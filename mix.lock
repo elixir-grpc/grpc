@@ -1,2 +1,4 @@
-%{"exprotobuf": {:hex, :exprotobuf, "1.0.2", "71056a3547eb37e53d64d892d4bc7a5d8d6355f48070e646357c6ed64571bfea", [:mix], [{:gpb, "~> 3.23.2", [hex: :gpb, optional: false]}]},
-  "gpb": {:hex, :gpb, "3.23.2", "dfabca052f8f4a8c6f98d43c6653e0037416537a9e5a747019f4ef53713982e3", [:rebar, :make], []}}
+%{"elixir_make": {:hex, :elixir_make, "0.3.0", "285147fa943806eee82f6680b7b446b5569bcf3ee8328fa0a7c200ffc44fbaba", [:mix], []},
+  "exprotobuf": {:hex, :exprotobuf, "1.1.0", "0d91a0b527abac118e03361d12eac7262299cdda3a0316fc60763557c227c890", [:mix], [{:gpb, "~> 3.24", [hex: :gpb, optional: false]}]},
+  "gpb": {:hex, :gpb, "3.24.3", "1a73dc1e023e92c5849c590c9600c98d7c3657038d41c8a29889a580c9be60b3", [:rebar, :make], []},
+  "jiffy": {:hex, :jiffy, "0.14.7", "9f33b893edd6041ceae03bc1e50b412e858cc80b46f3d7535a7a9940a79a1c37", [:rebar, :make], []}}

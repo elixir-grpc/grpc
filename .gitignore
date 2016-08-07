@@ -16,6 +16,6 @@ erl_crash.dump
 # Also ignore archive artifacts (built via "mix archive.build").
 *.ez
 
-/priv/grpc_c.so
+/priv/grpc_c.so*
 /src/grpc_c
 /tmp
