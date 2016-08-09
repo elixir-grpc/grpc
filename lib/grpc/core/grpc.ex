@@ -12,4 +12,8 @@ defmodule GRPC.Nifs do
     exit(:nif_library_not_loaded)
   end
 
+  def channel_create(a, b, c) do
+    exit(:nif_library_not_loaded)
+  end
+
 end

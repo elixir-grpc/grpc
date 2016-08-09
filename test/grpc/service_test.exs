@@ -21,7 +21,7 @@ defmodule GRPC.ServiceTest do
   end
 
   test "the client has functions created by rpc" do
-    channel = %GRPC.Channel{host: "localhost:50051", creds: :this_channel_is_insecure}
+    channel = GRPC.Core.Channel.create("localhost:50051", %{}, :this_channel_is_insecure)
     res1 = channel
       |> Helloworld.Greeter.Stub.say_hello(Helloworld.HelloRequest.new(name: "Foo"))
     res2 = channel
