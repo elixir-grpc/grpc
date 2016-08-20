@@ -2,6 +2,7 @@ defmodule GRPC.ServiceTest do
   use ExUnit.Case, async: true
 
   defmodule Helloworld do
+    @external_resource Path.expand("../proto/helloworld.proto", __DIR__)
     use Protobuf, from: Path.expand("../proto/helloworld.proto", __DIR__)
   end
 
