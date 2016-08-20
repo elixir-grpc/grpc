@@ -9,10 +9,18 @@ defmodule GRPC.Nifs do
   end
 
   def completion_queue_create() do
-    exit(:nif_library_not_loaded)
+    not_impl!
   end
 
   def channel_create(a, b, c) do
+    not_impl!
+  end
+
+  def call_create(channel, parent_call, propagation_mask, completion_queue, method, host, deadline) do
+    not_impl!
+  end
+
+  defp not_impl! do
     exit(:nif_library_not_loaded)
   end
 

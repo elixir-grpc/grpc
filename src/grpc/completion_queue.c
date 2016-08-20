@@ -4,12 +4,17 @@
 #include "utils.h"
 
 ERL_NIF_TERM nif_completion_queue_create0(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
-  grpc_completion_queue *cq = grpc_completion_queue_create(NULL);
+  ERL_NIF_TERM term;
+  wrapped_completion_queue *wrapped_cq = enif_alloc_resource(grpc_completion_queue_resource,
+                                                             sizeof(wrapped_completion_queue));
+  wrapped_cq->cq = grpc_completion_queue_create(NULL);
 
-  if (cq == NULL) {
-    enif_raise_exception_compat(env, "Could not create a completion queue: not sure why");
-    return ERL_NIL;
+  if (wrapped_cq->cq == NULL) {
+    return enif_raise_exception_compat(env, "Could not create a completion queue.");
   }
 
-  return enif_make_resource(env, cq);
+  term = enif_make_resource(env, wrapped_cq);
+  enif_release_resource(wrapped_cq);
+
+  return term;
 }
