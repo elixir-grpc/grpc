@@ -28,6 +28,7 @@ static void run_batch_stack_cleanup(run_batch_stack *st) {
   grpc_metadata_array_destroy(&st->recv_trailing_metadata);
 
   if (st->recv_status_details != NULL) {
+    // TODO: pointer being freed was not allocated sometimes
     gpr_free(st->recv_status_details);
   }
   if (st->recv_message != NULL) {
