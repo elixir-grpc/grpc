@@ -4,6 +4,7 @@
 #include "grpc_nifs.h"
 #include "utils.h"
 #include "byte_buffer.h"
+#include "completion_queue.h"
 
 /* run_batch_stack_init ensures the run_batch_stack is properly
  * initialized */
@@ -302,3 +303,31 @@ ERL_NIF_TERM nif_call_run_batch3(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
   return term;
 }
 
+ERL_NIF_TERM nif_call_finish_batch4(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
+  wrapped_grpc_completion_queue *wrapped_cq;
+  wrapped_run_batch_stack *stack;
+  grpc_event event;
+  ERL_NIF_TERM result;
+
+  if (!enif_get_resource(env, argv[0], run_batch_stack_resource, (void **)&stack)) {
+    return enif_raise_exception_compat(env, "Failed to get run_batch_stack!");
+  }
+
+  if (!enif_get_resource(env, argv[1], grpc_completion_queue_resource, (void **)&wrapped_cq)) {
+    return enif_raise_exception_compat(env, "Failed to get completion_queue!");
+  }
+
+  // wait for it to complete using pluck_event
+  event = completion_queue_pluck_event(env, wrapped_cq, argv[2], argv[3]);
+
+  if (event.type == GRPC_QUEUE_TIMEOUT) {
+    run_batch_stack_cleanup(stack->stack);
+    return enif_raise_exception_compat(env, "grpc_call_start_batch timed out");
+  }
+
+  /* Build and return result, if there is an error, it's reflected in the status */
+  result = run_batch_stack_build_result(env, stack->stack);
+  run_batch_stack_cleanup(stack->stack);
+
+  return result;
+}

@@ -24,6 +24,10 @@ defmodule GRPC.Nifs do
     not_impl!
   end
 
+  def call_finish_batch(call, completion_queue, tag, timeout) do
+    not_impl!
+  end
+
   defp not_impl! do
     exit(:nif_library_not_loaded)
   end

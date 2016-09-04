@@ -6,7 +6,8 @@ static ErlNifFunc nif_funcs[] = {
   {"completion_queue_create", 0, nif_completion_queue_create0},
   {"channel_create", 3, nif_channel_create3},
   {"call_create", 7, nif_call_create7},
-  {"call_run_batch", 3, nif_call_run_batch3}
+  {"call_run_batch", 3, nif_call_run_batch3},
+  {"call_finish_batch", 4, nif_call_finish_batch4}
 };
 
 static int load(ErlNifEnv* env, void** priv, ERL_NIF_TERM info) {

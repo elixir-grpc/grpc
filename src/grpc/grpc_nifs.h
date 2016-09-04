@@ -9,6 +9,7 @@ ERL_NIF_TERM nif_completion_queue_create0(ErlNifEnv* env, int argc, const ERL_NI
 ERL_NIF_TERM nif_channel_create3(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM nif_call_create7(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM nif_call_run_batch3(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
+ERL_NIF_TERM nif_call_finish_batch4(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
 
 /* ErlNifResourceType declarations */
 ErlNifResourceType* grpc_completion_queue_resource;

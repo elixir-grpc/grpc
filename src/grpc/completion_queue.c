@@ -18,3 +18,14 @@ ERL_NIF_TERM nif_completion_queue_create0(ErlNifEnv* env, int argc, const ERL_NI
 
   return term;
 }
+
+grpc_event completion_queue_pluck_event(ErlNifEnv *env, wrapped_grpc_completion_queue *wrapped_cq,
+                                        ERL_NIF_TERM tag, ERL_NIF_TERM timeout) {
+  grpc_event event;
+  event.type = GRPC_QUEUE_TIMEOUT;
+
+  gpr_timespec increment = gpr_time_from_millis(100, GPR_TIMESPAN);
+  gpr_timespec deadline = gpr_time_add(gpr_now(GPR_CLOCK_REALTIME), increment);
+  event = grpc_completion_queue_next(wrapped_cq->cq, deadline, NULL);
+  return event;
+}
