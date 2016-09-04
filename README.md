@@ -7,7 +7,7 @@ by [Erlang NIF](http://erlang.org/doc/tutorial/nif.html) written on top of [gRPC
 
 ## Installation
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed as:
+The package can be installed as:
 
   1. Add `grpc` to your list of dependencies in `mix.exs`:
 

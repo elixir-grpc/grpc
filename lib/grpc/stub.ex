@@ -16,7 +16,7 @@ defmodule GRPC.Stub do
     end
   end
 
-  def unary_call(channel, route, request, marshal_func, unmarshal_func, metadata, options \\ []) do
+  def unary_call(channel, route, request, marshal_func, unmarshal_func, metadata, _options \\ []) do
     cq = GRPC.Core.CompletionQueue.create
     deadline = :os.system_time(:seconds) + 300
     call = GRPC.Core.Call.create(channel, nil, nil, cq, String.to_charlist(route), nil, deadline)
