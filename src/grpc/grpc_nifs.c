@@ -5,7 +5,8 @@
 static ErlNifFunc nif_funcs[] = {
   {"completion_queue_create", 0, nif_completion_queue_create0},
   {"channel_create", 3, nif_channel_create3},
-  {"call_create", 7, nif_call_create7}
+  {"call_create", 7, nif_call_create7},
+  {"call_run_batch", 3, nif_call_run_batch3}
 };
 
 static int load(ErlNifEnv* env, void** priv, ERL_NIF_TERM info) {
@@ -14,6 +15,8 @@ static int load(ErlNifEnv* env, void** priv, ERL_NIF_TERM info) {
   grpc_channel_resource = enif_open_resource_type(env, NULL, "grpc_channel_resource",
                                     NULL, ERL_NIF_RT_CREATE, NULL);
   grpc_call_resource = enif_open_resource_type(env, NULL, "grpc_call_resource",
+                                    NULL, ERL_NIF_RT_CREATE, NULL);
+  run_batch_stack_resource = enif_open_resource_type(env, NULL, "run_batch_stack_resource",
                                     NULL, ERL_NIF_RT_CREATE, NULL);
   grpc_init();
   return 0;

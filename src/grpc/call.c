@@ -48,3 +48,38 @@ ERL_NIF_TERM nif_call_create7(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[
 
   return term;
 }
+ERL_NIF_TERM nif_call_run_batch3(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+  wrapped_grpc_call *wrapped_call;
+  wrapped_run_batch_stack *stack = enif_alloc_resource(run_batch_stack_resource,
+                                            sizeof(wrapped_run_batch_stack));
+  grpc_call_error err;
+  unsigned write_flag = 0;
+  ERL_NIF_TERM term;
+  ERL_NIF_TERM ERL_NIL = enif_make_atom(env, "nil");
+  stack->stack = malloc(sizeof(run_batch_stack));
+
+  if (!enif_get_resource(env, argv[0], grpc_call_resource, (void **)&wrapped_call)) {
+    return enif_raise_exception_compat(env, "Could not get call.");
+  }
+  if (!enif_is_map(env, argv[1])) {
+    return enif_raise_exception_compat(env, "ops should be a map");
+  }
+  // TODO: set write_flag if write_flag is passed
+
+  run_batch_stack_init(stack->stack, write_flag);
+  if (!run_batch_stack_fill_ops(env, stack->stack, argv[1])) {
+    return ERL_NIL;
+  }
+
+  err = grpc_call_start_batch(wrapped_call->call, stack->stack->ops, stack->stack->op_num, NULL, NULL);
+  if (err != GRPC_CALL_OK) {
+    run_batch_stack_cleanup(stack->stack);
+    return enif_raise_exception_compat(env, "Failed to start batch!");
+  }
+
+  term = enif_make_resource(env, stack);
+  enif_release_resource(stack);
+
+  return term;
+}
+

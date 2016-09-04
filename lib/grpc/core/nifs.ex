@@ -20,6 +20,10 @@ defmodule GRPC.Nifs do
     not_impl!
   end
 
+  def call_run_batch(call, ops, tag) do
+    not_impl!
+  end
+
   defp not_impl! do
     exit(:nif_library_not_loaded)
   end
