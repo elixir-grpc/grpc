@@ -9,7 +9,7 @@ defmodule GRPC.Stub do
         route = "/#{service_name}/#{name}"
         def unquote(String.to_atom(func_name))(channel, request, metadata \\ %{}) do
           marshal_func = fn(req) -> apply(unquote(request_mod), unquote(marshal), [req]) end
-          unmarshal_func = fn(res) -> apply(unquote(request_mod), unquote(unmarshal), [res]) end
+          unmarshal_func = fn(res) -> apply(unquote(reply_mod), unquote(unmarshal), [res]) end
           GRPC.Stub.unary_call(channel, unquote(route), request, marshal_func, unmarshal_func, metadata)
         end
       end

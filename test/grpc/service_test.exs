@@ -14,20 +14,16 @@ defmodule GRPC.ServiceTest do
     alias Helloworld.{HelloRequest, HelloReply}
 
     rpc :SayHello, HelloRequest, HelloReply
-    rpc :AskName, HelloRequest, HelloReply
   end
 
   defmodule Helloworld.Greeter.Stub do
     use GRPC.Stub, service: Helloworld.Greeter.Service
   end
 
+  @tag :integration
   test "the client has functions created by rpc" do
     channel = GRPC.Core.Channel.create("localhost:50051", %{}, :this_channel_is_insecure)
-    res1 = channel
-      |> Helloworld.Greeter.Stub.say_hello(Helloworld.HelloRequest.new(name: "Foo"))
-    res2 = channel
-      |> Helloworld.Greeter.Stub.ask_name(Helloworld.HelloRequest.new(name: "Bar"))
-    assert Helloworld.HelloRequest.decode(res1) == %Helloworld.HelloRequest{name: "Foo"}
-    assert Helloworld.HelloRequest.decode(res2) == %Helloworld.HelloRequest{name: "Bar"}
+    result = channel |> Helloworld.Greeter.Stub.say_hello(Helloworld.HelloRequest.new(name: "grpc-elixir"))
+    assert result[:message] == Helloworld.HelloReply.new(message: "Hello grpc-elixir")
   end
 end
