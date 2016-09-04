@@ -17,11 +17,17 @@ int better_get_atom(ErlNifEnv* env, ERL_NIF_TERM atom, char **buf) {
   return enif_get_atom(env, atom, *buf, length + 1, ERL_NIF_LATIN1);
 }
 
-int better_get_string(ErlNifEnv* env, ERL_NIF_TERM list, char **buf) {
+int better_get_string(ErlNifEnv* env, ERL_NIF_TERM string, char **buf) {
   unsigned int length;
-  if (!enif_get_list_length(env, list, &length)) {
-    return 0;
+  if (enif_get_list_length(env, string, &length)) {
+    *buf = alloc_chars(length);
+    return enif_get_string(env, string, *buf, length + 1, ERL_NIF_LATIN1);
+  } else {
+    ErlNifBinary *bin = NULL;
+    if (enif_is_binary(env, string) && enif_term_to_binary(env, string, bin)) {
+      *buf = (char *)bin->data;
+      return bin->size;
+    }
   }
-  *buf = alloc_chars(length);
-  return enif_get_string(env, list, *buf, length + 1, ERL_NIF_LATIN1);
+  return 0;
 }

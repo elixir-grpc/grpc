@@ -3,6 +3,7 @@
 #include "erl_nif.h"
 #include "grpc_nifs.h"
 #include "utils.h"
+#include "byte_buffer.h"
 
 /* run_batch_stack_init ensures the run_batch_stack is properly
  * initialized */
@@ -83,6 +84,188 @@ ERL_NIF_TERM nif_call_create7(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[
   enif_release_resource(wrapped_call);
 
   return term;
+}
+
+int set_capacity_of_medadata(ErlNifEnv *env, ERL_NIF_TERM md_map, grpc_metadata_array *md_array) {
+  ERL_NIF_TERM key, value;
+  ErlNifMapIterator iter;
+  enif_map_iterator_create(env, md_map, &iter, ERL_NIF_MAP_ITERATOR_FIRST);
+  while (enif_map_iterator_get_pair(env, &iter, &key, &value)) {
+    if (enif_is_list(env, value)) {
+      char *str;
+      if (better_get_string(env, value, &str)) {
+        md_array->capacity += 1;
+      } else {
+        unsigned len;
+        enif_get_list_length(env, value, &len);
+        md_array->capacity += len;
+      }
+    } else {
+      enif_raise_exception_compat(env, "metadata values should be string or list!");
+      return 0;
+    }
+
+    enif_map_iterator_next(env, &iter);
+  }
+  enif_map_iterator_destroy(env, &iter);
+
+  return 1;
+}
+
+int metadata_header_is_valid(char *key, size_t key_len, char *val, size_t val_len) {
+  if (grpc_is_binary_header(key, key_len) ||
+      grpc_header_nonbin_value_is_legal(val, val_len)) {
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
+int set_metadata_array(ErlNifEnv *env, ERL_NIF_TERM md_map, grpc_metadata_array *md_array) {
+  char *key_str;
+  char *val_str;
+  size_t key_len;
+  ERL_NIF_TERM key, value;
+  ErlNifMapIterator iter;
+  enif_map_iterator_create(env, md_map, &iter, ERL_NIF_MAP_ITERATOR_FIRST);
+  while (enif_map_iterator_get_pair(env, &iter, &key, &value)) {
+    key_len = better_get_string(env, key, &key_str);
+    if (!key_len) {
+      enif_raise_exception_compat(env, "Key of metadata should be a string!");
+      return 0;
+    }
+
+    if (!grpc_header_key_is_legal(key_str, key_len)) {
+      enif_raise_exception_compat(env, "header key is illegal!");
+      return 0;
+    }
+    if (!enif_is_list(env, value)) {
+      enif_raise_exception_compat(env, "Header value must be of type string or list!");
+      return 0;
+    }
+
+    int val_len = better_get_string(env, value, &val_str);
+    if (val_len) {
+      if (!metadata_header_is_valid(key_str, key_len, val_str, val_len)) {
+        enif_raise_exception_compat(env, "Header is invalid!");
+        return 0;
+      }
+      md_array->metadata[md_array->count].key = key_str;
+      md_array->metadata[md_array->count].value = val_str;
+      md_array->metadata[md_array->count].value_length = val_len;
+      md_array->count += 1;
+    } else {
+      ERL_NIF_TERM head;
+      ERL_NIF_TERM tail = value;
+      while (enif_get_list_cell(env, tail, &head, &tail)) {
+        val_len = better_get_string(env, head, &val_str);
+        if (!val_len) {
+          enif_raise_exception_compat(env, "Value of each metadata array should be string!");
+          return 0;
+        }
+        if (!metadata_header_is_valid(key_str, key_len, val_str, val_len)) {
+          enif_raise_exception_compat(env, "Header is invalid!");
+          return 0;
+        }
+        md_array->metadata[md_array->count].key = key_str;
+        md_array->metadata[md_array->count].value = val_str;
+        md_array->metadata[md_array->count].value_length = val_len;
+        md_array->count += 1;
+      }
+    }
+
+    enif_map_iterator_next(env, &iter);
+  }
+  enif_map_iterator_destroy(env, &iter);
+
+  return 1;
+}
+
+int metadata_map_to_array(ErlNifEnv *env, ERL_NIF_TERM md_map, grpc_metadata_array *md_array) {
+  if (!enif_is_map(env, md_map)) {
+    enif_raise_exception_compat(env, "metadata should be a map!");
+    return 0;
+  }
+
+  grpc_metadata_array_init(md_array);
+
+  set_capacity_of_medadata(env, md_map, md_array);
+  md_array->metadata = gpr_malloc(md_array->capacity * sizeof(grpc_metadata));
+  set_metadata_array(env, md_map, md_array);
+
+  return 1;
+}
+
+int run_batch_stack_fill_ops(ErlNifEnv *env, run_batch_stack *st, ERL_NIF_TERM ops_map) {
+  ERL_NIF_TERM this_op, this_value;
+  int int_op;
+  ErlNifMapIterator iter;
+  size_t index;
+  ErlNifBinary bin;
+
+  enif_map_iterator_create(env, ops_map, &iter, ERL_NIF_MAP_ITERATOR_FIRST);
+  while (enif_map_iterator_get_pair(env, &iter, &this_op, &this_value)) {
+    if (!enif_get_int(env, this_op, &int_op)) {
+      enif_raise_exception_compat(env, "op this_op should be a valid int!");
+      return 0;
+    }
+    index = st->op_num;
+    st->ops[index].flags = 0;
+    st->ops[index].reserved = NULL;
+    switch (int_op) {
+      case GRPC_OP_SEND_INITIAL_METADATA:
+        metadata_map_to_array(env, this_value, &st->send_metadata);
+        st->ops[index].op = GRPC_OP_SEND_INITIAL_METADATA;
+        st->ops[index].data.send_initial_metadata.count = st->send_metadata.count;
+        st->ops[index].data.send_initial_metadata.metadata = st->send_metadata.metadata;
+        break;
+      case GRPC_OP_SEND_MESSAGE:
+        if (better_get_binary(env, this_value, &bin)) {
+          st->ops[index].op = GRPC_OP_SEND_MESSAGE;
+          st->ops[index].data.send_message = str_to_byte_buffer((char *)bin.data, (size_t)bin.size);
+          st->ops[index].flags = st->write_flag;
+        } else {
+          enif_raise_exception_compat(env, "Sending message can't be parsed!");
+          return 0;
+        }
+        break;
+      case GRPC_OP_SEND_CLOSE_FROM_CLIENT:
+        st->ops[index].op = GRPC_OP_SEND_CLOSE_FROM_CLIENT;
+        break;
+      case GRPC_OP_SEND_STATUS_FROM_SERVER:
+        // TODO: For server
+        st->ops[index].op = GRPC_OP_SEND_STATUS_FROM_SERVER;
+        break;
+      case GRPC_OP_RECV_INITIAL_METADATA:
+        st->ops[index].op = GRPC_OP_RECV_INITIAL_METADATA;
+        st->ops[index].data.recv_initial_metadata = &st->recv_metadata;
+        break;
+      case GRPC_OP_RECV_MESSAGE:
+        st->ops[index].op = GRPC_OP_RECV_MESSAGE;
+        st->ops[index].data.recv_message = &st->recv_message;
+        break;
+      case GRPC_OP_RECV_STATUS_ON_CLIENT:
+        st->ops[index].op = GRPC_OP_RECV_STATUS_ON_CLIENT;
+        st->ops[index].data.recv_status_on_client.trailing_metadata = &st->recv_trailing_metadata;
+        st->ops[index].data.recv_status_on_client.status = &st->recv_status;
+        st->ops[index].data.recv_status_on_client.status_details = &st->recv_status_details;
+        st->ops[index].data.recv_status_on_client.status_details_capacity = &st->recv_status_details_capacity;
+        break;
+      case GRPC_OP_RECV_CLOSE_ON_SERVER:
+        st->ops[index].op = GRPC_OP_RECV_CLOSE_ON_SERVER;
+        st->ops[index].data.recv_close_on_server.cancelled = &st->recv_cancelled;
+        break;
+      default:
+        run_batch_stack_cleanup(st);
+        enif_raise_exception_compat(env, "Unknown op!");
+        return 0;
+    }
+    st->op_num++;
+    enif_map_iterator_next(env, &iter);
+  }
+  enif_map_iterator_destroy(env, &iter);
+
+  return 1;
 }
 ERL_NIF_TERM nif_call_run_batch3(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
   wrapped_grpc_call *wrapped_call;
