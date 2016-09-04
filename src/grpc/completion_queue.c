@@ -5,8 +5,8 @@
 
 ERL_NIF_TERM nif_completion_queue_create0(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
   ERL_NIF_TERM term;
-  wrapped_completion_queue *wrapped_cq = enif_alloc_resource(grpc_completion_queue_resource,
-                                                             sizeof(wrapped_completion_queue));
+  wrapped_grpc_completion_queue *wrapped_cq = enif_alloc_resource(grpc_completion_queue_resource,
+                                                             sizeof(wrapped_grpc_completion_queue));
   wrapped_cq->cq = grpc_completion_queue_create(NULL);
 
   if (wrapped_cq->cq == NULL) {

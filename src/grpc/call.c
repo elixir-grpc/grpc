@@ -7,7 +7,7 @@ ERL_NIF_TERM nif_call_create7(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[
   grpc_call *call = NULL;
   grpc_call *parent_call = NULL;
   wrapped_grpc_channel *wrapped_channel;
-  wrapped_completion_queue *wrapped_cq;
+  wrapped_grpc_completion_queue *wrapped_cq;
   gpr_timespec deadline;
   char *method = NULL;
   char *host = NULL;

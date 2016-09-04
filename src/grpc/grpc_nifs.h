@@ -19,6 +19,6 @@ typedef struct {
 
 typedef struct {
   grpc_completion_queue *cq;
-} wrapped_completion_queue;
+} wrapped_grpc_completion_queue;
 
 #endif
