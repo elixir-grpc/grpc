@@ -31,3 +31,29 @@ int better_get_string(ErlNifEnv* env, ERL_NIF_TERM string, char **buf) {
   }
   return 0;
 }
+
+ERL_NIF_TERM better_make_binary(ErlNifEnv *env, const char *data) {
+  return better_make_binary2(env, data, strlen(data));
+}
+
+ERL_NIF_TERM better_make_binary2(ErlNifEnv *env, const char *data, size_t len) {
+  ErlNifBinary bin;
+  if (enif_alloc_binary(len, &bin)) {
+    bin.size = len;
+    memcpy(bin.data, data, bin.size);
+    ERL_NIF_TERM term = enif_make_binary(env, &bin);
+    enif_release_binary(&bin);
+    return term;
+  } else {
+    return enif_raise_exception_compat(env, "Can't make binary");
+  }
+}
+
+int better_get_binary(ErlNifEnv *env, ERL_NIF_TERM binary, ErlNifBinary *bin) {
+  if (enif_inspect_binary(env, binary, bin)) {
+    return bin->size;
+  } else {
+    enif_raise_exception_compat(env, "Term is not a binary!");
+    return 0;
+  }
+}
