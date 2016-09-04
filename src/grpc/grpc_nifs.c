@@ -12,7 +12,9 @@ static int load(ErlNifEnv* env, void** priv, ERL_NIF_TERM info) {
   grpc_completion_queue_resource = enif_open_resource_type(env, NULL, "grpc_completion_queue",
                                     NULL, ERL_NIF_RT_CREATE, NULL);
   grpc_channel_resource = enif_open_resource_type(env, NULL, "grpc_channel_resource",
-                                    NULL, ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER, NULL);
+                                    NULL, ERL_NIF_RT_CREATE, NULL);
+  grpc_call_resource = enif_open_resource_type(env, NULL, "grpc_call_resource",
+                                    NULL, ERL_NIF_RT_CREATE, NULL);
   grpc_init();
   return 0;
 }

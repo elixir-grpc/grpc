@@ -12,6 +12,7 @@ ERL_NIF_TERM nif_call_create7(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[
 /* ErlNifResourceType declarations */
 ErlNifResourceType* grpc_completion_queue_resource;
 ErlNifResourceType* grpc_channel_resource;
+ErlNifResourceType* grpc_call_resource;
 
 typedef struct {
   grpc_channel *channel;
@@ -20,5 +21,9 @@ typedef struct {
 typedef struct {
   grpc_completion_queue *cq;
 } wrapped_grpc_completion_queue;
+
+typedef struct {
+  grpc_call *call;
+} wrapped_grpc_call;
 
 #endif

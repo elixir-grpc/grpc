@@ -4,7 +4,9 @@
 #include "utils.h"
 
 ERL_NIF_TERM nif_call_create7(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
-  grpc_call *call = NULL;
+  ERL_NIF_TERM term;
+  wrapped_grpc_call *wrapped_call = enif_alloc_resource(grpc_call_resource,
+                                                         sizeof(wrapped_grpc_call));
   grpc_call *parent_call = NULL;
   wrapped_grpc_channel *wrapped_channel;
   wrapped_grpc_completion_queue *wrapped_cq;
@@ -13,6 +15,7 @@ ERL_NIF_TERM nif_call_create7(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[
   char *host = NULL;
   int flags = GRPC_PROPAGATE_DEFAULTS;
   ErlNifSInt64 timeout;
+  ERL_NIF_TERM ERL_NIL = enif_make_atom(env, "nil");
 
   if (!enif_get_resource(env, argv[0], grpc_channel_resource, (void **)&wrapped_channel)) {
     return enif_raise_exception_compat(env, "Channel is not a handle to the right resource object.");
@@ -33,12 +36,15 @@ ERL_NIF_TERM nif_call_create7(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[
     return enif_raise_exception_compat(env, "timeout is invalid!");
   }
 
-  call = grpc_channel_create_call(wrapped_channel->channel, parent_call, flags, wrapped_cq->cq, method, host, deadline, NULL);
+  wrapped_call->call = grpc_channel_create_call(wrapped_channel->channel, parent_call, flags, wrapped_cq->cq, method, host, deadline, NULL);
 
-  if (call == NULL) {
+  if (wrapped_call->call == NULL) {
     enif_raise_exception_compat(env, "Could not create call.");
     return ERL_NIL;
   }
 
-  return enif_make_resource(env, call);
+  term = enif_make_resource(env, wrapped_call);
+  enif_release_resource(wrapped_call);
+
+  return term;
 }
