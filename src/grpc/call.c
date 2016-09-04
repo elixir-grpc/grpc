@@ -268,6 +268,90 @@ int run_batch_stack_fill_ops(ErlNifEnv *env, run_batch_stack *st, ERL_NIF_TERM o
 
   return 1;
 }
+
+ERL_NIF_TERM metadata_array_to_map(ErlNifEnv *env, grpc_metadata_array *md_array) {
+  ERL_NIF_TERM sym_nil = enif_make_atom(env, "nil");
+  ERL_NIF_TERM key = sym_nil;
+  ERL_NIF_TERM new_list = sym_nil;
+  ERL_NIF_TERM value = sym_nil;
+  ERL_NIF_TERM result = enif_make_new_map(env);
+
+  for (size_t i = 0; i < md_array->count; i++) {
+    key = better_make_binary(env, (char *)md_array->metadata[i].key);
+    if (enif_get_map_value(env, result, key, &value)) {
+      if (enif_is_list(env, value)) {
+        ERL_NIF_TERM head = better_make_binary2(env, md_array->metadata[i].value,
+                                                md_array->metadata[i].value_length);
+        value = enif_make_list_cell(env, head, value);
+      } else {
+        ERL_NIF_TERM new_val = better_make_binary2(env, md_array->metadata[i].value,
+                                                   md_array->metadata[i].value_length);
+        new_list = enif_make_list(env, 2, value, new_val);
+        enif_make_map_put(env, result, key, new_list, &result);
+      }
+    } else {
+      value = better_make_binary2(env, md_array->metadata[i].value, md_array->metadata[i].value_length);
+      enif_make_map_put(env, result, key, value, &result);
+    }
+  }
+  return result;
+}
+
+static ERL_NIF_TERM run_batch_stack_build_result(ErlNifEnv *env, run_batch_stack *st) {
+  ERL_NIF_TERM result = enif_make_new_map(env);
+
+  ERL_NIF_TERM sym_true = enif_make_atom(env, "true");
+  ERL_NIF_TERM sym_send_message = enif_make_atom(env, "send_message");
+  ERL_NIF_TERM sym_send_metadata = enif_make_atom(env, "send_metadata");
+  ERL_NIF_TERM sym_send_close = enif_make_atom(env, "send_close");
+  ERL_NIF_TERM sym_send_status = enif_make_atom(env, "send_status");
+  ERL_NIF_TERM sym_message = enif_make_atom(env, "message");
+  ERL_NIF_TERM sym_metadata = enif_make_atom(env, "metadata");
+
+  ERL_NIF_TERM status;
+
+  for (size_t i = 0; i < st->op_num; i++) {
+    switch (st->ops[i].op) {
+      case GRPC_OP_SEND_INITIAL_METADATA:
+        enif_make_map_put(env, result, sym_send_metadata, sym_true, &result);
+        break;
+      case GRPC_OP_SEND_MESSAGE:
+        enif_make_map_put(env, result, sym_send_message, sym_true, &result);
+        break;
+      case GRPC_OP_SEND_CLOSE_FROM_CLIENT:
+        enif_make_map_put(env, result, sym_send_close, sym_true, &result);
+        break;
+      case GRPC_OP_SEND_STATUS_FROM_SERVER:
+        enif_make_map_put(env, result, sym_send_status, sym_true, &result);
+        break;
+      case GRPC_OP_RECV_INITIAL_METADATA:
+        enif_make_map_put(env, result, sym_metadata, metadata_array_to_map(env, &st->recv_metadata), &result);
+        break;
+      case GRPC_OP_RECV_MESSAGE:
+        enif_make_map_put(env, result, sym_message, byte_buffer_to_binary(env, st->recv_message), &result);
+        break;
+      case GRPC_OP_RECV_STATUS_ON_CLIENT:
+        status = enif_make_new_map(env);
+        enif_make_map_put(env, status, enif_make_atom(env, "code"),
+                          enif_make_uint(env, st->recv_status), &status);
+        if (st->recv_status_details != NULL) {
+          enif_make_map_put(env, status, enif_make_atom(env, "details"),
+                            better_make_binary(env, st->recv_status_details), &status);
+        }
+        enif_make_map_put(env, status, enif_make_atom(env, "metadata"),
+                          metadata_array_to_map(env, &st->recv_trailing_metadata), &status);
+        break;
+      case GRPC_OP_RECV_CLOSE_ON_SERVER:
+        enif_make_map_put(env, result, sym_send_close, sym_true, &result);
+        break;
+      default:
+        break;
+    }
+  }
+
+  return result;
+}
+
 ERL_NIF_TERM nif_call_run_batch3(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
   wrapped_grpc_call *wrapped_call;
   wrapped_run_batch_stack *stack = enif_alloc_resource(run_batch_stack_resource,
