@@ -9,7 +9,13 @@ ERLANG_PATH = $(shell erl -eval 'io:format("~s", [lists:concat([code:root_dir(),
 CFLAGS += -I$(ERLANG_PATH)
 CFLAGS += -I$(GRPC_ELIXIR_PATH)/include
 
-GRPC_C_PATH = $(GRPC_ELIXIR_PATH)/deps/grpc_core
+ifeq ($(wildcard deps/grpc_core),)
+# use grpc-elixir as deps
+	GRPC_C_PATH = ../grpc_core
+else
+# dev locally
+	GRPC_C_PATH = deps/grpc_core
+endif
 
 ifneq ($(OS),Windows_NT)
 	CFLAGS += -fPIC

@@ -13,7 +13,7 @@ If [available in Hex](https://hex.pm/docs/publish), the package can be installed
 
     ```elixir
     def deps do
-      [{:grpc, "~> 0.1.0"}]
+      [{:grpc, github: "tony612/grpc-elixir"}]
     end
     ```
 
@@ -24,3 +24,7 @@ If [available in Hex](https://hex.pm/docs/publish), the package can be installed
       [applications: [:grpc]]
     end
     ```
+
+## Usage
+
+See test/grpc/service_test.exs for example
