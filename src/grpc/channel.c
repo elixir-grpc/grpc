@@ -4,7 +4,7 @@
 #include "grpc_nifs.h"
 #include "utils.h"
 
-#define INSECURE_CRED_STRING    "this_channel_is_insecure"
+#define INSECURE_CRED_STRING  "this_channel_is_insecure"
 
 ERL_NIF_TERM nif_channel_create3(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
   ERL_NIF_TERM term;

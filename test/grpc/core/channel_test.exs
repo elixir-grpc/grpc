@@ -6,7 +6,7 @@ defmodule GRPC.Core.ChannelTest do
   end
 
   test "create/3 raises error when cred is wrong atom" do
-    assert_raise ErlangError, ~r/must be atom :this_channel_is_insecure/,  fn ->
+    assert_raise ErlangError, ~r/must be atom :this_channel_is_insecure/, fn ->
       GRPC.Core.Channel.create("localhost:50051", %{}, :this_channel_is_insecur)
     end
   end

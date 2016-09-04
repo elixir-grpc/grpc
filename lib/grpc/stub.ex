@@ -22,9 +22,7 @@ defmodule GRPC.Stub do
     call = GRPC.Core.Call.create(channel, nil, nil, cq, String.to_charlist(route), nil, deadline)
 
     message = marshal_func.(request)
-    ops = %{0 => metadata, 1 => message, 2 => true, 4 => true, 5 => true, 6 => true}
-    stack = GRPC.Core.Call.run_batch(call, ops, nil)
-    result = GRPC.Core.Call.finish_batch(stack, cq, nil, 5)
+    result = GRPC.Call.unary(call, cq, message, metadata)
     Map.put(result, :message, unmarshal_func.(result[:message]))
   end
 end
