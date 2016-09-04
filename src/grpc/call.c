@@ -1,7 +1,43 @@
 #include <grpc/grpc.h>
+#include <grpc/support/alloc.h>
 #include "erl_nif.h"
 #include "grpc_nifs.h"
 #include "utils.h"
+
+/* run_batch_stack_init ensures the run_batch_stack is properly
+ * initialized */
+static void run_batch_stack_init(run_batch_stack *st, unsigned write_flag) {
+  grpc_metadata_array_init(&st->send_metadata);
+  grpc_metadata_array_init(&st->send_trailing_metadata);
+  grpc_metadata_array_init(&st->recv_metadata);
+  grpc_metadata_array_init(&st->recv_trailing_metadata);
+  st->op_num = 0;
+  st->write_flag = write_flag;
+}
+
+/* run_batch_stack_cleanup ensures the run_batch_stack is properly
+ * cleaned up */
+static void run_batch_stack_cleanup(run_batch_stack *st) {
+  size_t i = 0;
+
+  grpc_metadata_array_destroy(&st->send_metadata);
+  grpc_metadata_array_destroy(&st->send_trailing_metadata);
+  grpc_metadata_array_destroy(&st->recv_metadata);
+  grpc_metadata_array_destroy(&st->recv_trailing_metadata);
+
+  if (st->recv_status_details != NULL) {
+    gpr_free(st->recv_status_details);
+  }
+  if (st->recv_message != NULL) {
+    grpc_byte_buffer_destroy(st->recv_message);
+  }
+
+  for (i = 0; i < st->op_num; i++) {
+    if (st->ops[i].op == GRPC_OP_SEND_MESSAGE) {
+      grpc_byte_buffer_destroy(st->ops[i].data.send_message);
+    }
+  }
+}
 
 ERL_NIF_TERM nif_call_create7(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
   ERL_NIF_TERM term;
