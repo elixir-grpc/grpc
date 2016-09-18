@@ -23,7 +23,7 @@ defmodule GRPC.ServiceTest do
   @tag :integration
   test "the client has functions created by rpc" do
     {:ok, channel} = GRPC.Channel.connect("localhost:50051", insecure: true)
-    result = channel |> Helloworld.Greeter.Stub.say_hello(Helloworld.HelloRequest.new(name: "grpc-elixir"))
-    assert result == Helloworld.HelloReply.new(message: "Hello grpc-elixir")
+    reply = channel |> Helloworld.Greeter.Stub.say_hello(Helloworld.HelloRequest.new(name: "grpc-elixir"))
+    assert reply == Helloworld.HelloReply.new(message: "Hello grpc-elixir")
   end
 end
