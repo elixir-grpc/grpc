@@ -1,2 +1,6 @@
-%{"exprotobuf": {:hex, :exprotobuf, "1.1.0", "0d91a0b527abac118e03361d12eac7262299cdda3a0316fc60763557c227c890", [:mix], [{:gpb, "~> 3.24", [hex: :gpb, optional: false]}]},
-  "gpb": {:hex, :gpb, "3.24.3", "1a73dc1e023e92c5849c590c9600c98d7c3657038d41c8a29889a580c9be60b3", [:rebar, :make], []}}
+%{"chatterbox": {:git, "https://github.com/joedevivo/chatterbox.git", "d59b541cdc8d4e27cb4958769ef65ac345ab9e25", []},
+  "exprotobuf": {:hex, :exprotobuf, "1.1.0", "0d91a0b527abac118e03361d12eac7262299cdda3a0316fc60763557c227c890", [:mix], [{:gpb, "~> 3.24", [hex: :gpb, optional: false]}]},
+  "goldrush": {:git, "git://github.com/DeadZen/goldrush.git", "212299233c7e7eb63a97be2777e1c05ebaa58dbe", [tag: "0.1.8"]},
+  "gpb": {:hex, :gpb, "3.24.3", "1a73dc1e023e92c5849c590c9600c98d7c3657038d41c8a29889a580c9be60b3", [:rebar, :make], []},
+  "hpack": {:git, "git://github.com/joedevivo/hpack.git", "d903a08c1ef60f754402ee121ce5baaf0cc295cd", [branch: "master"]},
+  "lager": {:git, "git://github.com/basho/lager.git", "1c42c3bffbab49b0f06c9a916b00ca4911ae6a2f", [tag: "2.2.3"]}}

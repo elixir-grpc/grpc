@@ -1,9 +1,11 @@
 defmodule GRPC.Mixfile do
   use Mix.Project
 
+  @version "0.1.0"
+
   def project do
     [app: :grpc,
-     version: "0.1.0",
+     version: @version,
      elixir: "~> 1.3",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
@@ -18,6 +20,8 @@ defmodule GRPC.Mixfile do
   end
 
   defp deps do
-    [{:exprotobuf, "~> 1.1.0"}]
+    [{:exprotobuf, "~> 1.1.0"},
+     {:chatterbox, github: "joedevivo/chatterbox"}
+    ]
   end
 end

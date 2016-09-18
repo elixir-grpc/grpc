@@ -6,23 +6,20 @@ defmodule GRPC.Stub do
       unmarshal = service_mod.__meta__(:unmarshal_function)
       Enum.each service_mod.__rpc_calls__, fn ({name, request_mod, reply_mod}) ->
         func_name = name |> to_string |> Macro.underscore
-        route = "/#{service_name}/#{name}"
-        def unquote(String.to_atom(func_name))(channel, request, metadata \\ %{}) do
+        path = "/#{service_name}/#{name}"
+        def unquote(String.to_atom(func_name))(channel, request, opts \\ []) do
           marshal_func = fn(req) -> apply(unquote(request_mod), unquote(marshal), [req]) end
           unmarshal_func = fn(res) -> apply(unquote(reply_mod), unquote(unmarshal), [res]) end
-          GRPC.Stub.unary_call(channel, unquote(route), request, marshal_func, unmarshal_func, metadata)
+          GRPC.Stub.unary_call(channel, unquote(path), request, marshal_func, unmarshal_func, opts)
         end
       end
     end
   end
 
-  def unary_call(channel, route, request, marshal_func, unmarshal_func, metadata, _options \\ []) do
-    cq = GRPC.Core.CompletionQueue.create
-    deadline = :os.system_time(:seconds) + 300
-    call = GRPC.Core.Call.create(channel, nil, nil, cq, String.to_charlist(route), nil, deadline)
-
+  def unary_call(channel, path, request, marshal_func, unmarshal_func, opts \\ []) do
     message = marshal_func.(request)
-    result = GRPC.Call.unary(call, cq, message, metadata)
-    Map.put(result, :message, unmarshal_func.(result[:message]))
+    {:ok, {_resp_headers, resp_body}} = GRPC.Call.unary(channel, path, message, opts)
+    [<<_flag::bytes-size(1), _length::bytes-size(4), resp_body::binary>>] = resp_body
+    unmarshal_func.(resp_body)
   end
 end
