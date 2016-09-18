@@ -1,4 +1,2 @@
-%{"elixir_make": {:hex, :elixir_make, "0.3.0", "285147fa943806eee82f6680b7b446b5569bcf3ee8328fa0a7c200ffc44fbaba", [:mix], []},
-  "exprotobuf": {:hex, :exprotobuf, "1.1.0", "0d91a0b527abac118e03361d12eac7262299cdda3a0316fc60763557c227c890", [:mix], [{:gpb, "~> 3.24", [hex: :gpb, optional: false]}]},
-  "gpb": {:hex, :gpb, "3.24.3", "1a73dc1e023e92c5849c590c9600c98d7c3657038d41c8a29889a580c9be60b3", [:rebar, :make], []},
-  "grpc_core": {:git, "https://github.com/tony612/grpc-core.git", "d3797d03d294d01522cbeaa5a92171bb0b104358", [tag: "v1.0.0"]}}
+%{"exprotobuf": {:hex, :exprotobuf, "1.1.0", "0d91a0b527abac118e03361d12eac7262299cdda3a0316fc60763557c227c890", [:mix], [{:gpb, "~> 3.24", [hex: :gpb, optional: false]}]},
+  "gpb": {:hex, :gpb, "3.24.3", "1a73dc1e023e92c5849c590c9600c98d7c3657038d41c8a29889a580c9be60b3", [:rebar, :make], []}}

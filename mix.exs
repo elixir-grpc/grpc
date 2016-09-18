@@ -7,7 +7,6 @@ defmodule GRPC.Mixfile do
      elixir: "~> 1.3",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
-     compilers: [:elixir_make] ++ Mix.compilers,
      deps: deps()]
   end
 
@@ -19,9 +18,6 @@ defmodule GRPC.Mixfile do
   end
 
   defp deps do
-    [{:exprotobuf, "~> 1.1.0"},
-     {:elixir_make, "~> 0.3.0"},
-     {:grpc_core, github: "tony612/grpc-core", tag: "v1.0.0", app: false, compile: false}
-    ]
+    [{:exprotobuf, "~> 1.1.0"}]
   end
 end
