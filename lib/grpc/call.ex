@@ -5,14 +5,15 @@ defmodule GRPC.Call do
     :h2_client.sync_request(channel.pid, headers, body)
   end
 
-  defp compose_headers(channel, path, opts) do
+  def compose_headers(channel, path, opts \\ []) do
+    version = opts[:grpc_version] || GRPC.version
     [
       {":method", "POST"},
       {":scheme", channel.scheme},
       {":path", path},
       {":authority", channel.host},
       {"content-type", "application/grpc"},
-      {"user-agent", GRPC.version},
+      {"user-agent", version},
       {"te", "trailers"}
     ]
     |> append_encoding(Keyword.get(opts, :send_encoding))
