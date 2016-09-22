@@ -13,11 +13,11 @@ defmodule GRPC.Call do
       {":path", path},
       {":authority", channel.host},
       {"content-type", "application/grpc"},
-      {"user-agent", version},
+      {"user-agent", "grpc-elixir/#{version}"},
       {"te", "trailers"}
     ]
     |> append_encoding(Keyword.get(opts, :send_encoding))
-    |> append_timeout(Keyword.get(opts, :timeout))
+    |> append_timeout(Keyword.get(opts, :deadline))
     |> append_custom_metadata(Keyword.get(opts, :metadata))
     # TODO: Authorization
   end
@@ -32,6 +32,7 @@ defmodule GRPC.Call do
   end
   defp append_timeout(headers, _), do: headers
 
+  # TODO: Base64 encode Binary-Header for "*-bin" keys
   defp append_custom_metadata(headers, metadata) when is_map(metadata) and map_size(metadata) > 0 do
     new_headers = Enum.filter_map(metadata, fn({k, _v})-> !is_reserved_header(to_string(k)) end,
                                             fn({k, v})-> {String.downcase(to_string(k)), to_string(v)} end)
@@ -39,7 +40,7 @@ defmodule GRPC.Call do
   end
   defp append_custom_metadata(headers, _), do: headers
 
-  defp encode_timeout(_timeout) do
+  defp encode_timeout(_deadline) do
     # TODO
   end
 

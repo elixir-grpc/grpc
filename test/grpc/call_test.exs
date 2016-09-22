@@ -11,7 +11,7 @@ defmodule GRPC.CallTest do
       {":path", "/foo/bar"},
       {":authority", "grpc.io"},
       {"content-type", "application/grpc"},
-      {"user-agent", "1.0.0"},
+      {"user-agent", "grpc-elixir/1.0.0"},
       {"te", "trailers"}
     ]
   end
