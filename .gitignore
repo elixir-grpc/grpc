@@ -19,3 +19,5 @@ erl_crash.dump
 /priv/grpc_c.so*
 /src/grpc_c
 /tmp
+
+/log

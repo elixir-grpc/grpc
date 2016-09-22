@@ -16,12 +16,13 @@ defmodule GRPC.Mixfile do
   #
   # Type "mix help compile.app" for more information
   def application do
-    [applications: [:logger]]
+    [applications: [:lager, :logger, :exprotobuf, :chatterbox, :cowboy]]
   end
 
   defp deps do
     [{:exprotobuf, "~> 1.1.0"},
-     {:chatterbox, github: "joedevivo/chatterbox"}
+     {:chatterbox, github: "joedevivo/chatterbox"},
+     {:cowboy, github: "ninenines/cowboy"}
     ]
   end
 end
