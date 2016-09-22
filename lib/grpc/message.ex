@@ -11,16 +11,16 @@ defmodule GRPC.Message do
   ## Examples
 
       iex> message = <<1, 2, 3, 4, 5, 6, 7, 8>>
-      iex> GRPC.Message.delimited(message)
+      iex> GRPC.Message.to_data(message)
       {:ok, <<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>}
       iex> message = <<1, 2, 3, 4, 5, 6, 7, 8>>
-      iex> GRPC.Message.delimited(message, compressor: true)
+      iex> GRPC.Message.to_data(message, compressor: true)
       {:ok, <<1, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>}
       iex> message = <<1, 2, 3, 4, 5, 6, 7, 8, 9>>
-      iex> GRPC.Message.delimited(message, max_message_length: 8)
+      iex> GRPC.Message.to_data(message, max_message_length: 8)
       {:error, "Encoded message is too large (9 bytes)"}
   """
-  def delimited(message, opts \\ []) do
+  def to_data(message, opts \\ []) do
     compress_flag = if opts[:compressor], do: <<1>>, else: <<0>>
     length = byte_size(message)
     max_length = opts[:max_message_length] || @max_message_length
@@ -30,5 +30,16 @@ defmodule GRPC.Message do
       result = compress_flag <> <<length::size(4)-unit(8)>> <> message
       {:ok, result}
     end
+  end
+
+  @doc """
+  ## Examples
+
+      iex> GRPC.Message.from_data(<<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>)
+      <<1, 2, 3, 4, 5, 6, 7, 8>>
+  """
+  def from_data(data) do
+    <<_flag::bytes-size(1), _length::bytes-size(4), message::binary>> = data
+    message
   end
 end

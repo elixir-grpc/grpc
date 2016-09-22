@@ -1,8 +1,8 @@
 defmodule GRPC.Call do
   def unary(channel, path, message, opts) do
     headers = compose_headers(channel, path, opts)
-    {:ok, body} = GRPC.Message.delimited(message, opts)
-    :h2_client.sync_request(channel.pid, headers, body)
+    {:ok, data} = GRPC.Message.to_data(message, opts)
+    :h2_client.sync_request(channel.pid, headers, data)
   end
 
   def compose_headers(channel, path, opts \\ []) do

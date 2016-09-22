@@ -18,8 +18,8 @@ defmodule GRPC.Stub do
 
   def unary_call(channel, path, request, marshal_func, unmarshal_func, opts \\ []) do
     message = marshal_func.(request)
-    {:ok, {_resp_headers, resp_body}} = GRPC.Call.unary(channel, path, message, opts)
-    [<<_flag::bytes-size(1), _length::bytes-size(4), resp_body::binary>>] = resp_body
-    unmarshal_func.(resp_body)
+    {:ok, {_headers, [data]}} = GRPC.Call.unary(channel, path, message, opts)
+    message = GRPC.Message.from_data(data)
+    unmarshal_func.(message)
   end
 end
