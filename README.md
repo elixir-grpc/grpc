@@ -26,7 +26,9 @@ The package can be installed as:
 
 ## Usage
 
-Client:
+*Code generating from proto is not supported now*
+
+Service definition:
 
 ```elixir
 defmodule Helloworld do
@@ -42,13 +44,31 @@ defmodule Helloworld.Greeter.Service do
 
   rpc :SayHello, HelloRequest, HelloReply
 end
+```
 
+Server:
+
+```elixir
+defmodule Helloworld.Greeter.Server do
+  use GRPC.Server, service: Helloworld.Greeter.Service
+
+  def say_hello(request) do
+    Helloworld.HelloReply.new(message: "Hello #{request.name}")
+  end
+end
+
+GRPC.Server.start(Helloworld.Greeter.Server, "localhost:50051", insecure: true)
+```
+
+Client:
+
+```elixir
 defmodule Helloworld.Greeter.Stub do
   use GRPC.Stub, service: Helloworld.Greeter.Service
 end
 
-> {:ok, channel} = GRPC.Channel.connect("localhost:50051", insecure: true)
-> reply = channel |> Helloworld.Greeter.Stub.say_hello(Helloworld.HelloRequest.new(name: "grpc-elixir"))
+{:ok, channel} = GRPC.Channel.connect("localhost:50051", insecure: true)
+reply = channel |> Helloworld.Greeter.Stub.say_hello(Helloworld.HelloRequest.new(name: "grpc-elixir"))
 %Helloworld.HelloReply{message: "Hello grpc-elixir"}
 ```
 
