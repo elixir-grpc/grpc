@@ -13,6 +13,8 @@ defmodule GRPC.Message do
       iex> message = <<1, 2, 3, 4, 5, 6, 7, 8>>
       iex> GRPC.Message.to_data(message)
       {:ok, <<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>}
+      iex> GRPC.Message.to_data(message, iolist: true)
+      {:ok, [<<0>>, <<0, 0, 0, 8>>, <<1, 2, 3, 4, 5, 6, 7, 8>>]}
       iex> message = <<1, 2, 3, 4, 5, 6, 7, 8>>
       iex> GRPC.Message.to_data(message, compressor: true)
       {:ok, <<1, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>}
@@ -27,7 +29,8 @@ defmodule GRPC.Message do
     if length > max_length do
       {:error, "Encoded message is too large (#{length} bytes)"}
     else
-      result = compress_flag <> <<length::size(4)-unit(8)>> <> message
+      result = [compress_flag, <<length::size(4)-unit(8)>>, message]
+      result = if opts[:iolist], do: result, else: Enum.join(result)
       {:ok, result}
     end
   end

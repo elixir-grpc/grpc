@@ -4,7 +4,7 @@ defmodule GRPC.Handler do
     message = GRPC.Message.from_data(data)
     # TODO handle error branch
     {:ok, response} = server.__call_rpc__(:cowboy_req.path(req), message)
-    {:ok, data} = GRPC.Message.to_data(response)
+    {:ok, data} = GRPC.Message.to_data(response, iolist: true)
     req = :cowboy_req.reply(200, headers, data, req)
     {:ok, req, state}
   end
