@@ -9,9 +9,7 @@ defmodule GRPC.Transport.Utils do
     encode_timeout(deadline, DateTime.utc_now)
   end
   def encode_timeout(deadline, now) when not is_integer(deadline) do
-    deadline_ms = datetime_to_microsecond(deadline)
-    now_ms = datetime_to_microsecond(now)
-    encode_timeout(deadline_ms - now_ms)
+    encode_timeout(GRPC.TimeUtils.to_relative(deadline, now))
   end
   def encode_timeout(timeout) when timeout <= 0, do: "0u"
   def encode_timeout(timeout) when timeout < @us_ceiling do
@@ -31,9 +29,5 @@ defmodule GRPC.Transport.Utils do
   end
   def encode_timeout(timeout) do
     to_string(@us_ceiling - 1) <> "H"
-  end
-
-  defp datetime_to_microsecond(datetime) do
-    DateTime.to_unix(datetime) * 1000_000 + elem(datetime.microsecond, 0)
   end
 end

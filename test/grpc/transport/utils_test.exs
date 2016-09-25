@@ -9,7 +9,6 @@ defmodule GRPC.Transport.UtilsTest do
   @minute_ceiling @second_ceiling * 60
   @hour_ceiling @minute_ceiling * 60
 
-
   test "normalize_timeout/1 returns 0" do
     assert Utils.encode_timeout(-1) == "0u"
     assert Utils.encode_timeout(0) == "0u"

@@ -10,7 +10,7 @@ defmodule GRPC.CallTest do
       {":scheme", "http"},
       {":path", "/foo/bar"},
       {":authority", "grpc.io"},
-      {"content-type", "application/grpc"},
+      {"content-type", "application/grpc+proto"},
       {"user-agent", "grpc-elixir/1.0.0"},
       {"te", "trailers"}
     ]

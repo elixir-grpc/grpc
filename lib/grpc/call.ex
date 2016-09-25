@@ -4,7 +4,14 @@ defmodule GRPC.Call do
   def unary(channel, path, message, opts) do
     headers = compose_headers(channel, path, opts)
     {:ok, data} = GRPC.Message.to_data(message, opts)
-    :h2_client.sync_request(channel.pid, headers, data)
+    {:ok, stream_id} = :h2_client.send_request(channel.pid, headers, data)
+    receive do
+      {:END_STREAM, ^stream_id} ->
+        :h2_client.get_response(channel.pid, stream_id)
+      after timeout(opts) ->
+        # TODO: test
+        raise GRPC.TimeoutError
+    end
   end
 
   def compose_headers(channel, path, opts \\ []) do
@@ -14,7 +21,7 @@ defmodule GRPC.Call do
       {":scheme", channel.scheme},
       {":path", path},
       {":authority", channel.host},
-      {"content-type", "application/grpc"},
+      {"content-type", "application/grpc+proto"},
       {"user-agent", "grpc-elixir/#{version}"},
       {"te", "trailers"}
     ]
@@ -62,4 +69,12 @@ defmodule GRPC.Call do
   defp is_reserved_header("content-type"), do: true
   defp is_reserved_header("te"), do: true
   defp is_reserved_header(_), do: false
+
+  defp timeout(opts) do
+    cond do
+      opts[:deadline] -> GRPC.TimeUtils.to_relative(opts[:deadline])
+      opts[:timeout]  -> div(opts[:timeout], 1000)
+      true            -> :infinity
+    end
+  end
 end
