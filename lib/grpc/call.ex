@@ -1,4 +1,6 @@
 defmodule GRPC.Call do
+  alias GRPC.Transport.Utils
+
   def unary(channel, path, message, opts) do
     headers = compose_headers(channel, path, opts)
     {:ok, data} = GRPC.Message.to_data(message, opts)
@@ -28,8 +30,8 @@ defmodule GRPC.Call do
   end
   defp append_encoding(headers, _), do: headers
 
-  defp append_timeout(headers, timeout) when is_integer(timeout) and timeout > 0 do
-    headers ++ [{"grpc-timeout", encode_timeout(timeout)}]
+  defp append_timeout(headers, deadline) when deadline != nil do
+    headers ++ [{"grpc-timeout", Utils.encode_timeout(deadline)}]
   end
   defp append_timeout(headers, _), do: headers
 
@@ -50,10 +52,6 @@ defmodule GRPC.Call do
   defp normalize_custom_metadata({key, val}) do
     val = if String.ends_with?(key, "-bin"), do: Base.encode64(val), else: val
     {String.downcase(to_string(key)), val}
-  end
-
-  defp encode_timeout(_deadline) do
-    # TODO
   end
 
   defp is_reserved_header(":" <> _), do: true

@@ -47,4 +47,10 @@ defmodule GRPC.CallTest do
     headers = Call.compose_headers(channel, "/foo/bar", metadata: metadata)
     assert [{"foo-bar", "bar"}, {"foo", "bar"} | _] = Enum.reverse(headers)
   end
+
+  test "compose_headers/3 can have timeout" do
+    channel = %Channel{}
+    headers = Call.compose_headers(channel, "/foo/bar", deadline: DateTime.utc_now)
+    assert [{"grpc-timeout", "0u"} | _] = Enum.reverse(headers)
+  end
 end
