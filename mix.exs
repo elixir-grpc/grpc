@@ -20,9 +20,11 @@ defmodule GRPC.Mixfile do
   end
 
   defp deps do
-    [{:exprotobuf, "~> 1.1.0"},
+    [{:exprotobuf, "~> 1.2.0"},
      {:chatterbox, github: "joedevivo/chatterbox"},
-     {:cowboy, github: "ninenines/cowboy"}
+     # TODO
+     # https://github.com/ninenines/cowboy/pull/1020
+     {:cowboy, github: "tony612/cowboy", branch: "trailers-support"}
     ]
   end
 end

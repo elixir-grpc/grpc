@@ -5,7 +5,9 @@ defmodule GRPC.Handler do
     # TODO handle error branch
     {:ok, response} = server.__call_rpc__(:cowboy_req.path(req), message)
     {:ok, data} = GRPC.Message.to_data(response, iolist: true)
-    req = :cowboy_req.reply(200, headers, data, req)
+    req = :cowboy_req.stream_reply(200, headers, req)
+    :cowboy_req.stream_body(data, :nofin, req)
+    :cowboy_req.stream_trailers(trailers, req)
     {:ok, req, state}
   end
 
@@ -15,11 +17,9 @@ defmodule GRPC.Handler do
     }
   end
 
-  # TODO
-  # https://github.com/ninenines/cowboy/pull/1020
   def trailers do
     %{
-      "grpc-status" => 0,
+      "grpc-status" => "0",
       "grpc-message" => ""
     }
   end
