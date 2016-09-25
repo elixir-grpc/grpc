@@ -68,7 +68,8 @@ defmodule Helloworld.Greeter.Stub do
 end
 
 {:ok, channel} = GRPC.Channel.connect("localhost:50051", insecure: true)
-reply = channel |> Helloworld.Greeter.Stub.say_hello(Helloworld.HelloRequest.new(name: "grpc-elixir"))
+request = Helloworld.HelloRequest.new(name: "grpc-elixir")
+reply = channel |> Helloworld.Greeter.Stub.say_hello(request, timeout: 1000_000)
 %Helloworld.HelloReply{message: "Hello grpc-elixir"}
 ```
 

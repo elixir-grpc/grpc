@@ -19,7 +19,7 @@ defmodule GRPC.Call do
       {"te", "trailers"}
     ]
     |> append_encoding(Keyword.get(opts, :send_encoding))
-    |> append_timeout(Keyword.get(opts, :deadline))
+    |> append_timeout(Keyword.get(opts, :deadline) || Keyword.get(opts, :timeout))
     |> append_custom_metadata(Keyword.get(opts, :metadata))
     # TODO: grpc-accept-encoding, grpc-message-type
     # TODO: Authorization
@@ -30,6 +30,9 @@ defmodule GRPC.Call do
   end
   defp append_encoding(headers, _), do: headers
 
+  defp append_timeout(headers, timeout) when is_integer(timeout) do
+    headers ++ [{"grpc-timeout", Utils.encode_timeout(timeout)}]
+  end
   defp append_timeout(headers, deadline) when deadline != nil do
     headers ++ [{"grpc-timeout", Utils.encode_timeout(deadline)}]
   end
