@@ -19,6 +19,7 @@ defmodule GRPC.Call do
     |> append_encoding(Keyword.get(opts, :send_encoding))
     |> append_timeout(Keyword.get(opts, :deadline))
     |> append_custom_metadata(Keyword.get(opts, :metadata))
+    # TODO: grpc-accept-encoding, grpc-message-type
     # TODO: Authorization
   end
 
@@ -35,10 +36,21 @@ defmodule GRPC.Call do
   # TODO: Base64 encode Binary-Header for "*-bin" keys
   defp append_custom_metadata(headers, metadata) when is_map(metadata) and map_size(metadata) > 0 do
     new_headers = Enum.filter_map(metadata, fn({k, _v})-> !is_reserved_header(to_string(k)) end,
-                                            fn({k, v})-> {String.downcase(to_string(k)), to_string(v)} end)
+                                            fn({k, v}) -> normalize_custom_metadata({k, v}) end)
     headers ++ new_headers
   end
   defp append_custom_metadata(headers, _), do: headers
+
+  defp normalize_custom_metadata({key, val}) when not is_binary(key) do
+    normalize_custom_metadata({to_string(key), val})
+  end
+  defp normalize_custom_metadata({key, val}) when not is_binary(val) do
+    normalize_custom_metadata({key, to_string(val)})
+  end
+  defp normalize_custom_metadata({key, val}) do
+    val = if String.ends_with?(key, "-bin"), do: Base.encode64(val), else: val
+    {String.downcase(to_string(key)), val}
+  end
 
   defp encode_timeout(_deadline) do
     # TODO

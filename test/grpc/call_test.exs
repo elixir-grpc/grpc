@@ -28,6 +28,12 @@ defmodule GRPC.CallTest do
     assert [{"foo1", "bar1"}, {"foo", "bar"} | _] = Enum.reverse(headers)
   end
 
+  test "compose_headers/3 returns custom metadata with *-bin key" do
+    channel = %Channel{}
+    headers = Call.compose_headers(channel, "/foo/bar", metadata: %{"key1-bin" => "abc", "key2-bin" => <<194, 128>>})
+    assert [{"key2-bin", "woA="}, {"key1-bin", "YWJj"} | _] = Enum.reverse(headers)
+  end
+
   test "compose_headers/3 rejects reserved headers in metadata" do
     channel = %Channel{}
     metadata = %{"foo" => "bar", ":foo" => ":bar", "grpc-foo" => "bar", "content-type" => "bar", "te" => "et"}
