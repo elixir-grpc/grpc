@@ -1,5 +1,5 @@
 defmodule GRPC.Proto do
-  defstruct [package: "", services: [], messages: []]
+  defstruct [package: nil, services: [], messages: []]
 
   defmodule Service do
     defstruct [name: nil, rpcs: []]

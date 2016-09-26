@@ -41,8 +41,8 @@ defmodule Mix.Tasks.Grpc.Gen do
 
   def generate(proto_path, out_path) do
     proto = parse_proto(proto_path)
-    package = proto.package
-    assigns = [top_mod: top_mod(package), proto_path: proto_path(proto_path, out_path), proto: proto]
+    assigns = [top_mod: top_mod(proto.package), proto_path: proto_path(proto_path, out_path), proto: proto,
+               service_prefix: service_prefix(proto.package) ]
     create_file file_path(proto_path, out_path), grpc_gen_template(assigns)
   end
 
@@ -53,7 +53,7 @@ defmodule Mix.Tasks.Grpc.Gen do
     proto = Enum.reduce parsed, proto, fn(item, proto) ->
       case item do
         {:package, package} ->
-          %{proto | package: package}
+          %{proto | package: to_string(package)}
         {{:service, service_name}, rpcs} ->
           rpcs = Enum.map(rpcs, fn(rpc) -> Tuple.delete_at(rpc, 0) end)
           service_name = service_name |> to_string |> camelize
@@ -62,7 +62,8 @@ defmodule Mix.Tasks.Grpc.Gen do
         _ -> proto
       end
     end
-    %{proto | services: Enum.reverse(proto.services)}
+    package = proto.package || Path.basename(proto_path, ".proto")
+    %{proto | services: Enum.reverse(proto.services), package: package}
   end
 
   def top_mod(package) do
@@ -71,6 +72,10 @@ defmodule Mix.Tasks.Grpc.Gen do
     |> String.split(".")
     |> Enum.map(fn(seg)-> camelize(seg) end)
     |> Enum.join(".")
+  end
+
+  def service_prefix(package)  do
+    if package && String.length(package) > 0, do: package <> ".", else: ""
   end
 
   def proto_path(proto_path, out_path) do

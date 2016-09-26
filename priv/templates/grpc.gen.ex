@@ -4,7 +4,7 @@ defmodule <%= top_mod %> do
 
   <%= Enum.map proto.services, fn(service) -> %>
   defmodule <%= service.name %>.Service do
-    use GRPC.Service, name: "<%= proto.package %>.<%= service.name %>",
+    use GRPC.Service, name: "<%= service_prefix %><%= service.name %>",
                       marshal_function: :encode,
                       unmarshal_function: :decode
 
