@@ -40,9 +40,8 @@ defmodule Mix.Tasks.Grpc.Gen do
   end
 
   def generate(proto_path, out_path, opts) do
-    IO.inspect opts
     proto = parse_proto(proto_path)
-    assigns = [top_mod: top_mod(proto.package), proto_content: proto_content(proto_path, opts),
+    assigns = [top_mod: top_mod(proto.package, proto_path, opts), proto_content: proto_content(proto_path, opts),
                proto: proto, proto_path: proto_path(proto_path, out_path, opts),
                use_proto_path: opts[:use_proto_path], service_prefix: service_prefix(proto.package) ]
     create_file file_path(proto_path, out_path), grpc_gen_template(assigns)
@@ -50,9 +49,7 @@ defmodule Mix.Tasks.Grpc.Gen do
 
   def parse_proto(proto_path) do
     parsed = Protobuf.Parser.parse_files!([proto_path])
-    proto = %Proto{}
-    services = []
-    proto = Enum.reduce parsed, proto, fn(item, proto) ->
+    proto = Enum.reduce parsed, %Proto{}, fn(item, proto) ->
       case item do
         {:package, package} ->
           %{proto | package: to_string(package)}
@@ -60,15 +57,15 @@ defmodule Mix.Tasks.Grpc.Gen do
           rpcs = Enum.map(rpcs, fn(rpc) -> Tuple.delete_at(rpc, 0) end)
           service_name = service_name |> to_string |> camelize
           service = %Proto.Service{name: service_name , rpcs: rpcs}
-          %{proto | services: [service|services]}
+          %{proto | services: [service|proto.services]}
         _ -> proto
       end
     end
-    package = proto.package || Path.basename(proto_path, ".proto")
-    %{proto | services: Enum.reverse(proto.services), package: package}
+    %{proto | services: Enum.reverse(proto.services)}
   end
 
-  def top_mod(package) do
+  def top_mod(package, proto_path, opts) do
+    package = opts[:namespace] || package || Path.basename(proto_path, ".proto")
     package
     |> to_string
     |> String.split(".")
