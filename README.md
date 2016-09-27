@@ -2,7 +2,7 @@
 
 The Elixir implementation of [gRPC](https://github.com/grpc/grpc).
 
-**WARNING: This is unstable. Don't use in production!**
+**WARNING: This is unstable now. Be careful to use it in production!**
 
 ## Installation
 
@@ -26,51 +26,13 @@ The package can be installed as:
 
 ## Usage
 
-*Code generating from proto is not supported now*
+Generate Elixir code from proto file
 
-Service definition:
-
-```elixir
-defmodule Helloworld do
-  @external_resource Path.expand("priv/protos/helloworld.proto", __DIR__)
-  use Protobuf, from: Path.expand("priv/protos/helloworld.proto", __DIR__)
-end
-
-defmodule Helloworld.Greeter.Service do
-  use GRPC.Service, name: "helloworld.Greeter",
-                    marshal_function: :encode,
-                    unmarshal_function: :decode
-  alias Helloworld.{HelloRequest, HelloReply}
-
-  rpc :SayHello, HelloRequest, HelloReply
-end
+```shell
+$ mix do deps.get, compile
+$ mix grpc.gen priv/protos/helloworld.proto --out lib/
 ```
 
-Server:
+Define your server, then run the server and client.
 
-```elixir
-defmodule Helloworld.Greeter.Server do
-  use GRPC.Server, service: Helloworld.Greeter.Service
-
-  def say_hello(request) do
-    Helloworld.HelloReply.new(message: "Hello #{request.name}")
-  end
-end
-
-GRPC.Server.start(Helloworld.Greeter.Server, "localhost:50051", insecure: true)
-```
-
-Client:
-
-```elixir
-defmodule Helloworld.Greeter.Stub do
-  use GRPC.Stub, service: Helloworld.Greeter.Service
-end
-
-{:ok, channel} = GRPC.Channel.connect("localhost:50051", insecure: true)
-request = Helloworld.HelloRequest.new(name: "grpc-elixir")
-reply = channel |> Helloworld.Greeter.Stub.say_hello(request, timeout: 1000_000)
-%Helloworld.HelloReply{message: "Hello grpc-elixir"}
-```
-
-See `test` dir for more examples
+Check [examples/helloworld](examples/helloworld) for more details
