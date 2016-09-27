@@ -17,32 +17,34 @@ defmodule Mix.Tasks.Grpc.Gen do
 
       mix grpc.gen priv/protos/helloworld.proto --out lib/
 
-  Protobuf file should be in the same project because generated Elixir file
-  depends on it. Check the generated file for detail.
-
   The top level module name will be generated from package name by default,
   but you can custom it with `--namespace` option.
 
   ## Command line options
 
-    * `--namespace` - Custom top level module name
-
+    * `--namespace Your.Service.Namespace` - Custom top level module name
+    * `--use-proto-path` - Use proto path for protobuf parsing instead of
+      copying content of proto to generated file, which is the default behavior.
+      You should remember to generate Elixir files once .proto file changes,
+      because proto will be loaded every time for this option.
   """
 
   def run(args) do
-    case OptionParser.parse(args) do
-      {[out: out_path], [proto_path], _} ->
-        generate(proto_path, out_path)
-      {_, _, _} ->
-        Mix.raise "expected grpc.gen to receive the proto path and out path, " <>
-          "got: #{inspect Enum.join(args, " ")}"
+    {opts, [proto_path], _} = OptionParser.parse(args)
+    if opts[:out] do
+      generate(proto_path, opts[:out], opts)
+    else
+      Mix.raise "expected grpc.gen to receive the proto path and out path, " <>
+        "got: #{inspect Enum.join(args, " ")}"
     end
   end
 
-  def generate(proto_path, out_path) do
+  def generate(proto_path, out_path, opts) do
+    IO.inspect opts
     proto = parse_proto(proto_path)
-    assigns = [top_mod: top_mod(proto.package), proto_path: proto_path(proto_path, out_path), proto: proto,
-               service_prefix: service_prefix(proto.package) ]
+    assigns = [top_mod: top_mod(proto.package), proto_content: proto_content(proto_path, opts),
+               proto: proto, proto_path: proto_path(proto_path, out_path, opts),
+               use_proto_path: opts[:use_proto_path], service_prefix: service_prefix(proto.package) ]
     create_file file_path(proto_path, out_path), grpc_gen_template(assigns)
   end
 
@@ -78,11 +80,23 @@ defmodule Mix.Tasks.Grpc.Gen do
     if package && String.length(package) > 0, do: package <> ".", else: ""
   end
 
-  def proto_path(proto_path, out_path) do
-    proto_path = Path.relative_to_cwd(proto_path)
-    level = out_path |> Path.relative_to_cwd |> Path.split |> length
-    prefix = List.duplicate("..", level) |> Enum.join("/")
-    Path.join(prefix, proto_path)
+  def proto_path(proto_path, out_path, opts) do
+    if opts[:use_proto_path] do
+      proto_path = Path.relative_to_cwd(proto_path)
+      level = out_path |> Path.relative_to_cwd |> Path.split |> length
+      prefix = List.duplicate("..", level) |> Enum.join("/")
+      Path.join(prefix, proto_path)
+    else
+      ""
+    end
+  end
+
+  def proto_content(proto_path, opts) do
+    if opts[:use_proto_path] do
+      ""
+    else
+      File.read!(proto_path)
+    end
   end
 
   def file_path(proto_path, out_path) do
