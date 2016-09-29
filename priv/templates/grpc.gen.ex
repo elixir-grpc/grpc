@@ -10,7 +10,7 @@ defmodule <%= top_mod %> do
                       unmarshal_function: :decode
 
     <%= for rpc <- service.rpcs do %>
-    rpc <%= inspect elem(rpc, 0) %>, <%= top_mod %>.<%= elem(rpc, 1) %>, <%= top_mod %>.<%= elem(rpc, 2) %>
+    <%= compose_rpc.(rpc, top_mod) %>
     <% end %>
   end
 

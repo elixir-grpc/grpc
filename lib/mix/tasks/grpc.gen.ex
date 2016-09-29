@@ -43,8 +43,10 @@ defmodule Mix.Tasks.Grpc.Gen do
     proto = parse_proto(proto_path)
     assigns = [top_mod: top_mod(proto.package, proto_path, opts), proto_content: proto_content(proto_path, opts),
                proto: proto, proto_path: proto_path(proto_path, out_path, opts),
-               use_proto_path: opts[:use_proto_path], service_prefix: service_prefix(proto.package) ]
+               use_proto_path: opts[:use_proto_path], service_prefix: service_prefix(proto.package),
+               compose_rpc: &__MODULE__.compose_rpc/2]
     create_file file_path(proto_path, out_path), grpc_gen_template(assigns)
+    # TODO: Output template for server code so that users can copy to their own projects
   end
 
   def parse_proto(proto_path) do
@@ -94,6 +96,16 @@ defmodule Mix.Tasks.Grpc.Gen do
     else
       File.read!(proto_path)
     end
+  end
+
+  # Helper in EEx
+  @doc false
+  def compose_rpc(rpc, top_mod) do
+    request = "#{top_mod}.#{elem(rpc, 1)}"
+    request = if elem(rpc, 3), do: "stream(#{request})", else: request
+    reply = "#{top_mod}.#{elem(rpc, 2)}"
+    reply = if elem(rpc, 4), do: "stream(#{reply})", else: reply
+    "rpc #{inspect elem(rpc, 0)}, #{request}, #{reply}"
   end
 
   def file_path(proto_path, out_path) do
