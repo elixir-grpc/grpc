@@ -7,9 +7,7 @@ defmodule GRPC.ServiceTest do
   end
 
   defmodule Helloworld.Greeter.Service do
-    use GRPC.Service, name: "helloworld.Greeter",
-                      marshal_function: :encode,
-                      unmarshal_function: :decode
+    use GRPC.Service, name: "helloworld.Greeter"
 
     alias Helloworld.{HelloRequest, HelloReply}
 

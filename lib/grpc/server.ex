@@ -1,16 +1,13 @@
 defmodule GRPC.Server do
   defmacro __using__(opts) do
-    # TODO: remove the duplicated code with stub
     quote bind_quoted: [service_mod: opts[:service]] do
       service_name = service_mod.__meta__(:name)
-      marshal = service_mod.__meta__(:marshal_function)
-      unmarshal = service_mod.__meta__(:unmarshal_function)
-      Enum.each service_mod.__rpc_calls__, fn ({name, request_mod, reply_mod}) ->
+      Enum.each service_mod.__rpc_calls__, fn ({name, {request_mod, _}, {reply_mod, _}}) ->
         func_name = name |> to_string |> Macro.underscore
         path = "/#{service_name}/#{name}"
         def __call_rpc__(unquote(path), body) do
-          marshal_func = fn(req) -> apply(unquote(reply_mod), unquote(marshal), [req]) end
-          unmarshal_func = fn(res) -> apply(unquote(request_mod), unquote(unmarshal), [res]) end
+          marshal_func = fn(req) -> unquote(service_mod).marshal(unquote(reply_mod), req) end
+          unmarshal_func = fn(res) -> unquote(service_mod).unmarshal(unquote(request_mod), res) end
           request = unmarshal_func.(body)
           response = apply(__MODULE__, String.to_atom(unquote(func_name)), [request])
           {:ok, marshal_func.(response)}
