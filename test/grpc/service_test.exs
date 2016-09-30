@@ -1,36 +1,38 @@
 defmodule GRPC.ServiceTest do
   use ExUnit.Case, async: true
 
-  defmodule Helloworld do
-    @external_resource Path.expand("../../priv/protos/helloworld.proto", __DIR__)
-    use Protobuf, from: Path.expand("../../priv/protos/helloworld.proto", __DIR__)
-  end
+  defmodule Routeguide do
+    @external_resource Path.expand("../../priv/protos/route_guide.proto", __DIR__)
+    use Protobuf, from: Path.expand("../../priv/protos/route_guide.proto", __DIR__)
 
-  defmodule Helloworld.Greeter.Service do
-    use GRPC.Service, name: "helloworld.Greeter"
+    defmodule RouteGuide.Service do
+      use GRPC.Service, name: "routeguide.RouteGuide"
 
-    alias Helloworld.{HelloRequest, HelloReply}
+      rpc :GetFeature, Routeguide.Point, Routeguide.Feature
+      rpc :ListFeatures, Routeguide.Rectangle, stream(Routeguide.Feature)
+      rpc :RecordRoute, stream(Routeguide.Point), Routeguide.RouteSummary
+      rpc :RouteChat, stream(Routeguide.RouteNote), stream(Routeguide.RouteNote)
+    end
 
-    rpc :SayHello, HelloRequest, HelloReply
-  end
+    defmodule RouteGuide.Stub do
+      use GRPC.Stub, service: RouteGuide.Service
+    end
 
-  defmodule Helloworld.Greeter.Stub do
-    use GRPC.Stub, service: Helloworld.Greeter.Service
-  end
+    defmodule RouteGuide.Server do
+      use GRPC.Server, service: RouteGuide.Service
 
-  defmodule Helloworld.Greeter.Server do
-    use GRPC.Server, service: Helloworld.Greeter.Service
-
-    def say_hello(request) do
-      Helloworld.HelloReply.new(message: "Hello #{request.name}")
+      def get_feature(point) do
+        Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
+      end
     end
   end
 
-  test "the client has functions created by rpc" do
-    GRPC.Server.start(Helloworld.Greeter.Server, "localhost:50051", insecure: true)
+  test "Unary RPC works" do
+    GRPC.Server.start(Routeguide.RouteGuide.Server, "localhost:50051", insecure: true)
 
     {:ok, channel} = GRPC.Channel.connect("localhost:50051", insecure: true)
-    reply = channel |> Helloworld.Greeter.Stub.say_hello(Helloworld.HelloRequest.new(name: "grpc-elixir"))
-    assert reply == Helloworld.HelloReply.new(message: "Hello grpc-elixir")
+    point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
+    feature = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
+    assert feature == Routeguide.Feature.new(location: point, name: "409146138,-746188906")
   end
 end
