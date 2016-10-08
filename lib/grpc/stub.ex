@@ -13,7 +13,7 @@ defmodule GRPC.Stub do
   end
 
   def call(service_mod, rpc, path, channel, request, opts \\ []) do
-    {name, {req_mod, req_stream}, {res_mod, res_stream}} = rpc
+    {_, {req_mod, req_stream}, {res_mod, res_stream}} = rpc
     marshal = fn(req) -> service_mod.marshal(req_mod, req) end
     unmarshal = fn(res) -> service_mod.unmarshal(res_mod, res) end
     cond do
@@ -43,7 +43,7 @@ defmodule GRPC.Stub do
           |> GRPC.Message.from_data
           |> unmarshal.()
           {reply, [acc] ++ reply}
-        {:end_stream, resp} ->
+        {:end_stream, _resp} ->
           nil
       end
     end)

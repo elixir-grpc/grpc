@@ -15,7 +15,7 @@ defmodule GRPC.Call do
   def send_request(channel, path, message, opts) do
     headers = compose_headers(channel, path, opts)
     {:ok, data} = GRPC.Message.to_data(message, opts)
-    {:ok, stream_id} = :h2_client.send_request(channel.pid, headers, data)
+    :h2_client.send_request(channel.pid, headers, data)
   end
 
   def recv(channel, stream_id) do

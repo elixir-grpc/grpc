@@ -2,19 +2,36 @@ defmodule GRPC.Server do
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
       service_name = service_mod.__meta__(:name)
-      Enum.each service_mod.__rpc_calls__, fn ({name, {request_mod, _}, {reply_mod, _}}) ->
+      Enum.each service_mod.__rpc_calls__, fn ({name, _, _} = rpc) ->
         func_name = name |> to_string |> Macro.underscore
         path = "/#{service_name}/#{name}"
-        def __call_rpc__(unquote(path), body) do
-          marshal_func = fn(req) -> unquote(service_mod).marshal(unquote(reply_mod), req) end
-          unmarshal_func = fn(res) -> unquote(service_mod).unmarshal(unquote(request_mod), res) end
-          request = unmarshal_func.(body)
-          response = apply(__MODULE__, String.to_atom(unquote(func_name)), [request])
-          {:ok, marshal_func.(response)}
+        def __call_rpc__(unquote(path), body, conn) do
+          GRPC.Server.call(unquote(service_mod), conn, unquote(Macro.escape(rpc)), String.to_atom(unquote(func_name)), body)
         end
-        def __call_rpc(_, _), do: {:error, "Error"}
+        def __call_rpc(_, _, conn), do: {:error, conn, "Error"}
       end
     end
+  end
+
+  def call(service_mod, %{server: server_mod} = conn,
+           {_, {req_mod, req_stream}, {res_mod, res_stream}}, func_name, body) do
+    marshal_func = fn(req) -> service_mod.marshal(res_mod, req) end
+    unmarshal_func = fn(res) -> service_mod.unmarshal(req_mod, res) end
+    conn = %{conn | marshal: marshal_func, unmarshal: unmarshal_func}
+    request = unmarshal_func.(body)
+    cond do
+      !req_stream && !res_stream ->
+        response = apply(server_mod, func_name, [request, conn])
+        {:ok, conn, response}
+      !req_stream && res_stream ->
+        apply(server_mod, func_name, [request, conn])
+        {:ok, conn}
+    end
+  end
+
+  def stream_send(%{marshal: marshal, state: req}, response) do
+    {:ok, data} = response |> marshal.() |> GRPC.Message.to_data(iolist: true)
+    :cowboy_req.stream_body(data, :nofin, req)
   end
 
   def start(server, addr, opts) when is_binary(addr) do
@@ -28,10 +45,14 @@ defmodule GRPC.Server do
     dispatch = :cowboy_router.compile([
       {host, [{:_, GRPC.Handler, {server, opts}}]}
     ])
-    {:ok, _} = :cowboy.start_clear(:http, 100,
+    {:ok, _} = :cowboy.start_clear(server, 100,
       [port: port], %{:env => %{dispatch: dispatch}}
     )
     GRPC.ServerSup.start_link
+  end
+
+  def stop(server) do
+    :cowboy.stop_listener(server)
   end
 end
 
