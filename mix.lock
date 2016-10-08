@@ -1,4 +1,4 @@
-%{"chatterbox": {:git, "https://github.com/joedevivo/chatterbox.git", "d59b541cdc8d4e27cb4958769ef65ac345ab9e25", []},
+%{"chatterbox": {:git, "https://github.com/tony612/chatterbox.git", "8d209aedfd9995af6e521aaa5d22f9467a443988", [branch: "support-stream-responses"]},
   "cowboy": {:git, "https://github.com/tony612/cowboy.git", "85b48f4574df9e1d5797751deaa9730fe486c5fe", [branch: "trailers-support"]},
   "cowlib": {:git, "https://github.com/ninenines/cowlib", "8cf98c9f3d1292c1b08fca5ca99772ae912eaa86", [ref: "master"]},
   "exprotobuf": {:hex, :exprotobuf, "1.2.0", "31e8d449b342cec3f35f95c2272e018dc1de669e5f5ef01845e5e488b164837c", [:mix], [{:gpb, "~> 3.24", [hex: :gpb, optional: false]}]},

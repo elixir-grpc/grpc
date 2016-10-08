@@ -12,16 +12,40 @@ defmodule GRPC.Stub do
     end
   end
 
-  def call(service_mod, {name, {req_mod, _}, {res_mod, _}} = rpc, path, channel, request, opts \\ []) do
+  def call(service_mod, rpc, path, channel, request, opts \\ []) do
+    {name, {req_mod, req_stream}, {res_mod, res_stream}} = rpc
     marshal = fn(req) -> service_mod.marshal(req_mod, req) end
     unmarshal = fn(res) -> service_mod.unmarshal(res_mod, res) end
-    unary_call(path, marshal, unmarshal, channel, request, opts)
+    cond do
+      !req_stream && !res_stream ->
+        [reply] = unary_call(path, marshal, unmarshal, channel, request, opts)
+        reply
+      !req_stream && res_stream ->
+        server_stream_call(path, marshal, unmarshal, channel, request, opts)
+    end
   end
 
-  def unary_call(path, marshal_func, unmarshal_func, channel, request, opts \\ []) do
-    message = marshal_func.(request)
-    {:ok, {_headers, [data]}} = GRPC.Call.unary(channel, path, message, opts)
-    message = GRPC.Message.from_data(data)
-    unmarshal_func.(message)
+  def unary_call(path, marshal, unmarshal, channel, request, opts \\ []) do
+    message = marshal.(request)
+    {:ok, {_headers, data_list}} = GRPC.Call.unary(channel, path, message, opts)
+    data_list
+    |> Enum.map(&GRPC.Message.from_data/1)
+    |> Enum.map(& unmarshal.(&1))
+  end
+
+  def server_stream_call(path, marshal, unmarshal, channel, request, opts \\ []) do
+    message = marshal.(request)
+    {:ok, stream_id} = GRPC.Call.send_request(channel, path, message, opts)
+    Stream.unfold([], fn acc ->
+      case GRPC.Call.recv(channel, stream_id) do
+        {:data, data} ->
+          reply = data
+          |> GRPC.Message.from_data
+          |> unmarshal.()
+          {reply, [acc] ++ reply}
+        {:end_stream, resp} ->
+          nil
+      end
+    end)
   end
 end

@@ -2,16 +2,31 @@ defmodule GRPC.Call do
   alias GRPC.Transport.Utils
 
   def unary(channel, path, message, opts) do
-    headers = compose_headers(channel, path, opts)
-    {:ok, data} = GRPC.Message.to_data(message, opts)
-    {:ok, stream_id} = :h2_client.send_request(channel.pid, headers, data)
+    {:ok, stream_id} = send_request(channel, path, message, opts)
     receive do
       {:END_STREAM, ^stream_id} ->
         :h2_client.get_response(channel.pid, stream_id)
-      after timeout(opts) ->
-        # TODO: test
-        raise GRPC.TimeoutError
+    after timeout(opts) ->
+      # TODO: test
+      raise GRPC.TimeoutError
     end
+  end
+
+  def send_request(channel, path, message, opts) do
+    headers = compose_headers(channel, path, opts)
+    {:ok, data} = GRPC.Message.to_data(message, opts)
+    {:ok, stream_id} = :h2_client.send_request(channel.pid, headers, data)
+  end
+
+  def recv(channel, stream_id) do
+    receive do
+      {:END_STREAM, ^stream_id} ->
+        resp = :h2_client.get_response(channel.pid, stream_id)
+        {:end_stream, resp}
+      {:RECV_DATA, data} ->
+        {:data, data}
+    end
+    # TODO: timeout
   end
 
   def compose_headers(channel, path, opts \\ []) do

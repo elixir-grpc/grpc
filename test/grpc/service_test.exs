@@ -35,4 +35,17 @@ defmodule GRPC.ServiceTest do
     feature = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
     assert feature == Routeguide.Feature.new(location: point, name: "409146138,-746188906")
   end
+
+  test "unary-stream works" do
+    # GRPC.Server.start(Routeguide.RouteGuide.Server, "localhost:50051", insecure: true)
+
+    {:ok, channel} = GRPC.Channel.connect("localhost:10000", insecure: true)
+    low = Routeguide.Point.new(latitude: 400000000, longitude: -750000000)
+    high = Routeguide.Point.new(latitude: 420000000, longitude: -730000000)
+    rect = Routeguide.Rectangle.new(lo: low, hi: high)
+    stream = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
+    Enum.each stream, fn (reply)->
+      assert reply
+    end
+  end
 end
