@@ -1,9 +1,7 @@
 defmodule Helloworld do
   
   defmodule Greeter.Service do
-    use GRPC.Service, name: "helloworld.Greeter",
-                      marshal_function: :encode,
-                      unmarshal_function: :decode
+    use GRPC.Service, name: "helloworld.Greeter"
 
     rpc :SayHello, Helloworld.HelloRequest, Helloworld.HelloReply
   end
