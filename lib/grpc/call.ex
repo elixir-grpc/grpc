@@ -3,6 +3,29 @@ defmodule GRPC.Call do
 
   def unary(channel, path, message, opts) do
     {:ok, stream_id} = send_request(channel, path, message, opts)
+    recv_end(channel, stream_id, opts)
+  end
+
+  def send_request(channel, path, message, opts) do
+    opts = Keyword.put(opts, :send_end_stream, true)
+    {:ok, stream_id} = send_header(channel, path, opts)
+    send_body(channel, stream_id, message, opts)
+    {:ok, stream_id}
+  end
+
+  def send_header(%{pid: pid} = channel, path, opts) do
+    headers = compose_headers(channel, path, opts)
+    stream_id = :h2_connection.new_stream(pid)
+    :h2_connection.send_headers(pid, stream_id, headers)
+    {:ok, stream_id}
+  end
+
+  def send_body(%{pid: pid}, stream_id, message, opts) do
+    {:ok, data} = GRPC.Message.to_data(message, opts)
+    :h2_connection.send_body(pid, stream_id, data, opts)
+  end
+
+  def recv_end(channel, stream_id, opts) do
     receive do
       {:END_STREAM, ^stream_id} ->
         :h2_client.get_response(channel.pid, stream_id)
@@ -10,12 +33,6 @@ defmodule GRPC.Call do
       # TODO: test
       raise GRPC.TimeoutError
     end
-  end
-
-  def send_request(channel, path, message, opts) do
-    headers = compose_headers(channel, path, opts)
-    {:ok, data} = GRPC.Message.to_data(message, opts)
-    :h2_client.send_request(channel.pid, headers, data)
   end
 
   def recv(channel, stream_id) do

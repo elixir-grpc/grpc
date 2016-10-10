@@ -50,9 +50,9 @@ defmodule GRPC.ServiceTest do
   end
 
   test "unary-stream works" do
-    GRPC.Server.start(Routeguide.RouteGuide.Server, "localhost:10000", insecure: true)
+    GRPC.Server.start(Routeguide.RouteGuide.Server, "localhost:50051", insecure: true)
 
-    {:ok, channel} = GRPC.Channel.connect("localhost:10000", insecure: true)
+    {:ok, channel} = GRPC.Channel.connect("localhost:50051", insecure: true)
     low = Routeguide.Point.new(latitude: 400000000, longitude: -750000000)
     high = Routeguide.Point.new(latitude: 420000000, longitude: -730000000)
     rect = Routeguide.Rectangle.new(lo: low, hi: high)
@@ -62,5 +62,18 @@ defmodule GRPC.ServiceTest do
       Routeguide.Feature.new(location: high, name: "420000000,-730000000")
     ]
     :ok = GRPC.Server.stop(Routeguide.RouteGuide.Server)
+  end
+
+  test "stream-unary works" do
+    # GRPC.Server.start(Routeguide.RouteGuide.Server, "localhost:10000", insecure: true)
+
+    {:ok, channel} = GRPC.Channel.connect("localhost:10000", insecure: true)
+    point1 = Routeguide.Point.new(latitude: 400000000, longitude: -750000000)
+    point2 = Routeguide.Point.new(latitude: 420000000, longitude: -730000000)
+    stream = channel |> Routeguide.RouteGuide.Stub.record_route
+    GRPC.Stub.stream_send(stream, point1)
+    GRPC.Stub.stream_send(stream, point2, end_stream: true)
+    res = GRPC.Stub.recv(stream)
+    assert %GRPC.ServiceTest.Routeguide.RouteSummary{distance: 278598, point_count: 2} = res
   end
 end
