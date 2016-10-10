@@ -1,11 +1,9 @@
 defmodule GRPC.Handler do
   def init(req, {server, _opts} = state) do
     conn = %GRPC.Server.Conn{server: server}
-    {:ok, data, req} = :cowboy_req.read_body(req)
-    message = GRPC.Message.from_data(data)
     req = :cowboy_req.stream_reply(200, headers, req)
     conn = %{conn | state: req}
-    case server.__call_rpc__(:cowboy_req.path(req), message, conn) do
+    case server.__call_rpc__(:cowboy_req.path(req), conn) do
       {:ok, %{state: req} = conn, response} ->
         GRPC.Server.stream_send(conn, response)
         :cowboy_req.stream_trailers(trailers, req)

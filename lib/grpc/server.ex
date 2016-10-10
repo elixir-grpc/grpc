@@ -5,28 +5,36 @@ defmodule GRPC.Server do
       Enum.each service_mod.__rpc_calls__, fn ({name, _, _} = rpc) ->
         func_name = name |> to_string |> Macro.underscore
         path = "/#{service_name}/#{name}"
-        def __call_rpc__(unquote(path), body, conn) do
-          GRPC.Server.call(unquote(service_mod), conn, unquote(Macro.escape(rpc)), String.to_atom(unquote(func_name)), body)
+        def __call_rpc__(unquote(path), conn) do
+          GRPC.Server.call(unquote(service_mod), conn, unquote(Macro.escape(rpc)), String.to_atom(unquote(func_name)))
         end
-        def __call_rpc(_, _, conn), do: {:error, conn, "Error"}
+        def __call_rpc(_, conn), do: {:error, conn, "Error"}
       end
     end
   end
 
-  def call(service_mod, %{server: server_mod} = conn,
-           {_, {req_mod, req_stream}, {res_mod, res_stream}}, func_name, body) do
+  def call(service_mod, conn, {_, {req_mod, req_stream}, {res_mod, res_stream}} = _rpc, func_name) do
     marshal_func = fn(req) -> service_mod.marshal(res_mod, req) end
     unmarshal_func = fn(res) -> service_mod.unmarshal(req_mod, res) end
     conn = %{conn | marshal: marshal_func, unmarshal: unmarshal_func}
-    request = unmarshal_func.(body)
-    cond do
-      !req_stream && !res_stream ->
-        response = apply(server_mod, func_name, [request, conn])
-        {:ok, conn, response}
-      !req_stream && res_stream ->
-        apply(server_mod, func_name, [request, conn])
-        {:ok, conn}
-    end
+
+    handle_request(req_stream, res_stream, conn, func_name)
+  end
+
+  defp handle_request(false = req_stream, res_stream, %{unmarshal: unmarshal, state: req} = conn, func_name) do
+    {:ok, data, req} = :cowboy_req.read_body(req)
+    conn = %{conn | state: req}
+    message = GRPC.Message.from_data(data)
+    request = unmarshal.(message)
+    handle_request(req_stream, res_stream, conn, func_name, request)
+  end
+  defp handle_request(false, false, %{server: server_mod} = conn, func_name, request) do
+    response = apply(server_mod, func_name, [request, conn])
+    {:ok, conn, response}
+  end
+  defp handle_request(false, true, %{server: server_mod} = conn, func_name, request) do
+    apply(server_mod, func_name, [request, conn])
+    {:ok, conn}
   end
 
   def stream_send(%{marshal: marshal, state: req}, response) do
