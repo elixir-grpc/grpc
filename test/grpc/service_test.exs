@@ -33,6 +33,15 @@ defmodule GRPC.ServiceTest do
         end
       end
 
+      def record_route(stream, conn) do
+        points = Enum.reduce stream, [], fn (point, acc) ->
+          [point|acc]
+        end
+        fake_num = length(points)
+        Routeguide.RouteSummary.new(point_count: fake_num, feature_count: fake_num,
+                                    distance: fake_num, elapsed_time: fake_num)
+      end
+
       defp simple_feature(point) do
         Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
       end
@@ -65,7 +74,7 @@ defmodule GRPC.ServiceTest do
   end
 
   test "stream-unary works" do
-    # GRPC.Server.start(Routeguide.RouteGuide.Server, "localhost:10000", insecure: true)
+    GRPC.Server.start(Routeguide.RouteGuide.Server, "localhost:10000", insecure: true)
 
     {:ok, channel} = GRPC.Channel.connect("localhost:10000", insecure: true)
     point1 = Routeguide.Point.new(latitude: 400000000, longitude: -750000000)
@@ -74,6 +83,7 @@ defmodule GRPC.ServiceTest do
     GRPC.Stub.stream_send(stream, point1)
     GRPC.Stub.stream_send(stream, point2, end_stream: true)
     res = GRPC.Stub.recv(stream)
-    assert %GRPC.ServiceTest.Routeguide.RouteSummary{distance: 278598, point_count: 2} = res
+    assert %GRPC.ServiceTest.Routeguide.RouteSummary{point_count: 2} = res
+    :ok = GRPC.Server.stop(Routeguide.RouteGuide.Server)
   end
 end

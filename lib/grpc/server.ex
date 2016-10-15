@@ -14,8 +14,8 @@ defmodule GRPC.Server do
   end
 
   def call(service_mod, conn, {_, {req_mod, req_stream}, {res_mod, res_stream}} = _rpc, func_name) do
-    marshal_func = fn(req) -> service_mod.marshal(res_mod, req) end
-    unmarshal_func = fn(res) -> service_mod.unmarshal(req_mod, res) end
+    marshal_func = fn(res) -> service_mod.marshal(res_mod, res) end
+    unmarshal_func = fn(req) -> service_mod.unmarshal(req_mod, req) end
     conn = %{conn | marshal: marshal_func, unmarshal: unmarshal_func}
 
     handle_request(req_stream, res_stream, conn, func_name)
@@ -28,6 +28,23 @@ defmodule GRPC.Server do
     request = unmarshal.(message)
     handle_request(req_stream, res_stream, conn, func_name, request)
   end
+  defp handle_request(true, false, %{server: server_mod, unmarshal: unmarshal} = conn, func_name) do
+    stream = Stream.unfold(conn, fn nil -> nil; %{state: req} = acc ->
+      case :cowboy_req.read_body(req) do
+        {:ok, "", req} ->
+          nil
+        {atom, data, req} when atom == :ok or atom == :more ->
+          request = data
+          |> GRPC.Message.from_data
+          |> unmarshal.()
+          new_conn = %{acc | state: req}
+          {request, new_conn}
+      end
+    end)
+    response = apply(server_mod, func_name, [stream, conn])
+    {:ok, conn, response}
+  end
+
   defp handle_request(false, false, %{server: server_mod} = conn, func_name, request) do
     response = apply(server_mod, func_name, [request, conn])
     {:ok, conn, response}
@@ -54,7 +71,8 @@ defmodule GRPC.Server do
       {host, [{:_, GRPC.Handler, {server, opts}}]}
     ])
     {:ok, _} = :cowboy.start_clear(server, 100,
-      [port: port], %{:env => %{dispatch: dispatch}}
+      [port: port], %{:env => %{dispatch: dispatch},
+                      :stream_handler => {GRPC.Adapter.Cowboy.StreamHandler, :supervisor}}
     )
     GRPC.ServerSup.start_link
   end
