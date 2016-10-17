@@ -74,9 +74,9 @@ defmodule GRPC.ServiceTest do
   end
 
   test "stream-unary works" do
-    GRPC.Server.start(Routeguide.RouteGuide.Server, "localhost:10000", insecure: true)
+    GRPC.Server.start(Routeguide.RouteGuide.Server, "localhost:50051", insecure: true)
 
-    {:ok, channel} = GRPC.Channel.connect("localhost:10000", insecure: true)
+    {:ok, channel} = GRPC.Channel.connect("localhost:50051", insecure: true)
     point1 = Routeguide.Point.new(latitude: 400000000, longitude: -750000000)
     point2 = Routeguide.Point.new(latitude: 420000000, longitude: -730000000)
     stream = channel |> Routeguide.RouteGuide.Stub.record_route

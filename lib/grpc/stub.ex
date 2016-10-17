@@ -7,7 +7,7 @@ defmodule GRPC.Stub do
         path = "/#{service_name}/#{name}"
         if req_stream do
           def unquote(String.to_atom(func_name))(channel, opts \\ []) do
-            GRPC.Stub.call(unquote(service_mod), unquote(Macro.escape(rpc)), unquote(path), channel, opts)
+            GRPC.Stub.call(unquote(service_mod), unquote(Macro.escape(rpc)), unquote(path), channel, nil, opts)
           end
         else
           def unquote(String.to_atom(func_name))(channel, request, opts \\ []) do
@@ -18,35 +18,23 @@ defmodule GRPC.Stub do
     end
   end
 
-  def call(service_mod, rpc, path, channel, opts) do
-    {_, {req_mod, req_stream}, {res_mod, res_stream}} = rpc
-    marshal = fn(req) -> service_mod.marshal(req_mod, req) end
-    unmarshal = fn(res) -> service_mod.unmarshal(res_mod, res) end
-    cond do
-      req_stream && !res_stream ->
-        client_stream_call(path, marshal, unmarshal, channel, opts)
-    end
-  end
-
   def call(service_mod, rpc, path, channel, request, opts) do
     {_, {req_mod, req_stream}, {res_mod, res_stream}} = rpc
     marshal = fn(req) -> service_mod.marshal(req_mod, req) end
     unmarshal = fn(res) -> service_mod.unmarshal(res_mod, res) end
-    cond do
-      !req_stream && !res_stream ->
-        unary_call(path, marshal, unmarshal, channel, request, opts)
-      !req_stream && res_stream ->
-        server_stream_call(path, marshal, unmarshal, channel, request, opts)
-    end
+    service = %{marshal: marshal, unmarshal: unmarshal, path: path}
+    stream = %GRPC.Stream{service: service}
+    send_request(req_stream, res_stream, stream, channel, request, opts)
   end
 
-  defp unary_call(path, marshal, unmarshal, channel, request, opts) do
+  defp send_request(false, false, %{service: service} = stream, channel, request, opts) do
+    %{marshal: marshal, unmarshal: unmarshal, path: path} = service
     message = marshal.(request)
     {:ok, response} = GRPC.Call.unary(channel, path, message, opts)
     parse_unary_response(response, unmarshal)
   end
-
-  defp server_stream_call(path, marshal, unmarshal, channel, request, opts) do
+  defp send_request(false, true, %{service: service} = stream, channel, request, opts) do
+    %{marshal: marshal, unmarshal: unmarshal, path: path} = service
     message = marshal.(request)
     {:ok, stream_id} = GRPC.Call.send_request(channel, path, message, opts)
     Stream.unfold([], fn acc ->
@@ -61,22 +49,22 @@ defmodule GRPC.Stub do
       end
     end)
   end
-
-  defp client_stream_call(path, marshal, unmarshal, channel, opts) do
+  defp send_request(true, false, %{service: service} = stream, channel, _, opts) do
+    %{path: path} = service
     {:ok, stream_id} = GRPC.Call.send_header(channel, path, opts)
-    %GRPC.Stream{marshal: marshal, unmarshal: unmarshal, state: %{channel: channel, stream_id: stream_id}}
+    %{stream | state: %{channel: channel, stream_id: stream_id}}
   end
 
-  def stream_send(%{marshal: marshal, state: %{stream_id: stream_id, channel: channel}}, request, opts \\ []) do
-    message = marshal.(request)
+  def stream_send(%{service: service, state: %{stream_id: stream_id, channel: channel}}, request, opts \\ []) do
+    message = service[:marshal].(request)
     send_end_stream = Keyword.get(opts, :end_stream, false)
     GRPC.Call.send_body(channel, stream_id, message, send_end_stream: send_end_stream)
     :ok
   end
 
-  def recv(%{unmarshal: unmarshal, state: %{stream_id: stream_id, channel: channel}}, opts \\ []) do
+  def recv(%{service: service, state: %{stream_id: stream_id, channel: channel}}, opts \\ []) do
     {:ok, response} = GRPC.Call.recv_end(channel, stream_id, opts)
-    parse_unary_response(response, unmarshal)
+    parse_unary_response(response, service[:unmarshal])
   end
 
   defp parse_unary_response({_headers, data_list}, unmarshal) do
