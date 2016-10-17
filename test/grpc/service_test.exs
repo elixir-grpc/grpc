@@ -58,7 +58,7 @@ defmodule GRPC.ServiceTest do
     :ok = GRPC.Server.stop(Routeguide.RouteGuide.Server)
   end
 
-  test "unary-stream works" do
+  test "Server streaming RPC works" do
     GRPC.Server.start(Routeguide.RouteGuide.Server, "localhost:50051", insecure: true)
 
     {:ok, channel} = GRPC.Channel.connect("localhost:50051", insecure: true)
@@ -73,7 +73,7 @@ defmodule GRPC.ServiceTest do
     :ok = GRPC.Server.stop(Routeguide.RouteGuide.Server)
   end
 
-  test "stream-unary works" do
+  test "Client streaming RPC works" do
     GRPC.Server.start(Routeguide.RouteGuide.Server, "localhost:50051", insecure: true)
 
     {:ok, channel} = GRPC.Channel.connect("localhost:50051", insecure: true)
@@ -85,5 +85,27 @@ defmodule GRPC.ServiceTest do
     res = GRPC.Stub.recv(stream)
     assert %GRPC.ServiceTest.Routeguide.RouteSummary{point_count: 2} = res
     :ok = GRPC.Server.stop(Routeguide.RouteGuide.Server)
+  end
+
+  test "Bidirectional streaming RPC works" do
+    # GRPC.Server.start(Routeguide.RouteGuide.Server, "localhost:10000", insecure: true)
+
+    {:ok, channel} = GRPC.Channel.connect("localhost:10000", insecure: true)
+    current = self()
+    stream = channel |> Routeguide.RouteGuide.Stub.route_chat
+    task = Task.async(fn ->
+      Enum.each(1..6, fn (i) ->
+        point = Routeguide.Point.new(latitude: 0, longitude: rem(i, 3) + 1)
+        note = Routeguide.RouteNote.new(location: point, message: "Message #{i}")
+        opts = if i == 6, do: [end_stream: true], else: []
+        GRPC.Stub.stream_send(stream, note, opts)
+      end)
+    end)
+    stream_result = GRPC.Stub.recv(stream)
+    notes = Enum.map stream_result, fn (note)->
+      note
+    end
+    assert length(notes) > 0
+    # :ok = GRPC.Server.stop(Routeguide.RouteGuide.Server)
   end
 end
