@@ -28,7 +28,7 @@ defmodule GRPC.Server do
     request = unmarshal.(message)
     handle_request(req_stream, res_stream, conn, func_name, request)
   end
-  defp handle_request(true, false, %{server: server_mod, unmarshal: unmarshal} = conn, func_name) do
+  defp handle_request(true = req_stream, res_stream, %{server: server_mod, unmarshal: unmarshal} = conn, func_name) do
     stream = Stream.unfold(conn, fn nil -> nil; %{state: req} = acc ->
       case :cowboy_req.read_body(req) do
         {:ok, "", req} ->
@@ -41,8 +41,7 @@ defmodule GRPC.Server do
           {request, new_conn}
       end
     end)
-    response = apply(server_mod, func_name, [stream, conn])
-    {:ok, conn, response}
+    handle_request(req_stream, res_stream, conn, func_name, stream)
   end
 
   defp handle_request(false, false, %{server: server_mod} = conn, func_name, request) do
@@ -51,6 +50,14 @@ defmodule GRPC.Server do
   end
   defp handle_request(false, true, %{server: server_mod} = conn, func_name, request) do
     apply(server_mod, func_name, [request, conn])
+    {:ok, conn}
+  end
+  defp handle_request(true, false, %{server: server_mod} = conn, func_name, stream) do
+    response = apply(server_mod, func_name, [stream, conn])
+    {:ok, conn, response}
+  end
+  defp handle_request(true, true, %{server: server_mod} = conn, func_name, stream) do
+    apply(server_mod, func_name, [stream, conn])
     {:ok, conn}
   end
 

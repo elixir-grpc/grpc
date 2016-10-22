@@ -42,6 +42,13 @@ defmodule GRPC.ServiceTest do
                                     distance: fake_num, elapsed_time: fake_num)
       end
 
+      def route_chat(stream, conn) do
+        Enum.each stream, fn note ->
+          note = %{note | message: "Reply: #{note.message}"}
+          Server.stream_send(conn, note)
+        end
+      end
+
       defp simple_feature(point) do
         Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
       end
@@ -88,9 +95,9 @@ defmodule GRPC.ServiceTest do
   end
 
   test "Bidirectional streaming RPC works" do
-    # GRPC.Server.start(Routeguide.RouteGuide.Server, "localhost:10000", insecure: true)
+    GRPC.Server.start(Routeguide.RouteGuide.Server, "localhost:50051", insecure: true)
 
-    {:ok, channel} = GRPC.Channel.connect("localhost:10000", insecure: true)
+    {:ok, channel} = GRPC.Channel.connect("localhost:50051", insecure: true)
     current = self()
     stream = channel |> Routeguide.RouteGuide.Stub.route_chat
     task = Task.async(fn ->
@@ -103,9 +110,10 @@ defmodule GRPC.ServiceTest do
     end)
     stream_result = GRPC.Stub.recv(stream)
     notes = Enum.map stream_result, fn (note)->
+      assert "Reply: " <> _msg = note.message
       note
     end
     assert length(notes) > 0
-    # :ok = GRPC.Server.stop(Routeguide.RouteGuide.Server)
+    :ok = GRPC.Server.stop(Routeguide.RouteGuide.Server)
   end
 end
