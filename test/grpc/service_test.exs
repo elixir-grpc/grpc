@@ -4,54 +4,72 @@ defmodule GRPC.ServiceTest do
   defmodule Routeguide do
     @external_resource Path.expand("../../priv/protos/route_guide.proto", __DIR__)
     use Protobuf, from: Path.expand("../../priv/protos/route_guide.proto", __DIR__)
+  end
+  defmodule Routeguide.RouteGuide.Service do
+    use GRPC.Service, name: "routeguide.RouteGuide"
 
-    defmodule RouteGuide.Service do
-      use GRPC.Service, name: "routeguide.RouteGuide"
+    rpc :GetFeature, Routeguide.Point, Routeguide.Feature
+    rpc :ListFeatures, Routeguide.Rectangle, stream(Routeguide.Feature)
+    rpc :RecordRoute, stream(Routeguide.Point), Routeguide.RouteSummary
+    rpc :RouteChat, stream(Routeguide.RouteNote), stream(Routeguide.RouteNote)
+  end
+  defmodule Routeguide.RouteGuide.Stub do
+    use GRPC.Stub, service: Routeguide.RouteGuide.Service
+  end
 
-      rpc :GetFeature, Routeguide.Point, Routeguide.Feature
-      rpc :ListFeatures, Routeguide.Rectangle, stream(Routeguide.Feature)
-      rpc :RecordRoute, stream(Routeguide.Point), Routeguide.RouteSummary
-      rpc :RouteChat, stream(Routeguide.RouteNote), stream(Routeguide.RouteNote)
+  defmodule Routeguide.RouteGuide.Server do
+    use GRPC.Server, service: Routeguide.RouteGuide.Service
+    alias GRPC.Server
+
+    def get_feature(point, _conn) do
+      simple_feature(point)
     end
 
-    defmodule RouteGuide.Stub do
-      use GRPC.Stub, service: RouteGuide.Service
+    def list_features(rectangle, conn) do
+      Enum.each [rectangle.lo, rectangle.hi], fn (point)->
+        feature = simple_feature(point)
+        Server.stream_send(conn, feature)
+      end
     end
 
-    defmodule RouteGuide.Server do
-      use GRPC.Server, service: RouteGuide.Service
-      alias GRPC.Server
-
-      def get_feature(point, _conn) do
-        simple_feature(point)
+    def record_route(stream, conn) do
+      points = Enum.reduce stream, [], fn (point, acc) ->
+        [point|acc]
       end
+      fake_num = length(points)
+      Routeguide.RouteSummary.new(point_count: fake_num, feature_count: fake_num,
+                                  distance: fake_num, elapsed_time: fake_num)
+    end
 
-      def list_features(rectangle, conn) do
-        Enum.each [rectangle.lo, rectangle.hi], fn (point)->
-          feature = simple_feature(point)
-          Server.stream_send(conn, feature)
-        end
+    def route_chat(stream, conn) do
+      Enum.each stream, fn note ->
+        note = %{note | message: "Reply: #{note.message}"}
+        Server.stream_send(conn, note)
       end
+    end
 
-      def record_route(stream, conn) do
-        points = Enum.reduce stream, [], fn (point, acc) ->
-          [point|acc]
-        end
-        fake_num = length(points)
-        Routeguide.RouteSummary.new(point_count: fake_num, feature_count: fake_num,
-                                    distance: fake_num, elapsed_time: fake_num)
-      end
+    defp simple_feature(point) do
+      Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
+    end
+  end
 
-      def route_chat(stream, conn) do
-        Enum.each stream, fn note ->
-          note = %{note | message: "Reply: #{note.message}"}
-          Server.stream_send(conn, note)
-        end
-      end
+  # For the test case "it works when outer namespace is same with inner's"
+  defmodule Foo do
+    @external_resource Path.expand("../../priv/protos/route_guide.proto", __DIR__)
+    use Protobuf, from: Path.expand("../../priv/protos/route_guide.proto", __DIR__)
+  end
+  defmodule Foo.Foo.Service do
+    use GRPC.Service, name: "routeguide.RouteGuide"
+    rpc :GetFeature, Foo.Point, Foo.Feature
+  end
+  defmodule Foo.RouteGuide.Stub do
+    use GRPC.Stub, service: Foo.Foo.Service
+  end
+  defmodule Foo.RouteGuide.Server do
+    use GRPC.Server, service: Foo.Foo.Service
 
-      defp simple_feature(point) do
-        Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
-      end
+    def get_feature(point, _conn) do
+      Foo.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
     end
   end
 
@@ -63,6 +81,16 @@ defmodule GRPC.ServiceTest do
     feature = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
     assert feature == Routeguide.Feature.new(location: point, name: "409146138,-746188906")
     :ok = GRPC.Server.stop(Routeguide.RouteGuide.Server)
+  end
+
+  test "it works when outer namespace is same with inner's" do
+    GRPC.Server.start(Foo.RouteGuide.Server, "localhost:50051", insecure: true)
+
+    {:ok, channel} = GRPC.Channel.connect("localhost:50051", insecure: true)
+    point = Foo.Point.new(latitude: 409_146_138, longitude: -746_188_906)
+    feature = channel |> Foo.RouteGuide.Stub.get_feature(point)
+    assert feature == Foo.Feature.new(location: point, name: "409146138,-746188906")
+    :ok = GRPC.Server.stop(Foo.RouteGuide.Server)
   end
 
   test "Server streaming RPC works" do
