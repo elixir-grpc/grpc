@@ -1,15 +1,15 @@
+
+defmodule Helloworld.Greeter.Service do
+  use GRPC.Service, name: "helloworld.Greeter"
+
+  rpc :SayHello, Helloworld.HelloRequest, Helloworld.HelloReply
+end
+
+defmodule Helloworld.Greeter.Stub do
+  use GRPC.Stub, service: Helloworld.Greeter.Service
+end
+
 defmodule Helloworld do
-  
-  defmodule Greeter.Service do
-    use GRPC.Service, name: "helloworld.Greeter"
-
-    rpc :SayHello, Helloworld.HelloRequest, Helloworld.HelloReply
-  end
-
-  defmodule Greeter.Stub do
-    use GRPC.Stub, service: Greeter.Service
-  end
-  
   use Protobuf, """
 syntax = "proto3";
 
@@ -36,5 +36,4 @@ message HelloReply {
   string message = 1;
 }
   """
-
 end
