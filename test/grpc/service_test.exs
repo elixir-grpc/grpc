@@ -32,7 +32,7 @@ defmodule GRPC.ServiceTest do
       end
     end
 
-    def record_route(stream, conn) do
+    def record_route(stream, _conn) do
       points = Enum.reduce stream, [], fn (point, acc) ->
         [point|acc]
       end
@@ -126,7 +126,6 @@ defmodule GRPC.ServiceTest do
     GRPC.Server.start(Routeguide.RouteGuide.Server, "localhost:50051", insecure: true)
 
     {:ok, channel} = GRPC.Channel.connect("localhost:50051", insecure: true)
-    current = self()
     stream = channel |> Routeguide.RouteGuide.Stub.route_chat
     task = Task.async(fn ->
       Enum.each(1..6, fn (i) ->
@@ -137,11 +136,12 @@ defmodule GRPC.ServiceTest do
       end)
     end)
     stream_result = GRPC.Stub.recv(stream)
+    Task.await(task)
     notes = Enum.map stream_result, fn (note)->
       assert "Reply: " <> _msg = note.message
       note
     end
-    assert length(notes) > 0
+    assert length(notes) == 6
     :ok = GRPC.Server.stop(Routeguide.RouteGuide.Server)
   end
 end

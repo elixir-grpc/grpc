@@ -4,7 +4,7 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
 
   alias __MODULE__, as: State
 
-  def init(stream_id, %{ref: ref} = req, opts) do
+  def init(_stream_id, %{ref: ref} = req, opts) do
     env = Map.get(opts, :env, %{})
     middlewares = Map.get(opts, :middlewares, [:cowboy_router, :cowboy_handler])
     shutdown = Map.get(opts, :shutdown, 5000)
@@ -61,8 +61,7 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
     {[flow: length], %State{state | read_body_ref: ref, read_body_timer_ref: t_ref}}
   end
   # ref is matched
-  def info(_stream_id, {:read_body_timeout, ref},
-            %State{pid: pid, read_body_ref: ref, read_body_is_fin: is_fin} = state) do
+  def info(_stream_id, {:read_body_timeout, ref}, %State{read_body_ref: ref} = state) do
     {[], %State{state | read_body_ref: nil, read_body_timer_ref: nil}}
   end
   # ref is not matched
@@ -110,7 +109,7 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
     try do
       execute(req, env, middlewares)
     catch
-      _, reason when elem(0, reason) == :cowboy_handler ->
+      _, reason when elem(reason, 0) == :cowboy_handler ->
         exit(reason)
       _, reason ->
         exit({reason, :erlang.get_stacktrace()})
@@ -118,7 +117,7 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
   end
 
   def execute(_, _, []), do: :ok
-  def execute(req, env, [middleware|tail] = mds) do
+  def execute(req, env, [middleware|tail]) do
     res = middleware.execute(req, env)
     case res do
       {:ok, req2, env2} ->

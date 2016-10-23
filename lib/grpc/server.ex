@@ -28,10 +28,10 @@ defmodule GRPC.Server do
     request = unmarshal.(message)
     handle_request(req_stream, res_stream, conn, func_name, request)
   end
-  defp handle_request(true = req_stream, res_stream, %{server: server_mod, unmarshal: unmarshal} = conn, func_name) do
+  defp handle_request(true = req_stream, res_stream, %{unmarshal: unmarshal} = conn, func_name) do
     stream = Stream.unfold(conn, fn nil -> nil; %{state: req} = acc ->
       case :cowboy_req.read_body(req) do
-        {:ok, "", req} ->
+        {:ok, "", _} ->
           nil
         {atom, data, req} when atom == :ok or atom == :more ->
           request = data

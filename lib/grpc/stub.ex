@@ -27,13 +27,13 @@ defmodule GRPC.Stub do
     send_request(req_stream, res_stream, stream, channel, request, opts)
   end
 
-  defp send_request(false, false, %{service: service} = stream, channel, request, opts) do
+  defp send_request(false, false, %{service: service}, channel, request, opts) do
     %{marshal: marshal, unmarshal: unmarshal, path: path} = service
     message = marshal.(request)
     {:ok, response} = GRPC.Call.unary(channel, path, message, opts)
     parse_unary_response(response, unmarshal)
   end
-  defp send_request(false, true, %{service: service} = stream, channel, request, opts) do
+  defp send_request(false, true, %{service: service}, channel, request, opts) do
     %{marshal: marshal, unmarshal: unmarshal, path: path} = service
     message = marshal.(request)
     {:ok, stream_id} = GRPC.Call.send_request(channel, path, message, opts)
@@ -58,7 +58,7 @@ defmodule GRPC.Stub do
   end
 
   def recv(stream, opts \\ [])
-  def recv(%{service: %{res_stream: true, unmarshal: unmarshal}, state: %{stream_id: stream_id, channel: channel}}, opts) do
+  def recv(%{service: %{res_stream: true, unmarshal: unmarshal}, state: %{stream_id: stream_id, channel: channel}}, _opts) do
     response_stream(channel, stream_id, unmarshal)
   end
   def recv(%{service: service, state: %{stream_id: stream_id, channel: channel}}, opts) do
