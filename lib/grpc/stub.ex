@@ -1,4 +1,6 @@
 defmodule GRPC.Stub do
+  alias GRPC.Channel
+
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
       service_name = service_mod.__meta__(:name)
@@ -22,48 +24,44 @@ defmodule GRPC.Stub do
     {_, {req_mod, req_stream}, {res_mod, res_stream}} = rpc
     marshal = fn(req) -> service_mod.marshal(req_mod, req) end
     unmarshal = fn(res) -> service_mod.unmarshal(res_mod, res) end
-    service = %{marshal: marshal, unmarshal: unmarshal, path: path, req_stream: req_stream, res_stream: res_stream}
-    stream = %GRPC.Stream{service: service}
-    send_request(req_stream, res_stream, stream, channel, request, opts)
+    stream = %GRPC.Client.Stream{marshal: marshal, unmarshal: unmarshal, path: path,
+              req_stream: req_stream, res_stream: res_stream, channel: channel}
+    send_request(req_stream, res_stream, stream, request, opts)
   end
 
-  defp send_request(false, false, %{service: service}, channel, request, opts) do
-    %{marshal: marshal, unmarshal: unmarshal, path: path} = service
+  defp send_request(false, false, %{marshal: marshal, unmarshal: unmarshal} = stream, request, opts) do
     message = marshal.(request)
-    {:ok, response} = GRPC.Call.unary(channel, path, message, opts)
+    {:ok, response} = Channel.unary(stream, message, opts)
     parse_unary_response(response, unmarshal)
   end
-  defp send_request(false, true, %{service: service}, channel, request, opts) do
-    %{marshal: marshal, unmarshal: unmarshal, path: path} = service
+  defp send_request(false, true, %{marshal: marshal} = stream, request, opts) do
     message = marshal.(request)
-    {:ok, stream_id} = GRPC.Call.send_request(channel, path, message, opts)
-    response_stream(channel, stream_id, unmarshal)
+    {:ok, new_stream} = Channel.send_request(stream, message, opts)
+    response_stream(new_stream, opts)
   end
-  defp send_request(true, false, %{service: service} = stream, channel, _, opts) do
-    %{path: path} = service
-    {:ok, stream_id} = GRPC.Call.send_header(channel, path, opts)
-    %{stream | state: %{channel: channel, stream_id: stream_id}}
+  defp send_request(true, false, stream, _, opts) do
+    {:ok, stream} = Channel.send_header(stream, opts)
+    stream
   end
-  defp send_request(true, true, %{service: service} = stream, channel, _, opts) do
-    %{path: path} = service
-    {:ok, stream_id} = GRPC.Call.send_header(channel, path, opts)
-    %{stream | state: %{channel: channel, stream_id: stream_id}}
+  defp send_request(true, true, stream, _, opts) do
+    {:ok, stream} = Channel.send_header(stream, opts)
+    stream
   end
 
-  def stream_send(%{service: service, state: %{stream_id: stream_id, channel: channel}}, request, opts \\ []) do
-    message = service[:marshal].(request)
+  def stream_send(%{marshal: marshal} = stream, request, opts \\ []) do
+    message = marshal.(request)
     send_end_stream = Keyword.get(opts, :end_stream, false)
-    GRPC.Call.send_body(channel, stream_id, message, send_end_stream: send_end_stream)
+    Channel.send_body(stream, message, send_end_stream: send_end_stream)
     :ok
   end
 
   def recv(stream, opts \\ [])
-  def recv(%{service: %{res_stream: true, unmarshal: unmarshal}, state: %{stream_id: stream_id, channel: channel}}, _opts) do
-    response_stream(channel, stream_id, unmarshal)
+  def recv(%{res_stream: true} = stream, opts) do
+    response_stream(stream, opts)
   end
-  def recv(%{service: service, state: %{stream_id: stream_id, channel: channel}}, opts) do
-    {:ok, response} = GRPC.Call.recv_end(channel, stream_id, opts)
-    parse_unary_response(response, service[:unmarshal])
+  def recv(%{unmarshal: unmarshal} = stream, opts) do
+    {:ok, response} = Channel.recv_end(stream, opts)
+    parse_unary_response(response, unmarshal)
   end
 
   defp parse_unary_response({_headers, data_list}, unmarshal) do
@@ -73,9 +71,9 @@ defmodule GRPC.Stub do
     |> List.first
   end
 
-  defp response_stream(channel, stream_id, unmarshal) do
+  defp response_stream(%{unmarshal: unmarshal} = stream, opts) do
     Stream.unfold([], fn acc ->
-      case GRPC.Call.recv(channel, stream_id) do
+      case Channel.recv(stream, opts) do
         {:data, data} ->
           reply = data
           |> GRPC.Message.from_data
@@ -84,7 +82,7 @@ defmodule GRPC.Stub do
         {:end_stream, _resp} ->
           nil
         other ->
-          IO.inspect other
+          other
       end
     end)
   end

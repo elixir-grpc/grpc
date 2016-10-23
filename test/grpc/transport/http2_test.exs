@@ -1,10 +1,13 @@
-defmodule GRPC.CallTest do
+defmodule GRPC.Transport.HTTP2Test do
   use ExUnit.Case, async: true
-  alias GRPC.{Channel, Call}
+  alias GRPC.Channel
+  alias GRPC.Transport.HTTP2
+
+  @channel %Channel{scheme: "http", host: "grpc.io"}
 
   test "compose_headers/3 returns basic headers" do
-    channel = %Channel{scheme: "http", host: "grpc.io"}
-    headers = Call.compose_headers(channel, "/foo/bar", grpc_version: "1.0.0")
+    stream = %{channel: @channel, path: "/foo/bar"}
+    headers = HTTP2.compose_headers(stream, grpc_version: "1.0.0")
     assert headers == [
       {":method", "POST"},
       {":scheme", "http"},
@@ -17,46 +20,46 @@ defmodule GRPC.CallTest do
   end
 
   test "compose_headers/3 returns grpc-encoding" do
-    channel = %Channel{}
-    headers = Call.compose_headers(channel, "/foo/bar", send_encoding: "gzip")
+    stream = %{channel: @channel, path: "/foo/bar"}
+    headers = HTTP2.compose_headers(stream, send_encoding: "gzip")
     assert List.last(headers) == {"grpc-encoding", "gzip"}
   end
 
   test "compose_headers/3 returns custom metadata" do
-    channel = %Channel{}
-    headers = Call.compose_headers(channel, "/foo/bar", metadata: %{foo: "bar", foo1: :bar1})
+    stream = %{channel: @channel, path: "/foo/bar"}
+    headers = HTTP2.compose_headers(stream, metadata: %{foo: "bar", foo1: :bar1})
     assert [{"foo1", "bar1"}, {"foo", "bar"} | _] = Enum.reverse(headers)
   end
 
   test "compose_headers/3 returns custom metadata with *-bin key" do
-    channel = %Channel{}
-    headers = Call.compose_headers(channel, "/foo/bar", metadata: %{"key1-bin" => "abc", "key2-bin" => <<194, 128>>})
+    stream = %{channel: @channel, path: "/foo/bar"}
+    headers = HTTP2.compose_headers(stream, metadata: %{"key1-bin" => "abc", "key2-bin" => <<194, 128>>})
     assert [{"key2-bin", "woA="}, {"key1-bin", "YWJj"} | _] = Enum.reverse(headers)
   end
 
   test "compose_headers/3 rejects reserved headers in metadata" do
-    channel = %Channel{}
+    stream = %{channel: @channel, path: "/foo/bar"}
     metadata = %{"foo" => "bar", ":foo" => ":bar", "grpc-foo" => "bar", "content-type" => "bar", "te" => "et"}
-    headers = Call.compose_headers(channel, "/foo/bar", metadata: metadata)
+    headers = HTTP2.compose_headers(stream, metadata: metadata)
     assert [{"foo", "bar"}, {"te", "trailers"} | _] = Enum.reverse(headers)
   end
 
   test "compose_headers/3 downcase keys of metadata" do
-    channel = %Channel{}
+    stream = %{channel: @channel, path: "/foo/bar"}
     metadata = %{:Foo => "bar", "Foo-Bar" => "bar"}
-    headers = Call.compose_headers(channel, "/foo/bar", metadata: metadata)
+    headers = HTTP2.compose_headers(stream, metadata: metadata)
     assert [{"foo-bar", "bar"}, {"foo", "bar"} | _] = Enum.reverse(headers)
   end
 
   test "compose_headers/3 has timeout with :deadline option" do
-    channel = %Channel{}
-    headers = Call.compose_headers(channel, "/foo/bar", deadline: DateTime.utc_now)
+    stream = %{channel: @channel, path: "/foo/bar"}
+    headers = HTTP2.compose_headers(stream, deadline: DateTime.utc_now)
     assert [{"grpc-timeout", "0u"} | _] = Enum.reverse(headers)
   end
 
   test "compose_headers/3 has timeout with :timeout option" do
-    channel = %Channel{}
-    headers = Call.compose_headers(channel, "/foo/bar", timeout: 5)
+    stream = %{channel: @channel, path: "/foo/bar"}
+    headers = HTTP2.compose_headers(stream, timeout: 5)
     assert [{"grpc-timeout", "5u"} | _] = Enum.reverse(headers)
   end
 end

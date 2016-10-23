@@ -1,52 +1,7 @@
-defmodule GRPC.Call do
+defmodule GRPC.Transport.HTTP2 do
   alias GRPC.Transport.Utils
 
-  def unary(channel, path, message, opts) do
-    {:ok, stream_id} = send_request(channel, path, message, opts)
-    recv_end(channel, stream_id, opts)
-  end
-
-  def send_request(channel, path, message, opts) do
-    opts = Keyword.put(opts, :send_end_stream, true)
-    {:ok, stream_id} = send_header(channel, path, opts)
-    send_body(channel, stream_id, message, opts)
-    {:ok, stream_id}
-  end
-
-  def send_header(%{pid: pid} = channel, path, opts) do
-    headers = compose_headers(channel, path, opts)
-    stream_id = :h2_connection.new_stream(pid)
-    :h2_connection.send_headers(pid, stream_id, headers)
-    {:ok, stream_id}
-  end
-
-  def send_body(%{pid: pid}, stream_id, message, opts) do
-    {:ok, data} = GRPC.Message.to_data(message, opts)
-    :h2_connection.send_body(pid, stream_id, data, opts)
-  end
-
-  def recv_end(channel, stream_id, opts) do
-    receive do
-      {:END_STREAM, ^stream_id} ->
-        :h2_client.get_response(channel.pid, stream_id)
-    after timeout(opts) ->
-      # TODO: test
-      raise GRPC.TimeoutError
-    end
-  end
-
-  def recv(channel, stream_id) do
-    receive do
-      {:END_STREAM, ^stream_id} ->
-        resp = :h2_client.get_response(channel.pid, stream_id)
-        {:end_stream, resp}
-      {:RECV_DATA, data} ->
-        {:data, data}
-    end
-    # TODO: timeout
-  end
-
-  def compose_headers(channel, path, opts \\ []) do
+  def compose_headers(%{channel: channel, path: path}, opts \\ []) do
     version = opts[:grpc_version] || GRPC.version
     [
       {":method", "POST"},
@@ -100,12 +55,4 @@ defmodule GRPC.Call do
   defp is_reserved_header("content-type"), do: true
   defp is_reserved_header("te"), do: true
   defp is_reserved_header(_), do: false
-
-  defp timeout(opts) do
-    cond do
-      opts[:deadline] -> GRPC.TimeUtils.to_relative(opts[:deadline])
-      opts[:timeout]  -> div(opts[:timeout], 1000)
-      true            -> :infinity
-    end
-  end
 end
