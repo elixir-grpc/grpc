@@ -21,7 +21,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
   end
 
   def send_header(%{channel: channel} = stream, opts) do
-    headers = GRPC.Transport.HTTP2.compose_headers(stream, opts)
+    headers = GRPC.Transport.HTTP2.client_headers(stream, opts)
     pid = get_pid(channel)
     stream_id = :h2_connection.new_stream(pid)
     :h2_connection.send_headers(pid, stream_id, headers)

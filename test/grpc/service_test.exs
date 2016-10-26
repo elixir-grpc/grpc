@@ -21,19 +21,19 @@ defmodule GRPC.ServiceTest do
     use GRPC.Server, service: Routeguide.RouteGuide.Service
     alias GRPC.Server
 
-    def get_feature(point, _conn) do
+    def get_feature(point, _stream) do
       simple_feature(point)
     end
 
-    def list_features(rectangle, conn) do
+    def list_features(rectangle, stream) do
       Enum.each [rectangle.lo, rectangle.hi], fn (point)->
         feature = simple_feature(point)
-        Server.stream_send(conn, feature)
+        Server.stream_send(stream, feature)
       end
     end
 
-    def record_route(stream, _conn) do
-      points = Enum.reduce stream, [], fn (point, acc) ->
+    def record_route(req_stream, _stream) do
+      points = Enum.reduce req_stream, [], fn (point, acc) ->
         [point|acc]
       end
       fake_num = length(points)
@@ -41,10 +41,10 @@ defmodule GRPC.ServiceTest do
                                   distance: fake_num, elapsed_time: fake_num)
     end
 
-    def route_chat(stream, conn) do
-      Enum.each stream, fn note ->
+    def route_chat(req_stream, stream) do
+      Enum.each req_stream, fn note ->
         note = %{note | message: "Reply: #{note.message}"}
-        Server.stream_send(conn, note)
+        Server.stream_send(stream, note)
       end
     end
 

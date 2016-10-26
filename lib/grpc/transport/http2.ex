@@ -1,7 +1,19 @@
 defmodule GRPC.Transport.HTTP2 do
   alias GRPC.Transport.Utils
 
-  def compose_headers(%{channel: channel, path: path}, opts \\ []) do
+  def server_headers() do
+    %{":status" => 200}
+  end
+
+  def server_trailers do
+    %{
+      # TODO: custom grpc-status
+      "grpc-status" => "0",
+      "grpc-message" => ""
+    }
+  end
+
+  def client_headers(%{channel: channel, path: path}, opts \\ []) do
     version = opts[:grpc_version] || GRPC.version
     [
       {":method", "POST"},
