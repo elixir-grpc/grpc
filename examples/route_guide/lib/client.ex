@@ -1,8 +1,8 @@
 defmodule RouteGuide.Client do
   def main do
-    {:ok, channel} = GRPC.Channel.connect("localhost:10000", insecure: true)
     print_feature(channel, Routeguide.Point.new(latitude: 409146138, longitude: -746188906))
     print_feature(channel, Routeguide.Point.new(latitude: 0, longitude: 0))
+    {:ok, channel} = GRPC.Channel.connect("localhost:50051", insecure: true)
 
     # Looking for features between 40, -75 and 42, -73.
     print_features(channel, Routeguide.Rectangle.new(

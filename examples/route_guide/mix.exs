@@ -27,7 +27,10 @@ defmodule RouteGuide.Mixfile do
   #
   # Type "mix help deps" for more examples and options
   defp deps do
-    [{:grpc, github: "tony612/grpc-elixir"},
-     {:poison, "~> 3.0"}]
+    [
+      # {:grpc, path: "../../"},
+      {:grpc, github: "tony612/grpc-elixir"},
+      {:poison, "~> 3.0"}
+    ]
   end
 end
