@@ -3,8 +3,8 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
   @adapter GRPC.Adapter.Cowboy
 
-  def init(req, {server, _opts} = state) do
-    stream = %GRPC.Server.Stream{server: server, adapter: @adapter}
+  def init(req, {server, opts} = state) do
+    stream = %GRPC.Server.Stream{server: server, adapter: @adapter, state: opts[:state]}
     req = :cowboy_req.stream_reply(200, HTTP2.server_headers, req)
     stream = %{stream | payload: req}
     trailers = HTTP2.server_trailers
