@@ -1,8 +1,8 @@
 defmodule RouteGuide.Client do
   def main do
+    {:ok, channel} = GRPC.Channel.connect("localhost:50051", insecure: true)
     print_feature(channel, Routeguide.Point.new(latitude: 409146138, longitude: -746188906))
     print_feature(channel, Routeguide.Point.new(latitude: 0, longitude: 0))
-    {:ok, channel} = GRPC.Channel.connect("localhost:50051", insecure: true)
 
     # Looking for features between 40, -75 and 42, -73.
     print_features(channel, Routeguide.Rectangle.new(
@@ -30,9 +30,9 @@ defmodule RouteGuide.Client do
   end
 
   def run_record_route(channel) do
-    seed = :rand.seed(:exsplus, :os.timestamp)
+    seed = :rand.seed(:exs64, :os.timestamp)
     {count, seed} = :rand.uniform_s(seed)
-    count = round((count * 100) + 2)
+    count = trunc((count * 100) + 2)
     {points, seed} = Enum.reduce 1..count, {[], seed}, fn (_, {acc, seed}) ->
       {point, seed} = random_point(seed)
       {[point|acc], seed}
@@ -79,8 +79,8 @@ defmodule RouteGuide.Client do
   defp random_point(seed) do
     {lat, seed} = :rand.uniform_s(seed)
     {long, seed} = :rand.uniform_s(seed)
-    lat = round(((lat * 180) - 90) * 1.0e7)
-    long = round(((long * 360) - 180) * 1.0e7)
+    lat = trunc((trunc(lat * 180) - 90) * 1.0e7)
+    long = trunc((trunc(long * 360) - 180) * 1.0e7)
     {Routeguide.Point.new(latitude: lat, longitude: long), seed}
   end
 end
