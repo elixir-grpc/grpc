@@ -30,10 +30,11 @@ defmodule RouteGuide.Client do
   end
 
   def run_record_route(channel) do
-    seed = :rand.seed(:exs64, :os.timestamp)
+    ts = :os.timestamp
+    seed = :rand.seed(:exs64, ts)
     {count, seed} = :rand.uniform_s(seed)
     count = trunc((count * 100) + 2)
-    {points, seed} = Enum.reduce 1..count, {[], seed}, fn (_, {acc, seed}) ->
+    {points, _seed} = Enum.reduce 1..count, {[], seed}, fn (_, {acc, seed}) ->
       {point, seed} = random_point(seed)
       {[point|acc], seed}
     end

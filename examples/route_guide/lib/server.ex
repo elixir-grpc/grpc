@@ -3,7 +3,7 @@ defmodule Routeguide.RouteGuide.Server do
   alias GRPC.Server
   @json_path Path.expand("../priv/route_guide_db.json", __DIR__)
 
-  def get_feature(point, %{state: features} = stream) do
+  def get_feature(point, %{state: features} = _stream) do
     default_feature = Routeguide.Feature.new(location: point)
     Enum.find features, default_feature, fn (feature) ->
       feature.location == point
@@ -16,7 +16,7 @@ defmodule Routeguide.RouteGuide.Server do
     |> Enum.each(fn feature -> Server.stream_send(stream, feature) end)
   end
 
-  def record_route(req_stream, %{state: features} = stream) do
+  def record_route(req_stream, %{state: features} = _stream) do
     start_time = now_ts
     {_, distance, point_count, feature_count} =
       Enum.reduce req_stream, {nil, 0, 0, 0}, fn (point, {last, distance, point_count, feature_count}) ->
@@ -39,7 +39,7 @@ defmodule Routeguide.RouteGuide.Server do
     end
   end
 
-  defp in_range?(%{longitude: long, latitude: lat} = point, %{lo: low, hi: high} = rect) do
+  defp in_range?(%{longitude: long, latitude: lat}, %{lo: low, hi: high}) do
     left = min(low.longitude, high.longitude)
     right = max(low.longitude, high.longitude)
     bottom = min(low.latitude, high.latitude)
