@@ -23,7 +23,7 @@ defmodule GRPC.Mixfile do
     [{:exprotobuf, "~> 1.2.0"},
     # TODO
     # https://github.com/joedevivo/chatterbox/issues/57
-     {:chatterbox, github: "tony612/chatterbox", branch: "support-stream-responses"},
+     {:chatterbox, github: "tony612/chatterbox", branch: "my-fix"},
      # TODO
      # https://github.com/ninenines/cowboy/pull/1020
      {:cowboy, github: "tony612/cowboy", branch: "trailers-support"}
