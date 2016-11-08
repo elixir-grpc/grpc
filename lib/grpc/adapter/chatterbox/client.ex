@@ -49,7 +49,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
       {:END_STREAM, ^stream_id} ->
         resp = channel |> get_pid |> :h2_client.get_response(stream_id)
         {:end_stream, resp}
-      {:RECV_DATA, data} ->
+      {:RECV_DATA, ^stream_id, data} ->
         {:data, data}
     end
     # TODO: timeout
