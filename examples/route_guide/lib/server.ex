@@ -1,22 +1,25 @@
 defmodule Routeguide.RouteGuide.Server do
   use GRPC.Server, service: Routeguide.RouteGuide.Service
   alias GRPC.Server
-  @json_path Path.expand("../priv/route_guide_db.json", __DIR__)
+  alias RouteGuide.Data
 
-  def get_feature(point, %{state: features} = _stream) do
+  def get_feature(point, _stream) do
+    features = Data.fetch_features
     default_feature = Routeguide.Feature.new(location: point)
     Enum.find features, default_feature, fn (feature) ->
       feature.location == point
     end
   end
 
-  def list_features(rect, %{state: features} = stream) do
+  def list_features(rect, stream) do
+    features = Data.fetch_features
     features
     |> Enum.filter(fn %{location: loc} -> in_range?(loc, rect) end)
     |> Enum.each(fn feature -> Server.stream_send(stream, feature) end)
   end
 
-  def record_route(req_stream, %{state: features} = _stream) do
+  def record_route(req_stream, _stream) do
+    features = Data.fetch_features
     start_time = now_ts
     {_, distance, point_count, feature_count} =
       Enum.reduce req_stream, {nil, 0, 0, 0}, fn (point, {last, distance, point_count, feature_count}) ->
@@ -30,13 +33,17 @@ defmodule Routeguide.RouteGuide.Server do
                                 distance: distance, elapsed_time: now_ts - start_time)
   end
 
-  def load_features do
-    data = File.read!(@json_path)
-    items = Poison.Parser.parse!(data)
-    Enum.map items, fn (%{"location" => location, "name" => name}) ->
-      point = Routeguide.Point.new(latitude: location["latitude"], longitude: location["longitude"])
-      Routeguide.Feature.new(name: name, location: point)
+  def route_chat(req_stream, stream) do
+    notes = Enum.reduce req_stream, Data.fetch_notes, fn (note, notes) ->
+      key = serialize_location(note.location)
+      new_notes = Map.update(notes, key, [note], &(&1 ++ [note]))
+      Enum.each new_notes[key], fn note ->
+        IO.inspect note
+        Server.stream_send(stream, note)
+      end
+      new_notes
     end
+    Data.update_notes(notes)
   end
 
   defp in_range?(%{longitude: long, latitude: lat}, %{lo: low, hi: high}) do
@@ -77,5 +84,9 @@ defmodule Routeguide.RouteGuide.Server do
 
   defp sqr(num) do
     num * num
+  end
+
+  def serialize_location(p) do
+    "#{p.latitude} #{p.longitude}"
   end
 end

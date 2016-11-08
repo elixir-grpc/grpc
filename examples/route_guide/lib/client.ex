@@ -73,7 +73,7 @@ defmodule RouteGuide.Client do
     stream_result = GRPC.Stub.recv(stream)
     Task.await(task)
     Enum.each stream_result, fn (note) ->
-      IO.puts "Got message #{note.message} at point(#{note.location.latitude || 0}, #{note.location.longitude})"
+      IO.puts "Got message #{note.message} at point(#{note.location.latitude}, #{note.location.longitude})"
     end
   end
 
