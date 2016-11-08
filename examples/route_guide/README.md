@@ -1,24 +1,39 @@
-# RouteGuide
+# RouteGuide in grpc-elixir
 
-**TODO: Add description**
+## Usage
 
-## Installation
+1. Install deps and compile
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed as:
+  ```
+  $ mix do deps.get, compile
+  ```
 
-  1. Add `route_guide` to your list of dependencies in `mix.exs`:
+2. Run the script
 
-    ```elixir
-    def deps do
-      [{:route_guide, "~> 0.1.0"}]
-    end
-    ```
+  ```
+  $ mix run priv/main.exs
+  ```
 
-  2. Ensure `route_guide` is started before your application:
+Or run server and client separately in iex, check `priv/main.exs`
 
-    ```elixir
-    def application do
-      [applications: [:route_guide]]
-    end
-    ```
+## Regenerate Elixir code from proto
 
+1. Modify the proto `priv/route_guide.proto`
+
+2. Run mix task `grpc.gen`:
+
+  ```
+  $ mix grpc.gen priv/route_guide.proto --out lib/
+  ```
+
+View more options for `grpc.gen`:
+
+```
+$ mix help grpc.gen
+```
+
+## FAQ
+
+* Change log level? Check `config/config.exs`, default to warn
+* Use local grpc-elixir? Uncomment `{:grpc, path: "../../"}` in `mix.exs`
+* Output format of `Feature` & `Point` is different from normal map? Check `lib/inspect.ex`

@@ -14,6 +14,8 @@
   $ mix run priv/main.exs
   ```
 
+Or you can run server and client separately in iex, check `priv/main.exs`
+
 ## Regenerate Elixir code from proto
 
 1. Modify the proto `priv/protos/helloworld.proto`

@@ -35,4 +35,18 @@ $ mix grpc.gen priv/protos/helloworld.proto --out lib/
 
 Define your server, then run the server and client.
 
-Check [examples/helloworld](examples/helloworld) for more details
+Check [examples](examples) for all examples
+
+## TODO
+
+- [x] Unary RPC
+- [x] Server streaming RPC
+- [x] Client streaming RPC
+- [x] Bidirectional streaming RPC
+- [x] Helloworld and RouteGuide examples
+- [ ] Doc and more tests
+- [ ] Authentication
+- [ ] Improve timeout(now there's simple timeout)
+- [ ] Errors handling
+- [ ] Data compression
+- [ ] Benchmarking
