@@ -74,17 +74,17 @@ defmodule GRPC.ServiceTest do
   end
 
   def run_server(server, func) do
-    GRPC.Server.start(server, "localhost:50051", insecure: true)
+    {:ok, _, port} = GRPC.Server.start(server, "localhost:0", insecure: true)
     try do
-      func.()
+      func.(port)
     after
       :ok = GRPC.Server.stop(server)
     end
   end
 
   test "Unary RPC works" do
-    run_server Routeguide.RouteGuide.Server, fn ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:50051", insecure: true)
+    run_server Routeguide.RouteGuide.Server, fn(port) ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", insecure: true)
       point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
       feature = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
       assert feature == Routeguide.Feature.new(location: point, name: "409146138,-746188906")
@@ -92,8 +92,8 @@ defmodule GRPC.ServiceTest do
   end
 
   test "it works when outer namespace is same with inner's" do
-    run_server Foo.RouteGuide.Server, fn ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:50051", insecure: true)
+    run_server Foo.RouteGuide.Server, fn(port) ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", insecure: true)
       point = Foo.Point.new(latitude: 409_146_138, longitude: -746_188_906)
       feature = channel |> Foo.RouteGuide.Stub.get_feature(point)
       assert feature == Foo.Feature.new(location: point, name: "409146138,-746188906")
@@ -101,8 +101,8 @@ defmodule GRPC.ServiceTest do
   end
 
   test "Server streaming RPC works" do
-    run_server Routeguide.RouteGuide.Server, fn ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:50051", insecure: true)
+    run_server Routeguide.RouteGuide.Server, fn(port) ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", insecure: true)
       low = Routeguide.Point.new(latitude: 400000000, longitude: -750000000)
       high = Routeguide.Point.new(latitude: 420000000, longitude: -730000000)
       rect = Routeguide.Rectangle.new(lo: low, hi: high)
@@ -115,8 +115,8 @@ defmodule GRPC.ServiceTest do
   end
 
   test "Client streaming RPC works" do
-    run_server Routeguide.RouteGuide.Server, fn ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:50051", insecure: true)
+    run_server Routeguide.RouteGuide.Server, fn(port) ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", insecure: true)
       point1 = Routeguide.Point.new(latitude: 400000000, longitude: -750000000)
       point2 = Routeguide.Point.new(latitude: 420000000, longitude: -730000000)
       stream = channel |> Routeguide.RouteGuide.Stub.record_route
@@ -128,8 +128,8 @@ defmodule GRPC.ServiceTest do
   end
 
   test "Bidirectional streaming RPC works" do
-    run_server Routeguide.RouteGuide.Server, fn ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:50051", insecure: true)
+    run_server Routeguide.RouteGuide.Server, fn(port) ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", insecure: true)
       stream = channel |> Routeguide.RouteGuide.Stub.route_chat
       task = Task.async(fn ->
         Enum.each(1..6, fn (i) ->

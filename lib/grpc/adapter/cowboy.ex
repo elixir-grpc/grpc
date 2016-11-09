@@ -7,7 +7,9 @@ defmodule GRPC.Adapter.Cowboy do
       [port: port], %{:env => %{dispatch: dispatch},
                       :stream_handler => {GRPC.Adapter.Cowboy.StreamHandler, :supervisor}}
     )
-    GRPC.Adapter.Cowboy.ServerSup.start_link
+    {:ok, pid} = GRPC.Adapter.Cowboy.ServerSup.start_link
+    port = :ranch.get_port(server)
+    {:ok, pid, port}
   end
 
   def stop(server) do
