@@ -48,6 +48,40 @@ defmodule GRPC.Stub do
     stream
   end
 
+  @doc """
+  Establish a connection with gRPC server and return `GRPC.Channel` for passing
+  to RPC function calls.
+
+  ## Examples
+
+      iex> GRPC.Stub.connect("localhost:50051", insecure: true)
+      {:ok, channel}
+
+  ## Options
+
+    * `:insecure` - if it's a insecure connection
+    * `:adapter` - custom client adapter
+  """
+  @spec connect(String.t, Keyword.t) :: {:ok, struct} | {:error, any}
+  def connect(addr, opts) do
+    Channel.connect(addr, opts)
+  end
+
+  @doc """
+  Similar to `connect/2`, but support separated host and port as arguments.
+
+  See `connect/2` for options.
+
+  ## Examples
+
+      iex> GRPC.Stub.connect("localhost", 50051, insecure: true)
+      {:ok, channel}
+  """
+  @spec connect(String.t, Integer.t, Keyword.t) :: {:ok, struct} | {:error, any}
+  def connect(host, port, opts) do
+    Channel.connect(host, port, opts)
+  end
+
   def stream_send(%{marshal: marshal} = stream, request, opts \\ []) do
     message = marshal.(request)
     send_end_stream = Keyword.get(opts, :end_stream, false)
