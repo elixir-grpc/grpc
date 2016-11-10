@@ -2,11 +2,19 @@ defmodule GRPC.Message do
   use Bitwise, only_operators: true
   @max_message_length 1<<<32 - 1
 
+  @moduledoc """
+  Transform data between encoded protobuf and HTTP/2 body of gRPC
+
+  gRPC body format is:
+
+      Delimited-Message -> Compressed-Flag Message-Length Message
+      Compressed-Flag -> 0 / 1 # encoded as 1 byte unsigned integer
+      Message-Length -> {length of Message} # encoded as 4 byte unsigned integer
+      Message -> *{binary octet}
+  """
+
   @doc """
-  Delimited-Message → Compressed-Flag Message-Length Message
-  Compressed-Flag → 0 / 1 # encoded as 1 byte unsigned integer
-  Message-Length → {length of Message} # encoded as 4 byte unsigned integer
-  Message → *{binary octet}
+  Transform protobuf data to gRPC body
 
   ## Examples
 
@@ -36,6 +44,8 @@ defmodule GRPC.Message do
   end
 
   @doc """
+  Transform gRPC body to protobuf data
+
   ## Examples
 
       iex> GRPC.Message.from_data(<<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>)

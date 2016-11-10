@@ -68,7 +68,7 @@ defmodule GRPC.ServiceTest do
   defmodule Foo.RouteGuide.Server do
     use GRPC.Server, service: Foo.Foo.Service
 
-    def get_feature(point, _conn) do
+    def get_feature(point, _stream) do
       Foo.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
     end
   end

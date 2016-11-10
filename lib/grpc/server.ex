@@ -1,4 +1,37 @@
 defmodule GRPC.Server do
+  @moduledoc """
+  A gRPC server which handles requests by calling user-defined functions.
+
+  You should pass a `GRPC.Service` in when using the module:
+
+      defmodule Greeter.Service do
+        use GRPC.Service, name: "ping"
+
+        rpc :SayHello, Request, Reply
+        rpc :SayGoodbye, stream(Request), stream(Reply)
+      end
+
+      defmodule Greeter.Server do
+        use GRPC.Server, service: Greeter.Service
+
+        def say_hello(request, _stream) do
+          Reply.new(message: "Hello")
+        end
+      end
+
+  Your functions should accept a client request and a `GRPC.Server.Stream` struct.
+  The client request will be a lazy `Stream` of request struct if it's streaming.
+  So that all request structs can be fetched using functions in `Enum`, like `Enum.each/`.
+
+  The `GRPC.Server.Stream` struct should be passed to `stream_send/2` with
+  a reply struct together if the reply is streaming.
+
+  A server can be started and stoped using:
+
+      {:ok, _, port} = GRPC.Server.start(Greeter.Server, "localhost:50051", insecure: true)
+      :ok = GRPC.Server.stop(Greeter.Server)
+  """
+
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
       service_name = service_mod.__meta__(:name)
@@ -13,6 +46,9 @@ defmodule GRPC.Server do
     end
   end
 
+  @doc false
+  @spec call(atom, GRPC.Server.Stream.t,
+    tuple, atom) :: {:ok, GRPC.Server.Stream.t, struct} | {:ok, struct}
   def call(service_mod, stream, {_, {req_mod, req_stream}, {res_mod, res_stream}} = _rpc, func_name) do
     marshal_func = fn(res) -> service_mod.marshal(res_mod, res) end
     unmarshal_func = fn(req) -> service_mod.unmarshal(req_mod, req) end
@@ -53,10 +89,32 @@ defmodule GRPC.Server do
     {:ok, stream}
   end
 
+  @doc """
+  Start the gRPC server.
+
+  `port` will be returned if port 0 is used.
+
+  ## Examples
+
+      iex> {:ok, _, port} = GRPC.Server.start(Greeter.Server, "localhost:50051", insecure: true)
+
+  ## Options
+
+    * insecure - indicates it's an insecure server without auth
+    * adapter - use a custom server adapter instead of default `GRPC.Adapter.Cowboy`
+  """
+  @spec start(atom, String.t, Keyword.t) :: {atom, any, integer}
   def start(server, addr, opts) when is_binary(addr) do
     [host, port] = String.split(addr, ":")
     start(server, host, port, opts)
   end
+
+  @doc """
+  Similar to `start/3`, but support separated host and post as arguments.
+
+  See `start/3` for options.
+  """
+  @spec start(atom, String.t, integer, Keyword.t) :: {atom, any, integer}
   def start(server, host, port, opts) when is_binary(port) do
     start(server, host, String.to_integer(port), opts)
   end
@@ -65,11 +123,31 @@ defmodule GRPC.Server do
     adapter.start(server, host, port, opts)
   end
 
+  @doc """
+  Stop the server
+
+  ## Examples
+
+      iex> GRPC.Server.stop(Greeter.Server)
+
+  ## Options
+
+    * adapter - use a custom adapter instead of default `GRPC.Adapter.Cowboy`
+  """
+  @spec stop(atom, Keyword.t) :: any
   def stop(server, opts \\ []) do
     adapter = Keyword.get(opts, :adapter, GRPC.Adapter.Cowboy)
     adapter.stop(server)
   end
 
+  @doc """
+  Send streaming reply.
+
+  ## Examples
+
+      iex> GRPC.Server.stream_send(stream, reply)
+  """
+  @spec stream_send(GRPC.Server.Stream.t, struct) :: any
   def stream_send(%{adapter: adapter, marshal: marshal} = stream, response) do
     {:ok, data} = response |> marshal.() |> GRPC.Message.to_data(iolist: true)
     adapter.stream_send(stream, data)
