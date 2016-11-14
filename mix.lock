@@ -1,6 +1,8 @@
 %{"chatterbox": {:git, "https://github.com/tony612/chatterbox.git", "66079a34e61647d258329bd1db95c7609aa22b73", [branch: "my-fix"]},
   "cowboy": {:git, "https://github.com/tony612/cowboy.git", "85b48f4574df9e1d5797751deaa9730fe486c5fe", [branch: "trailers-support"]},
   "cowlib": {:git, "https://github.com/ninenines/cowlib", "8cf98c9f3d1292c1b08fca5ca99772ae912eaa86", [ref: "master"]},
+  "earmark": {:hex, :earmark, "1.0.3", "89bdbaf2aca8bbb5c97d8b3b55c5dd0cff517ecc78d417e87f1d0982e514557b", [:mix], []},
+  "ex_doc": {:hex, :ex_doc, "0.14.3", "e61cec6cf9731d7d23d254266ab06ac1decbb7651c3d1568402ec535d387b6f7", [:mix], [{:earmark, "~> 1.0", [hex: :earmark, optional: false]}]},
   "exprotobuf": {:hex, :exprotobuf, "1.2.0", "31e8d449b342cec3f35f95c2272e018dc1de669e5f5ef01845e5e488b164837c", [:mix], [{:gpb, "~> 3.24", [hex: :gpb, optional: false]}]},
   "goldrush": {:git, "git://github.com/DeadZen/goldrush.git", "212299233c7e7eb63a97be2777e1c05ebaa58dbe", [tag: "0.1.8"]},
   "gpb": {:hex, :gpb, "3.26.0", "a9495e9946928be0e7e0b25bb5c08b9dad6a83ce43cfb5aa2de6e0ccf1b9f9e4", [:rebar, :make], []},

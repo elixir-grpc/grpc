@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/tony612/grpc-elixir.svg?branch=master)](https://travis-ci.org/tony612/grpc-elixir)
 
-The Elixir implementation of [gRPC](https://github.com/grpc/grpc).
+The Elixir implementation of [gRPC](http://www.grpc.io/).
 
 **WARNING: This is unstable now. Be careful to use it in production!**
 
