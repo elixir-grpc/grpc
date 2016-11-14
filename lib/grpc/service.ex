@@ -1,4 +1,20 @@
 defmodule GRPC.Service do
+  @moduledoc """
+  Define gRPC service used by Stub and Server. Most of time, it's enough to
+  use generator to generate code instead of using this module directly.
+
+  It imports DSL functions like `rpc/3` and `stream/1` for defining the RPC
+  functions. It also generates some functions to save RPC calls.
+
+  ## Examples
+
+      defmodule Greeter.Service do
+        use GRPC.Service, name: "helloworld.Greeter"
+
+        rpc :SayHello, HelloRequest, stream(HelloReply)
+      end
+  """
+
   defmacro __using__(opts) do
     quote do
       import GRPC.Service, only: [rpc: 3, stream: 1]
