@@ -17,14 +17,18 @@ defmodule GRPC.Server do
         def say_hello(request, _stream) do
           Reply.new(message: "Hello")
         end
+
+        def say_goodbye(request_enum, stream) do
+          requests = Enum.map request_enum, &(&1)
+          GRPC.Server.stream_send(stream, reply1)
+          GRPC.Server.stream_send(stream, reply2)
+        end
       end
 
-  Your functions should accept a client request and a `GRPC.Server.Stream` struct.
-  The client request will be a lazy `Stream` of request struct if it's streaming.
-  So that all request structs can be fetched using functions in `Enum`, like `Enum.each/`.
-
-  The `GRPC.Server.Stream` struct should be passed to `stream_send/2` with
-  a reply struct together if the reply is streaming.
+  Your functions should accept a client request and a `GRPC.Server.Stream`.
+  The client request will be a `Stream` of requests if it's streaming.
+  If a reply is streaming, you need to call `stream_send/2` to send requests
+  one by one instead of returning reply in the end.
 
   A server can be started and stoped using:
 
@@ -92,7 +96,7 @@ defmodule GRPC.Server do
   @doc """
   Start the gRPC server.
 
-  `port` will be returned if port 0 is used.
+  A generated `port` will be returned if the port is `0`.
 
   ## Examples
 
@@ -100,8 +104,8 @@ defmodule GRPC.Server do
 
   ## Options
 
-    * insecure - indicates it's an insecure server without auth
-    * adapter - use a custom server adapter instead of default `GRPC.Adapter.Cowboy`
+    * `:insecure` - indicates it's an insecure server without auth
+    * `:adapter` - use a custom server adapter instead of default `GRPC.Adapter.Cowboy`
   """
   @spec start(atom, String.t, Keyword.t) :: {atom, any, integer}
   def start(server, addr, opts) when is_binary(addr) do
@@ -132,7 +136,7 @@ defmodule GRPC.Server do
 
   ## Options
 
-    * adapter - use a custom adapter instead of default `GRPC.Adapter.Cowboy`
+    * `:adapter` - use a custom adapter instead of default `GRPC.Adapter.Cowboy`
   """
   @spec stop(atom, Keyword.t) :: any
   def stop(server, opts \\ []) do

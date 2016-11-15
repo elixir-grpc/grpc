@@ -1,4 +1,12 @@
 defmodule GRPC.Adapter.Chatterbox.Client do
+  @moduledoc """
+  A client(`GRPC.Channel`) adapter based on Chatterbox.
+
+  When connection is established, the new pid will be stored in `:payload` of
+  `GRPC.Channel`.
+  """
+
+  @spec connect_insecurely(map) :: {:ok, any} | {:error, any}
   def connect_insecurely(%{host: host, port: port}) do
     case :h2_client.start_link(:http, String.to_charlist(host), port) do
       {:ok, pid} ->
@@ -8,11 +16,13 @@ defmodule GRPC.Adapter.Chatterbox.Client do
     end
   end
 
+  @spec unary(GRPC.Client.Stream.t, struct, keyword) :: struct
   def unary(stream, message, opts) do
     {:ok, stream} = send_request(stream, message, opts)
     recv_end(stream, opts)
   end
 
+  @spec send_request(GRPC.Client.Stream.t, struct, keyword) :: struct
   def send_request(stream, message, opts) do
     opts = Keyword.put(opts, :send_end_stream, true)
     {:ok, stream} = send_header(stream, opts)
@@ -20,6 +30,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
     {:ok, stream}
   end
 
+  @spec send_header(GRPC.Client.Stream.t, keyword) :: {:ok, GRPC.Client.Stream.t}
   def send_header(%{channel: channel} = stream, opts) do
     headers = GRPC.Transport.HTTP2.client_headers(stream, opts)
     pid = get_pid(channel)
@@ -28,12 +39,14 @@ defmodule GRPC.Adapter.Chatterbox.Client do
     {:ok, put_stream_id(stream, stream_id)}
   end
 
+  @spec send_body(GRPC.Client.Stream.t, struct, keyword) :: any
   def send_body(%{channel: channel, payload: %{stream_id: stream_id}}, message, opts) do
     pid = get_pid(channel)
     {:ok, data} = GRPC.Message.to_data(message, opts)
     :h2_connection.send_body(pid, stream_id, data, opts)
   end
 
+  @spec recv_end(GRPC.Client.Stream.t, keyword) :: any
   def recv_end(%{payload: %{stream_id: stream_id}, channel: channel}, opts) do
     receive do
       {:END_STREAM, ^stream_id} ->
@@ -44,6 +57,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
     end
   end
 
+  @spec recv(GRPC.Client.Stream.t, keyword) :: {:end_stream, any} | {:data, binary}
   def recv(%{payload: %{stream_id: stream_id}, channel: channel}, _opts) do
     receive do
       {:END_STREAM, ^stream_id} ->

@@ -1,4 +1,6 @@
 defmodule GRPC.Adapter.Cowboy.ServerSup do
+  @moduledoc false
+
   def start_link do
     :supervisor.start_link({:local, __MODULE__}, __MODULE__, [])
   end

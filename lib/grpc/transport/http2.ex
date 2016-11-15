@@ -1,10 +1,15 @@
 defmodule GRPC.Transport.HTTP2 do
+  @moduledoc """
+  A module providing functions for sending HTTP/2 requests.
+  """
+
   alias GRPC.Transport.Utils
 
   def server_headers() do
     %{":status" => 200}
   end
 
+  @spec server_trailers :: [{String.t, String.t}]
   def server_trailers do
     %{
       # TODO: custom grpc-status
@@ -13,6 +18,7 @@ defmodule GRPC.Transport.HTTP2 do
     }
   end
 
+  @spec client_headers(GRPC.Client.Stream.t, keyword) :: [{String.t, String.t}]
   def client_headers(%{channel: channel, path: path}, opts \\ []) do
     version = opts[:grpc_version] || GRPC.version
     [

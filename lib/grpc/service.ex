@@ -4,9 +4,7 @@ defmodule GRPC.Service do
   use generator to generate code instead of using this module directly.
 
   It imports DSL functions like `rpc/3` and `stream/1` for defining the RPC
-  functions. It also generates some functions to save RPC calls.
-
-  ## Examples
+  functions easily:
 
       defmodule Greeter.Service do
         use GRPC.Service, name: "helloworld.Greeter"
@@ -52,6 +50,7 @@ defmodule GRPC.Service do
     quote do: {unquote(param), true}
   end
 
+  @doc false
   def wrap_stream({:stream, _, _} = param) do
     quote do: unquote(param)
   end

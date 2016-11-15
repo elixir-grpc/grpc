@@ -1,8 +1,14 @@
 defmodule GRPC.Adapter.Cowboy.Handler do
+  @moduledoc """
+  A cowboy handler accepting all requests and calls corresponding functions
+  defined by users.
+  """
+
   alias GRPC.Transport.HTTP2
 
   @adapter GRPC.Adapter.Cowboy
 
+  @spec init(any, {atom, keyword}) :: {:ok, any, {atom, keyword}}
   def init(req, {server, _opts} = state) do
     stream = %GRPC.Server.Stream{server: server, adapter: @adapter}
     req = :cowboy_req.stream_reply(200, HTTP2.server_headers, req)

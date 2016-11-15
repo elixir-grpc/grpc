@@ -1,9 +1,23 @@
 defmodule GRPC.Adapter.Cowboy.StreamHandler do
+  @moduledoc """
+  Custom steam handler for cowboy.
+
+  This module is based on default handler `:cowboy_stream_h` of Cowboy,
+  which stores the response body as a whole binary so that it's
+  impossible to fetch the DATA frames one by one.
+  """
+
+  @type stream_id :: non_neg_integer
+  @type is_fin :: :nofin | {:fin, non_neg_integer}
+  @type t :: %__MODULE__{ref: :ranch.ref, pid: pid, read_body_ref: reference,
+                         read_body_timer_ref: reference, read_bodies: list,
+                         read_body_is_fin: is_fin}
   defstruct ref: nil, pid: nil, read_body_ref: nil,
             read_body_timer_ref: nil, read_body_is_fin: :nofin, read_bodies: []
 
   alias __MODULE__, as: State
 
+  @spec init(stream_id, any, keyword) :: {any, t}
   def init(_stream_id, %{ref: ref} = req, opts) do
     env = Map.get(opts, :env, %{})
     middlewares = Map.get(opts, :middlewares, [:cowboy_router, :cowboy_handler])
@@ -13,6 +27,7 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
   end
 
   # Stream is not waiting for data
+  @spec data(stream_id, is_fin, binary, t) :: {list, t}
   def data(_stream_id, is_fin, data, %State{read_body_ref: nil, read_bodies: bodies} = state) do
     {[], %State{state | read_body_is_fin: is_fin, read_bodies: bodies ++ [data]}}
   end
@@ -29,6 +44,7 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
     {[], %State{state | read_body_ref: nil, read_body_timer_ref: nil, read_body_is_fin: is_fin}}
   end
 
+  @spec info(stream_id, tuple, t) :: {list, t}
   def info(_stream_id, {:EXIT, pid, :normal}, %State{pid: pid} = state) do
     {[:stop], state}
   end
@@ -92,6 +108,8 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
     {[], state}
   end
 
+  @doc false
+  @spec terminate(stream_id, any, t) :: :ok
   def terminate(_stream_id, _reason, _state), do: :ok
 
   defp report_crash(_, _, _, :normal, _), do: :ok
@@ -105,6 +123,8 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
       [ref, self(), stream_id, pid, reason, stacktrace])
   end
 
+  @doc false
+  @spec proc_lib_hack(any, any, list) :: any
   def proc_lib_hack(req, env, middlewares) do
     try do
       execute(req, env, middlewares)
@@ -116,6 +136,8 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
     end
   end
 
+  @doc false
+  @spec execute(any, any, list) :: any
   def execute(_, _, []), do: :ok
   def execute(req, env, [middleware|tail]) do
     res = middleware.execute(req, env)
@@ -129,6 +151,8 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
     end
   end
 
+  @doc false
+  @spec resume(any, list, atom, any, any) :: any
   def resume(env, tail, module, function, args) do
     case apply(module, function, args) do
       {:ok, req, env} ->
