@@ -27,13 +27,14 @@ defmodule GRPC.Mixfile do
 
   defp deps do
     [{:exprotobuf, "~> 1.2.0"},
-     {:ex_doc, "~> 0.14", only: :dev},
      # TODO
      # https://github.com/joedevivo/chatterbox/issues/57
      {:chatterbox, github: "tony612/chatterbox", branch: "my-fix"},
      # TODO
      # https://github.com/ninenines/cowboy/pull/1020
-     {:cowboy, github: "tony612/cowboy", branch: "trailers-support"}
+     {:cowboy, github: "tony612/cowboy", branch: "trailers-support"},
+     {:ex_doc, "~> 0.14", only: :dev},
+     {:inch_ex, only: :docs}
     ]
   end
 
