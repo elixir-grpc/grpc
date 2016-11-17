@@ -70,9 +70,9 @@ defmodule RouteGuide.Client do
         tail
       end)
     end)
-    stream_result = GRPC.Stub.recv(stream)
+    result_enum = GRPC.Stub.recv(stream)
     Task.await(task)
-    Enum.each stream_result, fn (note) ->
+    Enum.each result_enum, fn (note) ->
       IO.puts "Got message #{note.message} at point(#{note.location.latitude}, #{note.location.longitude})"
     end
   end

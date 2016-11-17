@@ -18,11 +18,11 @@ defmodule Routeguide.RouteGuide.Server do
     |> Enum.each(fn feature -> Server.stream_send(stream, feature) end)
   end
 
-  def record_route(req_stream, _stream) do
+  def record_route(req_enum, _stream) do
     features = Data.fetch_features
     start_time = now_ts
     {_, distance, point_count, feature_count} =
-      Enum.reduce req_stream, {nil, 0, 0, 0}, fn (point, {last, distance, point_count, feature_count}) ->
+      Enum.reduce req_enum, {nil, 0, 0, 0}, fn (point, {last, distance, point_count, feature_count}) ->
         point_count = point_count + 1
         found_feature = Enum.find features, fn (f) -> f.location == point end
         feature_count = if found_feature, do: feature_count + 1, else: feature_count
@@ -33,8 +33,8 @@ defmodule Routeguide.RouteGuide.Server do
                                 distance: distance, elapsed_time: now_ts - start_time)
   end
 
-  def route_chat(req_stream, stream) do
-    notes = Enum.reduce req_stream, Data.fetch_notes, fn (note, notes) ->
+  def route_chat(req_enum, stream) do
+    notes = Enum.reduce req_enum, Data.fetch_notes, fn (note, notes) ->
       key = serialize_location(note.location)
       new_notes = Map.update(notes, key, [note], &(&1 ++ [note]))
       Enum.each new_notes[key], fn note ->

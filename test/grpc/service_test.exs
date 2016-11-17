@@ -32,8 +32,8 @@ defmodule GRPC.ServiceTest do
       end
     end
 
-    def record_route(req_stream, _stream) do
-      points = Enum.reduce req_stream, [], fn (point, acc) ->
+    def record_route(req_enum, _stream) do
+      points = Enum.reduce req_enum, [], fn (point, acc) ->
         [point|acc]
       end
       fake_num = length(points)
@@ -41,8 +41,8 @@ defmodule GRPC.ServiceTest do
                                   distance: fake_num, elapsed_time: fake_num)
     end
 
-    def route_chat(req_stream, stream) do
-      Enum.each req_stream, fn note ->
+    def route_chat(req_enum, stream) do
+      Enum.each req_enum, fn note ->
         note = %{note | message: "Reply: #{note.message}"}
         Server.stream_send(stream, note)
       end
@@ -139,9 +139,9 @@ defmodule GRPC.ServiceTest do
           GRPC.Stub.stream_send(stream, note, opts)
         end)
       end)
-      stream_result = GRPC.Stub.recv(stream)
+      result_enum = GRPC.Stub.recv(stream)
       Task.await(task)
-      notes = Enum.map stream_result, fn (note)->
+      notes = Enum.map result_enum, fn (note)->
         assert "Reply: " <> _msg = note.message
         note
       end
