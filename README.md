@@ -31,12 +31,21 @@ The package can be installed as:
 
 Generate Elixir code from proto file
 
-```shell
+```
 $ mix do deps.get, compile
-$ mix grpc.gen priv/protos/helloworld.proto --out lib/
+$ mix grpc.gen priv/protos/YOUR_SERVICE.proto --out lib/
+$ mix grpc.gen.server priv/protos/YOUR_SERVICE.proto --out lib/
 ```
 
-Define your server, then run the server and client.
+Implement functions in the generated server template, then run the server
+and client like this:
+
+```elixir
+iex> GRPC.Server.start(Helloworld.Greeter.Server, "localhost:50051", insecure: true)
+iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051", insecure: true)
+iex> request = Helloworld.HelloRequest.new(name: "grpc-elixir")
+iex> channel |> Greeter.Stub.say_hello(request)
+```
 
 Check [examples](examples) for all examples
 
