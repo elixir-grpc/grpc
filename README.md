@@ -1,10 +1,11 @@
 # gRPC Elixir
 
 [![Build Status](https://travis-ci.org/tony612/grpc-elixir.svg?branch=master)](https://travis-ci.org/tony612/grpc-elixir)
+[![Inline docs](http://inch-ci.org/github/tony612/grpc-elixir.svg?branch=master)](http://inch-ci.org/github/tony612/grpc-elixir)
 
 The Elixir implementation of [gRPC](http://www.grpc.io/).
 
-**WARNING: This is unstable now. Be careful to use it in production!**
+**WARNING: APIs are unstable now. Be careful to use it in production!**
 
 ## Installation
 
