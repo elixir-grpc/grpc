@@ -47,7 +47,7 @@ Check [examples](examples) for all examples
 - [x] Client streaming RPC
 - [x] Bidirectional streaming RPC
 - [x] Helloworld and RouteGuide examples
-- [ ] Doc and more tests
+- [x] Doc and more tests
 - [ ] Authentication
 - [ ] Improve timeout(now there's simple timeout)
 - [ ] Errors handling
