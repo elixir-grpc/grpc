@@ -11,8 +11,9 @@ defmodule GRPC.Adapter.Cowboy do
       {host, [{:_, GRPC.Adapter.Cowboy.Handler, {server, opts}}]}
     ])
     {:ok, _} = :cowboy.start_clear(server, 100,
-      [port: port], %{:env => %{dispatch: dispatch},
-                      :stream_handler => {GRPC.Adapter.Cowboy.StreamHandler, :supervisor}}
+      [port: port], %{env: %{dispatch: dispatch},
+                      stream_handler: {GRPC.Adapter.Cowboy.StreamHandler, :supervisor},
+                      http2_recv_timeout: :infinity }
     )
     {:ok, pid} = GRPC.Adapter.Cowboy.ServerSup.start_link
     port = :ranch.get_port(server)

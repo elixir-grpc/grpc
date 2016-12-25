@@ -32,9 +32,10 @@ defmodule GRPC.Mixfile do
      {:chatterbox, github: "tony612/chatterbox", branch: "my-fix"},
      # TODO
      # https://github.com/ninenines/cowboy/pull/1020
-     {:cowboy, github: "tony612/cowboy", branch: "trailers-support"},
+		 # https://github.com/ninenines/cowboy/pull/1068
+     {:cowboy, github: "tony612/cowboy", branch: "my-fix"},
      {:ex_doc, "~> 0.14", only: :dev},
-     {:inch_ex, only: :docs}
+     {:inch_ex, ">= 0.0.0", only: :docs}
     ]
   end
 

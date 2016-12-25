@@ -1,5 +1,5 @@
 %{"chatterbox": {:git, "https://github.com/tony612/chatterbox.git", "66079a34e61647d258329bd1db95c7609aa22b73", [branch: "my-fix"]},
-  "cowboy": {:git, "https://github.com/tony612/cowboy.git", "85b48f4574df9e1d5797751deaa9730fe486c5fe", [branch: "trailers-support"]},
+  "cowboy": {:git, "https://github.com/tony612/cowboy.git", "42d1c4060f169aa9eda044ba0ba79912a504bd66", [branch: "my-fix"]},
   "cowlib": {:git, "https://github.com/ninenines/cowlib", "8cf98c9f3d1292c1b08fca5ca99772ae912eaa86", [ref: "master"]},
   "earmark": {:hex, :earmark, "1.0.3", "89bdbaf2aca8bbb5c97d8b3b55c5dd0cff517ecc78d417e87f1d0982e514557b", [:mix], []},
   "ex_doc": {:hex, :ex_doc, "0.14.3", "e61cec6cf9731d7d23d254266ab06ac1decbb7651c3d1568402ec535d387b6f7", [:mix], [{:earmark, "~> 1.0", [hex: :earmark, optional: false]}]},
