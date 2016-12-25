@@ -15,9 +15,9 @@ defmodule GRPC.Adapter.Cowboy do
                       stream_handler: {GRPC.Adapter.Cowboy.StreamHandler, :supervisor},
                       http2_recv_timeout: :infinity }
     )
-    {:ok, pid} = GRPC.Adapter.Cowboy.ServerSup.start_link
+    {:ok, sup_pid} = GRPC.Adapter.Cowboy.ServerSup.start_link
     port = :ranch.get_port(server)
-    {:ok, pid, port}
+    {:ok, sup_pid, port}
   end
 
   @spec stop(atom) :: :ok | {:error, :not_found}

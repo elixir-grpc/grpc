@@ -73,11 +73,12 @@ defmodule GRPC.ServiceTest do
     end
   end
 
-  def run_server(server, func) do
-    {:ok, _, port} = GRPC.Server.start(server, "localhost:0", insecure: true)
+  def run_server(server, func, port \\ 0) do
+    {:ok, sup_pid, port} = GRPC.Server.start(server, "localhost:#{port}", insecure: true)
     try do
       func.(port)
     after
+      Process.exit(sup_pid, :normal)
       :ok = GRPC.Server.stop(server)
     end
   end
@@ -147,5 +148,19 @@ defmodule GRPC.ServiceTest do
       end
       assert length(notes) == 6
     end
+  end
+
+  test "reconnection works" do
+    server = Routeguide.RouteGuide.Server
+    {:ok, sup_pid, port} = GRPC.Server.start(server, "localhost:0", insecure: true)
+    point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
+    {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", insecure: true)
+    assert channel |> Routeguide.RouteGuide.Stub.get_feature(point)
+    Process.exit(sup_pid, :normal)
+    :ok = GRPC.Server.stop(server)
+    {:ok, sup_pid, port} = GRPC.Server.start(server, "localhost:#{port}", insecure: true)
+    assert channel |> Routeguide.RouteGuide.Stub.get_feature(point)
+    Process.exit(sup_pid, :normal)
+    :ok = GRPC.Server.stop(server)
   end
 end
