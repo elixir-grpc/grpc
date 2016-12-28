@@ -64,10 +64,10 @@ defmodule Routeguide.RouteGuide.Server do
   defp calc_distance(p1, p2) do
     cord_factor = 1.0e7
     r = 6371000.0
-    lat1 = p1.latitude / cord_factor
-    lat2 = p2.latitude / cord_factor
-    lng1 = p1.longitude / cord_factor
-    lng2 = p2.longitude / cord_factor
+    lat1 = (p1.latitude || 0) / cord_factor
+    lat2 = (p2.latitude || 0) / cord_factor
+    lng1 = (p1.longitude || 0) / cord_factor
+    lng2 = (p2.longitude || 0) / cord_factor
     phi1 = to_radians(lat1)
     phi2 = to_radians(lat2)
     delta_phi = to_radians(lat2 - lat1)

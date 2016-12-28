@@ -1,7 +1,7 @@
 defimpl Inspect, for: Routeguide.Point do
   def inspect(%{__struct__: struct} = point, opts) do
-    lat_str = Inspect.Integer.inspect(point.latitude, opts)
-    lng_str = Inspect.Integer.inspect(point.longitude, opts)
+    lat_str = Inspect.Integer.inspect(point.latitude || 0, opts)
+    lng_str = Inspect.Integer.inspect(point.longitude || 0, opts)
     middle = "latitude: " <> lat_str <> ", longitude: " <> lng_str
     if Map.get(opts, :compact, true) do
       "<" <> middle <> ">"
