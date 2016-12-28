@@ -1,16 +1,6 @@
 defmodule GRPC.ServerTest do
   use ExUnit.Case, async: true
 
-  test "start/3 works" do
-    assert {Greeter.Server, "localhost", 50051, insecure: true, adapter: GRPC.Test.ServerAdapter} =
-      GRPC.Server.start(Greeter.Server, "localhost:50051", insecure: true, adapter: GRPC.Test.ServerAdapter)
-  end
-
-  test "start/4 works" do
-    assert {Greeter.Server, "localhost", 50051, insecure: true, adapter: GRPC.Test.ServerAdapter} =
-      GRPC.Server.start(Greeter.Server, "localhost", 50051, insecure: true, adapter: GRPC.Test.ServerAdapter)
-  end
-
   test "stop/2 works" do
     assert {Greeter.Server} = GRPC.Server.stop(Greeter.Server, adapter: GRPC.Test.ServerAdapter)
   end

@@ -5,13 +5,15 @@ defmodule GRPC.Adapter.Cowboy do
   Cowboy req will be stored in `:payload` of `GRPC.Server.Stream`.
   """
 
-  @spec start(atom, String.t, non_neg_integer, keyword) :: {:ok, pid, non_neg_integer}
-  def start(server, host, port, opts) do
+  @spec start(atom, non_neg_integer, keyword) :: {:ok, pid, non_neg_integer}
+  def start(server, port, opts) do
     dispatch = :cowboy_router.compile([
-      {host, [{:_, GRPC.Adapter.Cowboy.Handler, {server, opts}}]}
+      {:_, [{:_, GRPC.Adapter.Cowboy.Handler, {server, opts}}]}
     ])
+    transport_opts = [port: port]
+    transport_opts = if opts[:ip], do: [{:ip, opts[:ip]}|transport_opts], else: transport_opts
     {:ok, _} = :cowboy.start_clear(server, 100,
-      [port: port], %{env: %{dispatch: dispatch},
+      transport_opts, %{env: %{dispatch: dispatch},
                       stream_handler: {GRPC.Adapter.Cowboy.StreamHandler, :supervisor},
                       http2_recv_timeout: :infinity }
     )

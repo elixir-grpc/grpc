@@ -74,7 +74,7 @@ defmodule GRPC.ServiceTest do
   end
 
   def run_server(server, func, port \\ 0) do
-    {:ok, sup_pid, port} = GRPC.Server.start(server, "localhost:#{port}", insecure: true)
+    {:ok, sup_pid, port} = GRPC.Server.start(server, port, insecure: true)
     try do
       func.(port)
     after
@@ -152,13 +152,13 @@ defmodule GRPC.ServiceTest do
 
   test "reconnection works" do
     server = Routeguide.RouteGuide.Server
-    {:ok, sup_pid, port} = GRPC.Server.start(server, "localhost:0", insecure: true)
+    {:ok, sup_pid, port} = GRPC.Server.start(server, 0, insecure: true)
     point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
     {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", insecure: true)
     assert channel |> Routeguide.RouteGuide.Stub.get_feature(point)
     Process.exit(sup_pid, :normal)
     :ok = GRPC.Server.stop(server)
-    {:ok, sup_pid, port} = GRPC.Server.start(server, "localhost:#{port}", insecure: true)
+    {:ok, sup_pid, port} = GRPC.Server.start(server, port, insecure: true)
     assert channel |> Routeguide.RouteGuide.Stub.get_feature(point)
     Process.exit(sup_pid, :normal)
     :ok = GRPC.Server.stop(server)
