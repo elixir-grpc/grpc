@@ -29,8 +29,15 @@ defmodule GRPC.Adapter.Cowboy do
 
   @spec read_body(GRPC.Client.Stream.t) :: {:ok, binary, GRPC.Client.Stream.t}
   def read_body(%{payload: req} = stream) do
-    {:ok, data, req} = :cowboy_req.read_body(req)
+    {:ok, data, req} = read_body("", req)
     {:ok, data, %{stream | payload: req}}
+  end
+
+  defp read_body(body, req) do
+    case :cowboy_req.read_body(req) do
+      {:ok, data, req} -> {:ok, body <> data, req}
+      {:more, data, req} -> read_body(body <> data, req)
+    end
   end
 
   @spec reading_stream(GRPC.Client.Stream.t, (binary -> struct)) :: Enumerable.t
