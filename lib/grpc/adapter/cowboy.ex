@@ -5,21 +5,19 @@ defmodule GRPC.Adapter.Cowboy do
   Cowboy req will be stored in `:payload` of `GRPC.Server.Stream`.
   """
 
+  @num_acceptors 100
+
   @spec start(atom, non_neg_integer, keyword) :: {:ok, pid, non_neg_integer}
   def start(server, port, opts) do
-    dispatch = :cowboy_router.compile([
-      {:_, [{:_, GRPC.Adapter.Cowboy.Handler, {server, opts}}]}
-    ])
-    transport_opts = [port: port]
-    transport_opts = if opts[:ip], do: [{:ip, opts[:ip]}|transport_opts], else: transport_opts
-    {:ok, _} = :cowboy.start_clear(server, 100,
-      transport_opts, %{env: %{dispatch: dispatch},
-                      stream_handler: {GRPC.Adapter.Cowboy.StreamHandler, :supervisor},
-                      http2_recv_timeout: :infinity }
-    )
-    {:ok, sup_pid} = GRPC.Adapter.Cowboy.ServerSup.start_link
+    server_args = start_args(server, port, opts)
+    {:ok, pid} =
+      if opts[:insecure] do
+        apply(:cowboy, :start_clear, server_args)
+      else
+        apply(:cowboy, :start_tls, server_args)
+      end
     port = :ranch.get_port(server)
-    {:ok, sup_pid, port}
+    {:ok, pid, port}
   end
 
   @spec stop(atom) :: :ok | {:error, :not_found}
@@ -57,5 +55,26 @@ defmodule GRPC.Adapter.Cowboy do
   @spec stream_send(GRPC.Client.Stream.t, binary) :: any
   def stream_send(%{payload: req}, data) do
     :cowboy_req.stream_body(data, :nofin, req)
+  end
+
+  defp start_args(server, port, opts) do
+    dispatch = :cowboy_router.compile([
+      {:_, [{:_, GRPC.Adapter.Cowboy.Handler, {server, opts}}]}
+    ])
+    [server, @num_acceptors, transport_opts(port, opts),
+     %{env: %{dispatch: dispatch}, http2_recv_timeout: :infinity,
+       stream_handler: {GRPC.Adapter.Cowboy.StreamHandler, :supervisor}}
+    ]
+  end
+
+  defp transport_opts(port, opts) do
+    list = [port: port]
+    list = if opts[:ip], do: [{:ip, opts[:ip]}|list], else: list
+    if opts[:cred] do
+      tls_cred = opts[:cred].tls
+      [{:certfile, tls_cred.cert_path}, {:keyfile, tls_cred.key_path}|list]
+    else
+      list
+    end
   end
 end

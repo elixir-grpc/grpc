@@ -24,7 +24,7 @@ defmodule Mix.Tasks.Grpc.Gen do
   alias GRPC.Proto
 
   @shortdoc "Generate Elixir code for Service and Stub from protobuf"
-  @external_resource Path.expand("../../priv/templates/grpc.gen/grpc_service.ex", __DIR__)
+  @external_resource Path.expand("./templates/grpc.gen/grpc_service.ex", :code.priv_dir(:grpc))
   @tmpl_path "priv/templates/grpc.gen/grpc_service.ex"
 
   def run(args) do

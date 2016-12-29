@@ -7,6 +7,7 @@ defmodule GRPC.Mixfile do
     [app: :grpc,
      version: @version,
      elixir: "~> 1.3",
+     elixirc_paths: elixirc_paths(Mix.env),
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
      deps: deps(),
@@ -44,4 +45,7 @@ defmodule GRPC.Mixfile do
       licenses: ["Apache 2"],
       links: %{"GitHub" => "https://github.com/tony612/grpc-elixir"}}
   end
+
+  defp elixirc_paths(:test), do: ["lib", "web", "test/support"]
+  defp elixirc_paths(_),     do: ["lib", "web"]
 end

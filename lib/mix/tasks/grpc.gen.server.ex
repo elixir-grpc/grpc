@@ -14,7 +14,7 @@ defmodule Mix.Tasks.Grpc.Gen.Server do
   import Mix.Generator
 
   @shortdoc "Generate Elixir code template for Server from protobuf"
-  @external_resource Path.expand("../../priv/templates/grpc.gen.server/grpc_server.ex", __DIR__)
+  @external_resource Path.expand("./templates/grpc.gen.server/grpc_server.ex", :code.priv_dir(:grpc))
   @tmpl_path "priv/templates/grpc.gen.server/grpc_server.ex"
 
   def run(args) do

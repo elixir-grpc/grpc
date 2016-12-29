@@ -1,9 +1,9 @@
-defmodule GRPC.ServiceTest do
-  use ExUnit.Case, async: true
+defmodule GRPC.Integration.ServiceTest do
+  use GRPC.Integration.TestCase, async: true
 
   defmodule Routeguide do
-    @external_resource Path.expand("../../priv/protos/route_guide.proto", __DIR__)
-    use Protobuf, from: Path.expand("../../priv/protos/route_guide.proto", __DIR__)
+    @external_resource Path.expand("./protos/route_guide.proto", :code.priv_dir(:grpc))
+    use Protobuf, from: Path.expand("./protos/route_guide.proto", :code.priv_dir(:grpc))
   end
   defmodule Routeguide.RouteGuide.Service do
     use GRPC.Service, name: "routeguide.RouteGuide"
@@ -53,51 +53,12 @@ defmodule GRPC.ServiceTest do
     end
   end
 
-  # For the test case "it works when outer namespace is same with inner's"
-  defmodule Foo do
-    @external_resource Path.expand("../../priv/protos/route_guide.proto", __DIR__)
-    use Protobuf, from: Path.expand("../../priv/protos/route_guide.proto", __DIR__)
-  end
-  defmodule Foo.Foo.Service do
-    use GRPC.Service, name: "routeguide.RouteGuide"
-    rpc :GetFeature, Foo.Point, Foo.Feature
-  end
-  defmodule Foo.RouteGuide.Stub do
-    use GRPC.Stub, service: Foo.Foo.Service
-  end
-  defmodule Foo.RouteGuide.Server do
-    use GRPC.Server, service: Foo.Foo.Service
-
-    def get_feature(point, _stream) do
-      Foo.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
-    end
-  end
-
-  def run_server(server, func, port \\ 0) do
-    {:ok, sup_pid, port} = GRPC.Server.start(server, port, insecure: true)
-    try do
-      func.(port)
-    after
-      Process.exit(sup_pid, :normal)
-      :ok = GRPC.Server.stop(server)
-    end
-  end
-
   test "Unary RPC works" do
     run_server Routeguide.RouteGuide.Server, fn(port) ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", insecure: true)
       point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
       feature = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
       assert feature == Routeguide.Feature.new(location: point, name: "409146138,-746188906")
-    end
-  end
-
-  test "it works when outer namespace is same with inner's" do
-    run_server Foo.RouteGuide.Server, fn(port) ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", insecure: true)
-      point = Foo.Point.new(latitude: 409_146_138, longitude: -746_188_906)
-      feature = channel |> Foo.RouteGuide.Stub.get_feature(point)
-      assert feature == Foo.Feature.new(location: point, name: "409146138,-746188906")
     end
   end
 
@@ -124,7 +85,7 @@ defmodule GRPC.ServiceTest do
       GRPC.Stub.stream_send(stream, point1)
       GRPC.Stub.stream_send(stream, point2, end_stream: true)
       res = GRPC.Stub.recv(stream)
-      assert %GRPC.ServiceTest.Routeguide.RouteSummary{point_count: 2} = res
+      assert %GRPC.Integration.ServiceTest.Routeguide.RouteSummary{point_count: 2} = res
     end
   end
 
@@ -148,19 +109,5 @@ defmodule GRPC.ServiceTest do
       end
       assert length(notes) == 6
     end
-  end
-
-  test "reconnection works" do
-    server = Routeguide.RouteGuide.Server
-    {:ok, sup_pid, port} = GRPC.Server.start(server, 0, insecure: true)
-    point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
-    {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", insecure: true)
-    assert channel |> Routeguide.RouteGuide.Stub.get_feature(point)
-    Process.exit(sup_pid, :normal)
-    :ok = GRPC.Server.stop(server)
-    {:ok, sup_pid, port} = GRPC.Server.start(server, port, insecure: true)
-    assert channel |> Routeguide.RouteGuide.Stub.get_feature(point)
-    Process.exit(sup_pid, :normal)
-    :ok = GRPC.Server.stop(server)
   end
 end

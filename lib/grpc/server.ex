@@ -106,6 +106,7 @@ defmodule GRPC.Server do
 
     * `:insecure` - indicates it's an insecure server without auth
     * `:adapter` - use a custom server adapter instead of default `GRPC.Adapter.Cowboy`
+    * `:cred` - a credential created by functions of `GRPC.Credential`
   """
   @spec start(atom, non_neg_integer, Keyword.t) :: {atom, any, non_neg_integer}
   def start(server, port, opts) do
