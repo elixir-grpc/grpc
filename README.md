@@ -62,3 +62,12 @@ Check [examples](examples) for all examples
 - [ ] Errors handling
 - [ ] Data compression
 - [ ] Benchmarking
+
+## Contributing
+
+You contributions are welcome!
+
+Please open issues if you have questions, problems and ideas. You can create pull
+requests directly if you want to fix little bugs, add small features and so on.
+But you'd better use issues first if you want to add a big feature or change a
+lot of code.
