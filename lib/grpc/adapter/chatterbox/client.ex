@@ -6,22 +6,29 @@ defmodule GRPC.Adapter.Chatterbox.Client do
   it will try to reconnect before sending a request.
   """
 
-  @spec connect_insecurely(map) :: {:ok, any} | {:error, any}
-  def connect_insecurely(%{host: host, port: port}) do
+  @spec connect(map, map) :: {:ok, any} | {:error, any}
+  def connect(%{host: host, port: port}, payload = %{cred: nil}) do
     pname = :"grpc_chatter_client_#{host}:#{port}"
-    case start_link(host, port, pname) do
+    init_args = {:client, :gen_tcp, String.to_charlist(host), port, [], :chatterbox.settings(:client)}
+    do_connect(pname, init_args, payload)
+  end
+
+  def connect(%{host: host, port: port}, payload = %{cred: cred}) do
+    pname = :"grpc_chatter_client_ssl_#{host}:#{port}"
+    ssl_opts = [cacertfile: cred.tls.ca_path]
+    init_args = {:client, :ssl, String.to_charlist(host), port, ssl_opts, :chatterbox.settings(:client)}
+    do_connect(pname, init_args, payload)
+  end
+
+  defp do_connect(pname, init_args, payload) do
+    case :gen_fsm.start_link({:local, pname}, :h2_connection, init_args, []) do
       {:ok, _pid} ->
-        {:ok, %{pname: pname}}
+        {:ok, Map.put(payload, :pname, pname)}
       {:error, {:already_started, _pid}} ->
-        {:ok, %{pname: pname}}
+        {:ok, Map.put(payload, :pname, pname)}
       err = {:error, _} -> err
       _ -> {:error, "Unknown error!"}
     end
-  end
-
-  def start_link(host, port, pname) do
-    init_args = {:client, :gen_tcp, String.to_charlist(host), port, [], :chatterbox.settings(:client)}
-    :gen_fsm.start_link({:local, pname}, :h2_connection, init_args, [])
   end
 
   @spec unary(GRPC.Client.Stream.t, struct, keyword) :: struct
@@ -81,9 +88,9 @@ defmodule GRPC.Adapter.Chatterbox.Client do
     %{stream | payload: Map.put(payload, :stream_id, stream_id)}
   end
 
-  defp get_active_pname(%{payload: %{pname: pname}} = channel) do
+  defp get_active_pname(%{payload: payload = %{pname: pname}} = channel) do
     pid = Process.whereis(pname)
-    if !pid || !Process.alive?(pid), do: connect_insecurely(channel)
+    if !pid || !Process.alive?(pid), do: connect(channel, payload)
     pname
   end
 

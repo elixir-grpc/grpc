@@ -90,32 +90,18 @@ defmodule GRPC.Stub do
 
   ## Examples
 
-      iex> GRPC.Stub.connect("localhost:50051", insecure: true)
+      iex> GRPC.Stub.connect("localhost:50051")
       {:ok, channel}
 
   ## Options
 
-    * `:insecure` - if it's a insecure connection
+    * `:cred` - a `GRPC.Credential` used to indicate it's a secure connection,
+                an insecure connection will be built without this option.
     * `:adapter` - custom client adapter
   """
   @spec connect(String.t, Keyword.t) :: {:ok, GRPC.Channel.t} | {:error, any}
-  def connect(addr, opts) do
+  def connect(addr, opts \\ []) when is_list(opts) do
     Channel.connect(addr, opts)
-  end
-
-  @doc """
-  Similar to `connect/2`, but support separated host and port as arguments.
-
-  See `connect/2` for options.
-
-  ## Examples
-
-      iex> GRPC.Stub.connect("localhost", 50051, insecure: true)
-      {:ok, channel}
-  """
-  @spec connect(String.t, Integer.t, Keyword.t) :: {:ok, GRPC.Channel.t} | {:error, any}
-  def connect(host, port, opts) do
-    Channel.connect(host, port, opts)
   end
 
   @doc """

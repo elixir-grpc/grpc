@@ -25,6 +25,7 @@ defmodule GRPC.Channel do
 
   @default_adapter GRPC.Adapter.Chatterbox.Client
   @insecure_scheme "http"
+  @secure_scheme "https"
 
   @doc false
   @spec connect(String.t, keyword) :: {:ok, t}
@@ -39,15 +40,11 @@ defmodule GRPC.Channel do
     connect(host, String.to_integer(port), opts)
   end
   def connect(host, port, opts) when is_integer(port) do
-    channel = %__MODULE__{host: host, port: port}
     adapter = Keyword.get(opts, :adapter, @default_adapter)
-    channel =
-      if opts[:insecure] do
-        {:ok, payload} = adapter.connect_insecurely(channel)
-        %{channel | scheme: @insecure_scheme, adapter: adapter, payload: payload}
-      else
-        # TODO: Secure connection
-      end
+    scheme = if opts[:cred], do: @secure_scheme, else: @insecure_scheme
+    channel = %__MODULE__{host: host, port: port, scheme: scheme, adapter: adapter}
+    {:ok, payload} = adapter.connect(channel, %{cred: opts[:cred]})
+    channel = %{channel | payload: payload}
     {:ok, channel}
   end
 

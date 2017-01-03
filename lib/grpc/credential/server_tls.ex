@@ -1,6 +1,6 @@
-defmodule GRPC.Credential.TLS do
+defmodule GRPC.Credential.ServerTLS do
   @moduledoc """
-  Stores TLS credential.
+  Stores server TLS credential.
   """
 
   @type t :: %__MODULE__{cert_path: String.t, key_path: String.t}

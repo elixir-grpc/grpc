@@ -55,7 +55,7 @@ defmodule GRPC.Integration.ServiceTest do
 
   test "Unary RPC works" do
     run_server Routeguide.RouteGuide.Server, fn(port) ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", insecure: true)
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
       feature = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
       assert feature == Routeguide.Feature.new(location: point, name: "409146138,-746188906")
@@ -64,7 +64,7 @@ defmodule GRPC.Integration.ServiceTest do
 
   test "Server streaming RPC works" do
     run_server Routeguide.RouteGuide.Server, fn(port) ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", insecure: true)
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       low = Routeguide.Point.new(latitude: 400000000, longitude: -750000000)
       high = Routeguide.Point.new(latitude: 420000000, longitude: -730000000)
       rect = Routeguide.Rectangle.new(lo: low, hi: high)
@@ -78,7 +78,7 @@ defmodule GRPC.Integration.ServiceTest do
 
   test "Client streaming RPC works" do
     run_server Routeguide.RouteGuide.Server, fn(port) ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", insecure: true)
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       point1 = Routeguide.Point.new(latitude: 400000000, longitude: -750000000)
       point2 = Routeguide.Point.new(latitude: 420000000, longitude: -730000000)
       stream = channel |> Routeguide.RouteGuide.Stub.record_route
@@ -91,7 +91,7 @@ defmodule GRPC.Integration.ServiceTest do
 
   test "Bidirectional streaming RPC works" do
     run_server Routeguide.RouteGuide.Server, fn(port) ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", insecure: true)
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       stream = channel |> Routeguide.RouteGuide.Stub.route_chat
       task = Task.async(fn ->
         Enum.each(1..6, fn (i) ->
