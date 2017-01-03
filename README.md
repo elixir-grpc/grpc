@@ -41,7 +41,7 @@ Implement functions in the generated server template, then run the server
 and client like this:
 
 ```elixir
-iex> GRPC.Server.start(Helloworld.Greeter.Server, 50051, insecure: true)
+iex> GRPC.Server.start(Helloworld.Greeter.Server, 50051)
 iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051")
 iex> request = Helloworld.HelloRequest.new(name: "grpc-elixir")
 iex> channel |> Greeter.Stub.say_hello(request)

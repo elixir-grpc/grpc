@@ -96,7 +96,7 @@ defmodule GRPC.Stub do
   ## Options
 
     * `:cred` - a `GRPC.Credential` used to indicate it's a secure connection,
-                an insecure connection will be built without this option.
+                an insecure connection will be created without this option.
     * `:adapter` - custom client adapter
   """
   @spec connect(String.t, Keyword.t) :: {:ok, GRPC.Channel.t} | {:error, any}

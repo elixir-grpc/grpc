@@ -28,12 +28,12 @@ defmodule GRPC.Integration.ConnectionTest do
 
   test "reconnection works" do
     server = Routeguide.RouteGuide.Server
-    {:ok, _, port} = GRPC.Server.start(server, 0, insecure: true)
+    {:ok, _, port} = GRPC.Server.start(server, 0)
     point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
     {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
     assert channel |> Routeguide.RouteGuide.Stub.get_feature(point)
     :ok = GRPC.Server.stop(server)
-    {:ok, _, _} = GRPC.Server.start(server, port, insecure: true)
+    {:ok, _, _} = GRPC.Server.start(server, port)
     assert channel |> Routeguide.RouteGuide.Stub.get_feature(point)
     :ok = GRPC.Server.stop(server)
   end

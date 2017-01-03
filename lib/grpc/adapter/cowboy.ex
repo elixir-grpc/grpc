@@ -11,10 +11,10 @@ defmodule GRPC.Adapter.Cowboy do
   def start(server, port, opts) do
     server_args = start_args(server, port, opts)
     {:ok, pid} =
-      if opts[:insecure] do
-        apply(:cowboy, :start_clear, server_args)
-      else
+      if opts[:cred] do
         apply(:cowboy, :start_tls, server_args)
+      else
+        apply(:cowboy, :start_clear, server_args)
       end
     port = :ranch.get_port(server)
     {:ok, pid, port}

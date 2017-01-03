@@ -32,7 +32,7 @@ defmodule GRPC.Server do
 
   A server can be started and stoped using:
 
-      {:ok, _, port} = GRPC.Server.start(Greeter.Server, 50051, insecure: true)
+      {:ok, _, port} = GRPC.Server.start(Greeter.Server, 50051)
       :ok = GRPC.Server.stop(Greeter.Server)
   """
 
@@ -100,16 +100,16 @@ defmodule GRPC.Server do
 
   ## Examples
 
-      iex> {:ok, _, port} = GRPC.Server.start(Greeter.Server, 50051, insecure: true)
+      iex> {:ok, _, port} = GRPC.Server.start(Greeter.Server, 50051)
 
   ## Options
 
-    * `:insecure` - indicates it's an insecure server without auth
+    * `:cred` - a credential created by functions of `GRPC.Credential`,
+                an insecure server will be created without this option
     * `:adapter` - use a custom server adapter instead of default `GRPC.Adapter.Cowboy`
-    * `:cred` - a credential created by functions of `GRPC.Credential`
   """
   @spec start(atom, non_neg_integer, Keyword.t) :: {atom, any, non_neg_integer}
-  def start(server, port, opts) do
+  def start(server, port, opts \\ []) do
     adapter = Keyword.get(opts, :adapter, GRPC.Adapter.Cowboy)
     adapter.start(server, port, opts)
   end
