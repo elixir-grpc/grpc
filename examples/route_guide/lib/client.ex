@@ -1,6 +1,6 @@
 defmodule RouteGuide.Client do
   def main do
-    {:ok, channel} = GRPC.Stub.connect("localhost:10000", insecure: true)
+    {:ok, channel} = GRPC.Stub.connect("localhost:10000")
     print_feature(channel, Routeguide.Point.new(latitude: 409146138, longitude: -746188906))
     print_feature(channel, Routeguide.Point.new(latitude: 0, longitude: 0))
 
