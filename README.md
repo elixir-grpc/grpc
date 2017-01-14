@@ -37,14 +37,14 @@ $ mix grpc.gen priv/protos/YOUR_SERVICE.proto --out lib/
 $ mix grpc.gen.server priv/protos/YOUR_SERVICE.proto --out lib/
 ```
 
-Implement functions in the generated server template, then run the server
-and client like this:
+Implement functions in the generated server template – remember to return the expected message types –,
+then run the server and client like this:
 
 ```elixir
 iex> GRPC.Server.start(Helloworld.Greeter.Server, 50051)
 iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051")
 iex> request = Helloworld.HelloRequest.new(name: "grpc-elixir")
-iex> channel |> Greeter.Stub.say_hello(request)
+iex> channel |> Helloworld.Greeter.Stub.say_hello(request)
 ```
 
 Check [examples](examples) for all examples
