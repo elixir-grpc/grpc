@@ -11,7 +11,8 @@ defmodule Helloworld.Mixfile do
   end
 
   def application do
-    [applications: [:lager, :logger, :grpc]]
+    [mod: {HelloworldApp, []},
+     applications: [:lager, :logger, :grpc]]
   end
 
   defp deps do

@@ -8,13 +8,17 @@
   $ mix do deps.get, compile
   ```
 
-2. Run the script
+2. Run the server
 
   ```shell
-  $ mix run priv/main.exs
+  $ mix helloworld.server
   ```
 
-Or you can run server and client separately in iex, check `priv/main.exs`
+3. Run the client script
+
+  ```shell
+  $ mix run priv/client.exs
+  ```
 
 ## Regenerate Elixir code from proto
 
@@ -30,4 +34,13 @@ View more options for `grpc.gen`:
 
 ```shell
 $ mix help grpc.gen
+```
+
+## How to start server when staging the OTP application?
+
+Change the config to:
+
+```elixir
+config :helloworld,
+  start_server: true
 ```
