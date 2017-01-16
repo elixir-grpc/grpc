@@ -5,11 +5,13 @@ defmodule GRPC.Adapter.Cowboy do
   Cowboy req will be stored in `:payload` of `GRPC.Server.Stream`.
   """
 
+  require Logger
+
   @num_acceptors 100
 
   @spec start(atom, non_neg_integer, keyword) :: {:ok, pid, non_neg_integer}
   def start(server, port, opts) do
-    server_args = start_args(server, port, opts)
+    server_args = cowboy_start_args(server, port, opts)
     {:ok, pid} =
       if opts[:cred] do
         apply(:cowboy, :start_tls, server_args)
@@ -18,6 +20,36 @@ defmodule GRPC.Adapter.Cowboy do
       end
     port = :ranch.get_port(server)
     {:ok, pid, port}
+  end
+
+  @spec child_spec(module, non_neg_integer, Keyword.t) :: Supervisor.Spec.spec
+  def child_spec(server, port, opts) do
+    args = cowboy_start_args(server, port, opts)
+    {ref, mfa, type, timeout, kind, modules} =
+      if opts[:cred] do
+        tls_ranch_start_args(args)
+      else
+        clear_ranch_start_args(args)
+      end
+    scheme = if opts[:cred], do: :https, else: :http
+    mfa = {__MODULE__, :start_link, [scheme, server, mfa]}
+    {ref, mfa, type, timeout, kind, modules}
+  end
+
+  @spec start_link(atom, module, [any]) :: {:ok, pid} | {:error, any}
+  def start_link(scheme, server, {m, f, [ref | _] = a}) do
+    case apply(m, f, a) do
+      {:ok, pid} ->
+        Logger.info running_info(scheme, server, ref)
+        {:ok, pid}
+
+      {:error, {:shutdown, {_, _, {{_, {:error, :eaddrinuse}}, _}}}} = error ->
+        Logger.error [running_info(scheme, server, ref), " failed, port already in use"]
+        error
+
+      {:error, _} = error ->
+        error
+    end
   end
 
   @spec stop(atom) :: :ok | {:error, :not_found}
@@ -57,7 +89,7 @@ defmodule GRPC.Adapter.Cowboy do
     :cowboy_req.stream_body(data, :nofin, req)
   end
 
-  defp start_args(server, port, opts) do
+  defp cowboy_start_args(server, port, opts) do
     dispatch = :cowboy_router.compile([
       {:_, [{:_, GRPC.Adapter.Cowboy.Handler, {server, opts}}]}
     ])
@@ -76,5 +108,32 @@ defmodule GRPC.Adapter.Cowboy do
     else
       list
     end
+  end
+
+  defp clear_ranch_start_args([ref, num_acceptors, trans_opts, proto_opts])
+        when is_integer(num_acceptors) and num_acceptors > 0 do
+    trans_opts = [connection_type(proto_opts) | trans_opts]
+    :ranch.child_spec(ref, num_acceptors, :ranch_tcp, trans_opts, :cowboy_clear, proto_opts)
+  end
+
+  defp tls_ranch_start_args([ref, num_acceptors, trans_opts, proto_opts])
+        when is_integer(num_acceptors) and num_acceptors > 0 do
+    trans_opts = [
+      connection_type(proto_opts),
+      {:next_protocols_advertised, ["h2", "http/1.1"]},
+      {:alpn_preferred_protocols, ["h2", "http/1.1"]}
+    | trans_opts]
+    :ranch.child_spec(ref, num_acceptors, :ranch_ssl, trans_opts, :cowboy_tls, proto_opts)
+  end
+
+  defp connection_type(proto_opts) do
+    {_, type} = Map.get(proto_opts, :stream_handler, {:cowboy_stream_h, :supervisor})
+    {:connection_type, type}
+  end
+
+  defp running_info(scheme, server, ref) do
+    {addr, port} = :ranch.get_addr(ref)
+    addr_str = :inet.ntoa(addr)
+    "Running #{inspect server} with Cowboy using #{scheme}://#{addr_str}:#{port}"
   end
 end
