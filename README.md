@@ -47,6 +47,38 @@ iex> request = Helloworld.HelloRequest.new(name: "grpc-elixir")
 iex> channel |> Helloworld.Greeter.Stub.say_hello(request)
 ```
 
+### Start the server
+
+You can start the gRPC server as a supervised process. First, add `GRPC.Server.Supervisor` to your supervision tree.
+
+```elixir
+# In the start function of your Application
+def start(_type, _args) do
+  children = [
+    # ...
+    supervisor(GRPC.Server.Supervisor, [{Helloworld.Greeter.Server, 50051}])
+  ]
+
+  opts = [strategy: :one_for_one, name: HelloworldApp]
+  Supervisor.start_link(children, opts)
+end
+```
+
+Then run grpc.server:
+
+```
+$ mix grpc.server
+```
+
+or start it when starting your application:
+
+```elixir
+# config.exs
+config :grpc, start_server: true
+
+$ iex -S mix
+```
+
 Check [examples](examples) for all examples
 
 ## TODO
