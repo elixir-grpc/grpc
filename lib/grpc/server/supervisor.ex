@@ -12,7 +12,12 @@ defmodule GRPC.Server.Supervisor do
   end
   def init({server, port, opts}) do
     adapter = Keyword.get(opts, :adapter, @default_adapter)
-    children = [adapter.child_spec(server, port, opts)]
+    children =
+      if Application.get_env(:grpc, :start_server, false) do
+        [adapter.child_spec(server, port, opts)]
+      else
+        []
+      end
     supervise(children, strategy: :one_for_one)
   end
 end

@@ -30,6 +30,7 @@ defmodule GRPC.Mixfile do
     [{:exprotobuf, "~> 1.2.0"},
      # TODO
      # https://github.com/joedevivo/chatterbox/issues/57
+     # https://github.com/joedevivo/chatterbox/issues/93
      {:chatterbox, github: "tony612/chatterbox", branch: "my-fix"},
      # TODO
      # https://github.com/ninenines/cowboy/pull/1020

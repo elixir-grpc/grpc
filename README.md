@@ -62,6 +62,7 @@ Check [examples](examples) for all examples
 - [ ] Errors handling
 - [ ] Data compression
 - [ ] Benchmarking
+- [ ] Logging
 
 ## Contributing
 
