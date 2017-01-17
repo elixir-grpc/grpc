@@ -5,5 +5,4 @@ config :lager, handlers: [
 ]
 
 # Start server in OTP
-# config :helloworld,
-#   start_server: true
+# config :grpc, start_server: true

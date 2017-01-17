@@ -41,6 +41,5 @@ $ mix help grpc.gen
 Change the config to:
 
 ```elixir
-config :helloworld,
-  start_server: true
+config :grpc, start_server: true
 ```

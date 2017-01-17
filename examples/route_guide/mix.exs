@@ -14,7 +14,8 @@ defmodule RouteGuide.Mixfile do
   #
   # Type "mix help compile.app" for more information
   def application do
-    [applications: [:lager, :logger, :grpc, :poison]]
+    [mod: {Routeguide.App, []},
+     applications: [:lager, :logger, :grpc, :poison]]
   end
 
   # Dependencies can be Hex packages:
