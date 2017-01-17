@@ -89,7 +89,7 @@ Check [examples](examples) for all examples
 - [x] Bidirectional streaming RPC
 - [x] Helloworld and RouteGuide examples
 - [x] Doc and more tests
-- [ ] Authentication
+- [x] Authentication with TLS
 - [ ] Improve timeout(now there's simple timeout)
 - [ ] Errors handling
 - [ ] Data compression

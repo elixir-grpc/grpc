@@ -4,4 +4,4 @@ config :lager, handlers: [
   lager_console_backend: :warn
 ]
 
-# config :route_guide, start_server: true
+# config :grpc, start_server: true

@@ -11,7 +11,7 @@
 2. Run the server
 
   ```shell
-  $ mix helloworld.server
+  $ mix grpc.server
   ```
 
 3. Run the client script
@@ -36,7 +36,7 @@ View more options for `grpc.gen`:
 $ mix help grpc.gen
 ```
 
-## How to start server when staging the OTP application?
+## How to start server when starting your application?
 
 Change the config to:
 
