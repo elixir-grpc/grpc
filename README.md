@@ -90,6 +90,7 @@ Check [examples](examples) for all examples
 - [x] Helloworld and RouteGuide examples
 - [x] Doc and more tests
 - [x] Authentication with TLS
+- [ ] Improve code generation from protos ([#8](https://github.com/tony612/grpc-elixir/issues/8))
 - [ ] Improve timeout(now there's simple timeout)
 - [ ] Errors handling
 - [ ] Data compression
