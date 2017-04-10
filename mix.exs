@@ -24,7 +24,8 @@ defmodule GRPC.Mixfile do
      {:chatterbox, github: "joedevivo/chatterbox"},
      # TODO
      # https://github.com/ninenines/cowboy/pull/1020
-     {:cowboy, github: "tony612/cowboy", branch: "trailers-support"}
+     {:cowboy, github: "tony612/cowboy", branch: "trailers-support"},
+     {:credo, "~> 0.7", only: [:dev, :test]}
     ]
   end
 end
