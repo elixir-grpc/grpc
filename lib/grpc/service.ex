@@ -1,4 +1,8 @@
 defmodule GRPC.Service do
+  @moduledoc """
+    GRPC.Service 
+  """
+
   defmacro __using__(opts) do
     quote do
       import GRPC.Service, only: [rpc: 3]

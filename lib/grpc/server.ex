@@ -1,4 +1,8 @@
 defmodule GRPC.Server do
+  @moduledoc """
+    GRPC.Server 
+  """
+
   defmacro __using__(opts) do
     # TODO: remove the duplicated code with stub
     quote bind_quoted: [service_mod: opts[:service]] do
@@ -19,7 +23,6 @@ defmodule GRPC.Server do
       end
     end
   end
-
   def start(server, addr, opts) when is_binary(addr) do
     [host, port] = String.split(addr, ":")
     start(server, host, port, opts)
@@ -39,6 +42,9 @@ defmodule GRPC.Server do
 end
 
 defmodule GRPC.ServerSup do
+  @moduledoc """
+    GRPC.ServerSup 
+  """
   def start_link do
     :supervisor.start_link({:local, __MODULE__}, __MODULE__, [])
   end

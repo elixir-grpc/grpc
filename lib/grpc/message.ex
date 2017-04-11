@@ -1,6 +1,9 @@
 defmodule GRPC.Message do
+  @moduledoc """
+    GRPC.Message 
+  """
   use Bitwise, only_operators: true
-  @max_message_length 1<<<32 - 1
+  @max_message_length 1 <<< 32 - 1
 
   @doc """
   Delimited-Message → Compressed-Flag Message-Length Message

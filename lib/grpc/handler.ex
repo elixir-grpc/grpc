@@ -1,4 +1,7 @@
 defmodule GRPC.Handler do
+  @moduledoc """
+    GRPC.Handler 
+  """
   def init(req, {server, _opts} = state) do
     {:ok, data, req} = :cowboy_req.read_body(req)
     message = GRPC.Message.from_data(data)

@@ -1,4 +1,7 @@
 defmodule GRPC.Call do
+  @moduledoc """
+    GRPC.Call 
+  """
   alias GRPC.Transport.Utils
 
   def unary(channel, path, message, opts) do
@@ -47,7 +50,7 @@ defmodule GRPC.Call do
 
   # TODO: Base64 encode Binary-Header for "*-bin" keys
   defp append_custom_metadata(headers, metadata) when is_map(metadata) and map_size(metadata) > 0 do
-    new_headers = Enum.filter_map(metadata, fn({k, _v})-> !is_reserved_header(to_string(k)) end,
+    new_headers = Enum.filter_map(metadata, fn({k, _v}) -> !is_reserved_header(to_string(k)) end,
                                             fn({k, v}) -> normalize_custom_metadata({k, v}) end)
     headers ++ new_headers
   end

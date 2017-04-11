@@ -41,8 +41,10 @@ defmodule Mix.Tasks.Grpc.Gen do
 
   def generate(proto_path, out_path) do
     proto = parse_proto(proto_path)
-    assigns = [top_mod: top_mod(proto.package), proto_path: proto_path(proto_path, out_path), proto: proto,
-               service_prefix: service_prefix(proto.package) ]
+    assigns = [top_mod: top_mod(proto.package), 
+               proto_path: proto_path(proto_path, out_path), 
+               proto: proto,
+               service_prefix: service_prefix(proto.package)]
     create_file file_path(proto_path, out_path), grpc_gen_template(assigns)
   end
 
@@ -70,7 +72,7 @@ defmodule Mix.Tasks.Grpc.Gen do
     package
     |> to_string
     |> String.split(".")
-    |> Enum.map(fn(seg)-> camelize(seg) end)
+    |> Enum.map(fn(seg) -> camelize(seg) end)
     |> Enum.join(".")
   end
 

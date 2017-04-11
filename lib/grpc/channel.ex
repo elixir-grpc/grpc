@@ -1,4 +1,7 @@
 defmodule GRPC.Channel do
+  @moduledoc """
+    GRPC.Channel 
+  """
   defstruct [:host, :port, :pid, :scheme]
 
   @spec connect(String.t, Integer.t, Keyword.t) :: {:ok, struct} | {:error, any}
@@ -6,6 +9,7 @@ defmodule GRPC.Channel do
     [host, port] = String.split(addr, ":")
     connect(host, port, opts)
   end
+
   def connect(host, port, opts) when is_binary(port) do
     connect(host, String.to_integer(port), opts)
   end

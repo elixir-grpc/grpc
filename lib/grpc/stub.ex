@@ -1,4 +1,7 @@
 defmodule GRPC.Stub do
+  @moduledoc """
+    GRPC.Stub 
+  """
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
       service_name = service_mod.__meta__(:name)
