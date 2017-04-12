@@ -9,6 +9,7 @@
 
 # Where 3rd-party dependencies like ExDoc output generated docs.
 /doc
+/docs
 
 # If the VM crashes, it generates a dump, let's ignore it too.
 erl_crash.dump
@@ -22,3 +23,4 @@ erl_crash.dump
 
 /log
 tags
+.DS_Store
