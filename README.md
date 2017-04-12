@@ -1,8 +1,11 @@
 # gRPC Elixir
 
-The Elixir implementation of [gRPC](https://github.com/grpc/grpc).
+[![Build Status](https://travis-ci.org/tony612/grpc-elixir.svg?branch=master)](https://travis-ci.org/tony612/grpc-elixir)
+[![Inline docs](http://inch-ci.org/github/tony612/grpc-elixir.svg?branch=master)](http://inch-ci.org/github/tony612/grpc-elixir)
 
-**WARNING: This is unstable. Don't use in production!**
+The Elixir implementation of [gRPC](http://www.grpc.io/).
+
+**WARNING: APIs are unstable now. Be careful to use it in production!**
 
 ## Installation
 
@@ -26,51 +29,79 @@ The package can be installed as:
 
 ## Usage
 
-*Code generating from proto is not supported now*
+Generate Elixir code from proto file
 
-Service definition:
+```
+$ mix do deps.get, compile
+$ mix grpc.gen priv/protos/YOUR_SERVICE.proto --out lib/
+$ mix grpc.gen.server priv/protos/YOUR_SERVICE.proto --out lib/
+```
+
+Implement functions in the generated server template – remember to return the expected message types –,
+then run the server and client like this:
 
 ```elixir
-defmodule Helloworld do
-  @external_resource Path.expand("priv/protos/helloworld.proto", __DIR__)
-  use Protobuf, from: Path.expand("priv/protos/helloworld.proto", __DIR__)
-end
+iex> GRPC.Server.start(Helloworld.Greeter.Server, 50051)
+iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051")
+iex> request = Helloworld.HelloRequest.new(name: "grpc-elixir")
+iex> channel |> Helloworld.Greeter.Stub.say_hello(request)
+```
 
-defmodule Helloworld.Greeter.Service do
-  use GRPC.Service, name: "helloworld.Greeter",
-                    marshal_function: :encode,
-                    unmarshal_function: :decode
-  alias Helloworld.{HelloRequest, HelloReply}
+### Start the server
 
-  rpc :SayHello, HelloRequest, HelloReply
+You can start the gRPC server as a supervised process. First, add `GRPC.Server.Supervisor` to your supervision tree.
+
+```elixir
+# In the start function of your Application
+def start(_type, _args) do
+  children = [
+    # ...
+    supervisor(GRPC.Server.Supervisor, [{Helloworld.Greeter.Server, 50051}])
+  ]
+
+  opts = [strategy: :one_for_one, name: HelloworldApp]
+  Supervisor.start_link(children, opts)
 end
 ```
 
-Server:
+Then run grpc.server:
 
-```elixir
-defmodule Helloworld.Greeter.Server do
-  use GRPC.Server, service: Helloworld.Greeter.Service
-
-  def say_hello(request) do
-    Helloworld.HelloReply.new(message: "Hello #{request.name}")
-  end
-end
-
-GRPC.Server.start(Helloworld.Greeter.Server, "localhost:50051", insecure: true)
+```
+$ mix grpc.server
 ```
 
-Client:
+or start it when starting your application:
 
 ```elixir
-defmodule Helloworld.Greeter.Stub do
-  use GRPC.Stub, service: Helloworld.Greeter.Service
-end
+# config.exs
+config :grpc, start_server: true
 
-{:ok, channel} = GRPC.Channel.connect("localhost:50051", insecure: true)
-request = Helloworld.HelloRequest.new(name: "grpc-elixir")
-reply = channel |> Helloworld.Greeter.Stub.say_hello(request, timeout: 1000_000)
-%Helloworld.HelloReply{message: "Hello grpc-elixir"}
+$ iex -S mix
 ```
 
-See `test` dir for more examples
+Check [examples](examples) for all examples
+
+## TODO
+
+- [x] Unary RPC
+- [x] Server streaming RPC
+- [x] Client streaming RPC
+- [x] Bidirectional streaming RPC
+- [x] Helloworld and RouteGuide examples
+- [x] Doc and more tests
+- [x] Authentication with TLS
+- [ ] Improve code generation from protos ([#8](https://github.com/tony612/grpc-elixir/issues/8))
+- [ ] Improve timeout(now there's simple timeout)
+- [ ] Errors handling
+- [ ] Data compression
+- [ ] Benchmarking
+- [ ] Logging
+
+## Contributing
+
+You contributions are welcome!
+
+Please open issues if you have questions, problems and ideas. You can create pull
+requests directly if you want to fix little bugs, add small features and so on.
+But you'd better use issues first if you want to add a big feature or change a
+lot of code.
