@@ -13,19 +13,19 @@ The package can be installed as:
 
   1. Add `grpc` to your list of dependencies in `mix.exs`:
 
-    ```elixir
-    def deps do
-      [{:grpc, github: "tony612/grpc-elixir"}]
-    end
-    ```
+      ```elixir
+      def deps do
+        [{:grpc, github: "tony612/grpc-elixir"}]
+      end
+      ```
 
   2. Ensure `grpc` is started before your application:
 
-    ```elixir
-    def application do
-      [applications: [:grpc]]
-    end
-    ```
+      ```elixir
+      def application do
+       [applications: [:grpc]]
+      end
+      ```
 
 ## Usage
 
