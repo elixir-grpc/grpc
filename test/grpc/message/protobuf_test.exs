@@ -21,11 +21,6 @@ defmodule GRPC.Message.ProtobufTest do
             GRPC.Message.Protobuf.encode(Helloworld.HelloRequest, request)
   end
 
-  test "encode/2 returns empty for mismatched arguments" do
-    request = Helloworld.HelloReply.new(name: "elixir")
-    assert "" = GRPC.Message.Protobuf.encode(Helloworld.HelloRequest, request)
-  end
-
   test "decode/2 works" do
     msg = <<10, 6, 101, 108, 105, 120, 105, 114>>
     request = Helloworld.HelloRequest.new(name: "elixir")
