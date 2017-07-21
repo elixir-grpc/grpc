@@ -1,11 +1,16 @@
 defmodule GRPC.Message.ProtobufTest do
   use ExUnit.Case, async: true
-
+  # use Protobuf.Case
   defmodule Helloworld do
+    # @external_resource Path.expand("../../fixtures/helloworld.proto", __DIR__)
+    # use Protobuf, from: Path.expand("../../fixtures/helloworld.proto", __DIR__)
     use Protobuf, """
   syntax = "proto3";
   package helloworld;
 
+  service Greeter {
+    rpc SayHello (HelloRequest) returns (HelloReply) {}
+  }
   message HelloRequest {
     string name = 1;
   }

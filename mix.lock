@@ -3,7 +3,7 @@
   "cowlib": {:git, "https://github.com/ninenines/cowlib", "11e07d3c2b164d06ad35188d83ad70e7501396db", [ref: "master"]},
   "earmark": {:hex, :earmark, "1.2.2", "f718159d6b65068e8daeef709ccddae5f7fdc770707d82e7d126f584cd925b74", [:mix], [], "hexpm"},
   "ex_doc": {:hex, :ex_doc, "0.16.2", "3b3e210ebcd85a7c76b4e73f85c5640c011d2a0b2f06dcdf5acdb2ae904e5084", [:mix], [{:earmark, "~> 1.1", [hex: :earmark, repo: "hexpm", optional: false]}], "hexpm"},
-  "exprotobuf": {:hex, :exprotobuf, "1.2.7", "287e2a1239fa9924c71815b1961e6e97d55c13496e9feb4ad755706af105ec36", [:mix], [{:gpb, "~> 3.24", [hex: :gpb, repo: "hexpm", optional: false]}], "hexpm"},
+  "exprotobuf": {:git, "https://github.com/bitwalker/exprotobuf.git", "fc6159d7f6a0b85930b2060d93be6fe3edf25fd9", []},
   "goldrush": {:git, "https://github.com/basho/goldrush.git", "8f1b715d36b650ec1e1f5612c00e28af6ab0de82", [tag: "0.1.9"]},
   "gpb": {:hex, :gpb, "3.27.3", "10b97043096f27d3b7fc31b5d6ed79c5f0f21c4bc5614a5bab7b687ac76c6b6b", [:make, :rebar], [], "hexpm"},
   "hpack": {:git, "https://github.com/joedevivo/hpack.git", "6b58b6231e9b6ab83096715120578976f72f4f7c", [tag: "0.2.3"]},

@@ -27,7 +27,7 @@ defmodule GRPC.Mixfile do
   end
 
   defp deps do
-    [{:exprotobuf, "~> 1.2.0"},
+    [{:exprotobuf, github: "bitwalker/exprotobuf"},
      # TODO
      # https://github.com/joedevivo/chatterbox/issues/57
      # https://github.com/joedevivo/chatterbox/issues/93
