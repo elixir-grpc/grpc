@@ -1,7 +1,7 @@
 # gRPC Elixir
 
-[![Build Status](https://travis-ci.org/tony612/grpc-elixir.svg?branch=master)](https://travis-ci.org/tony612/grpc-elixir)
-[![Inline docs](http://inch-ci.org/github/tony612/grpc-elixir.svg?branch=master)](http://inch-ci.org/github/tony612/grpc-elixir)
+[![Build Status](https://travis-ci.org/jaigouk/grpc-elixir.svg?branch=master)](https://travis-ci.org/jaigouk/grpc-elixir)
+[![Inline docs](http://inch-ci.org/github/jaigouk/grpc-elixir.svg?branch=master)](http://inch-ci.org/github/jaigouk/grpc-elixir)
 
 The Elixir implementation of [gRPC](http://www.grpc.io/).
 

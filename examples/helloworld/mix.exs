@@ -17,6 +17,8 @@ defmodule Helloworld.Mixfile do
 
   defp deps do
     # [{:grpc, path: "../../"}]
-    [{:grpc, github: "tony612/grpc-elixir"}]
+    [{:grpc, github: "tony612/grpc-elixir"},
+     {:chatterbox, github: "jaigouk/chatterbox", branch: "otp20", override: true},
+     {:cowboy, github: "tony612/cowboy", branch: "my-fix", override: true}]
   end
 end

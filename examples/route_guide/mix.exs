@@ -31,6 +31,8 @@ defmodule RouteGuide.Mixfile do
     [
       # {:grpc, path: "../../"},
       {:grpc, github: "tony612/grpc-elixir"},
+      {:chatterbox, github: "jaigouk/chatterbox", branch: "otp20", override: true},
+ {:cowboy, github: "tony612/cowboy", branch: "my-fix", override: true},
       {:poison, "~> 3.0"}
     ]
   end
