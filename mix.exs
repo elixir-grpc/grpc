@@ -1,7 +1,7 @@
 defmodule GRPC.Mixfile do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "0.2.0"
 
   def project do
     [app: :grpc,
@@ -16,7 +16,11 @@ defmodule GRPC.Mixfile do
      description: "The Elixir implementation of gRPC",
      docs: [extras: ["README.md"], main: "readme",
          source_ref: "v#{@version}",
-         source_url: "https://github.com/tony612/grpc-elixir"]]
+         source_url: "https://github.com/tony612/grpc-elixir"],
+
+    test_coverage: [tool: ExCoveralls],
+    preferred_cli_env: ["coveralls": :test, "coveralls.detail": :test,
+                        "coveralls.post": :test, "coveralls.html": :test]]
   end
 
   # Configuration for the OTP application
@@ -36,7 +40,10 @@ defmodule GRPC.Mixfile do
 		 # https://github.com/ninenines/cowboy/pull/1068
      {:cowboy, github: "tony612/cowboy", branch: "my-fix"},
      {:ex_doc, "~> 0.14", only: :dev},
-     {:inch_ex, ">= 0.0.0", only: :docs}
+     {:inch_ex, ">= 0.0.0", only: :docs},
+     {:credo, "~> 0.8", only: [:dev, :test], runtime: false},
+     {:excoveralls, "~> 0.7", only: :test, runtime: false},
+     {:mix_test_watch, "~> 0.3", only: :dev, runtime: false}
     ]
   end
 

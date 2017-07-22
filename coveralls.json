@@ -1,0 +1,6 @@
+{
+  "skip_files": [
+    "lib/mix/tasks",
+    "examples"
+  ]
+}

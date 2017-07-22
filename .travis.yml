@@ -5,6 +5,15 @@ elixir:
 otp_release:
   - 19.3
   - 20.0
+
+before_script:
+  - gem install fpm
+  - gem install pronto-credo
+
+script:
+  - MIX_ENV=test mix do coveralls, credo -a --format=oneline
+    # - if [[ $PRONTO_PULL_REQUEST_ID != false ]]; then pronto run -f github_pr -c origin/master; fi
+
 after_script:
   - mix deps.get --only docs
   - MIX_ENV=docs mix inch.report
