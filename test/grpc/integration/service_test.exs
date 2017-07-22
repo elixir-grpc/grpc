@@ -1,4 +1,5 @@
 defmodule GRPC.Integration.ServiceTest do
+  @moduledoc false
   use GRPC.Integration.TestCase, async: true
 
   defmodule Routeguide do

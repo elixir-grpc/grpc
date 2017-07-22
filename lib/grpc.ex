@@ -1,8 +1,10 @@
 defmodule GRPC do
+  @moduledoc false
+  alias GRPC.Mixfile
   @doc """
   Returns version of this project.
   """
-  def version, do: GRPC.Mixfile.project[:version]
+  def version, do: Mixfile.project[:version]
 
   @doc """
   Returns user agent used by HTTP/2.

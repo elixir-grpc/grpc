@@ -5,13 +5,14 @@ defmodule GRPC.Transport.HTTP2 do
 
   alias GRPC.Transport.Utils
 
-  def server_headers() do
+  def server_headers do
     %{":status" => 200}
   end
 
   @spec server_trailers :: [{String.t, String.t}]
   def server_trailers do
     %{
+      # credo:disable-for-next-line
       # TODO: custom grpc-status
       "grpc-status" => "0",
       "grpc-message" => ""
@@ -31,9 +32,12 @@ defmodule GRPC.Transport.HTTP2 do
       {"te", "trailers"}
     ]
     |> append_encoding(Keyword.get(opts, :send_encoding))
-    |> append_timeout(Keyword.get(opts, :deadline) || Keyword.get(opts, :timeout))
+    |> append_timeout(Keyword.get(opts, :deadline) ||
+      Keyword.get(opts, :timeout))
     |> append_custom_metadata(Keyword.get(opts, :metadata))
+    # credo:disable-for-next-line
     # TODO: grpc-accept-encoding, grpc-message-type
+    # credo:disable-for-next-line
     # TODO: Authorization
   end
 
@@ -51,8 +55,9 @@ defmodule GRPC.Transport.HTTP2 do
   defp append_timeout(headers, _), do: headers
 
   defp append_custom_metadata(headers, metadata) when is_map(metadata) and map_size(metadata) > 0 do
-    new_headers = Enum.filter_map(metadata, fn({k, _v})-> !is_reserved_header(to_string(k)) end,
-                                            fn({k, v}) -> normalize_custom_metadata({k, v}) end)
+    new_headers = Enum.filter_map(metadata,
+      fn({k, _v}) -> !is_reserved_header(to_string(k)) end,
+      fn({k, v}) -> normalize_custom_metadata({k, v}) end)
     headers ++ new_headers
   end
   defp append_custom_metadata(headers, _), do: headers

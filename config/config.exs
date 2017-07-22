@@ -4,7 +4,7 @@ if Mix.env == :dev do
   config :mix_test_watch,
     tasks: [
         "coveralls",
-        "credo -a --format=oneline",
+        "credo -a --strict --format=oneline",
       ]
 end
 

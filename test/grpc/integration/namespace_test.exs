@@ -1,4 +1,5 @@
 defmodule GRPC.Integration.NamespaceTest do
+  @moduledoc false
   use GRPC.Integration.TestCase, async: true
 
   defmodule Foo do

@@ -5,22 +5,30 @@ defmodule GRPC.Adapter.Chatterbox.Client do
   Only one connection will be used for the same host and port. If server disconnects,
   it will try to reconnect before sending a request.
   """
+  alias GRPC.Transport.HTTP2
+  alias GRPC.Message
+  alias GRPC.TimeUtils
 
   @spec connect(map, map) :: {:ok, any} | {:error, any}
-  def connect(%{host: host, port: port}, payload = %{cred: nil}) do
+  def connect(%{host: host, port: port}, %{cred: nil} = payload) do
     pname = :"grpc_chatter_client_#{host}:#{port}"
-    init_args = {:client, :gen_tcp, String.to_charlist(host), port, [], :chatterbox.settings(:client)}
+    init_args = {:client, :gen_tcp, String.to_charlist(host), port, [],
+      :chatterbox.settings(:client)}
     do_connect(pname, init_args, payload)
   end
 
-  def connect(%{host: host, port: port}, payload = %{cred: cred}) do
+  def connect(%{host: host, port: port}, %{cred: cred} = payload) do
     pname = :"grpc_chatter_client_ssl_#{host}:#{port}"
     ssl_opts = [cacertfile: cred.tls.ca_path]
-    init_args = {:client, :ssl, String.to_charlist(host), port, ssl_opts, :chatterbox.settings(:client)}
+    init_args = {:client, :ssl, String.to_charlist(host), port, ssl_opts,
+      :chatterbox.settings(:client)}
     do_connect(pname, init_args, payload)
   end
 
   defp do_connect(pname, init_args, payload) do
+    # credo:disable-for-next-line
+    # TODO: use gen_stream.start
+    # credo:disable-for-next-line
     case :gen_fsm.start_link({:local, pname}, :h2_connection, init_args, []) do
       {:ok, _pid} ->
         {:ok, Map.put(payload, :pname, pname)}
@@ -45,9 +53,10 @@ defmodule GRPC.Adapter.Chatterbox.Client do
     {:ok, stream}
   end
 
-  @spec send_header(GRPC.Client.Stream.t, keyword) :: {:ok, GRPC.Client.Stream.t}
+  @spec send_header(GRPC.Client.Stream.t, keyword) ::
+    {:ok, GRPC.Client.Stream.t}
   def send_header(%{channel: channel} = stream, opts) do
-    headers = GRPC.Transport.HTTP2.client_headers(stream, opts)
+    headers = HTTP2.client_headers(stream, opts)
     pid = get_active_pname(channel)
     stream_id = :h2_connection.new_stream(pid)
     :h2_connection.send_headers(pid, stream_id, headers)
@@ -57,7 +66,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
   @spec send_body(GRPC.Client.Stream.t, struct, keyword) :: any
   def send_body(%{channel: channel, payload: %{stream_id: stream_id}}, message, opts) do
     pid = get_active_pname(channel)
-    {:ok, data} = GRPC.Message.to_data(message, opts)
+    {:ok, data} = Message.to_data(message, opts)
     :h2_connection.send_body(pid, stream_id, data, opts)
   end
 
@@ -67,12 +76,14 @@ defmodule GRPC.Adapter.Chatterbox.Client do
       {:END_STREAM, ^stream_id} ->
         channel |> get_active_pname |> :h2_client.get_response(stream_id)
     after timeout(opts) ->
+      # credo:disable-for-next-line
       # TODO: test
       raise GRPC.TimeoutError
     end
   end
 
-  @spec recv(GRPC.Client.Stream.t, keyword) :: {:end_stream, any} | {:data, binary}
+  @spec recv(GRPC.Client.Stream.t, keyword) ::
+    {:end_stream, any} | {:data, binary}
   def recv(%{payload: %{stream_id: stream_id}, channel: channel}, _opts) do
     receive do
       {:END_STREAM, ^stream_id} ->
@@ -81,6 +92,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
       {:RECV_DATA, ^stream_id, data} ->
         {:data, data}
     end
+    # credo:disable-for-next-line
     # TODO: timeout
   end
 
@@ -96,7 +108,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
 
   defp timeout(opts) do
     cond do
-      opts[:deadline] -> GRPC.TimeUtils.to_relative(opts[:deadline])
+      opts[:deadline] -> TimeUtils.to_relative(opts[:deadline])
       opts[:timeout]  -> div(opts[:timeout], 1000)
       true            -> :infinity
     end

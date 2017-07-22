@@ -22,6 +22,7 @@ defmodule Mix.Tasks.Grpc.Gen do
   import Macro, only: [camelize: 1]
   import Mix.Generator
   alias GRPC.Proto
+  alias Protobuf.Parser
 
   @shortdoc "Generate Elixir code for Service and Stub from protobuf"
   @external_resource Path.expand("./templates/grpc.gen/grpc_service.ex", :code.priv_dir(:grpc))
@@ -39,9 +40,11 @@ defmodule Mix.Tasks.Grpc.Gen do
 
   defp generate(proto_path, out_path, opts) do
     proto = parse_proto(proto_path)
-    assigns = [top_mod: top_mod(proto.package, proto_path, opts), proto_content: proto_content(proto_path, opts),
+    assigns = [top_mod: top_mod(proto.package, proto_path, opts),
+               proto_content: proto_content(proto_path, opts),
                proto: proto, proto_path: proto_path(proto_path, out_path, opts),
-               use_proto_path: opts[:use_proto_path], service_prefix: service_prefix(proto.package),
+               use_proto_path: opts[:use_proto_path],
+               service_prefix: service_prefix(proto.package),
                compose_rpc: &__MODULE__.compose_rpc/2]
     create_file file_path(proto_path, out_path), grpc_gen_template(assigns)
     [:green, "You can generate a server template by: \n",
@@ -51,13 +54,14 @@ defmodule Mix.Tasks.Grpc.Gen do
   end
 
   def parse_proto(proto_path) do
-    parsed = Protobuf.Parser.parse_files!([proto_path])
+    parsed = Parser.parse_files!([proto_path])
     proto = Enum.reduce parsed, %Proto{}, fn(item, proto) ->
       case item do
         {:package, package} ->
           %{proto | package: to_string(package)}
         {{:service, service_name}, rpcs} ->
-          rpcs = Enum.map(rpcs, fn(rpc) -> Tuple.delete_at(rpc, 0) end)
+          res = rpcs |> List.first |> Tuple.delete_at(0)
+          rpcs = [res]
           service_name = service_name |> to_string |> camelize
           service = %Proto.Service{name: service_name , rpcs: rpcs}
           %{proto | services: [service|proto.services]}
@@ -72,7 +76,7 @@ defmodule Mix.Tasks.Grpc.Gen do
     package
     |> to_string
     |> String.split(".")
-    |> Enum.map(fn(seg)-> camelize(seg) end)
+    |> Enum.map(fn(seg) -> camelize(seg) end)
     |> Enum.join(".")
   end
 
@@ -84,7 +88,7 @@ defmodule Mix.Tasks.Grpc.Gen do
     if opts[:use_proto_path] do
       proto_path = Path.relative_to_cwd(proto_path)
       level = out_path |> Path.relative_to_cwd |> Path.split |> length
-      prefix = List.duplicate("..", level) |> Enum.join("/")
+      prefix = ".." |> List.duplicate(level) |> Enum.join("/")
       Path.join(prefix, proto_path)
     else
       ""

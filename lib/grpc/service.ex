@@ -12,6 +12,7 @@ defmodule GRPC.Service do
         rpc :SayHello, HelloRequest, stream(HelloReply)
       end
   """
+  alias GRPC.Message.Protobuf
 
   defmacro __using__(opts) do
     quote do
@@ -21,12 +22,12 @@ defmodule GRPC.Service do
       @before_compile GRPC.Service
 
       def marshal(mod, message) do
-        func = unquote(opts[:marshal]) || &GRPC.Message.Protobuf.encode/2
+        func = unquote(opts[:marshal]) || &Protobuf.encode/2
         func.(mod, message)
       end
 
       def unmarshal(mod, message) do
-        func = unquote(opts[:unmarshal]) || &GRPC.Message.Protobuf.decode/2
+        func = unquote(opts[:unmarshal]) || &Protobuf.decode/2
         func.(mod, message)
       end
       def __meta__(:name), do: unquote(opts[:name])
@@ -42,7 +43,8 @@ defmodule GRPC.Service do
 
   defmacro rpc(name, request, reply) do
     quote do
-      @rpc_calls {unquote(name), unquote(wrap_stream(request)), unquote(wrap_stream(reply))}
+      @rpc_calls {unquote(name), unquote(wrap_stream(request)),
+        unquote(wrap_stream(reply))}
     end
   end
 

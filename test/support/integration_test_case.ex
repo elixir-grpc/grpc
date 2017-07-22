@@ -1,4 +1,5 @@
 defmodule GRPC.Integration.TestCase do
+  @moduledoc false
   use ExUnit.CaseTemplate
 
   using do

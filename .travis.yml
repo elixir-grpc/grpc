@@ -11,8 +11,8 @@ before_script:
   - gem install pronto-credo
 
 script:
-  - MIX_ENV=test mix do coveralls, credo -a --format=oneline
-    # - if [[ $PRONTO_PULL_REQUEST_ID != false ]]; then pronto run -f github_pr -c origin/master; fi
+  - MIX_ENV=test mix do coveralls, credo -a --strict --format=oneline
+  # - if [[ $PRONTO_PULL_REQUEST_ID != false ]]; then pronto run -f github_pr -c origin/master; fi
 
 after_script:
   - mix deps.get --only docs

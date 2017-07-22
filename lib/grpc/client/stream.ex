@@ -16,8 +16,8 @@ defmodule GRPC.Client.Stream do
   @type marshal   :: (struct -> binary)
   @type unmarshal :: (binary -> struct)
   @type t :: %__MODULE__{channel: GRPC.Channel.t, payload: map, path: String.t,
-                         marshal: marshal, unmarshal: unmarshal, req_stream: boolean,
-                         res_stream: boolean}
-  defstruct [channel: nil, payload: %{}, path: nil, marshal: nil, unmarshal: nil,
-             req_stream: nil, res_stream: nil]
+                         marshal: marshal, unmarshal: unmarshal,
+                         req_stream: boolean, res_stream: boolean}
+  defstruct [channel: nil, payload: %{}, path: nil, marshal: nil,
+             unmarshal: nil, req_stream: nil, res_stream: nil]
 end

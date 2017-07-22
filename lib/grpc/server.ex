@@ -35,6 +35,8 @@ defmodule GRPC.Server do
       {:ok, _, port} = GRPC.Server.start(Greeter.Server, 50051)
       :ok = GRPC.Server.stop(Greeter.Server)
   """
+  alias GRPC.Server
+  alias GRPC.Message
 
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
@@ -43,7 +45,8 @@ defmodule GRPC.Server do
         func_name = name |> to_string |> Macro.underscore
         path = "/#{service_name}/#{name}"
         def __call_rpc__(unquote(path), stream) do
-          GRPC.Server.call(unquote(service_mod), stream, unquote(Macro.escape(rpc)), String.to_atom(unquote(func_name)))
+          Server.call(unquote(service_mod), stream,
+            unquote(Macro.escape(rpc)), String.to_atom(unquote(func_name)))
         end
         def __call_rpc(_, stream), do: {:error, stream, "Error"}
       end
@@ -63,14 +66,14 @@ defmodule GRPC.Server do
 
   defp handle_request(false = req_stream, res_stream, %{unmarshal: unmarshal, adapter: adapter} = stream, func_name) do
     {:ok, data, stream} = adapter.read_body(stream)
-    message = GRPC.Message.from_data(data)
+    message = Message.from_data(data)
     request = unmarshal.(message)
     handle_request(req_stream, res_stream, stream, func_name, request)
   end
   defp handle_request(true = req_stream, res_stream, %{unmarshal: unmarshal, adapter: adapter} = stream, func_name) do
     reading_stream = adapter.reading_stream(stream, fn (data) ->
       data
-      |> GRPC.Message.from_data
+      |> Message.from_data
       |> unmarshal.()
     end)
     handle_request(req_stream, res_stream, stream, func_name, reading_stream)
@@ -140,7 +143,7 @@ defmodule GRPC.Server do
   """
   @spec stream_send(GRPC.Server.Stream.t, struct) :: any
   def stream_send(%{adapter: adapter, marshal: marshal} = stream, response) do
-    {:ok, data} = response |> marshal.() |> GRPC.Message.to_data(iolist: true)
+    {:ok, data} = response |> marshal.() |> Message.to_data(iolist: true)
     adapter.stream_send(stream, data)
   end
 end

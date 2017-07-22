@@ -1,4 +1,5 @@
 defmodule GRPC.Server.Supervisor do
+  @moduledoc false
   use Supervisor
 
   @default_adapter GRPC.Adapter.Cowboy

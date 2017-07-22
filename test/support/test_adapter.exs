@@ -1,4 +1,5 @@
 defmodule GRPC.Test.ClientAdapter do
+  @moduledoc false
   def connect(_, %{cred: nil}) do
     {:ok, %{pname: :grpc_test_client_dapter, cred: nil}}
   end

@@ -1,7 +1,9 @@
 defmodule GRPC.Message.ProtobufTest do
+  @moduledoc false
   use ExUnit.Case, async: true
 
   defmodule Helloworld do
+    @moduledoc false
     use Protobuf, """
   syntax = "proto3";
   package helloworld;

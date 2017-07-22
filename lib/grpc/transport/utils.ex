@@ -8,11 +8,12 @@ defmodule GRPC.Transport.Utils do
   @minute_ceiling @second_ceiling * 60
   @hour_ceiling @minute_ceiling * 60
 
+  alias GRPC.TimeUtils
   @doc """
   Encode deadline by gRPC guide
   """
   def encode_timeout(deadline, now) when not is_integer(deadline) do
-    encode_timeout(GRPC.TimeUtils.to_relative(deadline, now))
+    encode_timeout(TimeUtils.to_relative(deadline, now))
   end
 
   def encode_timeout(deadline) when not is_integer(deadline) do

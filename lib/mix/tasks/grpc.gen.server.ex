@@ -12,6 +12,7 @@ defmodule Mix.Tasks.Grpc.Gen.Server do
   """
   use Mix.Task
   import Mix.Generator
+  alias Mix.Tasks.Grpc.Gen
 
   @shortdoc "Generate Elixir code template for Server from protobuf"
   @external_resource Path.expand("./templates/grpc.gen.server/grpc_server.ex", :code.priv_dir(:grpc))
@@ -28,8 +29,8 @@ defmodule Mix.Tasks.Grpc.Gen.Server do
   end
 
   defp generate(proto_path, out_path, opts) do
-    proto = Mix.Tasks.Grpc.Gen.parse_proto(proto_path)
-    assigns = [top_mod: Mix.Tasks.Grpc.Gen.top_mod(proto.package, proto_path, opts),
+    proto = Gen.parse_proto(proto_path)
+    assigns = [top_mod: Gen.top_mod(proto.package, proto_path, opts),
                proto: proto, compose_rpc: &__MODULE__.compose_rpc/1]
     create_file file_path(proto_path, out_path), grpc_gen_template(assigns)
   end

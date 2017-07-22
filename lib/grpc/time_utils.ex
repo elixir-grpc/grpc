@@ -19,6 +19,6 @@ defmodule GRPC.TimeUtils do
   end
 
   defp datetime_to_microsecond(datetime) do
-    DateTime.to_unix(datetime) * 1000_000 + elem(datetime.microsecond, 0)
+    DateTime.to_unix(datetime) * 1_000_000 + elem(datetime.microsecond, 0)
   end
 end

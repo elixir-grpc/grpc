@@ -72,7 +72,9 @@ defmodule GRPC.Adapter.Cowboy do
 
   @spec reading_stream(GRPC.Client.Stream.t, (binary -> struct)) :: Enumerable.t
   def reading_stream(stream, func) do
-    Stream.unfold(stream, fn nil -> nil; %{payload: req} = acc ->
+    Stream.unfold(stream, fn nil ->
+      nil
+      %{payload: req} = acc ->
       case :cowboy_req.read_body(req) do
         {:ok, "", _} ->
           nil
@@ -113,7 +115,8 @@ defmodule GRPC.Adapter.Cowboy do
   defp clear_ranch_start_args([ref, num_acceptors, trans_opts, proto_opts])
         when is_integer(num_acceptors) and num_acceptors > 0 do
     trans_opts = [connection_type(proto_opts) | trans_opts]
-    :ranch.child_spec(ref, num_acceptors, :ranch_tcp, trans_opts, :cowboy_clear, proto_opts)
+    :ranch.child_spec(ref, num_acceptors, :ranch_tcp, trans_opts,
+      :cowboy_clear, proto_opts)
   end
 
   defp tls_ranch_start_args([ref, num_acceptors, trans_opts, proto_opts])
@@ -123,11 +126,13 @@ defmodule GRPC.Adapter.Cowboy do
       {:next_protocols_advertised, ["h2", "http/1.1"]},
       {:alpn_preferred_protocols, ["h2", "http/1.1"]}
     | trans_opts]
-    :ranch.child_spec(ref, num_acceptors, :ranch_ssl, trans_opts, :cowboy_tls, proto_opts)
+    :ranch.child_spec(ref, num_acceptors, :ranch_ssl, trans_opts,
+      :cowboy_tls, proto_opts)
   end
 
   defp connection_type(proto_opts) do
-    {_, type} = Map.get(proto_opts, :stream_handler, {:cowboy_stream_h, :supervisor})
+    {_, type} = Map.get(proto_opts, :stream_handler,
+      {:cowboy_stream_h, :supervisor})
     {:connection_type, type}
   end
 

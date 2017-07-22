@@ -1,4 +1,5 @@
 defmodule GRPC.Integration.ConnectionTest do
+  @moduledoc false
   use GRPC.Integration.TestCase, async: false
 
   @cert_path Path.expand("./tls/server1.pem", :code.priv_dir(:grpc))
@@ -6,19 +7,23 @@ defmodule GRPC.Integration.ConnectionTest do
   @ca_path Path.expand("./tls/ca.pem", :code.priv_dir(:grpc))
 
   defmodule Routeguide do
+    @moduledoc false
     @external_resource Path.expand("protos/route_guide.proto", :code.priv_dir(:grpc))
     use Protobuf, from: Path.expand("protos/route_guide.proto", :code.priv_dir(:grpc))
   end
   defmodule Routeguide.RouteGuide.Service do
+    @moduledoc false
     use GRPC.Service, name: "routeguide.RouteGuide"
 
     rpc :GetFeature, Routeguide.Point, Routeguide.Feature
   end
   defmodule Routeguide.RouteGuide.Stub do
+    @moduledoc false
     use GRPC.Stub, service: Routeguide.RouteGuide.Service
   end
 
   defmodule Routeguide.RouteGuide.Server do
+    @moduledoc false
     use GRPC.Server, service: Routeguide.RouteGuide.Service
 
     def get_feature(point, _stream) do

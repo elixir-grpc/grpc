@@ -1,4 +1,5 @@
 defmodule GRPC.Transport.HTTP2Test do
+  @moduledoc false
   use ExUnit.Case, async: true
   alias GRPC.Channel
   alias GRPC.Transport.HTTP2

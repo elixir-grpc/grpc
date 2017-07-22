@@ -42,7 +42,8 @@ defmodule GRPC.Channel do
   def connect(host, port, opts) when is_integer(port) do
     adapter = Keyword.get(opts, :adapter, @default_adapter)
     scheme = if opts[:cred], do: @secure_scheme, else: @insecure_scheme
-    channel = %__MODULE__{host: host, port: port, scheme: scheme, adapter: adapter}
+    channel = %__MODULE__{host: host, port: port, scheme: scheme,
+      adapter: adapter}
     {:ok, payload} = adapter.connect(channel, %{cred: opts[:cred]})
     channel = %{channel | payload: payload}
     {:ok, channel}

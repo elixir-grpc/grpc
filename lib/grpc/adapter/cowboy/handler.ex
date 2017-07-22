@@ -5,6 +5,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   """
 
   alias GRPC.Transport.HTTP2
+  alias GRPC.Server
 
   @adapter GRPC.Adapter.Cowboy
 
@@ -16,13 +17,14 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     trailers = HTTP2.server_trailers
     case server.__call_rpc__(:cowboy_req.path(req), stream) do
       {:ok, %{payload: req} = stream, response} ->
-        GRPC.Server.stream_send(stream, response)
+        Server.stream_send(stream, response)
         :cowboy_req.stream_trailers(trailers, req)
         {:ok, req, state}
       {:ok, %{payload: req}} ->
         :cowboy_req.stream_trailers(trailers, req)
         {:ok, req, state}
       {:error, %{payload: req}, _reason} ->
+        # credo:disable-for-next-line
         # TODO handle error branch
         {:ok, req, state}
     end

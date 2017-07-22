@@ -1,4 +1,5 @@
 defmodule GRPC.Mixfile do
+  @moduledoc false
   use Mix.Project
 
   @version "0.2.0"
@@ -37,7 +38,7 @@ defmodule GRPC.Mixfile do
      # https://github.com/joedevivo/chatterbox/issues/93
      {:chatterbox, github: "jaigouk/chatterbox", branch: "otp20"},
      # TODO
-		 # https://github.com/ninenines/cowboy/pull/1068
+     # https://github.com/ninenines/cowboy/pull/1068
      {:cowboy, github: "tony612/cowboy", branch: "my-fix"},
      {:ex_doc, "~> 0.14", only: :dev},
      {:inch_ex, ">= 0.0.0", only: :docs},

@@ -3,7 +3,8 @@ defmodule GRPC.Credential do
   Stores credentials for authentication.
   """
 
-  @type t :: %__MODULE__{tls: GRPC.Credential.ClientTLS.t | GRPC.Credential.ServerTLS.t}
+  @type t :: %__MODULE__{tls: GRPC.Credential.ClientTLS.t |
+    GRPC.Credential.ServerTLS.t}
   defstruct [:tls]
 
   @doc """

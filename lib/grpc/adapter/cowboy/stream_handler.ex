@@ -22,36 +22,45 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
     env = Map.get(opts, :env, %{})
     middlewares = Map.get(opts, :middlewares, [:cowboy_router, :cowboy_handler])
     shutdown = Map.get(opts, :shutdown, 5000)
-    pid = :proc_lib.spawn_link(__MODULE__, :proc_lib_hack, [req, env, middlewares])
+    pid = :proc_lib.spawn_link(__MODULE__, :proc_lib_hack,
+      [req, env, middlewares])
     {[{:spawn, pid, shutdown}], %State{ref: ref, pid: pid}}
   end
 
   # Stream is not waiting for data
   @spec data(stream_id, is_fin, binary, t) :: {list, t}
-  def data(_stream_id, is_fin, data, %State{read_body_ref: nil, read_bodies: bodies} = state) do
-    {[], %State{state | read_body_is_fin: is_fin, read_bodies: bodies ++ [data]}}
+  def data(_stream_id, is_fin, data, %State{read_body_ref: nil,
+    read_bodies: bodies} = state) do
+    {[], %State{state | read_body_is_fin: is_fin,
+      read_bodies: bodies ++ [data]}}
   end
   # Stream is waiting for data, DATA receiving is fin and all bodies are read
   def data(_stream_id, is_fin, data, %State{pid: pid, read_body_ref: ref,
-            read_body_timer_ref: t_ref, read_bodies: []} = state) when elem(is_fin, 0) == :fin do
+    read_body_timer_ref: t_ref, read_bodies: []} = state)
+    when elem(is_fin, 0) == :fin do
     :ok = :erlang.cancel_timer(t_ref, async: true, info: false)
     send pid, {:request_body, ref, is_fin, data}
-    {[], %State{state | read_body_ref: nil, read_body_timer_ref: nil, read_body_is_fin: is_fin, read_bodies: []}}
+    {[], %State{state | read_body_ref: nil, read_body_timer_ref: nil,
+      read_body_is_fin: is_fin, read_bodies: []}}
   end
-  def data(_stream_id, is_fin, data, %State{pid: pid, read_body_ref: ref, read_body_timer_ref: t_ref} = state) do
+  def data(_stream_id, is_fin, data, %State{pid: pid, read_body_ref: ref,
+    read_body_timer_ref: t_ref} = state) do
     :ok = :erlang.cancel_timer(t_ref, async: true, info: false)
     send pid, {:request_body, ref, :nofin, data}
-    {[], %State{state | read_body_ref: nil, read_body_timer_ref: nil, read_body_is_fin: is_fin}}
+    {[], %State{state | read_body_ref: nil, read_body_timer_ref: nil,
+      read_body_is_fin: is_fin}}
   end
 
   @spec info(stream_id, tuple, t) :: {list, t}
   def info(_stream_id, {:EXIT, pid, :normal}, %State{pid: pid} = state) do
     {[:stop], state}
   end
-  def info(_stream_id, {:EXIT, pid, {_reason, [_, {:cow_http_hd, _, _, _}|_]}}, %State{pid: pid} = state) do
+  def info(_stream_id, {:EXIT, pid, {_reason, [_, {:cow_http_hd, _, _, _}|_]}},
+    %State{pid: pid} = state) do
     {[{:error_response, 400, %{}, ""}, :stop], state}
   end
-  def info(stream_id, {:EXIT, pid, {reason, stacktrace}} = exit, %State{ref: ref, pid: pid} = state) do
+  def info(stream_id, {:EXIT, pid, {reason, stacktrace}} = exit,
+    %State{ref: ref, pid: pid} = state) do
     report_crash(ref, stream_id, pid, reason, stacktrace)
     {[
       {:error_response, 500, %{"content-length" => "0"}, ""},
@@ -61,23 +70,28 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
 
   # DATAs receiving is finished and only one data is left
   def info(_stream_id, {:read_body, ref, _length, _},
-            %State{pid: pid, read_body_is_fin: is_fin, read_bodies: [data|[]]} = state) when elem(is_fin, 0) == :fin do
+            %State{pid: pid, read_body_is_fin: is_fin,
+            read_bodies: [data|[]]} = state) when elem(is_fin, 0) == :fin do
     send pid, {:request_body, ref, is_fin, data}
     {[], %State{state | read_bodies: []}}
   end
   # Not all bodies are read
-  def info(_stream_id, {:read_body, ref, _length, _}, %State{pid: pid, read_bodies: [data|bodies]} = state) do
+  def info(_stream_id, {:read_body, ref, _length, _},
+    %State{pid: pid, read_bodies: [data|bodies]} = state) do
     send pid, {:request_body, ref, :nofin, data}
     {[], %State{state | read_bodies: bodies}}
   end
   # DATAs receiving is not finished but bodies are all read, set timeout
   def info(stream_id, {:read_body, ref, length, period},
             %State{read_body_is_fin: :nofin, read_bodies: []} = state) do
-    t_ref = :erlang.send_after(period, self(), {{self(), stream_id}, {:read_body_timeout, ref}})
-    {[flow: length], %State{state | read_body_ref: ref, read_body_timer_ref: t_ref}}
+    t_ref = :erlang.send_after(period, self(), {{self(), stream_id},
+      {:read_body_timeout, ref}})
+    {[flow: length], %State{state | read_body_ref: ref,
+      read_body_timer_ref: t_ref}}
   end
   # ref is matched
-  def info(_stream_id, {:read_body_timeout, ref}, %State{read_body_ref: ref} = state) do
+  def info(_stream_id, {:read_body_timeout, ref},
+    %State{read_body_ref: ref} = state) do
     {[], %State{state | read_body_ref: nil, read_body_timer_ref: nil}}
   end
   # ref is not matched
@@ -126,14 +140,12 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
   @doc false
   @spec proc_lib_hack(any, any, list) :: any
   def proc_lib_hack(req, env, middlewares) do
-    try do
-      execute(req, env, middlewares)
-    catch
-      _, reason when elem(reason, 0) == :cowboy_handler ->
-        exit(reason)
-      _, reason ->
-        exit({reason, :erlang.get_stacktrace()})
-    end
+    execute(req, env, middlewares)
+  catch
+    _, reason when elem(reason, 0) == :cowboy_handler ->
+      exit(reason)
+    _, reason ->
+      exit({reason, :erlang.get_stacktrace()})
   end
 
   @doc false
@@ -145,7 +157,8 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
       {:ok, req2, env2} ->
         execute(req2, env2, tail)
       {:suspend, module, function, args} ->
-        :proc_lib.hibernate(__MODULE__, :resume, [env, tail, module, function, args])
+        :proc_lib.hibernate(__MODULE__, :resume,
+          [env, tail, module, function, args])
       {:stop, _req} ->
         :ok
     end
@@ -158,7 +171,8 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
       {:ok, req, env} ->
         execute(req, env, tail)
       {:suspend, module2, function2, args2} ->
-        :proc_lib.hibernate(__MODULE__, :resume, [env, tail, module2, function2, args2])
+        :proc_lib.hibernate(__MODULE__, :resume,
+          [env, tail, module2, function2, args2])
       {:stop, _req} ->
         :ok
     end

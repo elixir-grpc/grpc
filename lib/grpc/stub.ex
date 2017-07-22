@@ -34,20 +34,24 @@ defmodule GRPC.Stub do
   returns a `Stream`.
   """
   alias GRPC.Channel
-
+  alias GRPC.Stub
+  alias GRPC.Message
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
       service_name = service_mod.__meta__(:name)
-      Enum.each service_mod.__rpc_calls__, fn ({name, {_, req_stream}, {_, res_stream}} = rpc) ->
+      Enum.each service_mod.__rpc_calls__, fn (
+        {name, {_, req_stream}, {_, res_stream}} = rpc) ->
         func_name = name |> to_string |> Macro.underscore
         path = "/#{service_name}/#{name}"
         if req_stream do
           def unquote(String.to_atom(func_name))(channel, opts \\ []) do
-            GRPC.Stub.call(unquote(service_mod), unquote(Macro.escape(rpc)), unquote(path), channel, nil, opts)
+            Stub.call(unquote(service_mod), unquote(Macro.escape(rpc)),
+              unquote(path), channel, nil, opts)
           end
         else
           def unquote(String.to_atom(func_name))(channel, request, opts \\ []) do
-            GRPC.Stub.call(unquote(service_mod), unquote(Macro.escape(rpc)), unquote(path), channel, request, opts)
+            Stub.call(unquote(service_mod), unquote(Macro.escape(rpc)),
+              unquote(path), channel, request, opts)
           end
         end
       end
@@ -56,12 +60,14 @@ defmodule GRPC.Stub do
 
   @doc false
   @spec call(atom, tuple, String.t, GRPC.Channel, struct | nil, keyword) :: any
+  # credo:disable-for-next-line
   def call(service_mod, rpc, path, channel, request, opts) do
     {_, {req_mod, req_stream}, {res_mod, res_stream}} = rpc
     marshal = fn(req) -> service_mod.marshal(req_mod, req) end
     unmarshal = fn(res) -> service_mod.unmarshal(res_mod, res) end
-    stream = %GRPC.Client.Stream{marshal: marshal, unmarshal: unmarshal, path: path,
-              req_stream: req_stream, res_stream: res_stream, channel: channel}
+    stream = %GRPC.Client.Stream{marshal: marshal, unmarshal: unmarshal,
+      path: path, req_stream: req_stream, res_stream: res_stream,
+      channel: channel}
     send_request(req_stream, res_stream, stream, request, opts)
   end
 
@@ -152,7 +158,7 @@ defmodule GRPC.Stub do
 
   defp parse_unary_response({_headers, data_list}, unmarshal) do
     data_list
-    |> Enum.map(&GRPC.Message.from_data/1)
+    |> Enum.map(&Message.from_data/1)
     |> Enum.map(& unmarshal.(&1))
     |> List.first
   end
@@ -162,7 +168,7 @@ defmodule GRPC.Stub do
       case Channel.recv(stream, opts) do
         {:data, data} ->
           reply = data
-          |> GRPC.Message.from_data
+          |> Message.from_data
           |> unmarshal.()
           {reply, [acc] ++ reply}
         {:end_stream, _resp} ->

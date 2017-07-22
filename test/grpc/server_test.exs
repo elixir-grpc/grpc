@@ -1,4 +1,5 @@
 defmodule GRPC.ServerTest do
+  @moduledoc false
   use ExUnit.Case, async: true
 
   test "stop/2 works" do
