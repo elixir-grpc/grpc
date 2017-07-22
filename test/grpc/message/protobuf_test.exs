@@ -1,14 +1,11 @@
 defmodule GRPC.Message.ProtobufTest do
   use ExUnit.Case, async: true
-  # use Protobuf.Case
+
   defmodule Helloworld do
     use Protobuf, """
   syntax = "proto3";
   package helloworld;
 
-  service Greeter {
-    rpc SayHello (HelloRequest) returns (HelloReply) {}
-  }
   message HelloRequest {
     string name = 1;
   }
