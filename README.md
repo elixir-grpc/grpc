@@ -13,19 +13,19 @@ The package can be installed as:
 
   1. Add `grpc` to your list of dependencies in `mix.exs`:
 
-    ```elixir
-    def deps do
-      [{:grpc, github: "tony612/grpc-elixir"}]
-    end
-    ```
+      ```elixir
+      def deps do
+        [{:grpc, github: "tony612/grpc-elixir"}]
+      end
+      ```
 
   2. Ensure `grpc` is started before your application:
 
-    ```elixir
-    def application do
-      [applications: [:grpc]]
-    end
-    ```
+      ```elixir
+      def application do
+       [applications: [:grpc]]
+      end
+      ```
 
 ## Usage
 
@@ -90,7 +90,7 @@ Check [examples](examples) for all examples
 - [x] Helloworld and RouteGuide examples
 - [x] Doc and more tests
 - [x] Authentication with TLS
-- [ ] Improve code generation from protos ([#8](https://github.com/tony612/grpc-elixir/issues/8))
+- [ ] Improve code generation from protos ([protobuf-elixir](https://github.com/tony612/protobuf-elixir) [#8](https://github.com/tony612/grpc-elixir/issues/8))
 - [ ] Improve timeout(now there's simple timeout)
 - [ ] Errors handling
 - [ ] Data compression
