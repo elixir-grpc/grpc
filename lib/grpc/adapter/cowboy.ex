@@ -93,14 +93,14 @@ defmodule GRPC.Adapter.Cowboy do
     dispatch = :cowboy_router.compile([
       {:_, [{:_, GRPC.Adapter.Cowboy.Handler, {server, opts}}]}
     ])
-    [server, @num_acceptors, transport_opts(port, opts),
-     %{env: %{dispatch: dispatch}, http2_recv_timeout: :infinity,
-       stream_handler: {GRPC.Adapter.Cowboy.StreamHandler, :supervisor}}
+    [server, transport_opts(port, opts),
+     %{env: %{dispatch: dispatch}, inactivity_timeout: :infinity,
+       stream_handlers: [GRPC.Adapter.Cowboy.StreamHandler]}
     ]
   end
 
   defp transport_opts(port, opts) do
-    list = [port: port]
+    list = [port: port, num_acceptors: @num_acceptors]
     list = if opts[:ip], do: [{:ip, opts[:ip]}|list], else: list
     if opts[:cred] do
       tls_cred = opts[:cred].tls
@@ -110,25 +110,22 @@ defmodule GRPC.Adapter.Cowboy do
     end
   end
 
-  defp clear_ranch_start_args([ref, num_acceptors, trans_opts, proto_opts])
-        when is_integer(num_acceptors) and num_acceptors > 0 do
+  defp clear_ranch_start_args([ref, trans_opts, proto_opts]) do
     trans_opts = [connection_type(proto_opts) | trans_opts]
-    :ranch.child_spec(ref, num_acceptors, :ranch_tcp, trans_opts, :cowboy_clear, proto_opts)
+    :ranch.child_spec(ref, :ranch_tcp, trans_opts, :cowboy_clear, proto_opts)
   end
 
-  defp tls_ranch_start_args([ref, num_acceptors, trans_opts, proto_opts])
-        when is_integer(num_acceptors) and num_acceptors > 0 do
+  defp tls_ranch_start_args([ref, trans_opts, proto_opts]) do
     trans_opts = [
       connection_type(proto_opts),
       {:next_protocols_advertised, ["h2", "http/1.1"]},
       {:alpn_preferred_protocols, ["h2", "http/1.1"]}
     | trans_opts]
-    :ranch.child_spec(ref, num_acceptors, :ranch_ssl, trans_opts, :cowboy_tls, proto_opts)
+    :ranch.child_spec(ref, :ranch_ssl, trans_opts, :cowboy_tls, proto_opts)
   end
 
-  defp connection_type(proto_opts) do
-    {_, type} = Map.get(proto_opts, :stream_handler, {:cowboy_stream_h, :supervisor})
-    {:connection_type, type}
+  defp connection_type(_) do
+    {:connection_type, :supervisor}
   end
 
   defp running_info(scheme, server, ref) do

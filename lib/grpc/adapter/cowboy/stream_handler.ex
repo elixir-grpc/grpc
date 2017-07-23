@@ -7,7 +7,8 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
   impossible to fetch the DATA frames one by one.
   """
 
-  @type stream_id :: non_neg_integer
+  @type stream_id :: :cowboy_stream.streamid()
+  @type commands :: :cowboy_stream.commands()
   @type is_fin :: :nofin | {:fin, non_neg_integer}
   @type t :: %__MODULE__{ref: :ranch.ref, pid: pid, read_body_ref: reference,
                          read_body_timer_ref: reference, read_bodies: list,
@@ -17,17 +18,18 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
 
   alias __MODULE__, as: State
 
-  @spec init(stream_id, any, keyword) :: {any, t}
+  @spec init(stream_id, :cowboy_req.req(), :cowboy.opts()) ::
+    {[{:spawn, pid, timeout()}], t}
   def init(_stream_id, %{ref: ref} = req, opts) do
     env = Map.get(opts, :env, %{})
     middlewares = Map.get(opts, :middlewares, [:cowboy_router, :cowboy_handler])
-    shutdown = Map.get(opts, :shutdown, 5000)
+    shutdown = Map.get(opts, :shutdown_timeout, 5000)
     pid = :proc_lib.spawn_link(__MODULE__, :proc_lib_hack, [req, env, middlewares])
     {[{:spawn, pid, shutdown}], %State{ref: ref, pid: pid}}
   end
 
   # Stream is not waiting for data
-  @spec data(stream_id, is_fin, binary, t) :: {list, t}
+  @spec data(stream_id, :cowboy_stream.fin(), :cowboy_req.resp_body(), t) :: {commands, t}
   def data(_stream_id, is_fin, data, %State{read_body_ref: nil, read_bodies: bodies} = state) do
     {[], %State{state | read_body_is_fin: is_fin, read_bodies: bodies ++ [data]}}
   end
@@ -44,12 +46,13 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
     {[], %State{state | read_body_ref: nil, read_body_timer_ref: nil, read_body_is_fin: is_fin}}
   end
 
-  @spec info(stream_id, tuple, t) :: {list, t}
+  @spec info(stream_id, tuple, t) :: {commands, t}
   def info(_stream_id, {:EXIT, pid, :normal}, %State{pid: pid} = state) do
     {[:stop], state}
   end
-  def info(_stream_id, {:EXIT, pid, {_reason, [_, {:cow_http_hd, _, _, _}|_]}}, %State{pid: pid} = state) do
-    {[{:error_response, 400, %{}, ""}, :stop], state}
+  def info(_stream_id, {:EXIT, pid, {_reason, [t1, t2|_]}}, %State{pid: pid} = state)
+      when elem(t1, 1) == :cow_http_hd or elem(t2, 1) == :cow_http_hd do
+    {[{:error_response, 400, %{"content-length" => ""}, ""}, :stop], state}
   end
   def info(stream_id, {:EXIT, pid, {reason, stacktrace}} = exit, %State{ref: ref, pid: pid} = state) do
     report_crash(ref, stream_id, pid, reason, stacktrace)
@@ -104,13 +107,19 @@ defmodule GRPC.Adapter.Cowboy.StreamHandler do
     {[switch_protocol], state}
   end
   # stray message
-  def info(_stream_id, _msg, state) do
+  def info(_stream_id, _info, state) do
     {[], state}
   end
 
   @doc false
-  @spec terminate(stream_id, any, t) :: :ok
+  @spec terminate(stream_id, :cowboy_stream.reason(), t) :: :ok
   def terminate(_stream_id, _reason, _state), do: :ok
+
+  @spec early_error(stream_id, :cowboy_stream.reason(), :cowboy_stream.partial_req(),
+          resp, :cowboy.opts()) :: resp when resp: :cowboy_stream.resp_command()
+  def early_error(stream_id, reason, partial_req, resp, opts) do
+    :cowboy_stream.early_error(stream_id, reason, partial_req, resp, opts)
+  end
 
   defp report_crash(_, _, _, :normal, _), do: :ok
   defp report_crash(_, _, _, :shutdown, _), do: :ok
