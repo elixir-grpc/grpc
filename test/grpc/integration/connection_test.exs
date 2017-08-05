@@ -5,20 +5,7 @@ defmodule GRPC.Integration.ConnectionTest do
   @key_path Path.expand("./tls/server1.key", :code.priv_dir(:grpc))
   @ca_path Path.expand("./tls/ca.pem", :code.priv_dir(:grpc))
 
-  defmodule Routeguide do
-    @external_resource Path.expand("protos/route_guide.proto", :code.priv_dir(:grpc))
-    use Protobuf, from: Path.expand("protos/route_guide.proto", :code.priv_dir(:grpc))
-  end
-  defmodule Routeguide.RouteGuide.Service do
-    use GRPC.Service, name: "routeguide.RouteGuide"
-
-    rpc :GetFeature, Routeguide.Point, Routeguide.Feature
-  end
-  defmodule Routeguide.RouteGuide.Stub do
-    use GRPC.Stub, service: Routeguide.RouteGuide.Service
-  end
-
-  defmodule Routeguide.RouteGuide.Server do
+  defmodule FeatureServer do
     use GRPC.Server, service: Routeguide.RouteGuide.Service
 
     def get_feature(point, _stream) do
@@ -27,7 +14,7 @@ defmodule GRPC.Integration.ConnectionTest do
   end
 
   test "reconnection works" do
-    server = Routeguide.RouteGuide.Server
+    server = FeatureServer
     {:ok, _, port} = GRPC.Server.start(server, 0)
     point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
     {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
@@ -39,7 +26,7 @@ defmodule GRPC.Integration.ConnectionTest do
   end
 
   test "authentication works" do
-    server = Routeguide.RouteGuide.Server
+    server = FeatureServer
     cred = GRPC.Credential.server_tls(@cert_path, @key_path)
     {:ok, _, port} = GRPC.Server.start(server, 0, cred: cred)
     try do

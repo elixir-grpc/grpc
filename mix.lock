@@ -5,11 +5,11 @@
   "credo": {:hex, :credo, "0.8.4", "4e50acac058cf6292d6066e5b0d03da5e1483702e1ccde39abba385c9f03ead4", [:mix], [{:bunt, "~> 0.2.0", [hex: :bunt, optional: false]}]},
   "earmark": {:hex, :earmark, "1.0.3", "89bdbaf2aca8bbb5c97d8b3b55c5dd0cff517ecc78d417e87f1d0982e514557b", [:mix], []},
   "ex_doc": {:hex, :ex_doc, "0.14.3", "e61cec6cf9731d7d23d254266ab06ac1decbb7651c3d1568402ec535d387b6f7", [:mix], [{:earmark, "~> 1.0", [hex: :earmark, optional: false]}]},
-  "exprotobuf": {:hex, :exprotobuf, "1.2.7", "287e2a1239fa9924c71815b1961e6e97d55c13496e9feb4ad755706af105ec36", [:mix], [{:gpb, "~> 3.24", [hex: :gpb, optional: false]}]},
   "goldrush": {:git, "https://github.com/basho/goldrush.git", "8f1b715d36b650ec1e1f5612c00e28af6ab0de82", [tag: "0.1.9"]},
   "gpb": {:hex, :gpb, "3.27.3", "10b97043096f27d3b7fc31b5d6ed79c5f0f21c4bc5614a5bab7b687ac76c6b6b", [:make, :rebar], []},
   "hpack": {:git, "https://github.com/joedevivo/hpack.git", "6b58b6231e9b6ab83096715120578976f72f4f7c", [tag: "0.2.3"]},
   "inch_ex": {:hex, :inch_ex, "0.5.5", "b63f57e281467bd3456461525fdbc9e158c8edbe603da6e3e4671befde796a3d", [:mix], [{:poison, "~> 1.5 or ~> 2.0 or ~> 3.0", [hex: :poison, optional: false]}]},
   "lager": {:git, "https://github.com/basho/lager.git", "81eaef0ce98fdbf64ab95665e3bc2ec4b24c7dac", [tag: "3.2.4"]},
   "poison": {:hex, :poison, "3.0.0", "625ebd64d33ae2e65201c2c14d6c85c27cc8b68f2d0dd37828fde9c6920dd131", [:mix], []},
+  "protobuf": {:hex, :protobuf, "0.3.1", "0bedf46d33c37145c3d4c46edba43d3e70d9438dda6d03e5856d65fd776c1411", [:mix], []},
   "ranch": {:git, "https://github.com/ninenines/ranch", "55c2a9d623454f372a15e99721a37093d8773b48", [ref: "1.4.0"]}}

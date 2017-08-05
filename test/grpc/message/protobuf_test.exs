@@ -1,18 +1,18 @@
 defmodule GRPC.Message.ProtobufTest do
   use ExUnit.Case, async: true
 
-  defmodule Helloworld do
-    use Protobuf, """
-  syntax = "proto3";
-  package helloworld;
+  defmodule Helloworld.HelloRequest do
+    use Protobuf
 
-  message HelloRequest {
-    string name = 1;
-  }
-  message HelloReply {
-    string message = 1;
-  }
-    """
+    defstruct [:name]
+    field :name, 1, optional: true, type: :string
+  end
+
+  defmodule Helloworld.HelloReply do
+    use Protobuf
+
+    defstruct [:message]
+    field :message, 1, optional: true, type: :string
   end
 
   test "encode/2 works for matched arguments" do

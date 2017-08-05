@@ -23,11 +23,11 @@ defmodule GRPC.Mixfile do
   #
   # Type "mix help compile.app" for more information
   def application do
-    [applications: [:lager, :logger, :exprotobuf, :chatterbox, :cowboy]]
+    [applications: [:lager, :logger, :protobuf, :chatterbox, :cowboy]]
   end
 
   defp deps do
-    [{:exprotobuf, "~> 1.2.0"},
+    [{:protobuf, "~> 0.3"},
      # TODO
      # https://github.com/joedevivo/chatterbox/issues/57
      # https://github.com/joedevivo/chatterbox/issues/93
@@ -49,6 +49,6 @@ defmodule GRPC.Mixfile do
       links: %{"GitHub" => "https://github.com/tony612/grpc-elixir"}}
   end
 
-  defp elixirc_paths(:test), do: ["lib", "web", "test/support"]
-  defp elixirc_paths(_),     do: ["lib", "web"]
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_),     do: ["lib"]
 end
