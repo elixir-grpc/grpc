@@ -1,10 +1,9 @@
 %{"chatterbox": {:git, "https://github.com/tony612/chatterbox.git", "f94ad1790cfaab103785c1f78571497e9145d8da", [branch: "my-fix"]},
   "cowboy": {:git, "https://github.com/tony612/cowboy.git", "4af17688619a9382e7f0f2493005931a2c7003a8", [branch: "my-fix"]},
   "cowlib": {:git, "https://github.com/ninenines/cowlib", "11e07d3c2b164d06ad35188d83ad70e7501396db", [ref: "2.0.0-rc.1"]},
-  "exprotobuf": {:hex, :exprotobuf, "1.2.7", "287e2a1239fa9924c71815b1961e6e97d55c13496e9feb4ad755706af105ec36", [:mix], [{:gpb, "~> 3.24", [hex: :gpb, optional: false]}]},
   "goldrush": {:git, "https://github.com/basho/goldrush.git", "8f1b715d36b650ec1e1f5612c00e28af6ab0de82", [tag: "0.1.9"]},
-  "gpb": {:hex, :gpb, "3.27.3", "10b97043096f27d3b7fc31b5d6ed79c5f0f21c4bc5614a5bab7b687ac76c6b6b", [:make, :rebar], []},
-  "grpc": {:git, "https://github.com/tony612/grpc-elixir.git", "5accbc6005992965dc39ec134a3153a7f1d0c227", []},
+  "grpc": {:git, "https://github.com/tony612/grpc-elixir.git", "77de30d13c845e6ac283e83844834066427c6615", []},
   "hpack": {:git, "https://github.com/joedevivo/hpack.git", "6b58b6231e9b6ab83096715120578976f72f4f7c", [tag: "0.2.3"]},
   "lager": {:git, "https://github.com/basho/lager.git", "81eaef0ce98fdbf64ab95665e3bc2ec4b24c7dac", [tag: "3.2.4"]},
+  "protobuf": {:hex, :protobuf, "0.3.1", "0bedf46d33c37145c3d4c46edba43d3e70d9438dda6d03e5856d65fd776c1411", [:mix], []},
   "ranch": {:git, "https://github.com/ninenines/ranch", "55c2a9d623454f372a15e99721a37093d8773b48", [ref: "1.4.0"]}}
