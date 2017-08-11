@@ -29,17 +29,18 @@ The package can be installed as:
 
 ## Usage
 
-Generate Elixir code from proto file
-
+1. Generate Elixir code from proto file as [protobuf-elixir](https://github.com/tony612/protobuf-elixir#usage) shows.
+2. Implement the server side code like below and remember to return the expected message types.
 ```
-$ mix do deps.get, compile
-$ mix grpc.gen priv/protos/YOUR_SERVICE.proto --out lib/
-$ mix grpc.gen.server priv/protos/YOUR_SERVICE.proto --out lib/
+defmodule Helloworld.Greeter.Server do
+  use GRPC.Server, service: Helloworld.Greeter.Service
+
+  def say_hello(request, _stream) do
+    Helloworld.HelloReply.new(message: "Hello #{request.name}")
+  end
+end
 ```
-
-Implement functions in the generated server template – remember to return the expected message types –,
-then run the server and client like this:
-
+3. Run the server and client like this:
 ```elixir
 iex> GRPC.Server.start(Helloworld.Greeter.Server, 50051)
 iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051")
@@ -59,12 +60,12 @@ def start(_type, _args) do
     supervisor(GRPC.Server.Supervisor, [{Helloworld.Greeter.Server, 50051}])
   ]
 
-  opts = [strategy: :one_for_one, name: HelloworldApp]
+  opts = [strategy: :one_for_one, name: YourApp]
   Supervisor.start_link(children, opts)
 end
 ```
 
-Then run grpc.server:
+Then run grpc.server using a mix task
 
 ```
 $ mix grpc.server
@@ -90,7 +91,7 @@ Check [examples](examples) for all examples
 - [x] Helloworld and RouteGuide examples
 - [x] Doc and more tests
 - [x] Authentication with TLS
-- [ ] Improve code generation from protos ([protobuf-elixir](https://github.com/tony612/protobuf-elixir) [#8](https://github.com/tony612/grpc-elixir/issues/8))
+- [x] Improve code generation from protos ([protobuf-elixir](https://github.com/tony612/protobuf-elixir) [#8](https://github.com/tony612/grpc-elixir/issues/8))
 - [ ] Improve timeout(now there's simple timeout)
 - [ ] Errors handling
 - [ ] Data compression

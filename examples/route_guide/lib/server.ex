@@ -20,7 +20,7 @@ defmodule Routeguide.RouteGuide.Server do
 
   def record_route(req_enum, _stream) do
     features = Data.fetch_features
-    start_time = now_ts
+    start_time = now_ts()
     {_, distance, point_count, feature_count} =
       Enum.reduce req_enum, {nil, 0, 0, 0}, fn (point, {last, distance, point_count, feature_count}) ->
         point_count = point_count + 1
@@ -30,7 +30,7 @@ defmodule Routeguide.RouteGuide.Server do
         {point, distance, point_count, feature_count}
       end
     Routeguide.RouteSummary.new(point_count: point_count, feature_count: feature_count,
-                                distance: distance, elapsed_time: now_ts - start_time)
+                                distance: distance, elapsed_time: now_ts() - start_time)
   end
 
   def route_chat(req_enum, stream) do
