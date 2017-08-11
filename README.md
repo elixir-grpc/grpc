@@ -31,7 +31,7 @@ The package can be installed as:
 
 1. Generate Elixir code from proto file as [protobuf-elixir](https://github.com/tony612/protobuf-elixir#usage) shows.
 2. Implement the server side code like below and remember to return the expected message types.
-```
+```elixir
 defmodule Helloworld.Greeter.Server do
   use GRPC.Server, service: Helloworld.Greeter.Service
 
