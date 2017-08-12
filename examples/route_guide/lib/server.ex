@@ -3,6 +3,7 @@ defmodule Routeguide.RouteGuide.Server do
   alias GRPC.Server
   alias RouteGuide.Data
 
+  @spec get_feature(Routeguide.Point, GRPC.Server.Stream.t) :: Routeguide.Feature.t
   def get_feature(point, _stream) do
     features = Data.fetch_features
     default_feature = Routeguide.Feature.new(location: point)
@@ -11,6 +12,7 @@ defmodule Routeguide.RouteGuide.Server do
     end
   end
 
+  @spec list_features(Routeguide.Rectangle.t, GRPC.Server.Stream.t) :: any
   def list_features(rect, stream) do
     features = Data.fetch_features
     features
@@ -18,6 +20,7 @@ defmodule Routeguide.RouteGuide.Server do
     |> Enum.each(fn feature -> Server.stream_send(stream, feature) end)
   end
 
+  @spec record_route(Enumerable.t, GRPC.Server.Stream.t) :: Routeguide.RouteSummary.t
   def record_route(req_enum, _stream) do
     features = Data.fetch_features
     start_time = now_ts()
@@ -33,6 +36,7 @@ defmodule Routeguide.RouteGuide.Server do
                                 distance: distance, elapsed_time: now_ts() - start_time)
   end
 
+  @spec record_route(Enumerable.t, GRPC.Server.Stream.t) :: any
   def route_chat(req_enum, stream) do
     notes = Enum.reduce req_enum, Data.fetch_notes, fn (note, notes) ->
       key = serialize_location(note.location)
