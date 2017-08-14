@@ -29,7 +29,7 @@ The package can be installed as:
 
 ## Usage
 
-1. Generate Elixir code from proto file as [protobuf-elixir](https://github.com/tony612/protobuf-elixir#usage) shows.
+1. Generate Elixir code from proto file as [protobuf-elixir](https://github.com/tony612/protobuf-elixir#usage) shows(especially the `gRPC Support` section).
 2. Implement the server side code like below and remember to return the expected message types.
 ```elixir
 defmodule Helloworld.Greeter.Server do
