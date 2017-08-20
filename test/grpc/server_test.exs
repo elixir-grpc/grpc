@@ -8,7 +8,6 @@ defmodule GRPC.ServerTest do
   test "stream_send/2 works" do
     stream = %GRPC.Server.Stream{adapter: GRPC.Test.ServerAdapter, marshal: &(&1)}
     response = <<1, 2, 3, 4, 5, 6, 7, 8>>
-    assert {^stream, [<<0>>, <<0, 0, 0, 8>>, <<1, 2, 3, 4, 5, 6, 7, 8>>]} =
-      GRPC.Server.stream_send(stream, response)
+    assert {:ok, 13} == GRPC.Server.stream_send(stream, response)
   end
 end

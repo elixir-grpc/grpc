@@ -57,7 +57,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
   @spec send_body(GRPC.Client.Stream.t, struct, keyword) :: any
   def send_body(%{channel: channel, payload: %{stream_id: stream_id}}, message, opts) do
     pid = get_active_pname(channel)
-    {:ok, data} = GRPC.Message.to_data(message, opts)
+    {:ok, data, _} = GRPC.Message.to_data(message, opts)
     :h2_connection.send_body(pid, stream_id, data, opts)
   end
 

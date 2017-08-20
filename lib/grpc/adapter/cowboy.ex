@@ -89,6 +89,13 @@ defmodule GRPC.Adapter.Cowboy do
     :cowboy_req.stream_body(data, :nofin, req)
   end
 
+  @doc false
+  @spec flow_control(GRPC.Client.Stream.t, non_neg_integer) :: any
+  def flow_control(%{payload: req}, size) do
+    pid = req[:pid]
+    send(pid, {{pid, req[:streamid]}, {:flow, size}})
+  end
+
   defp cowboy_start_args(server, port, opts) do
     dispatch = :cowboy_router.compile([
       {:_, [{:_, GRPC.Adapter.Cowboy.Handler, {server, opts}}]}

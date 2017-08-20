@@ -140,7 +140,8 @@ defmodule GRPC.Server do
   """
   @spec stream_send(GRPC.Server.Stream.t, struct) :: any
   def stream_send(%{adapter: adapter, marshal: marshal} = stream, response) do
-    {:ok, data} = response |> marshal.() |> GRPC.Message.to_data(iolist: true)
+    {:ok, data, size} = response |> marshal.() |> GRPC.Message.to_data(iolist: true)
     adapter.stream_send(stream, data)
+    adapter.flow_control(stream, size)
   end
 end
