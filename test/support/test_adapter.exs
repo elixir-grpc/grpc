@@ -19,4 +19,8 @@ defmodule GRPC.Test.ServerAdapter do
   def stream_send(stream, data) do
     {stream, data}
   end
+
+  def flow_control(_, size) do
+    {:ok, size}
+  end
 end
