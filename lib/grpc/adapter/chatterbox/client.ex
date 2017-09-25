@@ -97,7 +97,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
   defp timeout(opts) do
     cond do
       opts[:deadline] -> GRPC.TimeUtils.to_relative(opts[:deadline])
-      opts[:timeout]  -> div(opts[:timeout], 1000)
+      opts[:timeout]  -> opts[:timeout]
       true            -> :infinity
     end
   end
