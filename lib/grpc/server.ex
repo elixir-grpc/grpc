@@ -45,8 +45,8 @@ defmodule GRPC.Server do
         def __call_rpc__(unquote(path), stream) do
           GRPC.Server.call(unquote(service_mod), stream, unquote(Macro.escape(rpc)), String.to_atom(unquote(func_name)))
         end
-        def __call_rpc(_, stream), do: {:error, stream, "Error"}
       end
+      def __call_rpc__(_, stream), do: {:error, stream, "Error"}
     end
   end
 
