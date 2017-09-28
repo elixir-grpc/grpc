@@ -1,4 +1,4 @@
-%{"chatterbox": {:git, "https://github.com/tony612/chatterbox.git", "f94ad1790cfaab103785c1f78571497e9145d8da", [branch: "my-fix"]},
+%{"chatterbox": {:git, "https://github.com/tony612/chatterbox.git", "c7c2ab4c3e74618cfa78fdbf6444fac3952d194b", [branch: "my-fix"]},
   "cowboy": {:git, "https://github.com/tony612/cowboy.git", "d047a94f7c2f94118f924724a62ce90f1cac4282", [branch: "my-fix"]},
   "cowlib": {:git, "https://github.com/ninenines/cowlib", "11e07d3c2b164d06ad35188d83ad70e7501396db", [ref: "2.0.0-rc.1"]},
   "earmark": {:hex, :earmark, "1.0.3", "89bdbaf2aca8bbb5c97d8b3b55c5dd0cff517ecc78d417e87f1d0982e514557b", [:mix], []},
