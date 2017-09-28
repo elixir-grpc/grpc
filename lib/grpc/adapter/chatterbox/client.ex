@@ -49,8 +49,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
   def send_header(%{channel: channel} = stream, opts) do
     headers = GRPC.Transport.HTTP2.client_headers(stream, opts)
     pid = get_active_pname(channel)
-    stream_id = :h2_connection.new_stream(pid)
-    :h2_connection.send_headers(pid, stream_id, headers)
+    stream_id = :h2_connection.begin_request(pid, headers)
     {:ok, put_stream_id(stream, stream_id)}
   end
 
