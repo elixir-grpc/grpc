@@ -2,7 +2,7 @@ defmodule RouteGuide.Data do
   @json_path Path.expand("../priv/route_guide_db.json", __DIR__)
 
   def start_link do
-    features = load_features
+    features = load_features()
     Agent.start_link(fn -> %{features: features, notes: %{}} end, name: __MODULE__)
   end
 

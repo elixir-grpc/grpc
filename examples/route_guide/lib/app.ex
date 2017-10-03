@@ -9,7 +9,7 @@ defmodule Routeguide.App do
 
     children = [
       supervisor(RouteGuide.Data, []),
-      supervisor(GRPC.Server.Supervisor, [start_args])
+      supervisor(GRPC.Server.Supervisor, [start_args()])
     ]
 
     opts = [strategy: :one_for_one, name: Routeguide]

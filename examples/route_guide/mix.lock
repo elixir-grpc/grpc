@@ -3,7 +3,7 @@
   "cowlib": {:git, "https://github.com/ninenines/cowlib", "11e07d3c2b164d06ad35188d83ad70e7501396db", [ref: "2.0.0-rc.1"]},
   "dialyxir": {:hex, :dialyxir, "0.5.1", "b331b091720fd93e878137add264bac4f644e1ddae07a70bf7062c7862c4b952", [:mix], []},
   "goldrush": {:git, "https://github.com/basho/goldrush.git", "8f1b715d36b650ec1e1f5612c00e28af6ab0de82", [tag: "0.1.9"]},
-  "grpc": {:git, "https://github.com/tony612/grpc-elixir.git", "5cee262a73d07f894c40c8e0f9bcc11008f96a72", []},
+  "grpc": {:git, "https://github.com/tony612/grpc-elixir.git", "214fea410474062fc1624900b971b2d0ad670f01", []},
   "hpack": {:git, "https://github.com/joedevivo/hpack.git", "6b58b6231e9b6ab83096715120578976f72f4f7c", [tag: "0.2.3"]},
   "lager": {:git, "https://github.com/basho/lager.git", "81eaef0ce98fdbf64ab95665e3bc2ec4b24c7dac", [tag: "3.2.4"]},
   "poison": {:hex, :poison, "3.1.0", "d9eb636610e096f86f25d9a46f35a9facac35609a7591b3be3326e99a0484665", [:mix], []},
