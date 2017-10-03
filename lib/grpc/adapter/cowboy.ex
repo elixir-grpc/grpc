@@ -9,22 +9,22 @@ defmodule GRPC.Adapter.Cowboy do
 
   @num_acceptors 100
 
-  @spec start(atom, non_neg_integer, keyword) :: {:ok, pid, non_neg_integer}
-  def start(server, port, opts) do
-    server_args = cowboy_start_args(server, port, opts)
+  @spec start(GRPC.Server.servers_map, non_neg_integer, keyword) :: {:ok, pid, non_neg_integer}
+  def start(servers, port, opts) do
+    server_args = cowboy_start_args(servers, port, opts)
     {:ok, pid} =
       if opts[:cred] do
         apply(:cowboy, :start_tls, server_args)
       else
         apply(:cowboy, :start_clear, server_args)
       end
-    port = :ranch.get_port(server)
+    port = :ranch.get_port(servers_name(servers))
     {:ok, pid, port}
   end
 
-  @spec child_spec(module, non_neg_integer, Keyword.t) :: Supervisor.Spec.spec
-  def child_spec(server, port, opts) do
-    args = cowboy_start_args(server, port, opts)
+  @spec child_spec(GRPC.Server.servers_map, non_neg_integer, Keyword.t) :: Supervisor.Spec.spec
+  def child_spec(servers, port, opts) do
+    args = cowboy_start_args(servers, port, opts)
     {ref, mfa, type, timeout, kind, modules} =
       if opts[:cred] do
         tls_ranch_start_args(args)
@@ -32,19 +32,19 @@ defmodule GRPC.Adapter.Cowboy do
         clear_ranch_start_args(args)
       end
     scheme = if opts[:cred], do: :https, else: :http
-    mfa = {__MODULE__, :start_link, [scheme, server, mfa]}
+    mfa = {__MODULE__, :start_link, [scheme, servers, mfa]}
     {ref, mfa, type, timeout, kind, modules}
   end
 
-  @spec start_link(atom, module, [any]) :: {:ok, pid} | {:error, any}
-  def start_link(scheme, server, {m, f, [ref | _] = a}) do
+  @spec start_link(atom, GRPC.Server.servers_map, [any]) :: {:ok, pid} | {:error, any}
+  def start_link(scheme, servers, {m, f, [ref | _] = a}) do
     case apply(m, f, a) do
       {:ok, pid} ->
-        Logger.info running_info(scheme, server, ref)
+        Logger.info running_info(scheme, servers, ref)
         {:ok, pid}
 
       {:error, {:shutdown, {_, _, {{_, {:error, :eaddrinuse}}, _}}}} = error ->
-        Logger.error [running_info(scheme, server, ref), " failed, port already in use"]
+        Logger.error [running_info(scheme, servers, ref), " failed, port already in use"]
         error
 
       {:error, _} = error ->
@@ -52,9 +52,9 @@ defmodule GRPC.Adapter.Cowboy do
     end
   end
 
-  @spec stop(atom) :: :ok | {:error, :not_found}
-  def stop(server) do
-    :cowboy.stop_listener(server)
+  @spec stop(GRPC.Server.servers_map) :: :ok | {:error, :not_found}
+  def stop(servers) do
+    :cowboy.stop_listener(servers_name(servers))
   end
 
   @spec read_body(GRPC.Client.Stream.t) :: {:ok, binary, GRPC.Client.Stream.t}
@@ -96,11 +96,11 @@ defmodule GRPC.Adapter.Cowboy do
     send(pid, {{pid, req[:streamid]}, {:flow, size}})
   end
 
-  defp cowboy_start_args(server, port, opts) do
+  defp cowboy_start_args(servers, port, opts) do
     dispatch = :cowboy_router.compile([
-      {:_, [{:_, GRPC.Adapter.Cowboy.Handler, {server, opts}}]}
+      {:_, [{:_, GRPC.Adapter.Cowboy.Handler, {servers, opts}}]}
     ])
-    [server, transport_opts(port, opts),
+    [servers_name(servers), transport_opts(port, opts),
      %{env: %{dispatch: dispatch}, inactivity_timeout: :infinity,
        stream_handlers: [GRPC.Adapter.Cowboy.StreamHandler]}
     ]
@@ -135,9 +135,13 @@ defmodule GRPC.Adapter.Cowboy do
     {:connection_type, :supervisor}
   end
 
-  defp running_info(scheme, server, ref) do
+  defp running_info(scheme, servers, ref) do
     {addr, port} = :ranch.get_addr(ref)
     addr_str = :inet.ntoa(addr)
-    "Running #{inspect server} with Cowboy using #{scheme}://#{addr_str}:#{port}"
+    "Running #{servers_name(servers)} with Cowboy using #{scheme}://#{addr_str}:#{port}"
+  end
+
+  defp servers_name(servers) do
+    servers |> Map.values |> Enum.map(fn(s) -> inspect(s) end) |> Enum.join(",")
   end
 end

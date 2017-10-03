@@ -1,8 +1,16 @@
 defmodule GRPC.ServerTest do
   use ExUnit.Case, async: true
 
+  defmodule Greeter.Service do
+    use GRPC.Service, name: "hello"
+  end
+
+  defmodule Greeter.Server do
+    use GRPC.Server, service: Greeter.Service
+  end
+
   test "stop/2 works" do
-    assert {Greeter.Server} = GRPC.Server.stop(Greeter.Server, adapter: GRPC.Test.ServerAdapter)
+    assert {%{"hello" => GRPC.ServerTest.Greeter.Server}} = GRPC.Server.stop(Greeter.Server, adapter: GRPC.Test.ServerAdapter)
   end
 
   test "stream_send/2 works" do

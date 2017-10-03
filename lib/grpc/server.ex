@@ -47,8 +47,13 @@ defmodule GRPC.Server do
         end
       end
       def __call_rpc__(_, stream), do: {:error, stream, "Error"}
+
+      def __meta__(:service), do: unquote(service_mod)
     end
   end
+
+  @type servers_map :: %{String.t => [module]}
+  @type servers_list :: module | [module]
 
   @doc false
   @spec call(atom, GRPC.Server.Stream.t,
@@ -108,10 +113,11 @@ defmodule GRPC.Server do
                 an insecure server will be created without this option
     * `:adapter` - use a custom server adapter instead of default `GRPC.Adapter.Cowboy`
   """
-  @spec start(atom, non_neg_integer, Keyword.t) :: {atom, any, non_neg_integer}
-  def start(server, port, opts \\ []) do
+  @spec start(servers_list, non_neg_integer, Keyword.t) :: {atom, any, non_neg_integer}
+  def start(servers, port, opts \\ []) do
     adapter = Keyword.get(opts, :adapter, GRPC.Adapter.Cowboy)
-    adapter.start(server, port, opts)
+    servers = GRPC.Server.servers_to_map(servers)
+    adapter.start(servers, port, opts)
   end
 
   @doc """
@@ -125,10 +131,11 @@ defmodule GRPC.Server do
 
     * `:adapter` - use a custom adapter instead of default `GRPC.Adapter.Cowboy`
   """
-  @spec stop(atom, Keyword.t) :: any
-  def stop(server, opts \\ []) do
+  @spec stop(servers_list, Keyword.t) :: any
+  def stop(servers, opts \\ []) do
     adapter = Keyword.get(opts, :adapter, GRPC.Adapter.Cowboy)
-    adapter.stop(server)
+    servers = GRPC.Server.servers_to_map(servers)
+    adapter.stop(servers)
   end
 
   @doc """
@@ -143,5 +150,20 @@ defmodule GRPC.Server do
     {:ok, data, size} = response |> marshal.() |> GRPC.Message.to_data(iolist: true)
     adapter.stream_send(stream, data)
     adapter.flow_control(stream, size)
+  end
+
+  @doc false
+  @spec service_name(String.t) :: String.t
+  def service_name(path) do
+    ["", name|_] = String.split(path, "/")
+    name
+  end
+
+  @doc false
+  @spec servers_to_map(servers_list) :: servers_map
+  def servers_to_map(servers) do
+    Enum.reduce(List.wrap(servers), %{}, fn(s, acc) ->
+      Map.put(acc, s.__meta__(:service).__meta__(:name), s)
+    end)
   end
 end
