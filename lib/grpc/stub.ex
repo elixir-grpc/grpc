@@ -152,9 +152,9 @@ defmodule GRPC.Stub do
 
   defp parse_unary_response({_headers, data_list}, unmarshal) do
     data_list
-    |> Enum.map(&GRPC.Message.from_data/1)
-    |> Enum.map(& unmarshal.(&1))
-    |> List.first
+    |> Enum.join("")
+    |> GRPC.Message.from_data
+    |> unmarshal.()
   end
 
   defp response_stream(%{unmarshal: unmarshal} = stream, opts) do
