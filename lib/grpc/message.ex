@@ -58,4 +58,15 @@ defmodule GRPC.Message do
     <<_flag::bytes-size(1), _length::bytes-size(4), message::binary>> = data
     message
   end
+
+  def complete?(data) do
+    <<_flag::bytes-size(1), length::unsigned-integer-size(32), message::binary>> = data
+    length == byte_size(message)
+  end
+
+  def message_length(data) do
+    <<_flag::bytes-size(1), length::unsigned-integer-size(32), _message::binary>> = data
+    length
+  end
+
 end
