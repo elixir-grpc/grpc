@@ -150,11 +150,18 @@ defmodule GRPC.Stub do
     parse_unary_response(response, unmarshal)
   end
 
-  defp parse_unary_response({_headers, data_list}, unmarshal) do
-    data_list
-    |> Enum.join("")
-    |> GRPC.Message.from_data
-    |> unmarshal.()
+  defp parse_unary_response({headers, data_list}, unmarshal) do
+    {_, status} = Enum.find(headers, nil, fn(header) -> elem(header, 0) == "grpc-status" end)
+    if status != GRPC.Status.ok do
+      {_, message} = Enum.find(headers, nil, fn(header) -> elem(header, 0) == "grpc-message" end)
+      {:error, %GRPC.RPCError{status: status, message: message}}
+    else
+      result = data_list
+      |> Enum.join("")
+      |> GRPC.Message.from_data
+      |> unmarshal.()
+      {:ok, result}
+    end
   end
 
   defp response_stream(%{unmarshal: unmarshal} = stream, opts) do
