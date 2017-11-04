@@ -37,13 +37,19 @@ defmodule GRPC.Server do
   """
 
   defmacro __using__(opts) do
-    quote bind_quoted: [service_mod: opts[:service]] do
+    quote bind_quoted: [service_mod: opts[:service], middlewares: opts[:middlewares]] do
       service_name = service_mod.__meta__(:name)
       Enum.each service_mod.__rpc_calls__, fn ({name, _, _} = rpc) ->
         func_name = name |> to_string |> Macro.underscore
         path = "/#{service_name}/#{name}"
+
         def __call_rpc__(unquote(path), stream) do
-          GRPC.Server.call(unquote(service_mod), stream, unquote(Macro.escape(rpc)), String.to_atom(unquote(func_name)))
+          f = Middleware.build_chain(unquote(middlewares), &GRPC.Server.call/4)
+          args  = [unquote(service_mod), stream, unquote(Macro.escape(rpc)), String.to_atom(unquote(func_name))]
+
+          apply(f, args)
+
+          # GRPC.Server.call(unquote(service_mod), stream, unquote(Macro.escape(rpc)), String.to_atom(unquote(func_name)))
         end
       end
       def __call_rpc__(_, stream), do: {:error, stream, "Error"}
