@@ -8,11 +8,11 @@ defmodule Middleware do
     end
   end
 
-  def build_chain(mods, wrapped_call) do
-    # TODO rewrite
-    fns = Enum.map(mods, &wrap/1)
-    Enum.reduce(fns, wrapped_call, fn(curr, next) ->
-      curr.(next) # fn(a,b,c)
+  def build_chain(mods, final_fn) do
+    mods
+    |> Enum.map(&wrap/1)
+    |> Enum.reduce(final_fn, fn(curr, next) ->
+      curr.(next)
     end)
   end
 end
