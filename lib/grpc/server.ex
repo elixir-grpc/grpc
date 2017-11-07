@@ -63,7 +63,12 @@ defmodule GRPC.Server do
     unmarshal_func = fn(req) -> service_mod.unmarshal(req_mod, req) end
     stream = %{stream | marshal: marshal_func, unmarshal: unmarshal_func}
 
-    handle_request(req_stream, res_stream, stream, func_name)
+    try do
+      handle_request(req_stream, res_stream, stream, func_name)
+    rescue
+      e in GRPC.RPCError -> {:error, stream, e}
+      _ -> {:error, stream, %GRPC.RPCError{status: GRPC.Status.unknown, message: "Internal Server Error"}}
+    end
   end
 
   defp handle_request(false = req_stream, res_stream, %{unmarshal: unmarshal, adapter: adapter} = stream, func_name) do
