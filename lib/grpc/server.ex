@@ -44,7 +44,8 @@ defmodule GRPC.Server do
         path = "/#{service_name}/#{name}"
 
         def __call_rpc__(unquote(path), stream) do
-          f = Middleware.build_chain(unquote(middlewares), &GRPC.Server.call/4)
+          # TODO can we move those defs outside?
+          f = Middleware.build_chain(unquote(middlewares), &GRPC.Server.call/4, {:call, 4})
           args  = [unquote(service_mod), stream, unquote(Macro.escape(rpc)), String.to_atom(unquote(func_name))]
 
           apply(f, args)
@@ -52,9 +53,15 @@ defmodule GRPC.Server do
           # GRPC.Server.call(unquote(service_mod), stream, unquote(Macro.escape(rpc)), String.to_atom(unquote(func_name)))
         end
       end
+
       def __call_rpc__(_, stream), do: {:error, stream, "Error"}
 
       def __meta__(:service), do: unquote(service_mod)
+
+      def stream_send(%{adapter: adapter, marshal: marshal} = stream, response) do
+        f = Middleware.build_chain(unquote(middlewares), &GRPC.Server.stream_send/2, {:stream_send, 2})
+        apply(f, [stream, response])
+      end
     end
   end
 

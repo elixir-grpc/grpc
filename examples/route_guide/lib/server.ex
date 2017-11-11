@@ -1,5 +1,38 @@
+defmodule Foo1 do
+  def stream_send(stream, response, next) do
+    IO.puts("Foo1")
+    next.(stream, response)
+  end
+  def call(service_mod, stream, rpc, func_name, next) do
+    IO.puts("Foo1")
+    next.(service_mod, stream, rpc, func_name)
+  end
+end
+
+defmodule Foo2 do
+  def stream_send(stream, response, next) do
+    IO.puts("Foo2")
+    next.(stream, response)
+  end
+  def call(service_mod, stream, rpc, func_name, next) do
+    IO.puts("Foo2")
+    next.(service_mod, stream, rpc, func_name)
+  end
+end
+
+defmodule Foo3 do
+  def stream_send(stream, response, next) do
+    IO.puts("Foo3")
+    next.(stream, response)
+  end
+  def call(service_mod, stream, rpc, func_name, next) do
+    IO.puts("Foo3")
+    next.(service_mod, stream, rpc, func_name)
+  end
+end
+
 defmodule Routeguide.RouteGuide.Server do
-  use GRPC.Server, service: Routeguide.RouteGuide.Service
+  use GRPC.Server, service: Routeguide.RouteGuide.Service, middlewares: [Foo1, Foo2, Foo3]
   alias GRPC.Server
   alias RouteGuide.Data
 
@@ -17,7 +50,8 @@ defmodule Routeguide.RouteGuide.Server do
     features = Data.fetch_features
     features
     |> Enum.filter(fn %{location: loc} -> in_range?(loc, rect) end)
-    |> Enum.each(fn feature -> Server.stream_send(stream, feature) end)
+    |> Enum.each(fn feature -> stream_send(stream, feature) end)
+    # |> Enum.each(fn feature -> Server.stream_send(stream, feature) end)
   end
 
   @spec record_route(Enumerable.t, GRPC.Server.Stream.t) :: Routeguide.RouteSummary.t
