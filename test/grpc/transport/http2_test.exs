@@ -62,4 +62,10 @@ defmodule GRPC.Transport.HTTP2Test do
     headers = HTTP2.client_headers(stream, timeout: 5)
     assert [{"grpc-timeout", "5u"} | _] = Enum.reverse(headers)
   end
+
+  test "client_headers/3 support custom content-type" do
+    stream = %{channel: @channel, path: "/foo/bar"}
+    headers = HTTP2.client_headers(stream, content_type: "application/grpc")
+    assert {_, "application/grpc"} = Enum.find(headers, fn({key, _}) -> key == "content-type" end)
+  end
 end

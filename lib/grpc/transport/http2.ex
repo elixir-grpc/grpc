@@ -22,14 +22,13 @@ defmodule GRPC.Transport.HTTP2 do
 
   @spec client_headers(GRPC.Client.Stream.t, keyword) :: [{String.t, String.t}]
   def client_headers(%{channel: channel, path: path}, opts \\ []) do
-    version = opts[:grpc_version] || GRPC.version
     [
       {":method", "POST"},
       {":scheme", channel.scheme},
       {":path", path},
       {":authority", channel.host},
-      {"content-type", "application/grpc+proto"},
-      {"user-agent", "grpc-elixir/#{version}"},
+      {"content-type", opts[:content_type] || "application/grpc+proto"},
+      {"user-agent", "grpc-elixir/#{opts[:grpc_version] || GRPC.version}"},
       {"te", "trailers"}
     ]
     |> append_encoding(Keyword.get(opts, :send_encoding))
