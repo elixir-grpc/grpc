@@ -37,7 +37,7 @@ defmodule GRPC.Mixfile do
      # TODO
      # https://github.com/ninenines/cowboy/pull/1020
 		 # https://github.com/ninenines/cowboy/pull/1068
-     {:cowboy, github: "tony612/cowboy", branch: "my-fix"},
+     {:cowboy, github: "ninenines/cowboy"},
      {:ex_doc, "~> 0.14", only: :dev},
      {:inch_ex, ">= 0.0.0", only: :docs}
     ]

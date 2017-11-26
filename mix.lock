@@ -1,6 +1,6 @@
 %{"chatterbox": {:git, "https://github.com/tony612/chatterbox.git", "c7c2ab4c3e74618cfa78fdbf6444fac3952d194b", [branch: "my-fix"]},
-  "cowboy": {:git, "https://github.com/tony612/cowboy.git", "d047a94f7c2f94118f924724a62ce90f1cac4282", [branch: "my-fix"]},
-  "cowlib": {:git, "https://github.com/ninenines/cowlib", "11e07d3c2b164d06ad35188d83ad70e7501396db", [ref: "2.0.0-rc.1"]},
+  "cowboy": {:git, "https://github.com/ninenines/cowboy.git", "c4e43ec26ad5193b9665f159d294d133a2d34a85", []},
+  "cowlib": {:git, "https://github.com/ninenines/cowlib", "e48f1cb34f5cc16844577ae55a9ebf0b7d08818a", [ref: "master"]},
   "earmark": {:hex, :earmark, "1.0.3", "89bdbaf2aca8bbb5c97d8b3b55c5dd0cff517ecc78d417e87f1d0982e514557b", [:mix], []},
   "ex_doc": {:hex, :ex_doc, "0.14.3", "e61cec6cf9731d7d23d254266ab06ac1decbb7651c3d1568402ec535d387b6f7", [:mix], [{:earmark, "~> 1.0", [hex: :earmark, optional: false]}]},
   "goldrush": {:git, "https://github.com/basho/goldrush.git", "8f1b715d36b650ec1e1f5612c00e28af6ab0de82", [tag: "0.1.9"]},
