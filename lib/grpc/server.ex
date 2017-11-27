@@ -155,7 +155,7 @@ defmodule GRPC.Server do
   def stream_send(%{adapter: adapter, marshal: marshal} = stream, response) do
     {:ok, data, size} = response |> marshal.() |> GRPC.Message.to_data(iolist: true)
     adapter.stream_send(stream, data)
-    adapter.flow_control(stream, size)
+    {:ok, size}
   end
 
   @doc false
