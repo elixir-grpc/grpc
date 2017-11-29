@@ -56,7 +56,7 @@ defmodule GRPC.Server do
 
       def __meta__(:service), do: unquote(service_mod)
 
-      def stream_send(%{adapter: adapter, marshal: marshal} = stream, response) do
+      def stream_send(stream, response) do
         f = Middleware.build_chain(unquote(middlewares), &GRPC.Server.stream_send/2, {:stream_send, 2})
         apply(f, [stream, response])
       end
