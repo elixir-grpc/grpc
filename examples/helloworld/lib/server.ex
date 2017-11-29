@@ -1,34 +1,43 @@
-defmodule Foo1 do
-  def call(service_mod, stream, rpc, func_name, next) do
-    IO.puts("Foo1")
-    next.(service_mod, stream, rpc, func_name)
+defmodule FooReplacer do
+  def call(service_mod, stream, {_, {req_mod, req_stream}, {res_mod, res_stream}} = rpc, func_name, next) do
+    IO.puts("FooReplacer.call/4")
+
+    unmarshal_func = fn(req) ->
+      case service_mod.unmarshal(req_mod, req) do
+        %Helloworld.HelloRequest{name: "grpc-elixir"} -> %Helloworld.HelloRequest{name: "GRPC-elixir"}
+        reply -> reply
+      end
+    end
+
+    next.(service_mod, %{stream | unmarshal: unmarshal_func}, rpc, func_name)
   end
 end
 
-defmodule Foo2 do
+defmodule Logging do
+  require Logger
   def call(service_mod, stream, rpc, func_name, next) do
-    IO.puts("Foo2")
-    next.(service_mod, stream, rpc, func_name)
+    case next.(service_mod, stream, rpc, func_name) do
+      {:ok, _stream, _res}    = r -> Logger.info("#{service_mod}.#{func_name} handled with success"); r
+      {:error, _stream, _res} = r -> Logger.error("#{service_mod}.#{func_name} handled with failure"); r
+      r                           -> Logger.error("#{r}"); r
+    end
   end
 end
 
-defmodule Foo3 do
+defmodule Metrics do
+  require Logger
   def call(service_mod, stream, rpc, func_name, next) do
-    IO.puts("Foo3")
-    next.(service_mod, stream, rpc, func_name)
-  end
-end
+    {t, ret} = :timer.tc fn ->
+      next.(service_mod, stream, rpc, func_name)
+    end
 
-defmodule Bar do
-  def run do
-    wrapped_call = fn(a,b,c,d) -> IO.puts("final") end
-    f = Middleware.build_chain([Foo1, Foo2, Foo3], wrapped_call)
-    f.(1,2,3,4)
+    Logger.info("replied in #{t}μs")
+    ret
   end
 end
 
 defmodule Helloworld.Greeter.Server do
-  use GRPC.Server, service: Helloworld.Greeter.Service, middlewares: [Foo1, Foo2, Foo3]
+  use GRPC.Server, service: Helloworld.Greeter.Service, middlewares: [FooReplacer, Logging, Metrics]
 
   @spec say_hello(Helloworld.HelloRequest.t, GRPC.Server.Stream.t) :: Helloworld.HelloReply.t
   def say_hello(request, _stream) do
