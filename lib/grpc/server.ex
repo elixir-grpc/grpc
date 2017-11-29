@@ -49,8 +49,6 @@ defmodule GRPC.Server do
           args  = [unquote(service_mod), stream, unquote(Macro.escape(rpc)), String.to_atom(unquote(func_name))]
 
           apply(f, args)
-
-          # GRPC.Server.call(unquote(service_mod), stream, unquote(Macro.escape(rpc)), String.to_atom(unquote(func_name)))
         end
       end
 
@@ -72,9 +70,17 @@ defmodule GRPC.Server do
   @spec call(atom, GRPC.Server.Stream.t,
     tuple, atom) :: {:ok, GRPC.Server.Stream.t, struct} | {:ok, struct}
   def call(service_mod, stream, {_, {req_mod, req_stream}, {res_mod, res_stream}} = _rpc, func_name) do
-    marshal_func = fn(res) -> service_mod.marshal(res_mod, res) end
-    unmarshal_func = fn(req) -> service_mod.unmarshal(req_mod, req) end
-    stream = %{stream | marshal: marshal_func, unmarshal: unmarshal_func}
+    # Unless a middleware inserted a marshal function, use the one provided by service_mod
+    unless stream.marshal do
+      marshal_func = fn(res) -> service_mod.marshal(res_mod, res) end
+      stream = %{stream | marshal: marshal_func}
+    end
+
+    # Unless a middleware inserted a unmarshal function, use the one provided by service_mod
+    unless stream.unmarshal do
+      unmarshal_func = fn(req) -> service_mod.unmarshal(req_mod, req) end
+      stream = %{stream | unmarshal: unmarshal_func}
+    end
 
     try do
       handle_request(req_stream, res_stream, stream, func_name)
