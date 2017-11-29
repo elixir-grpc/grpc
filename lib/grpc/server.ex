@@ -37,7 +37,7 @@ defmodule GRPC.Server do
   """
 
   defmacro __using__(opts) do
-    quote bind_quoted: [service_mod: opts[:service], middlewares: opts[:middlewares]] do
+    quote bind_quoted: [service_mod: opts[:service], middlewares: opts[:middlewares] || []] do
       service_name = service_mod.__meta__(:name)
       Enum.each service_mod.__rpc_calls__, fn ({name, _, _} = rpc) ->
         func_name = name |> to_string |> Macro.underscore
