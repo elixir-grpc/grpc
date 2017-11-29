@@ -60,6 +60,11 @@ defmodule GRPC.Server do
         f = Middleware.build_chain(unquote(middlewares), &GRPC.Server.stream_send/2, {:stream_send, 2})
         apply(f, [stream, response])
       end
+
+      def stream_receive(stream, data) do
+        f = Middleware.build_chain(unquote(middlewares), &GRPC.Server.stream_receive/2, {:stream_receive, 2})
+        apply(f, [stream, data])
+      end
     end
   end
 
@@ -70,6 +75,7 @@ defmodule GRPC.Server do
   @spec call(atom, GRPC.Server.Stream.t,
     tuple, atom) :: {:ok, GRPC.Server.Stream.t, struct} | {:ok, struct}
   def call(service_mod, stream, {_, {req_mod, req_stream}, {res_mod, res_stream}} = _rpc, func_name) do
+
     # Unless a middleware inserted a marshal function, use the one provided by service_mod
     unless stream.marshal do
       marshal_func = fn(res) -> service_mod.marshal(res_mod, res) end
@@ -97,12 +103,9 @@ defmodule GRPC.Server do
     request = unmarshal.(message)
     handle_request(req_stream, res_stream, stream, func_name, request)
   end
-  defp handle_request(true = req_stream, res_stream, %{unmarshal: unmarshal, adapter: adapter} = stream, func_name) do
-    reading_stream = adapter.reading_stream(stream, fn (data) ->
-      data
-      |> GRPC.Message.from_frame
-      |> Enum.map(&unmarshal.(&1))
-    end)
+
+  defp handle_request(true = req_stream, res_stream, %{unmarshal: unmarshal, adapter: adapter, server: server_mod} = stream, func_name) do
+    reading_stream = adapter.reading_stream(stream, fn (data) -> server_mod.stream_receive(stream, data) end)
     handle_request(req_stream, res_stream, stream, func_name, reading_stream)
   end
 
@@ -175,6 +178,14 @@ defmodule GRPC.Server do
     {:ok, data, size} = response |> marshal.() |> GRPC.Message.to_data(iolist: true)
     adapter.stream_send(stream, data)
     {:ok, size}
+  end
+
+  @doc false
+  @spec stream_receive(GRPC.Server.Stream.t, binary) :: struct
+  def stream_receive(%{unmarshal: unmarshal} = stream, data) do
+    data
+    |> GRPC.Message.from_frame()
+    |> Enum.map(&unmarshal.(&1))
   end
 
   @doc false

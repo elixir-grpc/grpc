@@ -1,35 +1,50 @@
 defmodule Foo1 do
   def stream_send(stream, response, next) do
-    IO.puts("Foo1")
+    IO.puts("Foo1 stream_send")
     next.(stream, response)
   end
 
+  def stream_receive(stream, data, next) do
+    IO.puts("Foo1 stream_receive")
+    next.(stream, data)
+  end
+
   def call(service_mod, stream, rpc, func_name, next) do
-    IO.puts("Foo1")
+    IO.puts("Foo1 call")
     next.(service_mod, stream, rpc, func_name)
   end
 end
 
 defmodule Foo2 do
   def stream_send(stream, response, next) do
-    IO.puts("Foo2")
+    IO.puts("Foo2 stream_send")
     next.(stream, response)
   end
 
+  def stream_receive(stream, data, next) do
+    IO.puts("Foo2 stream_receive")
+    next.(stream, data)
+  end
+
   def call(service_mod, stream, rpc, func_name, next) do
-    IO.puts("Foo2")
+    IO.puts("Foo2 call")
     next.(service_mod, stream, rpc, func_name)
   end
 end
 
 defmodule Foo3 do
   def stream_send(stream, response, next) do
-    IO.puts("Foo3")
+    IO.puts("Foo3 stream_send")
     next.(stream, response)
   end
 
+  def stream_receive(stream, data, next) do
+    IO.puts("Foo3 stream_receive")
+    next.(stream, data)
+  end
+
   def call(service_mod, stream, rpc, func_name, next) do
-    IO.puts("Foo3")
+    IO.puts("Foo3 call")
     next.(service_mod, stream, rpc, func_name)
   end
 end
