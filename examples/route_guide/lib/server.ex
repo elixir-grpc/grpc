@@ -3,6 +3,7 @@ defmodule Foo1 do
     IO.puts("Foo1")
     next.(stream, response)
   end
+
   def call(service_mod, stream, rpc, func_name, next) do
     IO.puts("Foo1")
     next.(service_mod, stream, rpc, func_name)
@@ -14,6 +15,7 @@ defmodule Foo2 do
     IO.puts("Foo2")
     next.(stream, response)
   end
+
   def call(service_mod, stream, rpc, func_name, next) do
     IO.puts("Foo2")
     next.(service_mod, stream, rpc, func_name)
@@ -25,6 +27,7 @@ defmodule Foo3 do
     IO.puts("Foo3")
     next.(stream, response)
   end
+
   def call(service_mod, stream, rpc, func_name, next) do
     IO.puts("Foo3")
     next.(service_mod, stream, rpc, func_name)
@@ -51,7 +54,6 @@ defmodule Routeguide.RouteGuide.Server do
     features
     |> Enum.filter(fn %{location: loc} -> in_range?(loc, rect) end)
     |> Enum.each(fn feature -> stream_send(stream, feature) end)
-    # |> Enum.each(fn feature -> Server.stream_send(stream, feature) end)
   end
 
   @spec record_route(Enumerable.t, GRPC.Server.Stream.t) :: Routeguide.RouteSummary.t
@@ -70,14 +72,14 @@ defmodule Routeguide.RouteGuide.Server do
                                 distance: distance, elapsed_time: now_ts() - start_time)
   end
 
-  @spec record_route(Enumerable.t, GRPC.Server.Stream.t) :: any
+  @spec route_chat(Enumerable.t, GRPC.Server.Stream.t) :: any
   def route_chat(req_enum, stream) do
     notes = Enum.reduce req_enum, Data.fetch_notes, fn (note, notes) ->
       key = serialize_location(note.location)
       new_notes = Map.update(notes, key, [note], &(&1 ++ [note]))
       Enum.each new_notes[key], fn note ->
         IO.inspect note
-        Server.stream_send(stream, note)
+        stream_send(stream, note)
       end
       new_notes
     end
