@@ -1,7 +1,7 @@
 opts =
   if System.get_env("TLS") do
     ca_path = Path.expand("./tls/ca.pem", :code.priv_dir(:route_guide))
-    cred = GRPC.Credential.client_tls(ca_path)
+    cred = GRPC.Credential.new(ssl: [cacertfile: ca_path])
     [cred: cred]
   else
     []

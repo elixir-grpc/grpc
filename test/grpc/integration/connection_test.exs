@@ -27,11 +27,11 @@ defmodule GRPC.Integration.ConnectionTest do
 
   test "authentication works" do
     server = FeatureServer
-    cred = GRPC.Credential.server_tls(@cert_path, @key_path)
+    cred = GRPC.Credential.new(ssl: [certfile: @cert_path, keyfile: @key_path])
     {:ok, _, port} = GRPC.Server.start(server, 0, cred: cred)
     try do
       point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
-      client_cred = GRPC.Credential.client_tls(@ca_path)
+      client_cred = GRPC.Credential.new(ssl: [cacertfile: @ca_path])
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", cred: client_cred)
       assert channel |> Routeguide.RouteGuide.Stub.get_feature(point)
     after
