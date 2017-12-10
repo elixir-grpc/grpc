@@ -98,17 +98,17 @@ Check [examples](examples) for all examples
 - [ ] Data compression
 - [ ] Benchmarking
 - [ ] Logging
-- [ ] Middleware support
-  - [ ] Server
+- [x] Middleware support
+  - [x] Server
     - [x] Unary
-    - [ ] Streaming
+    - [x] Streaming
       - [x] send
-      - [ ] recv
-  - [ ] Client
-    - [ ] Unary
-    - [ ] Streaming
-      - [ ] send
-      - [ ] recv
+      - [x] recv
+  - [x] Client
+    - [x] Unary
+    - [x] Streaming
+      - [x] send
+      - [x] recv
 
 ## Contributing
 
