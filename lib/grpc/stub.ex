@@ -41,15 +41,36 @@ defmodule GRPC.Stub do
       Enum.each service_mod.__rpc_calls__, fn ({name, {_, req_stream}, {_, res_stream}} = rpc) ->
         func_name = name |> to_string |> Macro.underscore
         path = "/#{service_name}/#{name}"
+
         if req_stream do
           def unquote(String.to_atom(func_name))(channel, opts \\ []) do
-            GRPC.Stub.call(unquote(service_mod), unquote(Macro.escape(rpc)), unquote(path), channel, nil, opts)
+            middlewares = Keyword.get(opts, :middlewares, [])
+            f = Middleware.build_chain(middlewares, &GRPC.Stub.call/6, {:call, 6})
+            args = [unquote(service_mod), unquote(Macro.escape(rpc)), unquote(path), channel, nil, opts]
+            apply(f, args)
+            # GRPC.Stub.call(unquote(service_mod), unquote(Macro.escape(rpc)), unquote(path), channel, nil, opts)
           end
         else
           def unquote(String.to_atom(func_name))(channel, request, opts \\ []) do
-            GRPC.Stub.call(unquote(service_mod), unquote(Macro.escape(rpc)), unquote(path), channel, request, opts)
+            middlewares = Keyword.get(opts, :middlewares, [])
+            f = Middleware.build_chain(middlewares, &GRPC.Stub.call/6, {:call, 6})
+            args = [unquote(service_mod), unquote(Macro.escape(rpc)), unquote(path), channel, request, opts]
+            apply(f, args)
+            # GRPC.Stub.call(unquote(service_mod), unquote(Macro.escape(rpc)), unquote(path), channel, request, opts)
           end
         end
+      end
+
+      def stream_send(stream, request, opts \\ []) do
+        middlewares = Keyword.get(opts, :middlewares, [])
+        f = Middleware.build_chain(middlewares, &GRPC.Stub.stream_send/3, {:stream_send, 3})
+        apply(f, [stream, request, opts])
+      end
+
+      def recv(stream, opts \\ []) do
+        middlewares = Keyword.get(opts, :middlewares, [])
+        f = Middleware.build_chain(middlewares, &GRPC.Stub.recv/2, {:recv, 2})
+        apply(f, [stream, opts])
       end
     end
   end
@@ -57,20 +78,13 @@ defmodule GRPC.Stub do
   @doc false
   @spec call(atom, tuple, String.t, GRPC.Channel, struct | nil, keyword) :: any
   def call(service_mod, rpc, path, channel, request, opts) do
-    middlewares = Keyword.get(opts, :middlewares, [])
-
     {_, {req_mod, req_stream}, {res_mod, res_stream}} = rpc
     marshal = fn(req) -> service_mod.marshal(req_mod, req) end
     unmarshal = fn(res) -> service_mod.unmarshal(res_mod, res) end
     stream = %GRPC.Client.Stream{marshal: marshal, unmarshal: unmarshal, path: path,
               req_stream: req_stream, res_stream: res_stream, channel: channel}
 
-    send_request_fn = fn (req_stream, res_stream, stream, request, opts) ->
-      send_request(req_stream, res_stream, stream, request, opts)
-    end
-
-    f = Middleware.build_chain(middlewares, send_request_fn, {:send_request, 5})
-    apply(f, [req_stream, res_stream, stream, request, opts])
+    send_request(req_stream, res_stream, stream, request, opts)
   end
 
   defp send_request(false, false, %{marshal: marshal, unmarshal: unmarshal} = stream, request, opts) do

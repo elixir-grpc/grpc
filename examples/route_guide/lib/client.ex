@@ -1,4 +1,23 @@
 defmodule RouteGuide.Client do
+  defmodule Foo do
+    def call(service_mod, rpc, path, channel, request, opts, next) do
+      IO.puts("Foo.call")
+      next.(service_mod, rpc, path, channel, request, opts)
+    end
+
+    def stream_send(stream, request, opts, next) do
+      IO.puts("Foo.stream_send")
+      next.(stream, request, opts)
+    end
+
+    def recv(stream, opts, next) do
+      IO.puts("Foo.recv")
+      next.(stream, opts)
+    end
+  end
+
+  @middlewares [Foo]
+
   def main(channel) do
     print_feature(channel, Routeguide.Point.new(latitude: 409146138, longitude: -746188906))
     print_feature(channel, Routeguide.Point.new(latitude: 0, longitude: 0))
@@ -16,13 +35,13 @@ defmodule RouteGuide.Client do
 
   def print_feature(channel, point) do
     IO.puts "Getting feature for point (#{point.latitude}, #{point.longitude})"
-    {:ok, reply} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
+    {:ok, reply} = channel |> Routeguide.RouteGuide.Stub.get_feature(point, middlewares: @middlewares)
     IO.inspect reply
   end
 
   def print_features(channel, rect) do
     IO.puts "Looking for features within #{inspect rect}"
-    stream = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
+    stream = channel |> Routeguide.RouteGuide.Stub.list_features(rect, middlewares: @middlewares)
     Enum.each stream, fn (feature)->
       IO.inspect feature
     end
@@ -38,13 +57,15 @@ defmodule RouteGuide.Client do
       {[point|acc], seed}
     end
     IO.puts "Traversing #{length(points)} points."
-    stream = channel |> Routeguide.RouteGuide.Stub.record_route
+    stream = channel |> Routeguide.RouteGuide.Stub.record_route(middlewares: @middlewares)
     Enum.reduce points, points, fn (_, [point|tail]) ->
       opts = if length(tail) == 0, do: [end_stream: true], else: []
-      GRPC.Stub.stream_send(stream, point, opts)
+      Routeguide.RouteGuide.Stub.stream_send(stream, point, Keyword.put_new(opts, :middlewares, @middlewares))
+      # GRPC.Stub.stream_send(stream, point, opts)
       tail
     end
-    res = GRPC.Stub.recv(stream)
+    # res = GRPC.Stub.recv(stream)
+    res = Routeguide.RouteGuide.Stub.recv(stream, middlewares: @middlewares)
     IO.puts "Route summary: #{inspect res}"
   end
 
@@ -65,11 +86,13 @@ defmodule RouteGuide.Client do
     task = Task.async(fn ->
       Enum.reduce(notes, notes, fn (_, [note|tail]) ->
         opts = if length(tail) == 0, do: [end_stream: true], else: []
-        GRPC.Stub.stream_send(stream, note, opts)
+        # GRPC.Stub.stream_send(stream, note, opts)
+        Routeguide.RouteGuide.Stub.stream_send(stream, note, Keyword.put_new(opts, :middlewares, @middlewares))
         tail
       end)
     end)
-    result_enum = GRPC.Stub.recv(stream)
+    # result_enum = GRPC.Stub.recv(stream)
+    result_enum = Routeguide.RouteGuide.Stub.recv(stream, middlewares: @middlewares)
     Task.await(task)
     Enum.each result_enum, fn (note) ->
       IO.puts "Got message #{note.message} at point(#{note.location.latitude}, #{note.location.longitude})"
