@@ -57,12 +57,20 @@ defmodule GRPC.Stub do
   @doc false
   @spec call(atom, tuple, String.t, GRPC.Channel, struct | nil, keyword) :: any
   def call(service_mod, rpc, path, channel, request, opts) do
+    middlewares = Keyword.get(opts, :middlewares, [])
+
     {_, {req_mod, req_stream}, {res_mod, res_stream}} = rpc
     marshal = fn(req) -> service_mod.marshal(req_mod, req) end
     unmarshal = fn(res) -> service_mod.unmarshal(res_mod, res) end
     stream = %GRPC.Client.Stream{marshal: marshal, unmarshal: unmarshal, path: path,
               req_stream: req_stream, res_stream: res_stream, channel: channel}
-    send_request(req_stream, res_stream, stream, request, opts)
+
+    send_request_fn = fn (req_stream, res_stream, stream, request, opts) ->
+      send_request(req_stream, res_stream, stream, request, opts)
+    end
+
+    f = Middleware.build_chain(middlewares, send_request_fn, {:send_request, 5})
+    apply(f, [req_stream, res_stream, stream, request, opts])
   end
 
   defp send_request(false, false, %{marshal: marshal, unmarshal: unmarshal} = stream, request, opts) do
