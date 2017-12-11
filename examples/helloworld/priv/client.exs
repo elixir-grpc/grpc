@@ -1,7 +1,7 @@
 defmodule Foo do
-  def send_request(req_stream, res_stream, stream, request, opts, next) do
+  def call(service_mod, rpc, path, channel, request, opts, next) do
     IO.puts("Foo")
-    next.(req_stream, res_stream, stream, request, opts)
+    next.(service_mod, rpc, path, channel, request, opts)
   end
 end
 
