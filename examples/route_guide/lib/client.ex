@@ -61,10 +61,8 @@ defmodule RouteGuide.Client do
     Enum.reduce points, points, fn (_, [point|tail]) ->
       opts = if length(tail) == 0, do: [end_stream: true], else: []
       Routeguide.RouteGuide.Stub.stream_send(stream, point, Keyword.put_new(opts, :middlewares, @middlewares))
-      # GRPC.Stub.stream_send(stream, point, opts)
       tail
     end
-    # res = GRPC.Stub.recv(stream)
     res = Routeguide.RouteGuide.Stub.recv(stream, middlewares: @middlewares)
     IO.puts "Route summary: #{inspect res}"
   end
@@ -86,12 +84,10 @@ defmodule RouteGuide.Client do
     task = Task.async(fn ->
       Enum.reduce(notes, notes, fn (_, [note|tail]) ->
         opts = if length(tail) == 0, do: [end_stream: true], else: []
-        # GRPC.Stub.stream_send(stream, note, opts)
         Routeguide.RouteGuide.Stub.stream_send(stream, note, Keyword.put_new(opts, :middlewares, @middlewares))
         tail
       end)
     end)
-    # result_enum = GRPC.Stub.recv(stream)
     result_enum = Routeguide.RouteGuide.Stub.recv(stream, middlewares: @middlewares)
     Task.await(task)
     Enum.each result_enum, fn (note) ->

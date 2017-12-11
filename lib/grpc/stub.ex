@@ -48,7 +48,6 @@ defmodule GRPC.Stub do
             f = Middleware.build_chain(middlewares, &GRPC.Stub.call/6, {:call, 6})
             args = [unquote(service_mod), unquote(Macro.escape(rpc)), unquote(path), channel, nil, opts]
             apply(f, args)
-            # GRPC.Stub.call(unquote(service_mod), unquote(Macro.escape(rpc)), unquote(path), channel, nil, opts)
           end
         else
           def unquote(String.to_atom(func_name))(channel, request, opts \\ []) do
@@ -56,7 +55,6 @@ defmodule GRPC.Stub do
             f = Middleware.build_chain(middlewares, &GRPC.Stub.call/6, {:call, 6})
             args = [unquote(service_mod), unquote(Macro.escape(rpc)), unquote(path), channel, request, opts]
             apply(f, args)
-            # GRPC.Stub.call(unquote(service_mod), unquote(Macro.escape(rpc)), unquote(path), channel, request, opts)
           end
         end
       end
@@ -83,7 +81,6 @@ defmodule GRPC.Stub do
     unmarshal = fn(res) -> service_mod.unmarshal(res_mod, res) end
     stream = %GRPC.Client.Stream{marshal: marshal, unmarshal: unmarshal, path: path,
               req_stream: req_stream, res_stream: res_stream, channel: channel}
-
     send_request(req_stream, res_stream, stream, request, opts)
   end
 
