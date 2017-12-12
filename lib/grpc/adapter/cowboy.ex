@@ -122,8 +122,7 @@ defmodule GRPC.Adapter.Cowboy do
     list = [port: port, num_acceptors: @num_acceptors]
     list = if opts[:ip], do: [{:ip, opts[:ip]}|list], else: list
     if opts[:cred] do
-      tls_cred = opts[:cred].tls
-      [{:certfile, tls_cred.cert_path}, {:keyfile, tls_cred.key_path}|list]
+      opts[:cred].ssl ++ list
     else
       list
     end

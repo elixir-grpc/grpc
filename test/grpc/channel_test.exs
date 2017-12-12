@@ -10,7 +10,7 @@ defmodule GRPC.ChannelTest do
   end
 
   test "connect/2 works for ssl" do
-    cred = %{tls: %{}}
+    cred = %{ssl: []}
     {:ok, channel} = GRPC.Stub.connect("10.1.0.0:50051", adapter: ClientAdapter, cred: cred)
     assert %Channel{host: "10.1.0.0", port: 50051, scheme: "https",
             payload: %{pname: :grpc_test_client_ssl_dapter, cred: ^cred}} = channel
