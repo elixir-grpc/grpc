@@ -10,18 +10,18 @@ defmodule GRPC.Channel do
     * `:host` - server's host to connect
     * `:port` - server's port to connect
     * `:scheme` - scheme of connection, like `http`
+    * `:cred` - credentials used for authentication
     * `:adapter` - a client adapter module, like `GRPC.Adapter.Chatterbox.Client`
-    * `:payload` - the payload needed by the adapter
   """
 
   @type t :: %__MODULE__{
-          host: String.t(),
-          port: non_neg_integer,
-          scheme: String.t(),
-          adapter: atom,
-          payload: %{atom => any}
-        }
-  defstruct host: nil, port: nil, scheme: nil, adapter: nil, payload: %{}
+    host: String.t,
+    port: non_neg_integer,
+    scheme: String.t,
+    cred: GRPC.Credential.t,
+    adapter: atom
+  }
+  defstruct [host: nil, port: nil, scheme: nil, cred: nil, adapter: nil]
 
   @default_adapter GRPC.Adapter.Chatterbox.Client
   @insecure_scheme "http"
@@ -35,18 +35,18 @@ defmodule GRPC.Channel do
   end
 
   @doc false
-  @spec connect(String.t(), non_neg_integer, keyword) :: {:ok, t}
+  @spec connect(String.t, binary | non_neg_integer, keyword) :: {:ok, t} | {:error, any}
   def connect(host, port, opts) when is_binary(port) do
     connect(host, String.to_integer(port), opts)
   end
 
   def connect(host, port, opts) when is_integer(port) do
     adapter = Keyword.get(opts, :adapter, @default_adapter)
-    scheme = if opts[:cred], do: @secure_scheme, else: @insecure_scheme
-    channel = %__MODULE__{host: host, port: port, scheme: scheme, adapter: adapter}
-    {:ok, payload} = adapter.connect(channel, %{cred: opts[:cred]})
-    channel = %{channel | payload: payload}
-    {:ok, channel}
+    cred = Keyword.get(opts, :cred)
+    scheme = if cred, do: @secure_scheme, else: @insecure_scheme
+    %__MODULE__{host: host, port: port, scheme: scheme,
+                cred: cred, adapter: adapter}
+    |> adapter.connect()
   end
 
   @doc false
@@ -68,7 +68,7 @@ defmodule GRPC.Channel do
   end
 
   @doc false
-  @spec send_body(GRPC.Client.Stream.t(), struct, keyword) :: any
+  @spec send_body(GRPC.Client.Stream.t, binary, keyword) :: any
   def send_body(%{channel: channel} = stream, message, opts) do
     channel.adapter.send_body(stream, message, opts)
   end
