@@ -165,34 +165,33 @@ defmodule GRPC.Stub do
   end
 
   defp response_stream(%{unmarshal: unmarshal} = stream, opts) do
-    Stream.unfold(%{ complete: [], buffer: :empty, message_length: -1 }, fn acc ->
+    Stream.unfold(%{buffer: :empty, message_length: -1}, fn acc ->
       case Channel.recv(stream, opts) do
         {:data, data} ->
           if GRPC.Message.complete?(data) do
             reply = data |> GRPC.Message.from_data() |> unmarshal.()
-            {reply, Map.update!(acc, :complete, &([&1] ++ reply))}
+            {reply, acc}
           else
             case acc do
-              %{ buffer: :empty } ->
+              %{buffer: :empty} ->
                 {
                   :skip,
                   Map.merge(acc, %{
                     buffer: data, message_length: GRPC.Message.message_length(data)
                   })
                 }
-              %{ buffer: buffer, message_length: ml } when byte_size(buffer) + byte_size(data) >  ml ->
+              %{buffer: buffer, message_length: ml} when byte_size(buffer) + byte_size(data) - 5 == ml ->
                 final_buffer = buffer <> data
                 reply = final_buffer
                         |> GRPC.Message.from_data()
                         |> unmarshal.()
                 {
                   reply,
-                  Map.update!(acc, :complete, &([&1] ++ reply))
-                  |> Map.merge( %{ buffer: :empty, message_length: -1 })
+                  Map.merge(acc, %{buffer: :empty, message_length: -1})
                 }
-              %{ buffer: buffer } ->
+              %{buffer: buffer} ->
                 next_buffer = buffer <> data
-                {:skip, Map.put(acc, :buffer, next_buffer) }
+                {:skip, Map.put(acc, :buffer, next_buffer)}
             end
           end
         {:end_stream, _resp} ->
