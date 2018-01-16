@@ -15,8 +15,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
 
   def connect(%{host: host, port: port}, payload = %{cred: cred}) do
     pname = :"grpc_chatter_client_ssl_#{host}:#{port}"
-    ssl_opts = [cacertfile: cred.tls.ca_path]
-    init_args = {:client, :ssl, String.to_charlist(host), port, ssl_opts, :chatterbox.settings(:client)}
+    init_args = {:client, :ssl, String.to_charlist(host), port, cred.ssl, :chatterbox.settings(:client)}
     do_connect(pname, init_args, payload)
   end
 
@@ -67,7 +66,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
         channel |> get_active_pname |> :h2_client.get_response(stream_id)
     after timeout(opts) ->
       # TODO: test
-      raise GRPC.TimeoutError
+      raise GRPC.RPCError, status: GRPC.Status.deadline_exceeded, message: "deadline exceeded"
     end
   end
 

@@ -59,6 +59,12 @@ defmodule GRPC.Message do
     message
   end
 
+  def from_frame(bin), do: from_frame(bin, [])
+  def from_frame(<<>>, acc), do: Enum.reverse(acc)
+  def from_frame(<<_flag::8, length::32, msg::bytes-size(length), rest::binary>>, acc) do
+    from_frame(rest, [msg|acc])
+  end
+
   def complete?(data) do
     <<_flag::bytes-size(1), length::unsigned-integer-size(32), message::binary>> = data
     length == byte_size(message)
@@ -68,5 +74,4 @@ defmodule GRPC.Message do
     <<_flag::bytes-size(1), length::unsigned-integer-size(32), _message::binary>> = data
     length
   end
-
 end

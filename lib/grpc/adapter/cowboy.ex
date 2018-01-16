@@ -70,18 +70,30 @@ defmodule GRPC.Adapter.Cowboy do
     end
   end
 
-  @spec reading_stream(GRPC.Client.Stream.t, (binary -> struct)) :: Enumerable.t
+  @spec reading_stream(GRPC.Client.Stream.t, ([binary] -> [struct])) :: Enumerable.t
   def reading_stream(stream, func) do
-    Stream.unfold(stream, fn nil -> nil; %{payload: req} = acc ->
-      case :cowboy_req.read_body(req) do
-        {:ok, "", _} ->
-          nil
-        {atom, data, req} when atom == :ok or atom == :more ->
-          request = func.(data)
-          new_stream = %{acc | payload: req}
-          {request, new_stream}
-      end
-    end)
+    Stream.unfold({stream, %{buffer: []}}, fn(acc) -> read_stream(acc, func) end)
+  end
+
+  defp read_stream(nil, _), do: nil
+  defp read_stream({_, %{buffer: [], finished: true}}, _), do: nil
+  defp read_stream({stream, %{buffer: [curr|rest]} = s}, _) do
+    new_s = Map.put(s, :buffer, rest)
+    {curr, {stream, new_s}}
+  end
+  defp read_stream({%{payload: req} = st, %{buffer: []} = s}, func) do
+    case :cowboy_req.read_body(req) do
+      {:ok, data, req} ->
+        [request|rest] = func.(data)
+        new_stream = %{st | payload: req}
+        new_s = Map.put(s, :buffer, rest) |> Map.put(:finished, true)
+        {request, {new_stream, new_s}}
+      {:more, data, req} ->
+        [request|rest] = func.(data)
+        new_stream = %{st | payload: req}
+        new_s = Map.put(s, :buffer, rest)
+        {request, {new_stream, new_s}}
+    end
   end
 
   @spec stream_send(GRPC.Client.Stream.t, binary) :: any
@@ -102,7 +114,7 @@ defmodule GRPC.Adapter.Cowboy do
     ])
     [servers_name(servers), transport_opts(port, opts),
      %{env: %{dispatch: dispatch}, inactivity_timeout: :infinity,
-       stream_handlers: [GRPC.Adapter.Cowboy.StreamHandler]}
+       stream_handlers: [:grpc_stream_h]}
     ]
   end
 
@@ -110,8 +122,7 @@ defmodule GRPC.Adapter.Cowboy do
     list = [port: port, num_acceptors: @num_acceptors]
     list = if opts[:ip], do: [{:ip, opts[:ip]}|list], else: list
     if opts[:cred] do
-      tls_cred = opts[:cred].tls
-      [{:certfile, tls_cred.cert_path}, {:keyfile, tls_cred.key_path}|list]
+      opts[:cred].ssl ++ list
     else
       list
     end

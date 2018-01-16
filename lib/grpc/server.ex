@@ -63,7 +63,13 @@ defmodule GRPC.Server do
     unmarshal_func = fn(req) -> service_mod.unmarshal(req_mod, req) end
     stream = %{stream | marshal: marshal_func, unmarshal: unmarshal_func}
 
-    handle_request(req_stream, res_stream, stream, func_name)
+    try do
+      handle_request(req_stream, res_stream, stream, func_name)
+    rescue
+      e in GRPC.RPCError -> {:error, stream, e}
+      # TODO: log error
+      _ -> {:error, stream, %GRPC.RPCError{status: GRPC.Status.unknown, message: "Internal Server Error"}}
+    end
   end
 
   defp handle_request(false = req_stream, res_stream, %{unmarshal: unmarshal, adapter: adapter} = stream, func_name) do
@@ -75,8 +81,8 @@ defmodule GRPC.Server do
   defp handle_request(true = req_stream, res_stream, %{unmarshal: unmarshal, adapter: adapter} = stream, func_name) do
     reading_stream = adapter.reading_stream(stream, fn (data) ->
       data
-      |> GRPC.Message.from_data
-      |> unmarshal.()
+      |> GRPC.Message.from_frame
+      |> Enum.map(&unmarshal.(&1))
     end)
     handle_request(req_stream, res_stream, stream, func_name, reading_stream)
   end
@@ -149,7 +155,7 @@ defmodule GRPC.Server do
   def stream_send(%{adapter: adapter, marshal: marshal} = stream, response) do
     {:ok, data, size} = response |> marshal.() |> GRPC.Message.to_data(iolist: true)
     adapter.stream_send(stream, data)
-    adapter.flow_control(stream, size)
+    {:ok, size}
   end
 
   @doc false

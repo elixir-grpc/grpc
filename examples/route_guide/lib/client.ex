@@ -16,7 +16,7 @@ defmodule RouteGuide.Client do
 
   def print_feature(channel, point) do
     IO.puts "Getting feature for point (#{point.latitude}, #{point.longitude})"
-    reply = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
+    {:ok, reply} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
     IO.inspect reply
   end
 

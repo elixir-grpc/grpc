@@ -4,31 +4,31 @@ defmodule GRPC.Transport.HTTP2 do
   """
 
   alias GRPC.Transport.Utils
+  alias GRPC.Status
 
   def server_headers() do
     %{":status" => 200,
       "content-type" => "application/grpc+proto"}
   end
 
-  @spec server_trailers :: [{String.t, String.t}]
-  def server_trailers do
+  @spec server_trailers(String.t, String.t) :: [{String.t, String.t}]
+  def server_trailers(status \\ Status.ok, message \\ "") do
     %{
       # TODO: custom grpc-status
-      "grpc-status" => "0",
-      "grpc-message" => ""
+      "grpc-status" => status,
+      "grpc-message" => message
     }
   end
 
   @spec client_headers(GRPC.Client.Stream.t, keyword) :: [{String.t, String.t}]
   def client_headers(%{channel: channel, path: path}, opts \\ []) do
-    version = opts[:grpc_version] || GRPC.version
     [
       {":method", "POST"},
       {":scheme", channel.scheme},
       {":path", path},
       {":authority", channel.host},
-      {"content-type", "application/grpc+proto"},
-      {"user-agent", "grpc-elixir/#{version}"},
+      {"content-type", opts[:content_type] || "application/grpc+proto"},
+      {"user-agent", "grpc-elixir/#{opts[:grpc_version] || GRPC.version}"},
       {"te", "trailers"}
     ]
     |> append_encoding(Keyword.get(opts, :send_encoding))

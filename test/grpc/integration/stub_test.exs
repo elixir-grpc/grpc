@@ -14,7 +14,7 @@ defmodule GRPC.Integration.StubTest do
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       name = String.duplicate("a", round(:math.pow(2, 15)))
       req = Helloworld.HelloRequest.new(name: name)
-      reply = channel |> Helloworld.Greeter.Stub.say_hello(req)
+      {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
       assert reply.message == "Hello, #{name}"
     end
   end

@@ -5,6 +5,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   """
 
   alias GRPC.Transport.HTTP2
+  alias GRPC.RPCError
 
   @adapter GRPC.Adapter.Cowboy
 
@@ -22,6 +23,10 @@ defmodule GRPC.Adapter.Cowboy.Handler do
         :cowboy_req.stream_trailers(trailers, req)
         {:ok, req, state}
       {:ok, %{payload: req}} ->
+        :cowboy_req.stream_trailers(trailers, req)
+        {:ok, req, state}
+      {:error, %{payload: req}, %RPCError{} = error} ->
+        trailers = HTTP2.server_trailers(error.status, error.message)
         :cowboy_req.stream_trailers(trailers, req)
         {:ok, req, state}
       {:error, %{payload: req}, _reason} ->

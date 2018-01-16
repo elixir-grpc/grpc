@@ -41,7 +41,7 @@ defmodule GRPC.Integration.ServiceTest do
     run_server FeatureServer, fn(port) ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
-      feature = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
+      {:ok, feature} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
       assert feature == Routeguide.Feature.new(location: point, name: "409146138,-746188906")
     end
   end
@@ -68,7 +68,7 @@ defmodule GRPC.Integration.ServiceTest do
       stream = channel |> Routeguide.RouteGuide.Stub.record_route
       GRPC.Stub.stream_send(stream, point1)
       GRPC.Stub.stream_send(stream, point2, end_stream: true)
-      res = GRPC.Stub.recv(stream)
+      {:ok, res} = GRPC.Stub.recv(stream)
       assert %Routeguide.RouteSummary{point_count: 2} = res
     end
   end
