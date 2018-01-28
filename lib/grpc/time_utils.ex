@@ -12,7 +12,7 @@ defmodule GRPC.TimeUtils do
       iex> GRPC.TimeUtils.to_relative(datetime, from)
       5
   """
-  def to_relative(datetime, from \\ DateTime.utc_now) do
+  def to_relative(datetime, from \\ DateTime.utc_now()) do
     ms = datetime_to_microsecond(datetime)
     now_ms = datetime_to_microsecond(from)
     ms - now_ms

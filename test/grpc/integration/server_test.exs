@@ -16,6 +16,7 @@ defmodule GRPC.Integration.ServerTest do
       name = String.duplicate("a", round(:math.pow(2, 14)))
       Helloworld.HelloReply.new(message: "Hello, #{name}")
     end
+
     def say_hello(req, _stream) do
       Helloworld.HelloReply.new(message: "Hello, #{req.name}")
     end
@@ -25,7 +26,7 @@ defmodule GRPC.Integration.ServerTest do
     use GRPC.Server, service: Helloworld.Greeter.Service
 
     def say_hello(_req, _stream) do
-      raise GRPC.RPCError, status: GRPC.Status.unauthenticated, message: "Please authenticate"
+      raise GRPC.RPCError, status: GRPC.Status.unauthenticated(), message: "Please authenticate"
     end
   end
 
@@ -34,11 +35,12 @@ defmodule GRPC.Integration.ServerTest do
     alias GRPC.Server
 
     def list_features(rectangle, stream) do
-      raise GRPC.RPCError, status: GRPC.Status.unauthenticated, message: "Please authenticate"
-      Enum.each [rectangle.lo, rectangle.hi], fn (point)->
+      raise GRPC.RPCError, status: GRPC.Status.unauthenticated(), message: "Please authenticate"
+
+      Enum.each([rectangle.lo, rectangle.hi], fn point ->
         feature = simple_feature(point)
         Server.stream_send(stream, feature)
-      end
+      end)
     end
 
     defp simple_feature(point) do
@@ -47,7 +49,7 @@ defmodule GRPC.Integration.ServerTest do
   end
 
   test "multiple servers works" do
-    run_server [FeatureServer, HelloServer], fn(port) ->
+    run_server([FeatureServer, HelloServer], fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
       {:ok, feature} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
@@ -56,38 +58,43 @@ defmodule GRPC.Integration.ServerTest do
       req = Helloworld.HelloRequest.new(name: "Elixir")
       {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
       assert reply.message == "Hello, Elixir"
-    end
+    end)
   end
 
   test "returns appropriate error for unary requests" do
-    run_server [HelloErrorServer], fn(port) ->
+    run_server([HelloErrorServer], fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       req = Helloworld.HelloRequest.new(name: "Elixir")
       {:error, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
-      assert reply == %GRPC.RPCError{status: GRPC.Status.unauthenticated, message: "Please authenticate"}
-    end
+
+      assert reply == %GRPC.RPCError{
+               status: GRPC.Status.unauthenticated(),
+               message: "Please authenticate"
+             }
+    end)
   end
 
   test "returns appropriate error for stream requests" do
-    run_server [FeatureErrorServer], fn(port) ->
+    run_server([FeatureErrorServer], fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-      low = Routeguide.Point.new(latitude: 400000000, longitude: -750000000)
-      high = Routeguide.Point.new(latitude: 420000000, longitude: -730000000)
+      low = Routeguide.Point.new(latitude: 400_000_000, longitude: -750_000_000)
+      high = Routeguide.Point.new(latitude: 420_000_000, longitude: -730_000_000)
       rect = Routeguide.Rectangle.new(lo: low, hi: high)
       stream = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
-      Enum.each(stream, fn(thing) ->
-        IO.inspect thing
+
+      Enum.each(stream, fn thing ->
+        IO.inspect(thing)
       end)
-    end
+    end)
   end
 
   test "return large response(more than MAX_FRAME_SIZE 16384)" do
-    run_server [HelloServer], fn(port) ->
+    run_server([HelloServer], fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       req = Helloworld.HelloRequest.new(name: "large response")
       {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
       name = String.duplicate("a", round(:math.pow(2, 14)))
       assert "Hello, #{name}" == reply.message
-    end
+    end)
   end
 end

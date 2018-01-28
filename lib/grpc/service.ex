@@ -29,14 +29,16 @@ defmodule GRPC.Service do
         func = unquote(opts[:unmarshal]) || &GRPC.Message.Protobuf.decode/2
         func.(mod, message)
       end
+
       def __meta__(:name), do: unquote(opts[:name])
     end
   end
 
   defmacro __before_compile__(env) do
     rpc_calls = Module.get_attribute(env.module, :rpc_calls)
+
     quote do
-      def __rpc_calls__, do: unquote(rpc_calls |> Macro.escape |> Enum.reverse)
+      def __rpc_calls__, do: unquote(rpc_calls |> Macro.escape() |> Enum.reverse())
     end
   end
 
@@ -54,6 +56,7 @@ defmodule GRPC.Service do
   def wrap_stream({:stream, _, _} = param) do
     quote do: unquote(param)
   end
+
   def wrap_stream(param) do
     quote do: {unquote(param), false}
   end

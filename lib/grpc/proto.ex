@@ -1,11 +1,11 @@
 defmodule GRPC.Proto do
-  defstruct [package: nil, services: [], messages: []]
+  defstruct package: nil, services: [], messages: []
 
   @moduledoc false
 
   defmodule Service do
     @moduledoc false
-    defstruct [name: nil, rpcs: []]
+    defstruct name: nil, rpcs: []
   end
 
   defmodule Message do

@@ -21,9 +21,12 @@ defmodule RouteGuide.Data do
   defp load_features(path \\ @json_path) do
     data = File.read!(path)
     items = Poison.Parser.parse!(data)
-    Enum.map items, fn (%{"location" => location, "name" => name}) ->
-      point = Routeguide.Point.new(latitude: location["latitude"], longitude: location["longitude"])
+
+    Enum.map(items, fn %{"location" => location, "name" => name} ->
+      point =
+        Routeguide.Point.new(latitude: location["latitude"], longitude: location["longitude"])
+
       Routeguide.Feature.new(name: name, location: point)
-    end
+    end)
   end
 end

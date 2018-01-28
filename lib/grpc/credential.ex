@@ -3,7 +3,7 @@ defmodule GRPC.Credential do
   Stores credentials for authentication.
   """
 
-  @type t :: %__MODULE__{ssl: [:ssl.ssl_option]}
+  @type t :: %__MODULE__{ssl: [:ssl.ssl_option()]}
   defstruct [:ssl]
 
   @doc """

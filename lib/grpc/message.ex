@@ -1,6 +1,6 @@
 defmodule GRPC.Message do
   use Bitwise, only_operators: true
-  @max_message_length 1<<<32 - 1
+  @max_message_length 1 <<< (32 - 1)
 
   @moduledoc """
   Transform data between encoded protobuf and HTTP/2 body of gRPC.
@@ -31,11 +31,12 @@ defmodule GRPC.Message do
       iex> GRPC.Message.to_data(message, max_message_length: 8)
       {:error, "Encoded message is too large (9 bytes)"}
   """
-  @spec to_data(binary, keyword) :: {:ok, iodata, non_neg_integer} | {:error, String.t}
+  @spec to_data(binary, keyword) :: {:ok, iodata, non_neg_integer} | {:error, String.t()}
   def to_data(message, opts \\ []) do
     compress_flag = if opts[:compressor], do: <<1>>, else: <<0>>
     length = byte_size(message)
     max_length = opts[:max_message_length] || @max_message_length
+
     if length > max_length do
       {:error, "Encoded message is too large (#{length} bytes)"}
     else
@@ -61,13 +62,15 @@ defmodule GRPC.Message do
 
   def from_frame(bin), do: from_frame(bin, [])
   def from_frame(<<>>, acc), do: Enum.reverse(acc)
+
   def from_frame(<<_flag::8, length::32, msg::bytes-size(length), rest::binary>>, acc) do
-    from_frame(rest, [msg|acc])
+    from_frame(rest, [msg | acc])
   end
 
   def complete?(<<_flag::bytes-size(1), length::unsigned-integer-size(32), message::binary>>) do
     length == byte_size(message)
   end
+
   def complete?(_), do: false
 
   def message_length(data) do

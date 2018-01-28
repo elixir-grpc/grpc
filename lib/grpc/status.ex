@@ -1,5 +1,4 @@
 defmodule GRPC.Status do
-  
   @doc """
   Not an error; returned on success.
   """
