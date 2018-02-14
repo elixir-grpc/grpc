@@ -93,8 +93,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
         |> :h2_client.get_response(stream_id)
     after
       timeout(opts) ->
-        # TODO: test
-        raise GRPC.RPCError, status: GRPC.Status.deadline_exceeded(), message: "deadline exceeded"
+        {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "deadline exceeded")}
     end
   end
 

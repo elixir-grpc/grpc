@@ -97,8 +97,11 @@ defmodule GRPC.Stub do
          opts
        ) do
     message = marshal.(request)
-    {:ok, response} = Channel.unary(stream, message, opts)
-    parse_unary_response(response, unmarshal)
+    case Channel.unary(stream, message, opts) do
+      {:ok, response} ->
+        parse_unary_response(response, unmarshal)
+      other -> other
+    end
   end
 
   defp send_request(false, true, %{marshal: marshal} = stream, request, opts) do
