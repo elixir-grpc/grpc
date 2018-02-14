@@ -7,7 +7,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
   """
 
   @spec connect(map, map) :: {:ok, any} | {:error, any}
-  def connect(%{host: host, port: port}, payload = %{cred: nil}) do
+  def connect(%{host: host, port: port}, %{cred: nil} = payload) do
     pname = :"grpc_chatter_client_#{host}:#{port}"
 
     init_args =
@@ -16,7 +16,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
     do_connect(pname, init_args, payload)
   end
 
-  def connect(%{host: host, port: port}, payload = %{cred: cred}) do
+  def connect(%{host: host, port: port}, %{cred: cred} = payload) do
     pname = :"grpc_chatter_client_ssl_#{host}:#{port}"
 
     init_args =

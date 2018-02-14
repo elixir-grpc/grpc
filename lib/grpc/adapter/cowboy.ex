@@ -93,7 +93,7 @@ defmodule GRPC.Adapter.Cowboy do
       {:ok, data, req} ->
         [request | rest] = func.(data)
         new_stream = %{st | payload: req}
-        new_s = Map.put(s, :buffer, rest) |> Map.put(:finished, true)
+        new_s = s |> Map.put(:buffer, rest) |> Map.put(:finished, true)
         {request, {new_stream, new_s}}
 
       {:more, data, req} ->

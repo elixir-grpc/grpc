@@ -203,7 +203,7 @@ defmodule GRPC.Stub do
   end
 
   defp response_stream(%{unmarshal: unmarshal} = stream, opts) do
-    Stream.unfold(%{buffer: :empty, message_length: -1}, fn acc ->
+    resp_stream = Stream.unfold(%{buffer: :empty, message_length: -1}, fn acc ->
       case Channel.recv(stream, opts) do
         {:data, data} ->
           if GRPC.Message.complete?(data) do
@@ -247,6 +247,6 @@ defmodule GRPC.Stub do
           other
       end
     end)
-    |> Stream.reject(&match?(:skip, &1))
+    Stream.reject(resp_stream, &match?(:skip, &1))
   end
 end
