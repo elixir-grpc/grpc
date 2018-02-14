@@ -31,7 +31,7 @@ defmodule GRPC.Message do
       iex> GRPC.Message.to_data(message, max_message_length: 8)
       {:error, "Encoded message is too large (9 bytes)"}
   """
-  @spec to_data(binary, keyword) :: {:ok, binary, non_neg_integer} | {:error, String.t}
+  @spec to_data(binary, keyword) :: {:ok, binary, non_neg_integer} | {:error, String.t()}
   def to_data(message, opts \\ []) do
     compress_flag = if opts[:compressor], do: <<1>>, else: <<0>>
     length = byte_size(message)

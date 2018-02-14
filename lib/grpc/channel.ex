@@ -15,13 +15,13 @@ defmodule GRPC.Channel do
   """
 
   @type t :: %__MODULE__{
-    host: String.t,
-    port: non_neg_integer,
-    scheme: String.t,
-    cred: GRPC.Credential.t,
-    adapter: atom
-  }
-  defstruct [host: nil, port: nil, scheme: nil, cred: nil, adapter: nil]
+          host: String.t(),
+          port: non_neg_integer,
+          scheme: String.t(),
+          cred: GRPC.Credential.t(),
+          adapter: atom
+        }
+  defstruct host: nil, port: nil, scheme: nil, cred: nil, adapter: nil
 
   @default_adapter GRPC.Adapter.Chatterbox.Client
   @insecure_scheme "http"
@@ -35,7 +35,7 @@ defmodule GRPC.Channel do
   end
 
   @doc false
-  @spec connect(String.t, binary | non_neg_integer, keyword) :: {:ok, t} | {:error, any}
+  @spec connect(String.t(), binary | non_neg_integer, keyword) :: {:ok, t} | {:error, any}
   def connect(host, port, opts) when is_binary(port) do
     connect(host, String.to_integer(port), opts)
   end
@@ -44,8 +44,8 @@ defmodule GRPC.Channel do
     adapter = Keyword.get(opts, :adapter, @default_adapter)
     cred = Keyword.get(opts, :cred)
     scheme = if cred, do: @secure_scheme, else: @insecure_scheme
-    %__MODULE__{host: host, port: port, scheme: scheme,
-                cred: cred, adapter: adapter}
+
+    %__MODULE__{host: host, port: port, scheme: scheme, cred: cred, adapter: adapter}
     |> adapter.connect()
   end
 
@@ -68,7 +68,7 @@ defmodule GRPC.Channel do
   end
 
   @doc false
-  @spec send_body(GRPC.Client.Stream.t, binary, keyword) :: any
+  @spec send_body(GRPC.Client.Stream.t(), binary, keyword) :: any
   def send_body(%{channel: channel} = stream, message, opts) do
     channel.adapter.send_body(stream, message, opts)
   end

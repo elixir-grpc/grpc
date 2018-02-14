@@ -6,40 +6,50 @@ defmodule GRPC.Adapter.Chatterbox.Client do
   it will try to reconnect before sending a request.
   """
 
-  @type send_opts :: :h2_connection.send_opts
+  @type send_opts :: :h2_connection.send_opts()
 
-  @spec connect(GRPC.Channel.t) :: {:ok, GRPC.Channel.t} | {:error, any}
+  @spec connect(GRPC.Channel.t()) :: {:ok, GRPC.Channel.t()} | {:error, any}
   def connect(%{scheme: "https"} = channel), do: connect_secure(channel)
   def connect(channel), do: connect_insecure(channel)
 
   defp connect_secure(%{host: host, port: port, cred: %{ssl: ssl}} = channel) do
-    do_connect(channel, {:client, :ssl, String.to_charlist(host),
-                         port, ssl, :chatterbox.settings(:client)})
+    do_connect(
+      channel,
+      {:client, :ssl, String.to_charlist(host), port, ssl, :chatterbox.settings(:client)}
+    )
   end
 
   defp connect_insecure(%{host: host, port: port} = channel) do
-    do_connect(channel, {:client, :gen_tcp, String.to_charlist(host),
-                         port, [], :chatterbox.settings(:client)})
+    do_connect(
+      channel,
+      {:client, :gen_tcp, String.to_charlist(host), port, [], :chatterbox.settings(:client)}
+    )
   end
 
   defp do_connect(channel, init_args) do
     pname = process_name(channel)
+
     case :gen_fsm.start_link({:local, pname}, :h2_connection, init_args, []) do
       {:ok, _pid} ->
         {:ok, channel}
+
       {:error, {:already_started, _pid}} ->
         {:ok, channel}
-      err = {:error, _} -> err
-      _ -> {:error, "Unknown error!"}
+
+      err = {:error, _} ->
+        err
+
+      _ ->
+        {:error, "Unknown error!"}
     end
   end
 
   defp process_name(%{host: host, port: port, scheme: "https"}),
     do: :"grpc_chatter_client_ssl_#{host}:#{port}"
-  defp process_name(%{host: host, port: port}),
-    do: :"grpc_chatter_client_#{host}:#{port}"
 
-  @spec unary(GRPC.Client.Stream.t, struct, keyword) :: struct
+  defp process_name(%{host: host, port: port}), do: :"grpc_chatter_client_#{host}:#{port}"
+
+  @spec unary(GRPC.Client.Stream.t(), struct, keyword) :: struct
   def unary(stream, message, opts) do
     {:ok, stream} = send_request(stream, message, opts)
     recv_end(stream, opts)
@@ -56,16 +66,19 @@ defmodule GRPC.Adapter.Chatterbox.Client do
   @spec send_header(GRPC.Client.Stream.t(), keyword) :: {:ok, GRPC.Client.Stream.t()}
   def send_header(%{channel: channel} = stream, opts) do
     headers = GRPC.Transport.HTTP2.client_headers(stream, opts)
+
     stream_id =
       channel
       |> h2_client_pid()
       |> :h2_connection.begin_request(headers)
+
     {:ok, put_stream_id(stream, stream_id)}
   end
 
-  @spec send_body(GRPC.Client.Stream.t, binary, send_opts) :: :ok
+  @spec send_body(GRPC.Client.Stream.t(), binary, send_opts) :: :ok
   def send_body(%{channel: channel, payload: %{stream_id: stream_id}}, message, opts) do
     {:ok, data, _} = GRPC.Message.to_data(message, opts)
+
     channel
     |> h2_client_pid()
     |> :h2_connection.send_body(stream_id, data, opts)
@@ -78,9 +91,10 @@ defmodule GRPC.Adapter.Chatterbox.Client do
         channel
         |> h2_client_pid()
         |> :h2_client.get_response(stream_id)
-    after timeout(opts) ->
-      # TODO: test
-      raise GRPC.RPCError, status: GRPC.Status.deadline_exceeded, message: "deadline exceeded"
+    after
+      timeout(opts) ->
+        # TODO: test
+        raise GRPC.RPCError, status: GRPC.Status.deadline_exceeded(), message: "deadline exceeded"
     end
   end
 
@@ -92,6 +106,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
           channel
           |> h2_client_pid()
           |> :h2_client.get_response(stream_id)
+
         {:end_stream, resp}
 
       {:RECV_DATA, ^stream_id, data} ->
