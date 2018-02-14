@@ -35,6 +35,10 @@ defmodule GRPC.Stub do
   """
   alias GRPC.Channel
 
+  @default_adapter GRPC.Adapter.Chatterbox.Client
+  @insecure_scheme "http"
+  @secure_scheme "https"
+
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
       service_name = service_mod.__meta__(:name)
@@ -70,6 +74,40 @@ defmodule GRPC.Stub do
     end
   end
 
+  @doc """
+  Establish a connection with gRPC server and return `GRPC.Channel` needed for
+  sending requests.
+
+  ## Examples
+
+      iex> GRPC.Stub.connect("localhost:50051")
+      {:ok, channel}
+
+  ## Options
+
+    * `:cred` - a `GRPC.Credential` used to indicate it's a secure connection,
+                an insecure connection will be created without this option.
+    * `:adapter` - custom client adapter
+  """
+  @spec connect(String.t(), Keyword.t()) :: {:ok, GRPC.Channel.t()} | {:error, any}
+  def connect(addr, opts \\ []) when is_binary(addr) and is_list(opts) do
+    [host, port] = String.split(addr, ":")
+    connect(host, port, opts)
+  end
+
+  @spec connect(String.t(), binary | non_neg_integer, keyword) :: {:ok, Channel.t} | {:error, any}
+  def connect(host, port, opts) when is_binary(port) do
+    connect(host, String.to_integer(port), opts)
+  end
+  def connect(host, port, opts) when is_integer(port) do
+    adapter = Keyword.get(opts, :adapter, @default_adapter)
+    cred = Keyword.get(opts, :cred)
+    scheme = if cred, do: @secure_scheme, else: @insecure_scheme
+
+    %Channel{host: host, port: port, scheme: scheme, cred: cred, adapter: adapter}
+    |> adapter.connect()
+  end
+
   @doc false
   @spec call(atom, tuple, String.t(), GRPC.Channel, struct | nil, keyword) :: any
   def call(service_mod, rpc, path, channel, request, opts) do
@@ -92,52 +130,32 @@ defmodule GRPC.Stub do
   defp send_request(
          false,
          false,
-         %{marshal: marshal, unmarshal: unmarshal} = stream,
+         %{marshal: marshal, unmarshal: unmarshal, channel: channel} = stream,
          request,
          opts
        ) do
     message = marshal.(request)
-    case Channel.unary(stream, message, opts) do
+    case channel.adapter.unary(stream, message, opts) do
       {:ok, response} ->
         parse_unary_response(response, unmarshal)
       other -> other
     end
   end
 
-  defp send_request(false, true, %{marshal: marshal} = stream, request, opts) do
+  defp send_request(false, true, %{marshal: marshal, channel: channel} = stream, request, opts) do
     message = marshal.(request)
-    {:ok, new_stream} = Channel.send_request(stream, message, opts)
+    {:ok, new_stream} = channel.adapter.send_request(stream, message, opts)
     response_stream(new_stream, opts)
   end
 
-  defp send_request(true, false, stream, _, opts) do
-    {:ok, stream} = Channel.send_header(stream, opts)
+  defp send_request(true, false, %{channel: channel} = stream, _, opts) do
+    {:ok, stream} = channel.adapter.send_header(stream, opts)
     stream
   end
 
-  defp send_request(true, true, stream, _, opts) do
-    {:ok, stream} = Channel.send_header(stream, opts)
+  defp send_request(true, true, %{channel: channel} = stream, _, opts) do
+    {:ok, stream} = channel.adapter.send_header(stream, opts)
     stream
-  end
-
-  @doc """
-  Establish a connection with gRPC server and return `GRPC.Channel` needed for
-  sending requests.
-
-  ## Examples
-
-      iex> GRPC.Stub.connect("localhost:50051")
-      {:ok, channel}
-
-  ## Options
-
-    * `:cred` - a `GRPC.Credential` used to indicate it's a secure connection,
-                an insecure connection will be created without this option.
-    * `:adapter` - custom client adapter
-  """
-  @spec connect(String.t(), Keyword.t()) :: {:ok, GRPC.Channel.t()} | {:error, any}
-  def connect(addr, opts \\ []) when is_list(opts) do
-    Channel.connect(addr, opts)
   end
 
   @doc """
@@ -155,10 +173,10 @@ defmodule GRPC.Stub do
     * `:end_stream` - indicates it's the last one request
   """
   @spec stream_send(GRPC.Client.Stream, struct, keyword) :: :ok
-  def stream_send(%{marshal: marshal} = stream, request, opts \\ []) do
+  def stream_send(%{marshal: marshal, channel: channel} = stream, request, opts \\ []) do
     message = marshal.(request)
     send_end_stream = Keyword.get(opts, :end_stream, false)
-    Channel.send_body(stream, message, send_end_stream: send_end_stream)
+    channel.adapter.send_body(stream, message, send_end_stream: send_end_stream)
     :ok
   end
 
@@ -183,8 +201,8 @@ defmodule GRPC.Stub do
     response_stream(stream, opts)
   end
 
-  def recv(%{unmarshal: unmarshal} = stream, opts) do
-    {:ok, response} = Channel.recv_end(stream, opts)
+  def recv(%{unmarshal: unmarshal, channel: channel} = stream, opts) do
+    {:ok, response} = channel.adapter.recv_end(stream, opts)
     parse_unary_response(response, unmarshal)
   end
 
@@ -205,9 +223,9 @@ defmodule GRPC.Stub do
     end
   end
 
-  defp response_stream(%{unmarshal: unmarshal} = stream, opts) do
+  defp response_stream(%{unmarshal: unmarshal, channel: channel} = stream, opts) do
     resp_stream = Stream.unfold(%{buffer: :empty, message_length: -1}, fn acc ->
-      case Channel.recv(stream, opts) do
+      case channel.adapter.recv(stream, opts) do
         {:data, data} ->
           if GRPC.Message.complete?(data) do
             reply = data |> GRPC.Message.from_data() |> unmarshal.()
