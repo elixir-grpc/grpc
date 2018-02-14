@@ -25,6 +25,10 @@ defmodule GRPC.Integration.ServerTest do
   defmodule HelloErrorServer do
     use GRPC.Server, service: Helloworld.Greeter.Service
 
+    def say_hello(%{name: "unknown error"}, _stream) do
+      raise "unknown error"
+    end
+
     def say_hello(_req, _stream) do
       raise GRPC.RPCError, status: GRPC.Status.unauthenticated(), message: "Please authenticate"
     end
@@ -71,6 +75,16 @@ defmodule GRPC.Integration.ServerTest do
                status: GRPC.Status.unauthenticated(),
                message: "Please authenticate"
              }
+    end)
+  end
+
+  test "return errors for unknown errors" do
+    run_server([HelloErrorServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      req = Helloworld.HelloRequest.new(name: "unknown error")
+
+      assert {:error, %GRPC.RPCError{message: "Internal Server Error", status: "2"}} ==
+        channel |> Helloworld.Greeter.Stub.say_hello(req)
     end)
   end
 

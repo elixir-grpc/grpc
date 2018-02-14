@@ -19,11 +19,11 @@ The package can be installed as:
       end
       ```
 
-  2. Ensure `grpc` is started before your application:
+  2. (Before Elixir 1.4)Ensure `grpc` is started before your application:
 
       ```elixir
       def application do
-       [applications: [:grpc]]
+        [applications: [:grpc]]
       end
       ```
 
@@ -46,7 +46,7 @@ end
 iex> GRPC.Server.start(Helloworld.Greeter.Server, 50051)
 iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051")
 iex> request = Helloworld.HelloRequest.new(name: "grpc-elixir")
-iex> channel |> Helloworld.Greeter.Stub.say_hello(request)
+iex> {:ok, msg} = channel |> Helloworld.Greeter.Stub.say_hello(request)
 ```
 
 ### Start the server
@@ -94,7 +94,7 @@ Check [examples](examples) for all examples
 - [x] Authentication with TLS
 - [x] Improve code generation from protos ([protobuf-elixir](https://github.com/tony612/protobuf-elixir) [#8](https://github.com/tony612/grpc-elixir/issues/8))
 - [ ] Improve timeout(now there's simple timeout)
-- [ ] Errors handling
+- [x] Errors handling
 - [ ] Data compression
 - [ ] Benchmarking
 - [ ] Logging
