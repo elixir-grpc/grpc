@@ -36,6 +36,8 @@ defmodule GRPC.Server do
       :ok = GRPC.Server.stop(Greeter.Server)
   """
 
+  import Logger
+
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
       service_name = service_mod.__meta__(:name)
@@ -82,10 +84,10 @@ defmodule GRPC.Server do
       e in GRPC.RPCError ->
         {:error, stream, e}
 
-      # TODO: log error
-      _ ->
+      e ->
+        Logger.error("Error when calling #{inspect(service_mod)}.#{func_name}: #{inspect(e)}")
         {:error, stream,
-         %GRPC.RPCError{status: GRPC.Status.unknown(), message: "Internal Server Error"}}
+          %GRPC.RPCError{status: GRPC.Status.unknown(), message: "Internal Server Error"}}
     end
   end
 
