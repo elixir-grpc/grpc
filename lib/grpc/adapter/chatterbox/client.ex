@@ -6,32 +6,35 @@ defmodule GRPC.Adapter.Chatterbox.Client do
   it will try to reconnect before sending a request.
   """
 
-  @spec connect(map, map) :: {:ok, any} | {:error, any}
-  def connect(%{host: host, port: port}, %{cred: nil} = payload) do
-    pname = :"grpc_chatter_client_#{host}:#{port}"
+  @type send_opts :: :h2_connection.send_opts()
 
-    init_args =
+  @spec connect(GRPC.Channel.t()) :: {:ok, GRPC.Channel.t()} | {:error, any}
+  def connect(%{scheme: "https"} = channel), do: connect_secure(channel)
+  def connect(channel), do: connect_insecure(channel)
+
+  defp connect_secure(%{host: host, port: port, cred: %{ssl: ssl}} = channel) do
+    do_connect(
+      channel,
+      {:client, :ssl, String.to_charlist(host), port, ssl, :chatterbox.settings(:client)}
+    )
+  end
+
+  defp connect_insecure(%{host: host, port: port} = channel) do
+    do_connect(
+      channel,
       {:client, :gen_tcp, String.to_charlist(host), port, [], :chatterbox.settings(:client)}
-
-    do_connect(pname, init_args, payload)
+    )
   end
 
-  def connect(%{host: host, port: port}, %{cred: cred} = payload) do
-    pname = :"grpc_chatter_client_ssl_#{host}:#{port}"
+  defp do_connect(channel, init_args) do
+    pname = process_name(channel)
 
-    init_args =
-      {:client, :ssl, String.to_charlist(host), port, cred.ssl, :chatterbox.settings(:client)}
-
-    do_connect(pname, init_args, payload)
-  end
-
-  defp do_connect(pname, init_args, payload) do
     case :gen_fsm.start_link({:local, pname}, :h2_connection, init_args, []) do
       {:ok, _pid} ->
-        {:ok, Map.put(payload, :pname, pname)}
+        {:ok, channel}
 
       {:error, {:already_started, _pid}} ->
-        {:ok, Map.put(payload, :pname, pname)}
+        {:ok, channel}
 
       err = {:error, _} ->
         err
@@ -40,6 +43,11 @@ defmodule GRPC.Adapter.Chatterbox.Client do
         {:error, "Unknown error!"}
     end
   end
+
+  defp process_name(%{host: host, port: port, scheme: "https"}),
+    do: :"grpc_chatter_client_ssl_#{host}:#{port}"
+
+  defp process_name(%{host: host, port: port}), do: :"grpc_chatter_client_#{host}:#{port}"
 
   @spec unary(GRPC.Client.Stream.t(), struct, keyword) :: struct
   def unary(stream, message, opts) do
@@ -58,23 +66,31 @@ defmodule GRPC.Adapter.Chatterbox.Client do
   @spec send_header(GRPC.Client.Stream.t(), keyword) :: {:ok, GRPC.Client.Stream.t()}
   def send_header(%{channel: channel} = stream, opts) do
     headers = GRPC.Transport.HTTP2.client_headers(stream, opts)
-    pid = get_active_pname(channel)
-    stream_id = :h2_connection.begin_request(pid, headers)
+
+    stream_id =
+      channel
+      |> h2_client_pid()
+      |> :h2_connection.begin_request(headers)
+
     {:ok, put_stream_id(stream, stream_id)}
   end
 
-  @spec send_body(GRPC.Client.Stream.t(), struct, keyword) :: any
+  @spec send_body(GRPC.Client.Stream.t(), binary, send_opts) :: :ok
   def send_body(%{channel: channel, payload: %{stream_id: stream_id}}, message, opts) do
-    pid = get_active_pname(channel)
     {:ok, data, _} = GRPC.Message.to_data(message, opts)
-    :h2_connection.send_body(pid, stream_id, data, opts)
+
+    channel
+    |> h2_client_pid()
+    |> :h2_connection.send_body(stream_id, data, opts)
   end
 
   @spec recv_end(GRPC.Client.Stream.t(), keyword) :: any
   def recv_end(%{payload: %{stream_id: stream_id}, channel: channel}, opts) do
     receive do
       {:END_STREAM, ^stream_id} ->
-        channel |> get_active_pname |> :h2_client.get_response(stream_id)
+        channel
+        |> h2_client_pid()
+        |> :h2_client.get_response(stream_id)
     after
       timeout(opts) ->
         # TODO: test
@@ -86,7 +102,11 @@ defmodule GRPC.Adapter.Chatterbox.Client do
   def recv(%{payload: %{stream_id: stream_id}, channel: channel}, _opts) do
     receive do
       {:END_STREAM, ^stream_id} ->
-        resp = channel |> get_active_pname |> :h2_client.get_response(stream_id)
+        resp =
+          channel
+          |> h2_client_pid()
+          |> :h2_client.get_response(stream_id)
+
         {:end_stream, resp}
 
       {:RECV_DATA, ^stream_id, data} ->
@@ -100,10 +120,11 @@ defmodule GRPC.Adapter.Chatterbox.Client do
     %{stream | payload: Map.put(payload, :stream_id, stream_id)}
   end
 
-  defp get_active_pname(%{payload: payload = %{pname: pname}} = channel) do
+  defp h2_client_pid(channel) do
+    pname = process_name(channel)
     pid = Process.whereis(pname)
-    if !pid || !Process.alive?(pid), do: connect(channel, payload)
-    pname
+    if !pid || !Process.alive?(pid), do: connect(channel)
+    Process.whereis(pname)
   end
 
   defp timeout(opts) do

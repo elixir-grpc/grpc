@@ -15,9 +15,10 @@ defmodule GRPC.Client.Stream do
 
   @type marshal :: (struct -> binary)
   @type unmarshal :: (binary -> struct)
+  @type stream_payload :: %{stream_id: :h2_connection.stream_id()}
   @type t :: %__MODULE__{
           channel: GRPC.Channel.t(),
-          payload: map,
+          payload: stream_payload,
           path: String.t(),
           marshal: marshal,
           unmarshal: unmarshal,

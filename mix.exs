@@ -41,7 +41,8 @@ defmodule GRPC.Mixfile do
       {:chatterbox, github: "tony612/chatterbox", branch: "my-fix"},
       {:cowboy, "~> 2.2.0"},
       {:ex_doc, "~> 0.14", only: :dev},
-      {:inch_ex, ">= 0.0.0", only: :docs}
+      {:inch_ex, ">= 0.0.0", only: :docs},
+      {:dialyxir, "~> 0.5", only: :dev, runtime: false}
     ]
   end
 
