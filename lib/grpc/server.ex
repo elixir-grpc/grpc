@@ -36,7 +36,7 @@ defmodule GRPC.Server do
       :ok = GRPC.Server.stop(Greeter.Server)
   """
 
-  import Logger
+  require Logger
 
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
