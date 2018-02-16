@@ -19,12 +19,18 @@ defmodule GRPC.Transport.HTTP2 do
   end
 
   @spec client_headers(GRPC.Client.Stream.t(), keyword) :: [{String.t(), String.t()}]
-  def client_headers(%{channel: channel, path: path}, opts \\ []) do
+  def client_headers(%{channel: channel, path: path} = s, opts \\ []) do
     [
       {":method", "POST"},
       {":scheme", channel.scheme},
       {":path", path},
       {":authority", channel.host},
+    ] ++ client_headers_without_reserved(s, opts)
+  end
+
+  @spec client_headers(GRPC.Client.Stream.t(), keyword) :: [{String.t(), String.t()}]
+  def client_headers_without_reserved(_, opts \\ []) do
+    [
       {"content-type", opts[:content_type] || "application/grpc+proto"},
       {"user-agent", "grpc-elixir/#{opts[:grpc_version] || GRPC.version()}"},
       {"te", "trailers"}
