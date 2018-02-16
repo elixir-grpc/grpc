@@ -95,7 +95,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
 
         {:ok, headers, Enum.join(data_list, "")}
     after
-      timeout(opts) ->
+      GRPC.Adapter.Client.timeout(opts[:deadline], opts[:timeout]) ->
         {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "deadline exceeded")}
     end
   end
@@ -127,13 +127,5 @@ defmodule GRPC.Adapter.Chatterbox.Client do
     pid = Process.whereis(pname)
     if !pid || !Process.alive?(pid), do: connect(channel)
     Process.whereis(pname)
-  end
-
-  defp timeout(opts) do
-    cond do
-      opts[:deadline] -> GRPC.TimeUtils.to_relative(opts[:deadline])
-      opts[:timeout] -> opts[:timeout]
-      true -> :infinity
-    end
   end
 end

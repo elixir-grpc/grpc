@@ -19,7 +19,8 @@ defmodule GRPC.Channel do
           port: non_neg_integer,
           scheme: String.t(),
           cred: GRPC.Credential.t(),
-          adapter: atom
+          adapter: atom,
+          adapter_payload: any,
         }
-  defstruct host: nil, port: nil, scheme: nil, cred: nil, adapter: nil
+  defstruct host: nil, port: nil, scheme: nil, cred: nil, adapter: nil, adapter_payload: nil
 end
