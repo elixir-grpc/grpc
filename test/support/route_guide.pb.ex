@@ -2,9 +2,9 @@ defmodule Routeguide.Point do
   use Protobuf
 
   @type t :: %__MODULE__{
-    latitude:  integer,
-    longitude: integer
-  }
+          latitude: integer,
+          longitude: integer
+        }
   defstruct [:latitude, :longitude]
 
   field :latitude, 1, optional: true, type: :int32
@@ -15,9 +15,9 @@ defmodule Routeguide.Rectangle do
   use Protobuf
 
   @type t :: %__MODULE__{
-    lo: Routeguide.Point.t,
-    hi: Routeguide.Point.t
-  }
+          lo: Routeguide.Point.t(),
+          hi: Routeguide.Point.t()
+        }
   defstruct [:lo, :hi]
 
   field :lo, 1, optional: true, type: Routeguide.Point
@@ -28,9 +28,9 @@ defmodule Routeguide.Feature do
   use Protobuf
 
   @type t :: %__MODULE__{
-    name:     String.t,
-    location: Routeguide.Point.t
-  }
+          name: String.t(),
+          location: Routeguide.Point.t()
+        }
   defstruct [:name, :location]
 
   field :name, 1, optional: true, type: :string
@@ -41,9 +41,9 @@ defmodule Routeguide.RouteNote do
   use Protobuf
 
   @type t :: %__MODULE__{
-    location: Routeguide.Point.t,
-    message:  String.t
-  }
+          location: Routeguide.Point.t(),
+          message: String.t()
+        }
   defstruct [:location, :message]
 
   field :location, 1, optional: true, type: Routeguide.Point
@@ -54,11 +54,11 @@ defmodule Routeguide.RouteSummary do
   use Protobuf
 
   @type t :: %__MODULE__{
-    point_count:   integer,
-    feature_count: integer,
-    distance:      integer,
-    elapsed_time:  integer
-  }
+          point_count: integer,
+          feature_count: integer,
+          distance: integer,
+          elapsed_time: integer
+        }
   defstruct [:point_count, :feature_count, :distance, :elapsed_time]
 
   field :point_count, 1, optional: true, type: :int32

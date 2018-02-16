@@ -31,8 +31,12 @@ defmodule GRPC.Integration.StubTest do
     run_server(SlowServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       req = Helloworld.HelloRequest.new(name: "Elixir")
-      assert {:error, %GRPC.RPCError{message: "deadline exceeded", status: GRPC.Status.deadline_exceeded}} ==
-        channel |> Helloworld.Greeter.Stub.say_hello(req, timeout: 500)
+
+      assert {:error,
+              %GRPC.RPCError{
+                message: "deadline exceeded",
+                status: GRPC.Status.deadline_exceeded()
+              }} == channel |> Helloworld.Greeter.Stub.say_hello(req, timeout: 500)
     end)
   end
 end

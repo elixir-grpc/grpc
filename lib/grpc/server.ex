@@ -86,8 +86,9 @@ defmodule GRPC.Server do
 
       e ->
         Logger.error("Error when calling #{inspect(service_mod)}.#{func_name}: #{inspect(e)}")
+
         {:error, stream,
-          %GRPC.RPCError{status: GRPC.Status.unknown(), message: "Internal Server Error"}}
+         %GRPC.RPCError{status: GRPC.Status.unknown(), message: "Internal Server Error"}}
     end
   end
 

@@ -89,9 +89,10 @@ defmodule GRPC.Adapter.Chatterbox.Client do
     receive do
       {:END_STREAM, ^stream_id} ->
         {:ok, {headers, data_list}} =
-        channel
-        |> h2_client_pid()
-        |> :h2_client.get_response(stream_id)
+          channel
+          |> h2_client_pid()
+          |> :h2_client.get_response(stream_id)
+
         {:ok, headers, Enum.join(data_list, "")}
     after
       timeout(opts) ->

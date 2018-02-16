@@ -95,10 +95,12 @@ defmodule GRPC.Stub do
     connect(host, port, opts)
   end
 
-  @spec connect(String.t(), binary | non_neg_integer, keyword) :: {:ok, Channel.t} | {:error, any}
+  @spec connect(String.t(), binary | non_neg_integer, keyword) ::
+          {:ok, Channel.t()} | {:error, any}
   def connect(host, port, opts) when is_binary(port) do
     connect(host, String.to_integer(port), opts)
   end
+
   def connect(host, port, opts) when is_integer(port) do
     adapter = Keyword.get(opts, :adapter, @default_adapter)
     cred = Keyword.get(opts, :cred)
@@ -135,10 +137,13 @@ defmodule GRPC.Stub do
          opts
        ) do
     message = marshal.(request)
+
     case channel.adapter.unary(stream, message, opts) do
       {:ok, headers, data} ->
         parse_response(headers, data, unmarshal)
-      other -> other
+
+      other ->
+        other
     end
   end
 
@@ -224,50 +229,52 @@ defmodule GRPC.Stub do
   end
 
   defp response_stream(%{unmarshal: unmarshal, channel: channel} = stream, opts) do
-    resp_stream = Stream.unfold(%{buffer: :empty, message_length: -1}, fn acc ->
-      case channel.adapter.recv(stream, opts) do
-        {:data, data} ->
-          if GRPC.Message.complete?(data) do
-            reply = data |> GRPC.Message.from_data() |> unmarshal.()
-            {reply, acc}
-          else
-            case acc do
-              %{buffer: :empty} ->
-                {
-                  :skip,
-                  Map.merge(acc, %{
-                    buffer: data,
-                    message_length: GRPC.Message.message_length(data)
-                  })
-                }
+    resp_stream =
+      Stream.unfold(%{buffer: :empty, message_length: -1}, fn acc ->
+        case channel.adapter.recv(stream, opts) do
+          {:data, data} ->
+            if GRPC.Message.complete?(data) do
+              reply = data |> GRPC.Message.from_data() |> unmarshal.()
+              {reply, acc}
+            else
+              case acc do
+                %{buffer: :empty} ->
+                  {
+                    :skip,
+                    Map.merge(acc, %{
+                      buffer: data,
+                      message_length: GRPC.Message.message_length(data)
+                    })
+                  }
 
-              %{buffer: buffer, message_length: ml}
-              when byte_size(buffer) + byte_size(data) - 5 == ml ->
-                final_buffer = buffer <> data
+                %{buffer: buffer, message_length: ml}
+                when byte_size(buffer) + byte_size(data) - 5 == ml ->
+                  final_buffer = buffer <> data
 
-                reply =
-                  final_buffer
-                  |> GRPC.Message.from_data()
-                  |> unmarshal.()
+                  reply =
+                    final_buffer
+                    |> GRPC.Message.from_data()
+                    |> unmarshal.()
 
-                {
-                  reply,
-                  Map.merge(acc, %{buffer: :empty, message_length: -1})
-                }
+                  {
+                    reply,
+                    Map.merge(acc, %{buffer: :empty, message_length: -1})
+                  }
 
-              %{buffer: buffer} ->
-                next_buffer = buffer <> data
-                {:skip, Map.put(acc, :buffer, next_buffer)}
+                %{buffer: buffer} ->
+                  next_buffer = buffer <> data
+                  {:skip, Map.put(acc, :buffer, next_buffer)}
+              end
             end
-          end
 
-        {:end_stream, _resp} ->
-          nil
+          {:end_stream, _resp} ->
+            nil
 
-        other ->
-          other
-      end
-    end)
+          other ->
+            other
+        end
+      end)
+
     Stream.reject(resp_stream, &match?(:skip, &1))
   end
 end
