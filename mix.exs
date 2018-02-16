@@ -7,7 +7,7 @@ defmodule GRPC.Mixfile do
     [
       app: :grpc,
       version: @version,
-      elixir: "~> 1.3",
+      elixir: "~> 1.4",
       elixirc_paths: elixirc_paths(Mix.env()),
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
@@ -27,7 +27,7 @@ defmodule GRPC.Mixfile do
   #
   # Type "mix help compile.app" for more information
   def application do
-    [applications: [:lager, :logger, :protobuf, :chatterbox, :cowboy]]
+    [extra_applications: [:logger]]
   end
 
   defp deps do
