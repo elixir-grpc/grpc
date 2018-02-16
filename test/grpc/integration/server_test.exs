@@ -83,7 +83,7 @@ defmodule GRPC.Integration.ServerTest do
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       req = Helloworld.HelloRequest.new(name: "unknown error")
 
-      assert {:error, %GRPC.RPCError{message: "Internal Server Error", status: "2"}} ==
+      assert {:error, %GRPC.RPCError{message: "Internal Server Error", status: GRPC.Status.unknown}} ==
         channel |> Helloworld.Greeter.Stub.say_hello(req)
     end)
   end

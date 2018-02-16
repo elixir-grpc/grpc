@@ -10,11 +10,10 @@ defmodule GRPC.Transport.HTTP2 do
     %{":status" => 200, "content-type" => "application/grpc+proto"}
   end
 
-  @spec server_trailers(String.t(), String.t()) :: [{String.t(), String.t()}]
+  @spec server_trailers(String.t(), GRPC.Status) :: [{String.t(), String.t()}]
   def server_trailers(status \\ Status.ok(), message \\ "") do
     %{
-      # TODO: custom grpc-status
-      "grpc-status" => status,
+      "grpc-status" => Integer.to_string(status),
       "grpc-message" => message
     }
   end

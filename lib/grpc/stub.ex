@@ -136,8 +136,8 @@ defmodule GRPC.Stub do
        ) do
     message = marshal.(request)
     case channel.adapter.unary(stream, message, opts) do
-      {:ok, response} ->
-        parse_unary_response(response, unmarshal)
+      {:ok, headers, data} ->
+        parse_response(headers, data, unmarshal)
       other -> other
     end
   end
@@ -202,20 +202,20 @@ defmodule GRPC.Stub do
   end
 
   def recv(%{unmarshal: unmarshal, channel: channel} = stream, opts) do
-    {:ok, response} = channel.adapter.recv_end(stream, opts)
-    parse_unary_response(response, unmarshal)
+    {:ok, headers, data} = channel.adapter.recv_end(stream, opts)
+    parse_response(headers, data, unmarshal)
   end
 
-  defp parse_unary_response({headers, data_list}, unmarshal) do
+  defp parse_response(headers, data, unmarshal) do
     {_, status} = Enum.find(headers, nil, fn header -> elem(header, 0) == "grpc-status" end)
+    status = String.to_integer(status)
 
     if status != GRPC.Status.ok() do
       {_, message} = Enum.find(headers, nil, fn header -> elem(header, 0) == "grpc-message" end)
       {:error, %GRPC.RPCError{status: status, message: message}}
     else
       result =
-        data_list
-        |> Enum.join("")
+        data
         |> GRPC.Message.from_data()
         |> unmarshal.()
 

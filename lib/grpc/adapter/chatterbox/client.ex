@@ -88,9 +88,11 @@ defmodule GRPC.Adapter.Chatterbox.Client do
   def recv_end(%{payload: %{stream_id: stream_id}, channel: channel}, opts) do
     receive do
       {:END_STREAM, ^stream_id} ->
+        {:ok, {headers, data_list}} =
         channel
         |> h2_client_pid()
         |> :h2_client.get_response(stream_id)
+        {:ok, headers, Enum.join(data_list, "")}
     after
       timeout(opts) ->
         {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "deadline exceeded")}
