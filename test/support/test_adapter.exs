@@ -1,5 +1,5 @@
 defmodule GRPC.Test.ClientAdapter do
-  def connect(channel), do: {:ok, channel}
+  def connect(channel, _opts), do: {:ok, channel}
 end
 
 defmodule GRPC.Test.ServerAdapter do

@@ -17,24 +17,31 @@ defmodule GRPC.Integration.ConnectionTest do
     server = FeatureServer
     {:ok, _, port} = GRPC.Server.start(server, 0)
     point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
-    {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-    assert channel |> Routeguide.RouteGuide.Stub.get_feature(point)
+    {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", adapter_opts: %{retry_timeout: 10})
+    assert {:ok, _} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
     :ok = GRPC.Server.stop(server)
     {:ok, _, _} = GRPC.Server.start(server, port)
-    assert channel |> Routeguide.RouteGuide.Stub.get_feature(point)
+    assert {:ok, _} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
     :ok = GRPC.Server.stop(server)
   end
 
   test "authentication works" do
     server = FeatureServer
-    cred = GRPC.Credential.new(ssl: [certfile: @cert_path, keyfile: @key_path])
+    cred = GRPC.Credential.new(ssl: [
+      certfile: @cert_path,
+      cacertfile: @ca_path,
+      keyfile: @key_path,
+      verify: :verify_peer, fail_if_no_peer_cert: true])
     {:ok, _, port} = GRPC.Server.start(server, 0, cred: cred)
 
     try do
       point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
-      client_cred = GRPC.Credential.new(ssl: [cacertfile: @ca_path])
+      client_cred = GRPC.Credential.new(ssl: [certfile: @cert_path, keyfile: @key_path])
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", cred: client_cred)
-      assert channel |> Routeguide.RouteGuide.Stub.get_feature(point)
+      assert {:ok, _} = Routeguide.RouteGuide.Stub.get_feature(channel, point)
+    catch
+      error ->
+        refute "Caught #{inspect(error)}"
     after
       :ok = GRPC.Server.stop(server)
     end

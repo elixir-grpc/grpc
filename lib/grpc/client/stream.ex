@@ -32,4 +32,9 @@ defmodule GRPC.Client.Stream do
             unmarshal: nil,
             req_stream: nil,
             res_stream: nil
+
+  def put_payload(%{payload: payload} = stream, key, val) do
+    payload = if payload, do: payload, else: %{}
+    %{stream | payload: Map.put(payload, key, val)}
+  end
 end

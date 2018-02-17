@@ -34,8 +34,6 @@ defmodule GRPC.Stub do
   returns a `Stream`.
   """
   alias GRPC.Channel
-
-  @default_adapter GRPC.Adapter.Chatterbox.Client
   @insecure_scheme "http"
   @secure_scheme "https"
 
@@ -102,12 +100,12 @@ defmodule GRPC.Stub do
   end
 
   def connect(host, port, opts) when is_integer(port) do
-    adapter = Keyword.get(opts, :adapter, @default_adapter)
+    adapter = Keyword.get(opts, :adapter, Application.get_env(:grpc, :http2_client_adapter, GRPC.Adapter.Chatterbox.Client))
     cred = Keyword.get(opts, :cred)
     scheme = if cred, do: @secure_scheme, else: @insecure_scheme
 
     %Channel{host: host, port: port, scheme: scheme, cred: cred, adapter: adapter}
-    |> adapter.connect()
+    |> adapter.connect(opts[:adapter_opts])
   end
 
   @doc false
@@ -188,18 +186,19 @@ defmodule GRPC.Stub do
   @doc """
   Receive replies when requests are streaming.
 
-  If a reply is streaming, a `Stream` instead of a normal reply struct
-  will be returned.
+  * If the reply is not streaming, a normal reply struct will be returned
+  * If the reply is streaming, a enumerable `Stream` will be returned.
 
   ## Examples
 
+      # Reply is not streaming
+      iex> {:ok, reply} = GRPC.Stub.recv(stream)
+
       # Reply is streaming
       iex> enum = GRPC.Stub.recv(stream)
-      iex> replies = Enum.map enum, &(&1)
-      # Reply is not streaming
-      iex> reply = GRPC.Stub.recv(stream)
+      iex> replies_stream = Enum.map enum, &(&1)
   """
-  @spec recv(GRPC.Client.Stream.t(), keyword) :: Enumerable.t()
+  @spec recv(GRPC.Client.Stream.t(), keyword) :: {:ok, struct} | Enumerable.t() | {:error, any}
   def recv(stream, opts \\ [])
 
   def recv(%{res_stream: true} = stream, opts) do
