@@ -8,9 +8,9 @@ defmodule GRPC.Adapter.Chatterbox.Client do
 
   @type send_opts :: :h2_connection.send_opts()
 
-  @spec connect(GRPC.Channel.t()) :: {:ok, GRPC.Channel.t()} | {:error, any}
-  def connect(%{scheme: "https"} = channel), do: connect_secure(channel)
-  def connect(channel), do: connect_insecure(channel)
+  @spec connect(GRPC.Channel.t(), any) :: {:ok, GRPC.Channel.t()} | {:error, any}
+  def connect(%{scheme: "https"} = channel, _), do: connect_secure(channel)
+  def connect(channel, _), do: connect_insecure(channel)
 
   defp connect_secure(%{host: host, port: port, cred: %{ssl: ssl}} = channel) do
     do_connect(
@@ -72,7 +72,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
       |> h2_client_pid()
       |> :h2_connection.begin_request(headers)
 
-    {:ok, put_stream_id(stream, stream_id)}
+    {:ok, GRPC.Client.Stream.put_payload(stream, :stream_id, stream_id)}
   end
 
   @spec send_body(GRPC.Client.Stream.t(), binary, send_opts) :: :ok
@@ -118,14 +118,10 @@ defmodule GRPC.Adapter.Chatterbox.Client do
     # TODO: timeout
   end
 
-  defp put_stream_id(%{payload: payload} = stream, stream_id) do
-    %{stream | payload: Map.put(payload, :stream_id, stream_id)}
-  end
-
   defp h2_client_pid(channel) do
     pname = process_name(channel)
     pid = Process.whereis(pname)
-    if !pid || !Process.alive?(pid), do: connect(channel)
+    if !pid || !Process.alive?(pid), do: connect(channel, [])
     Process.whereis(pname)
   end
 end
