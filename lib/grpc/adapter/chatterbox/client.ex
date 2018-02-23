@@ -29,7 +29,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
   defp do_connect(channel, init_args) do
     pname = process_name(channel)
 
-    case :gen_fsm.start_link({:local, pname}, :h2_connection, init_args, []) do
+    case :gen_statem.start_link({:local, pname}, :h2_connection, init_args, []) do
       {:ok, _pid} ->
         {:ok, channel}
 
