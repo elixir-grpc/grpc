@@ -46,7 +46,7 @@ end
 iex> GRPC.Server.start(Helloworld.Greeter.Server, 50051)
 iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051")
 iex> request = Helloworld.HelloRequest.new(name: "grpc-elixir")
-iex> {:ok, msg} = channel |> Helloworld.Greeter.Stub.say_hello(request)
+iex> {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(request)
 ```
 
 ### Start the server

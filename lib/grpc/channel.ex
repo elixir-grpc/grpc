@@ -11,7 +11,7 @@ defmodule GRPC.Channel do
     * `:port` - server's port to connect
     * `:scheme` - scheme of connection, like `http`
     * `:cred` - credentials used for authentication
-    * `:adapter` - a client adapter module, like `GRPC.Adapter.Chatterbox.Client`
+    * `:adapter` - a client adapter module, like `GRPC.Adapter.Gun`
   """
 
   @type t :: %__MODULE__{

@@ -100,7 +100,7 @@ defmodule GRPC.Stub do
   end
 
   def connect(host, port, opts) when is_integer(port) do
-    adapter = Keyword.get(opts, :adapter, Application.get_env(:grpc, :http2_client_adapter, GRPC.Adapter.Chatterbox.Client))
+    adapter = Keyword.get(opts, :adapter, Application.get_env(:grpc, :http2_client_adapter, GRPC.Adapter.Gun))
     cred = Keyword.get(opts, :cred)
     scheme = if cred, do: @secure_scheme, else: @insecure_scheme
 
