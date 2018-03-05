@@ -97,7 +97,14 @@ defmodule GRPC.Adapter.Cowboy do
         {request, {new_stream, new_s}}
 
       {:more, data, req} ->
-        read_stream({st, Map.put(s, :buffer, buffer <> data)}, func)
+        if GRPC.Message.complete?(buffer <> data) do
+          [request | rest] = func.(data)
+          new_stream = %{st | payload: req}
+          new_s = Map.put(s, :frames, rest)
+          {request, {new_stream, new_s}}
+        else
+          read_stream({st, Map.put(s, :buffer, buffer <> data)}, func)
+        end
     end
   end
 
