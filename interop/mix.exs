@@ -22,7 +22,7 @@ defmodule Interop.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:grpc, github: "tony612/grpc-elixir", branch: "add-gun"},
+      {:grpc, path: ".."},
       {:gun, ">= 1.0.0-pre.5"}
     ]
   end
