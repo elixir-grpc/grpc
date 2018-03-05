@@ -77,30 +77,27 @@ defmodule GRPC.Adapter.Cowboy do
 
   @spec reading_stream(GRPC.Client.Stream.t(), ([binary] -> [struct])) :: Enumerable.t()
   def reading_stream(stream, func) do
-    Stream.unfold({stream, %{buffer: []}}, fn acc -> read_stream(acc, func) end)
+    Stream.unfold({stream, %{frames: [], buffer: ""}}, fn acc -> read_stream(acc, func) end)
   end
 
   defp read_stream(nil, _), do: nil
-  defp read_stream({_, %{buffer: [], finished: true}}, _), do: nil
+  defp read_stream({_, %{frames: [], finished: true}}, _), do: nil
 
-  defp read_stream({stream, %{buffer: [curr | rest]} = s}, _) do
-    new_s = Map.put(s, :buffer, rest)
+  defp read_stream({stream, %{frames: [curr | rest]} = s}, _) do
+    new_s = Map.put(s, :frames, rest)
     {curr, {stream, new_s}}
   end
 
-  defp read_stream({%{payload: req} = st, %{buffer: []} = s}, func) do
+  defp read_stream({%{payload: req} = st, %{frames: [], buffer: buffer} = s}, func) do
     case :cowboy_req.read_body(req) do
       {:ok, data, req} ->
-        [request | rest] = func.(data)
+        [request | rest] = func.(buffer <> data)
         new_stream = %{st | payload: req}
-        new_s = s |> Map.put(:buffer, rest) |> Map.put(:finished, true)
+        new_s = s |> Map.put(:frames, rest) |> Map.put(:finished, true)
         {request, {new_stream, new_s}}
 
       {:more, data, req} ->
-        [request | rest] = func.(data)
-        new_stream = %{st | payload: req}
-        new_s = Map.put(s, :buffer, rest)
-        {request, {new_stream, new_s}}
+        read_stream({st, Map.put(s, :buffer, buffer <> data)}, func)
     end
   end
 
