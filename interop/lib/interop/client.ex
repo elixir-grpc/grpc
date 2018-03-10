@@ -84,6 +84,14 @@ defmodule Interop.Client do
     %{payload: %{body: ^reply}} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
   end
 
+  def empty_stream!(ch) do
+    IO.puts("Run empty_stream!")
+    stream = Grpc.Testing.TestService.Stub.full_duplex_call(ch)
+    :ok = GRPC.Stub.end_stream(stream)
+    res_enum = GRPC.Stub.recv(stream)
+    [] = Enum.to_list(res_enum)
+  end
+
   defp res_param(size) do
     Grpc.Testing.ResponseParameters.new(size: size)
   end
