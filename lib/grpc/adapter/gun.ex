@@ -66,6 +66,12 @@ defmodule GRPC.Adapter.Gun do
     {:ok, stream}
   end
 
+  def end_stream(%{channel: channel, payload: %{stream_ref: stream_ref}} = stream) do
+    conn_pid = channel.adapter_payload[:conn_pid]
+    :gun.data(conn_pid, stream_ref, :fin, "")
+    {:ok, stream}
+  end
+
   @spec recv(GRPC.Client.Stream.t(), keyword) :: {:end_stream, any} | {:data, binary}
   def recv(%{payload: %{stream_ref: stream_ref}, channel: channel}, opts) do
     timeout = GRPC.Adapter.Client.timeout(opts[:deadline], opts[:timeout])

@@ -90,6 +90,8 @@ defmodule GRPC.Adapter.Cowboy do
 
   defp read_stream({%{payload: req} = st, %{frames: [], buffer: buffer} = s}, func) do
     case :cowboy_req.read_body(req) do
+      {:ok, "", _} -> nil
+
       {:ok, data, req} ->
         [request | rest] = func.(buffer <> data)
         new_stream = %{st | payload: req}

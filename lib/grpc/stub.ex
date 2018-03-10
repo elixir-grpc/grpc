@@ -164,7 +164,8 @@ defmodule GRPC.Stub do
   @doc """
   Send streaming requests.
 
-  The last request must be sent with `:end_stream` option.
+  The last request can be sent with `:end_stream` option, or you can call `end_stream/1`
+  to send a frame with END_STREAM flag.
 
   ## Examples
 
@@ -173,13 +174,31 @@ defmodule GRPC.Stub do
 
   ## Options
 
-    * `:end_stream` - indicates it's the last one request
+    * `:end_stream` - indicates it's the last one request, then the stream will be in
+      half_closed state.
   """
   @spec stream_send(GRPC.Client.Stream, struct, keyword) :: :ok
   def stream_send(%{marshal: marshal, channel: channel} = stream, request, opts \\ []) do
     message = marshal.(request)
     send_end_stream = Keyword.get(opts, :end_stream, false)
     channel.adapter.send_body(stream, message, send_end_stream: send_end_stream)
+    :ok
+  end
+
+  @doc """
+  Send END_STREAM frame to end the stream.
+
+  The stream will be in half_closed state after this is called.
+
+  ## Examples
+
+      iex> GRPC.Stub.stream_send(stream, request)
+      :ok
+      iex> GRPC.Stub.end_stream(stream)
+      :ok
+  """
+  def end_stream(%{channel: channel} = stream) do
+    channel.adapter.end_stream(stream)
     :ok
   end
 
