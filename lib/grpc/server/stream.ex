@@ -9,9 +9,10 @@ defmodule GRPC.Server.Stream do
     * `:unmarshal` - a function decoding the request
     * `:adapter` - a server adapter module, like `GRPC.Adapter.Cowboy`
     * `:payload` - the payload needed by the adapter
+    * `:metadata` - metadata sent by client
   """
 
-  defstruct [:server, :marshal, :unmarshal, :payload, :adapter]
+  defstruct [:server, :marshal, :unmarshal, :payload, :adapter, :metadata]
 
   @type marshal :: (struct -> binary)
   @type unmarshal :: (binary -> struct)
@@ -20,6 +21,7 @@ defmodule GRPC.Server.Stream do
           marshal: marshal,
           unmarshal: unmarshal,
           payload: any,
-          adapter: atom
+          adapter: atom,
+          metadata: list
         }
 end

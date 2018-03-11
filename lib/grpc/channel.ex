@@ -12,6 +12,7 @@ defmodule GRPC.Channel do
     * `:scheme` - scheme of connection, like `http`
     * `:cred` - credentials used for authentication
     * `:adapter` - a client adapter module, like `GRPC.Adapter.Gun`
+    * `:adapter_payload` - payload the adapter uses
   """
 
   @type t :: %__MODULE__{

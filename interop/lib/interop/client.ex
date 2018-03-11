@@ -92,6 +92,17 @@ defmodule Interop.Client do
     [] = Enum.to_list(res_enum)
   end
 
+  def custom_metadata!(ch) do
+    IO.puts("Run custom_metadata!")
+    req = Grpc.Testing.SimpleRequest.new(response_size: 314159, payload: payload(271828))
+    reply = Grpc.Testing.SimpleResponse.new(payload: payload(314159))
+    metadata = %{
+      "x-grpc-test-echo-initial" => "test_initial_metadata_value",
+      "x-grpc-test-echo-trailing-bin" => 0xababab
+    }
+    {:ok, ^reply} = Grpc.Testing.TestService.Stub.unary_call(ch, req, metadata: metadata)
+  end
+
   defp res_param(size) do
     Grpc.Testing.ResponseParameters.new(size: size)
   end

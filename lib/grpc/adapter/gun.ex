@@ -34,8 +34,7 @@ defmodule GRPC.Adapter.Gun do
 
   def unary(%{channel: %{adapter_payload: %{conn_pid: conn_pid}}} = stream, message, opts) do
     stream_ref = do_send_request(stream, message, opts)
-    timeout = GRPC.Adapter.Client.timeout(opts[:deadline], opts[:timeout])
-    receive_body(conn_pid, stream_ref, timeout)
+    receive_body(conn_pid, stream_ref, opts[:timeout])
   end
 
   @spec send_request(GRPC.Client.Stream.t(), struct, keyword) :: struct
@@ -72,18 +71,16 @@ defmodule GRPC.Adapter.Gun do
     {:ok, stream}
   end
 
-  @spec recv(GRPC.Client.Stream.t(), keyword) :: {:end_stream, any} | {:data, binary}
+  @spec recv(GRPC.Client.Stream.t(), map) :: {:end_stream, any} | {:data, binary}
   def recv(%{payload: %{stream_ref: stream_ref}, channel: channel}, opts) do
-    timeout = GRPC.Adapter.Client.timeout(opts[:deadline], opts[:timeout])
     conn_pid = channel.adapter_payload[:conn_pid]
-    receive_data(conn_pid, stream_ref, timeout)
+    receive_data(conn_pid, stream_ref, opts[:timeout])
   end
 
-  @spec recv_end(GRPC.Client.Stream.t(), keyword) :: any
+  @spec recv_end(GRPC.Client.Stream.t(), map) :: any
   def recv_end(%{payload: %{stream_ref: stream_ref}, channel: channel}, opts) do
     conn_pid = channel.adapter_payload[:conn_pid]
-    timeout = GRPC.Adapter.Client.timeout(opts[:deadline], opts[:timeout])
-    receive_body(conn_pid, stream_ref, timeout)
+    receive_body(conn_pid, stream_ref, opts[:timeout])
   end
 
   defp receive_data(conn_pid, stream_ref, timeout) do

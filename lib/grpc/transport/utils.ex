@@ -8,14 +8,6 @@ defmodule GRPC.Transport.Utils do
   @doc """
   Encode deadline by gRPC guide
   """
-  def encode_timeout(deadline, now) when not is_integer(deadline) do
-    encode_timeout(GRPC.TimeUtils.to_relative(deadline, now))
-  end
-
-  def encode_timeout(deadline) when not is_integer(deadline) do
-    encode_timeout(deadline, DateTime.utc_now())
-  end
-
   def encode_timeout(timeout) when timeout <= 0, do: "0u"
 
   def encode_timeout(timeout) when timeout < @us_ceiling do

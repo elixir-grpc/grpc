@@ -6,7 +6,7 @@ defmodule Interop.Server do
     Grpc.Testing.Empty.new()
   end
 
-  def unary_call(req, _) do
+  def unary_call(req, stream) do
     payload = Grpc.Testing.Payload.new(body: String.duplicate("0", req.response_size))
     Grpc.Testing.SimpleResponse.new(payload: payload)
   end

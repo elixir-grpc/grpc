@@ -39,16 +39,4 @@ defmodule GRPC.Transport.UtilsTest do
     assert Utils.encode_timeout(@hour_ceiling - 1) == "#{@max_val}H"
     assert Utils.encode_timeout(@hour_ceiling) == "#{@max_val}H"
   end
-
-  test "normalize_timeout/1 accepts deadline" do
-    deadline = DateTime.utc_now()
-    assert Utils.encode_timeout(deadline) == "0u"
-  end
-
-  test "normalize_timeout/2 accepts deadline" do
-    now = DateTime.utc_now()
-    now_us = DateTime.to_unix(now, :microseconds)
-    deadline = DateTime.from_unix!(now_us + 5, :microseconds)
-    assert Utils.encode_timeout(deadline, now) == "5u"
-  end
 end

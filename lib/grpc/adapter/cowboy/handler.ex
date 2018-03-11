@@ -14,7 +14,8 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     req = :cowboy_req.stream_reply(200, HTTP2.server_headers(), req)
     path = :cowboy_req.path(req)
     server = Map.get(servers, GRPC.Server.service_name(path))
-    stream = %GRPC.Server.Stream{server: server, adapter: @adapter}
+    metadata = GRPC.Transport.HTTP2.extract_metadata(req[:headers])
+    stream = %GRPC.Server.Stream{server: server, adapter: @adapter, metadata: metadata}
     stream = %{stream | payload: req}
     trailers = HTTP2.server_trailers()
 

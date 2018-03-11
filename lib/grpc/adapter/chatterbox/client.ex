@@ -49,7 +49,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
 
   defp process_name(%{host: host, port: port}), do: :"grpc_chatter_client_#{host}:#{port}"
 
-  @spec unary(GRPC.Client.Stream.t(), struct, keyword) :: struct
+  @spec unary(GRPC.Client.Stream.t(), struct, map) :: struct
   def unary(stream, message, opts) do
     {:ok, stream} = send_request(stream, message, opts)
     recv_end(stream, opts)
@@ -84,7 +84,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
     |> :h2_connection.send_body(stream_id, data, opts)
   end
 
-  @spec recv_end(GRPC.Client.Stream.t(), keyword) :: any
+  @spec recv_end(GRPC.Client.Stream.t(), map) :: any
   def recv_end(%{payload: %{stream_id: stream_id}, channel: channel}, opts) do
     receive do
       {:END_STREAM, ^stream_id} ->
@@ -95,7 +95,7 @@ defmodule GRPC.Adapter.Chatterbox.Client do
 
         {:ok, headers, Enum.join(data_list, "")}
     after
-      GRPC.Adapter.Client.timeout(opts[:deadline], opts[:timeout]) ->
+      opts[:timeout] ->
         {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "deadline exceeded")}
     end
   end

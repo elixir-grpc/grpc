@@ -108,7 +108,15 @@ defmodule GRPC.Stub do
     |> adapter.connect(opts[:adapter_opts])
   end
 
-  @doc false
+  @doc """
+  The actual function invoked when invoking a rpc function.
+
+  ## Options
+
+    * `:timeout` - request timeout
+    * `:deadline` - when the request is timeout, will override timeout
+    *
+  """
   @spec call(atom, tuple, String.t(), GRPC.Channel, struct | nil, keyword) :: any
   def call(service_mod, rpc, path, channel, request, opts) do
     {_, {req_mod, req_stream}, {res_mod, res_stream}} = rpc
@@ -123,6 +131,7 @@ defmodule GRPC.Stub do
       res_stream: res_stream,
       channel: channel
     }
+    opts = parse_req_opts(opts)
 
     send_request(req_stream, res_stream, stream, request, opts)
   end
@@ -220,6 +229,9 @@ defmodule GRPC.Stub do
   @spec recv(GRPC.Client.Stream.t(), keyword) :: {:ok, struct} | Enumerable.t() | {:error, any}
   def recv(stream, opts \\ [])
 
+  def recv(stream, opts) when is_list(opts) do
+    recv(stream, parse_recv_opts(opts))
+  end
   def recv(%{res_stream: true} = stream, opts) do
     response_stream(stream, opts)
   end
@@ -295,4 +307,45 @@ defmodule GRPC.Stub do
 
     Stream.reject(resp_stream, &match?(:skip, &1))
   end
+
+  defp parse_req_opts(list) when is_list(list) do
+    parse_req_opts(list, %{timeout: :infinity})
+  end
+  defp parse_req_opts([{:timeout, timeout}|t], acc) do
+    parse_req_opts(t, Map.put(acc, :timeout, timeout))
+  end
+  defp parse_req_opts([{:deadline, deadline}|t], acc) do
+    parse_req_opts(t, Map.put(acc, :deadline, GRPC.TimeUtils.to_relative(deadline)))
+  end
+  defp parse_req_opts([{:compressor, compressor}|t], acc) do
+    parse_req_opts(t, Map.put(acc, :compressor, compressor))
+  end
+  defp parse_req_opts([{:grpc_encoding, grpc_encoding}|t], acc) do
+    parse_req_opts(t, Map.put(acc, :grpc_encoding, grpc_encoding))
+  end
+  defp parse_req_opts([{:metadata, metadata}|t], acc) do
+    parse_req_opts(t, Map.put(acc, :metadata, metadata))
+  end
+  defp parse_req_opts([{:content_type, content_type}|t], acc) do
+    parse_req_opts(t, Map.put(acc, :content_type, content_type))
+  end
+  # skip unknown option
+  defp parse_req_opts([{_, _} | t], acc) do
+    parse_req_opts(t, acc)
+  end
+  defp parse_req_opts(_, acc), do: acc
+
+  defp parse_recv_opts(list) when is_list(list) do
+    parse_recv_opts(list, %{timeout: :infinity})
+  end
+  defp parse_recv_opts([{:timeout, timeout}|t], acc) do
+    parse_recv_opts(t, Map.put(acc, :timeout, timeout))
+  end
+  defp parse_recv_opts([{:deadline, deadline}|t], acc) do
+    parse_recv_opts(t, Map.put(acc, :deadline, GRPC.TimeUtils.to_relative(deadline)))
+  end
+  defp parse_recv_opts([{_, _} | t], acc) do
+    parse_recv_opts(t, acc)
+  end
+  defp parse_recv_opts(_, acc), do: acc
 end
