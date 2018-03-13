@@ -7,8 +7,19 @@ defmodule Interop.Server do
   end
 
   def unary_call(req, stream) do
+    headers = GRPC.Stream.get_headers(stream)
+    stream = case headers["x-grpc-test-echo-initial"] do
+      nil -> stream
+      val ->
+        GRPC.Server.send_headers(stream, %{"x-grpc-test-echo-initial" => val})
+    end
+    stream = case headers["x-grpc-test-echo-trailing-bin"] do
+      nil -> stream
+      val ->
+        GRPC.Server.set_trailers(stream, %{"x-grpc-test-echo-trailing-bin" => val})
+    end
     payload = Grpc.Testing.Payload.new(body: String.duplicate("0", req.response_size))
-    Grpc.Testing.SimpleResponse.new(payload: payload)
+    {Grpc.Testing.SimpleResponse.new(payload: payload), stream}
   end
 
   def streaming_input_call(req_enum, _stream) do

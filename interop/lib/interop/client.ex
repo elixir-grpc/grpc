@@ -96,11 +96,12 @@ defmodule Interop.Client do
     IO.puts("Run custom_metadata!")
     req = Grpc.Testing.SimpleRequest.new(response_size: 314159, payload: payload(271828))
     reply = Grpc.Testing.SimpleResponse.new(payload: payload(314159))
-    metadata = %{
-      "x-grpc-test-echo-initial" => "test_initial_metadata_value",
-      "x-grpc-test-echo-trailing-bin" => 0xababab
-    }
-    {:ok, ^reply} = Grpc.Testing.TestService.Stub.unary_call(ch, req, metadata: metadata)
+    headers = %{"x-grpc-test-echo-initial" => "test_initial_metadata_value"}
+    trailers = %{"x-grpc-test-echo-trailing-bin" => 0xababab} # 11250603
+    metadata = Map.merge(headers, trailers)
+    {:ok, ^reply, %{headers: new_headers, trailers: new_trailers}} = Grpc.Testing.TestService.Stub.unary_call(ch, req, metadata: metadata, return_headers: true)
+    %{"x-grpc-test-echo-initial" => "test_initial_metadata_value"} = new_headers
+    %{"x-grpc-test-echo-trailing-bin" => "11250603"} = new_trailers
   end
 
   defp res_param(size) do
