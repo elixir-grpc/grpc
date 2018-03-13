@@ -122,6 +122,29 @@ defmodule GRPC.Adapter.Cowboy do
     send(pid, {{pid, req[:streamid]}, {:flow, size}})
   end
 
+  def has_sent_headers?(%{payload: req}) do
+    req[:has_sent_resp] != nil
+  end
+
+  def send_headers(%{payload: req} = stream, headers) do
+    req = :cowboy_req.stream_reply(200, headers, req)
+    %{stream | payload: req}
+  end
+
+  def set_headers(%{payload: req} = stream, headers) do
+    req = :cowboy_req.set_resp_headers(headers, req)
+    %{stream | payload: req}
+  end
+
+  def send_trailers(%{payload: req} = stream, trailers) do
+    :cowboy_req.stream_trailers(trailers, req)
+    %{stream | payload: req}
+  end
+
+  def get_headers(%{payload: req}) do
+    :cowboy_req.headers(req)
+  end
+
   defp cowboy_start_args(servers, port, opts) do
     dispatch =
       :cowboy_router.compile([

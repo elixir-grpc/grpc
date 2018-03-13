@@ -46,7 +46,29 @@ defmodule GRPC.Transport.HTTP2 do
   def extract_metadata(headers) do
     headers
     |> Enum.filter(fn({k, _}) -> is_metadata(k) end)
+    |> Enum.map(&decode_metadata/1)
     |> Enum.into(%{})
+  end
+
+  def decode_headers(headers) do
+    headers
+    |> Enum.map(fn({k, v}) ->
+      if is_metadata(k) do
+        decode_metadata({k, v})
+      else
+        {k, v}
+      end
+    end)
+    |> Enum.into(%{})
+  end
+
+  def encode_metadata(metadata) do
+    metadata
+    |> Enum.filter(fn {k, _v} -> !is_reserved_header(to_string(k)) end)
+    |> Enum.reduce(%{}, fn({k, v}, acc) ->
+      {new_k, new_v} = encode_metadata_pair({k, v})
+      Map.update(acc, new_k, new_v, fn old_v -> Enum.join([old_v, new_v], ",") end)
+    end)
   end
 
   defp append_encoding(headers, grpc_encoding) when is_binary(grpc_encoding) do
@@ -61,31 +83,27 @@ defmodule GRPC.Transport.HTTP2 do
   defp append_timeout(headers, _), do: headers
 
   defp append_custom_metadata(headers, metadata) when is_map(metadata) or is_list(metadata) do
-    new_headers =
-      metadata
-      |> Enum.filter(fn {k, _v} -> !is_reserved_header(to_string(k)) end)
-      |> Enum.reduce(%{}, fn({k, v}, acc) ->
-        {new_k, new_v} = normalize_custom_metadata({k, v})
-        Map.update(acc, new_k, new_v, fn old_v -> Enum.join([old_v, new_v], ",") end)
-      end)
-      |> Map.to_list
-
-    headers ++ new_headers
+    headers ++ Enum.to_list(encode_metadata(metadata))
   end
 
   defp append_custom_metadata(headers, _), do: headers
 
-  defp normalize_custom_metadata({key, val}) when not is_binary(key) do
-    normalize_custom_metadata({to_string(key), val})
+  defp encode_metadata_pair({key, val}) when not is_binary(key) do
+    encode_metadata_pair({to_string(key), val})
   end
 
-  defp normalize_custom_metadata({key, val}) when not is_binary(val) do
-    normalize_custom_metadata({key, to_string(val)})
+  defp encode_metadata_pair({key, val}) when not is_binary(val) do
+    encode_metadata_pair({key, to_string(val)})
   end
 
-  defp normalize_custom_metadata({key, val}) do
+  defp encode_metadata_pair({key, val}) do
     val = if String.ends_with?(key, "-bin"), do: Base.encode64(val), else: val
     {String.downcase(to_string(key)), val}
+  end
+
+  defp decode_metadata({key, val}) do
+    val = if String.ends_with?(key, "-bin"), do: Base.decode64!(val), else: val
+    {key, val}
   end
 
   defp is_reserved_header(":" <> _), do: true

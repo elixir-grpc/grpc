@@ -8,31 +8,30 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   alias GRPC.RPCError
 
   @adapter GRPC.Adapter.Cowboy
+  @default_trailers HTTP2.server_trailers()
 
   @spec init(any, {GRPC.Server.servers_map(), keyword}) :: {:ok, any, {atom, keyword}}
   def init(req, {servers, _opts} = state) do
-    req = :cowboy_req.stream_reply(200, HTTP2.server_headers(), req)
     path = :cowboy_req.path(req)
     server = Map.get(servers, GRPC.Server.service_name(path))
-    metadata = GRPC.Transport.HTTP2.extract_metadata(req[:headers])
-    stream = %GRPC.Server.Stream{server: server, adapter: @adapter, metadata: metadata}
-    stream = %{stream | payload: req}
-    trailers = HTTP2.server_trailers()
+    stream = %GRPC.Server.Stream{server: server, adapter: @adapter, payload: req}
+    stream = @adapter.set_headers(stream, HTTP2.server_headers())
 
     case server.__call_rpc__(path, stream) do
-      {:ok, %{payload: req} = stream, response} ->
-        GRPC.Server.stream_send(stream, response)
-        :cowboy_req.stream_trailers(trailers, req)
-        {:ok, req, state}
+      {:ok, stream, response} ->
+        stream = stream
+        |> GRPC.Server.stream_send(response)
+        |> GRPC.Server.send_trailers(@default_trailers)
+        {:ok, stream.payload, state}
 
-      {:ok, %{payload: req}} ->
-        :cowboy_req.stream_trailers(trailers, req)
-        {:ok, req, state}
+      {:ok, stream} ->
+        stream = GRPC.Server.send_trailers(stream, @default_trailers)
+        {:ok, stream.payload, state}
 
-      {:error, %{payload: req}, %RPCError{} = error} ->
+      {:error, stream, %RPCError{} = error} ->
         trailers = HTTP2.server_trailers(error.status, error.message)
-        :cowboy_req.stream_trailers(trailers, req)
-        {:ok, req, state}
+        stream = GRPC.Server.send_trailers(stream, trailers)
+        {:ok, stream.payload, state}
 
       {:error, %{payload: req}, _reason} ->
         # TODO handle error branch

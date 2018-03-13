@@ -120,13 +120,15 @@ defmodule GRPC.Server do
     handle_request(req_stream, res_stream, stream, func_name, reading_stream)
   end
 
-  defp handle_request(false, false, %{server: server_mod} = stream, func_name, request) do
-    response = apply(server_mod, func_name, [request, stream])
-    {:ok, stream, response}
+  defp handle_request(false, false, %{server: server_mod} = stream0, func_name, request) do
+    case apply(server_mod, func_name, [request, stream0]) do
+      resp = %{} -> {:ok, stream0, resp}
+      {resp, stream} -> {:ok, stream, resp}
+    end
   end
 
   defp handle_request(false, true, %{server: server_mod} = stream, func_name, request) do
-    apply(server_mod, func_name, [request, stream])
+    stream = apply(server_mod, func_name, [request, stream])
     {:ok, stream}
   end
 
@@ -136,7 +138,7 @@ defmodule GRPC.Server do
   end
 
   defp handle_request(true, true, %{server: server_mod} = stream, func_name, req_stream) do
-    apply(server_mod, func_name, [req_stream, stream])
+    stream = apply(server_mod, func_name, [req_stream, stream])
     {:ok, stream}
   end
 
@@ -189,9 +191,34 @@ defmodule GRPC.Server do
   """
   @spec stream_send(GRPC.Server.Stream.t(), struct) :: any
   def stream_send(%{adapter: adapter, marshal: marshal} = stream, response) do
-    {:ok, data, size} = response |> marshal.() |> GRPC.Message.to_data(iolist: true)
+    stream = cond do
+      !adapter.has_sent_headers?(stream) -> send_headers(stream, %{})
+      true -> stream
+    end
+    {:ok, data, _size} = response |> marshal.() |> GRPC.Message.to_data(iolist: true)
     adapter.stream_send(stream, data)
-    {:ok, size}
+    stream
+  end
+
+  def send_headers(%{adapter: adapter} = stream, headers) do
+    adapter.send_headers(stream, headers)
+  end
+
+  def set_headers(%{adapter: adapter} = stream, headers) do
+    adapter.set_headers(stream, headers)
+  end
+
+  def set_trailers(stream, trailers) do
+    Map.put(stream, :resp_trailers, trailers)
+  end
+
+  def send_trailers(%{adapter: adapter, resp_trailers: resp_trailers} = stream, trailers) do
+    stream = cond do
+      !adapter.has_sent_headers?(stream) -> send_headers(stream, %{})
+      true -> stream
+    end
+    metadata = GRPC.Transport.HTTP2.encode_metadata(resp_trailers || %{})
+    adapter.send_trailers(stream, Map.merge(metadata, trailers))
   end
 
   @doc false

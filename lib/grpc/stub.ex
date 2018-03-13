@@ -146,8 +146,13 @@ defmodule GRPC.Stub do
     message = marshal.(request)
 
     case channel.adapter.unary(stream, message, opts) do
-      {:ok, headers, data} ->
-        parse_response(headers, data, unmarshal)
+      {:ok, headers, data, trailers} ->
+        {status, msg} = parse_response(headers, data, trailers, unmarshal)
+        if opts[:return_headers] do
+          {status, msg, %{headers: headers, trailers: trailers}}
+        else
+          {status, msg}
+        end
 
       other ->
         other
@@ -237,17 +242,20 @@ defmodule GRPC.Stub do
   end
 
   def recv(%{unmarshal: unmarshal, channel: channel} = stream, opts) do
-    {:ok, headers, data} = channel.adapter.recv_end(stream, opts)
-    parse_response(headers, data, unmarshal)
+    {:ok, headers, data, trailers} = channel.adapter.recv_end(stream, opts)
+    {status, msg} = parse_response(headers, data, trailers, unmarshal)
+    if opts[:return_headers] do
+      {status, msg, %{headers: headers, trailers: trailers}}
+    else
+      {status, msg}
+    end
   end
 
-  defp parse_response(headers, data, unmarshal) do
-    {_, status} = Enum.find(headers, nil, fn header -> elem(header, 0) == "grpc-status" end)
-    status = String.to_integer(status)
+  defp parse_response(_headers, data, trailers, unmarshal) do
+    status = String.to_integer(trailers["grpc-status"])
 
     if status != GRPC.Status.ok() do
-      {_, message} = Enum.find(headers, nil, fn header -> elem(header, 0) == "grpc-message" end)
-      {:error, %GRPC.RPCError{status: status, message: message}}
+      {:error, %GRPC.RPCError{status: status, message: trailers["grpc-message"]}}
     else
       result =
         data
@@ -297,7 +305,7 @@ defmodule GRPC.Stub do
               end
             end
 
-          {:end_stream, _resp} ->
+          {:trailers, _resp} ->
             nil
 
           other ->
@@ -328,6 +336,9 @@ defmodule GRPC.Stub do
   end
   defp parse_req_opts([{:content_type, content_type}|t], acc) do
     parse_req_opts(t, Map.put(acc, :content_type, content_type))
+  end
+  defp parse_req_opts([{:return_headers, return_headers}|t], acc) do
+    parse_req_opts(t, Map.put(acc, :return_headers, return_headers))
   end
   # skip unknown option
   defp parse_req_opts([{_, _} | t], acc) do

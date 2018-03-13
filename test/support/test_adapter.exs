@@ -18,4 +18,12 @@ defmodule GRPC.Test.ServerAdapter do
   def flow_control(_, size) do
     {:ok, size}
   end
+
+  def send_headers(stream, _headers) do
+    stream
+  end
+
+  def has_sent_headers?(_stream) do
+    false
+  end
 end
