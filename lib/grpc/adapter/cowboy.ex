@@ -88,8 +88,8 @@ defmodule GRPC.Adapter.Cowboy do
     {curr, {stream, new_s}}
   end
 
-  defp read_stream({%{payload: req} = st, %{frames: [], buffer: buffer} = s}, func) do
-    case :cowboy_req.read_body(req) do
+  defp read_stream({%{payload: req0} = st, %{frames: [], buffer: buffer} = s}, func) do
+    case :cowboy_req.read_body(req0) do
       {:ok, "", _} -> nil
 
       {:ok, data, req} ->
@@ -99,13 +99,14 @@ defmodule GRPC.Adapter.Cowboy do
         {request, {new_stream, new_s}}
 
       {:more, data, req} ->
-        if GRPC.Message.complete?(buffer <> data) do
+        data = buffer <> data
+        if GRPC.Message.complete?(data) do
           [request | rest] = func.(data)
           new_stream = %{st | payload: req}
-          new_s = Map.put(s, :frames, rest)
+          new_s = s |> Map.put(:frames, rest) |> Map.put(:buffer, "")
           {request, {new_stream, new_s}}
         else
-          read_stream({st, Map.put(s, :buffer, buffer <> data)}, func)
+          read_stream({%{st | payload: req}, Map.put(s, :buffer, data)}, func)
         end
     end
   end

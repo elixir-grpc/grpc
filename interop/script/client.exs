@@ -16,4 +16,4 @@ run = fn(i) ->
   IO.puts("Succeed!")
 end
 
-Enum.each(1..1000, run)
+Enum.each(1..100, run)
