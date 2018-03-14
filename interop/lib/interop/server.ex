@@ -27,15 +27,15 @@ defmodule Interop.Server do
     Grpc.Testing.StreamingInputCallResponse.new(aggregated_payload_size: size)
   end
 
-  def streaming_output_call(req, stream) do
+  def streaming_output_call(req, stream0) do
     req.response_parameters
     |> Enum.map(&Grpc.Testing.Payload.new(body: String.duplicate("0", &1.size)))
     |> Enum.map(&Grpc.Testing.StreamingOutputCallResponse.new(payload: &1))
-    |> Enum.each(&GRPC.Server.stream_send(stream, &1))
+    |> Enum.reduce(stream0, &GRPC.Server.stream_send(&2, &1))
   end
 
-  def full_duplex_call(req_enum, stream) do
-    Enum.each(req_enum, fn(req) ->
+  def full_duplex_call(req_enum, stream0) do
+    Enum.reduce(req_enum, stream0, fn(req, stream) ->
       size = List.first(req.response_parameters).size
       payload = Grpc.Testing.Payload.new(body: String.duplicate("0", size))
       res = Grpc.Testing.StreamingOutputCallResponse.new(payload: payload)
