@@ -100,6 +100,12 @@ Check [examples](examples) for all examples
 - [ ] Data compression
 - [ ] Support other encoding(other than protobuf)
 
+## Sponsors
+
+This project is being sponsored by [Tubi](https://tubitv.com/). Thank you!
+
+<img src="https://user-images.githubusercontent.com/1253659/37473536-4db44048-28a9-11e8-90d5-f8a2f5a8d53c.jpg" height="80">
+
 ## Contributing
 
 You contributions are welcome!
