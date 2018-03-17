@@ -59,7 +59,7 @@ defmodule GRPC.Integration.ServiceTest do
       low = Routeguide.Point.new(latitude: 400_000_000, longitude: -750_000_000)
       high = Routeguide.Point.new(latitude: 420_000_000, longitude: -730_000_000)
       rect = Routeguide.Rectangle.new(lo: low, hi: high)
-      stream = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
+      {:ok, stream} = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
 
       assert Enum.to_list(stream) == [
                Routeguide.Feature.new(location: low, name: "400000000,-750000000"),
@@ -96,7 +96,7 @@ defmodule GRPC.Integration.ServiceTest do
           end)
         end)
 
-      result_enum = GRPC.Stub.recv(stream)
+      {:ok, result_enum} = GRPC.Stub.recv(stream)
       Task.await(task)
 
       notes =

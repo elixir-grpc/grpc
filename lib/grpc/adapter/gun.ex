@@ -32,11 +32,6 @@ defmodule GRPC.Adapter.Gun do
     end
   end
 
-  def unary(%{channel: %{adapter_payload: %{conn_pid: conn_pid}}} = stream, message, opts) do
-    stream_ref = do_send_request(stream, message, opts)
-    receive_body(conn_pid, stream_ref, opts[:timeout])
-  end
-
   @spec send_request(GRPC.Client.Stream.t(), struct, keyword) :: struct
   def send_request(stream, message, opts) do
     stream_ref = do_send_request(stream, message, opts)
@@ -71,58 +66,54 @@ defmodule GRPC.Adapter.Gun do
     {:ok, stream}
   end
 
-  @spec recv(GRPC.Client.Stream.t(), map) :: {:trailers, any} | {:data, binary}
-  def recv(%{payload: %{stream_ref: stream_ref}, channel: channel}, opts) do
-    conn_pid = channel.adapter_payload[:conn_pid]
-    receive_data(conn_pid, stream_ref, opts[:timeout])
-  end
-
-  @spec recv_end(GRPC.Client.Stream.t(), map) :: any
-  def recv_end(%{payload: %{stream_ref: stream_ref}, channel: channel}, opts) do
-    conn_pid = channel.adapter_payload[:conn_pid]
-    receive_body(conn_pid, stream_ref, opts[:timeout])
-  end
-
-  defp receive_data(conn_pid, stream_ref, timeout) do
-    case :gun.await(conn_pid, stream_ref, timeout) do
-      {:response, :fin, _status, _headers} ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.data_loss(), "didn't get data from peer")}
-      {:response, :nofin, _status, _init_headers} ->
-        receive_data(conn_pid, stream_ref, timeout)
-      {:data, _is_fin, data} ->
-        {:data, data}
-      {:trailers, trailers} ->
-        {:trailers, trailers}
-      {:error, :timeout} ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "deadline exceeded")}
-      {:error, {reason, msg}} ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "#{reason}: #{msg}")}
-      {:error, reason} ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}")}
+  def recv_headers(%{conn_pid: conn_pid}, %{stream_ref: stream_ref}, opts) do
+    case await(conn_pid, stream_ref, opts[:timeout]) do
+      {:response, headers} ->
+        {:ok, headers}
+      error = {:error, _} ->
+        error
+      other ->
+        {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "unexpected when waiting for headers: #{inspect(other)}")}
     end
   end
 
-  defp receive_body(conn_pid, stream_ref, timeout) do
+  def recv_data_or_trailers(%{conn_pid: conn_pid}, %{stream_ref: stream_ref}, opts) do
+    case await(conn_pid, stream_ref, opts[:timeout]) do
+      data = {:data, _} ->
+        data
+      trailers = {:trailers, _} ->
+        trailers
+      error = {:error, _} ->
+        error
+      other ->
+        {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "unexpected when waiting for data: #{inspect(other)}")}
+    end
+  end
+
+  defp await(conn_pid, stream_ref, timeout) do
     case :gun.await(conn_pid, stream_ref, timeout) do
-      {:response, :fin, _status, _headers} ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.data_loss(), "didn't get data from peer")}
-      {:response, :nofin, _status, headers} ->
-        case :gun.await_body(conn_pid, stream_ref, timeout) do
-          {:ok, body, trailers} ->
-            {:ok, GRPC.Transport.HTTP2.decode_headers(headers), body, GRPC.Transport.HTTP2.decode_headers(trailers)}
-          {:error, :timeout} ->
-            {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "deadline exceeded")}
-          {:error, {reason, msg}} ->
-            {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "#{reason}: #{inspect(msg)}")}
-          {:error, reason} ->
-            {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}")}
+      {:response, :fin, _, _} ->
+        {:error, GRPC.RPCError.exception(GRPC.Status.internal(), "shouldn't finish when getting headers")}
+      {:response, :nofin, status, headers} ->
+        if status == 200 do
+          {:response, headers}
+        else
+          {:error, GRPC.RPCError.exception(GRPC.Status.internal(), "status got is not 200")}
         end
+      {:data, :fin, _} ->
+        {:error, GRPC.RPCError.exception(GRPC.Status.internal(), "shouldn't finish when getting data")}
+      {:data, :nofin, data} ->
+        {:data, data}
+      trailers = {:trailers, _} ->
+        trailers
       {:error, :timeout} ->
         {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "deadline exceeded")}
       {:error, {reason, msg}} ->
         {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "#{reason}: #{msg}")}
       {:error, reason} ->
         {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}")}
+      other ->
+        {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "unexpected message when waiting: #{inspect(other)}")}
     end
   end
 end

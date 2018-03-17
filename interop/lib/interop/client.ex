@@ -48,7 +48,7 @@ defmodule Interop.Client do
     IO.puts("Run server_streaming!")
     params = Enum.map([31415, 9, 2653, 58979], &res_param(&1))
     req = Grpc.Testing.StreamingOutputCallRequest.new(response_parameters: params)
-    stream = ch |> Grpc.Testing.TestService.Stub.streaming_output_call(req)
+    {:ok, stream} = ch |> Grpc.Testing.TestService.Stub.streaming_output_call(req)
     result = Enum.map([31415, 9, 2653, 58979], &String.duplicate("0", &1))
     ^result = Enum.map(stream, fn res ->
       res.payload.body
@@ -67,7 +67,7 @@ defmodule Interop.Client do
     end
 
     GRPC.Stub.stream_send(stream, req.(31415, 27182))
-    res_enum = GRPC.Stub.recv(stream)
+    {:ok, res_enum} = GRPC.Stub.recv(stream)
     reply = String.duplicate("0", 31415)
     %{payload: %{body: ^reply}} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
 
@@ -88,20 +88,35 @@ defmodule Interop.Client do
     IO.puts("Run empty_stream!")
     stream = Grpc.Testing.TestService.Stub.full_duplex_call(ch)
     :ok = GRPC.Stub.end_stream(stream)
-    res_enum = GRPC.Stub.recv(stream)
+    {:ok, res_enum} = GRPC.Stub.recv(stream)
     [] = Enum.to_list(res_enum)
   end
 
   def custom_metadata!(ch) do
     IO.puts("Run custom_metadata!")
+    # UnaryCall
     req = Grpc.Testing.SimpleRequest.new(response_size: 314159, payload: payload(271828))
     reply = Grpc.Testing.SimpleResponse.new(payload: payload(314159))
     headers = %{"x-grpc-test-echo-initial" => "test_initial_metadata_value"}
     trailers = %{"x-grpc-test-echo-trailing-bin" => 0xababab} # 11250603
     metadata = Map.merge(headers, trailers)
     {:ok, ^reply, %{headers: new_headers, trailers: new_trailers}} = Grpc.Testing.TestService.Stub.unary_call(ch, req, metadata: metadata, return_headers: true)
-    %{"x-grpc-test-echo-initial" => "test_initial_metadata_value"} = new_headers
-    %{"x-grpc-test-echo-trailing-bin" => "11250603"} = new_trailers
+    validate_headers!(new_headers, new_trailers)
+
+    # FullDuplexCall
+    stream = Grpc.Testing.TestService.Stub.full_duplex_call(ch, metadata: metadata)
+    req = Grpc.Testing.StreamingOutputCallRequest.new(response_parameters: [res_param(314159)], payload: payload(271828))
+    :ok = GRPC.Stub.stream_send(stream, req, end_stream: true)
+
+    {:ok, res_enum, %{headers: new_headers}} = GRPC.Stub.recv(stream, return_headers: true)
+    reply = String.duplicate("0", 314159)
+    %{payload: %{body: ^reply}} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
+    # validate_headers!(new_headers, %{})
+  end
+
+  def validate_headers!(headers, trailers) do
+    %{"x-grpc-test-echo-initial" => "test_initial_metadata_value"} = headers
+    %{"x-grpc-test-echo-trailing-bin" => "11250603"} = trailers
   end
 
   defp res_param(size) do

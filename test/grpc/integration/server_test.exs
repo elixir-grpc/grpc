@@ -95,7 +95,7 @@ defmodule GRPC.Integration.ServerTest do
       low = Routeguide.Point.new(latitude: 400_000_000, longitude: -750_000_000)
       high = Routeguide.Point.new(latitude: 420_000_000, longitude: -730_000_000)
       rect = Routeguide.Rectangle.new(lo: low, hi: high)
-      stream = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
+      {:ok, stream} = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
 
       Enum.each(stream, fn thing ->
         IO.inspect(thing)

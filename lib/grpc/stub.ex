@@ -136,41 +136,13 @@ defmodule GRPC.Stub do
     send_request(req_stream, res_stream, stream, request, opts)
   end
 
-  defp send_request(
-         false,
-         false,
-         %{marshal: marshal, unmarshal: unmarshal, channel: channel} = stream,
-         request,
-         opts
-       ) do
+  defp send_request(false, _, %{marshal: marshal, channel: channel} = stream, request, opts) do
     message = marshal.(request)
-
-    case channel.adapter.unary(stream, message, opts) do
-      {:ok, headers, data, trailers} ->
-        {status, msg} = parse_response(headers, data, trailers, unmarshal)
-        if opts[:return_headers] do
-          {status, msg, %{headers: headers, trailers: trailers}}
-        else
-          {status, msg}
-        end
-
-      other ->
-        other
-    end
+    {:ok, stream} = channel.adapter.send_request(stream, message, opts)
+    recv(stream, opts)
   end
 
-  defp send_request(false, true, %{marshal: marshal, channel: channel} = stream, request, opts) do
-    message = marshal.(request)
-    {:ok, new_stream} = channel.adapter.send_request(stream, message, opts)
-    response_stream(new_stream, opts)
-  end
-
-  defp send_request(true, false, %{channel: channel} = stream, _, opts) do
-    {:ok, stream} = channel.adapter.send_header(stream, opts)
-    stream
-  end
-
-  defp send_request(true, true, %{channel: channel} = stream, _, opts) do
+  defp send_request(true, _, %{channel: channel} = stream, _, opts) do
     {:ok, stream} = channel.adapter.send_header(stream, opts)
     stream
   end
@@ -237,17 +209,53 @@ defmodule GRPC.Stub do
   def recv(stream, opts) when is_list(opts) do
     recv(stream, parse_recv_opts(opts))
   end
-  def recv(%{res_stream: true} = stream, opts) do
-    response_stream(stream, opts)
+  def recv(%{res_stream: true, channel: channel, payload: payload} = stream, opts) when is_map(opts) do
+    case recv_headers(channel.adapter, channel.adapter_payload, payload, opts) do
+      {:ok, headers} ->
+        res_enum = response_stream(stream, opts)
+        if opts[:return_headers] do
+          {:ok, res_enum, %{headers: headers}}
+        else
+          {:ok, res_enum}
+        end
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
-  def recv(%{unmarshal: unmarshal, channel: channel} = stream, opts) do
-    {:ok, headers, data, trailers} = channel.adapter.recv_end(stream, opts)
-    {status, msg} = parse_response(headers, data, trailers, unmarshal)
-    if opts[:return_headers] do
-      {status, msg, %{headers: headers, trailers: trailers}}
+  def recv(%{payload: payload, unmarshal: unmarshal, channel: channel}, opts) do
+    with {:ok, headers} <- recv_headers(channel.adapter, channel.adapter_payload, payload, opts),
+         {:ok, body, trailers} <- recv_body(channel.adapter, channel.adapter_payload, payload, opts) do
+      {status, msg} = parse_response(headers, body, trailers, unmarshal)
+      if opts[:return_headers] do
+        {status, msg, %{headers: headers, trailers: trailers}}
+      else
+        {status, msg}
+      end
     else
-      {status, msg}
+      error = {:error, _} ->
+        error
+    end
+  end
+
+  defp recv_headers(adapter, conn_payload, stream_payload, opts) do
+    case adapter.recv_headers(conn_payload, stream_payload, opts) do
+      {:ok, headers} ->
+        {:ok, GRPC.Transport.HTTP2.decode_headers(headers)}
+      other ->
+        other
+    end
+  end
+
+  defp recv_body(adapter, conn_payload, stream_payload, opts) do
+    recv_body(adapter, conn_payload, stream_payload, "", opts)
+  end
+  defp recv_body(adapter, conn_payload, stream_payload, acc, opts) do
+    case adapter.recv_data_or_trailers(conn_payload, stream_payload, opts) do
+      {:data, data} ->
+        recv_body(adapter, conn_payload, stream_payload, <<acc::binary, data::binary>>, opts)
+      {:trailers, trailers} ->
+        {:ok, acc, GRPC.Transport.HTTP2.decode_headers(trailers)}
     end
   end
 
@@ -266,10 +274,10 @@ defmodule GRPC.Stub do
     end
   end
 
-  defp response_stream(%{unmarshal: unmarshal, channel: channel} = stream, opts) do
+  defp response_stream(%{unmarshal: unmarshal, channel: channel, payload: payload}, opts) do
     resp_stream =
       Stream.unfold(%{buffer: :empty, message_length: -1}, fn acc ->
-        case channel.adapter.recv(stream, opts) do
+        case channel.adapter.recv_data_or_trailers(channel.adapter_payload, payload, opts) do
           {:data, data} ->
             if GRPC.Message.complete?(data) do
               reply = data |> GRPC.Message.from_data() |> unmarshal.()
@@ -307,9 +315,6 @@ defmodule GRPC.Stub do
 
           {:trailers, _resp} ->
             nil
-
-          other ->
-            other
         end
       end)
 
@@ -340,9 +345,8 @@ defmodule GRPC.Stub do
   defp parse_req_opts([{:return_headers, return_headers}|t], acc) do
     parse_req_opts(t, Map.put(acc, :return_headers, return_headers))
   end
-  # skip unknown option
-  defp parse_req_opts([{_, _} | t], acc) do
-    parse_req_opts(t, acc)
+  defp parse_req_opts([{key, _} | _], _) do
+    raise ArgumentError, "option #{inspect(key)} is not supported"
   end
   defp parse_req_opts(_, acc), do: acc
 
@@ -355,8 +359,11 @@ defmodule GRPC.Stub do
   defp parse_recv_opts([{:deadline, deadline}|t], acc) do
     parse_recv_opts(t, Map.put(acc, :deadline, GRPC.TimeUtils.to_relative(deadline)))
   end
-  defp parse_recv_opts([{_, _} | t], acc) do
-    parse_recv_opts(t, acc)
+  defp parse_recv_opts([{:return_headers, return_headers}|t], acc) do
+    parse_recv_opts(t, Map.put(acc, :return_headers, return_headers))
+  end
+  defp parse_recv_opts([{key, _} | _], _) do
+    raise ArgumentError, "option #{inspect(key)} is not supported"
   end
   defp parse_recv_opts(_, acc), do: acc
 end
