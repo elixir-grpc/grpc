@@ -13,7 +13,7 @@ run = fn(i) ->
   Client.ping_pong!(ch)
   Client.empty_stream!(ch)
   Client.custom_metadata!(ch)
-  IO.puts("Succeed!")
 end
 
 Enum.each(1..100, run)
+IO.puts("Succeed!")

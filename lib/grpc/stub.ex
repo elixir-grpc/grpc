@@ -138,13 +138,13 @@ defmodule GRPC.Stub do
 
   defp send_request(false, _, %{marshal: marshal, channel: channel} = stream, request, opts) do
     message = marshal.(request)
-    {:ok, stream} = channel.adapter.send_request(stream, message, opts)
-    recv(stream, opts)
+    stream
+    |> channel.adapter.send_request(message, opts)
+    |> recv(opts)
   end
 
   defp send_request(true, _, %{channel: channel} = stream, _, opts) do
-    {:ok, stream} = channel.adapter.send_header(stream, opts)
-    stream
+    channel.adapter.send_headers(stream, opts)
   end
 
   @doc """
@@ -156,7 +156,7 @@ defmodule GRPC.Stub do
   ## Examples
 
       iex> GRPC.Stub.stream_send(stream, request, opts)
-      :ok
+      new_stream
 
   ## Options
 
@@ -168,7 +168,6 @@ defmodule GRPC.Stub do
     message = marshal.(request)
     send_end_stream = Keyword.get(opts, :end_stream, false)
     channel.adapter.send_body(stream, message, send_end_stream: send_end_stream)
-    :ok
   end
 
   @doc """
@@ -185,7 +184,6 @@ defmodule GRPC.Stub do
   """
   def end_stream(%{channel: channel} = stream) do
     channel.adapter.end_stream(stream)
-    :ok
   end
 
   @doc """
@@ -275,50 +273,48 @@ defmodule GRPC.Stub do
   end
 
   defp response_stream(%{unmarshal: unmarshal, channel: channel, payload: payload}, opts) do
-    resp_stream =
-      Stream.unfold(%{buffer: :empty, message_length: -1}, fn acc ->
+    enum = Stream.unfold(%{buffer: "", message_length: -1, fin: false}, fn
+      %{fin: true} -> nil
+      acc ->
         case channel.adapter.recv_data_or_trailers(channel.adapter_payload, payload, opts) do
           {:data, data} ->
             if GRPC.Message.complete?(data) do
               reply = data |> GRPC.Message.from_data() |> unmarshal.()
-              {reply, acc}
+              {{:ok, reply}, %{buffer: "", message_length: -1}}
             else
-              case acc do
-                %{buffer: :empty} ->
-                  {
-                    :skip,
-                    Map.merge(acc, %{
-                      buffer: data,
-                      message_length: GRPC.Message.message_length(data)
-                    })
-                  }
-
-                %{buffer: buffer, message_length: ml}
-                when byte_size(buffer) + byte_size(data) - 5 == ml ->
-                  final_buffer = buffer <> data
-
-                  reply =
-                    final_buffer
-                    |> GRPC.Message.from_data()
-                    |> unmarshal.()
-
-                  {
-                    reply,
-                    Map.merge(acc, %{buffer: :empty, message_length: -1})
-                  }
-
-                %{buffer: buffer} ->
-                  next_buffer = buffer <> data
-                  {:skip, Map.put(acc, :buffer, next_buffer)}
-              end
+              handle_incomplete_data(acc, data, unmarshal)
             end
 
-          {:trailers, _resp} ->
-            nil
+          {:trailers, trailers} ->
+            if opts[:return_headers] do
+              {{:trailers, GRPC.Transport.HTTP2.decode_headers(trailers)}, Map.put(acc, :fin, true)}
+            else
+              nil
+            end
         end
-      end)
+    end)
+    Stream.reject(enum, &match?(:skip, &1))
+  end
 
-    Stream.reject(resp_stream, &match?(:skip, &1))
+  defp handle_incomplete_data(%{buffer: ""} = acc, data, _) do
+    new_acc = acc
+      |> Map.put(:buffer, data)
+      |> Map.put(:message_length, GRPC.Message.message_length(data))
+    {:skip, new_acc}
+  end
+  defp handle_incomplete_data(%{buffer: buffer, message_length: ml}, data, unmarshal)
+      when byte_size(buffer) + byte_size(data) - 5 == ml and ml > 0 do
+    final_buffer = buffer <> data
+
+    reply =
+      final_buffer
+      |> GRPC.Message.from_data()
+      |> unmarshal.()
+
+    {{:ok, reply}, %{buffer: "", message_length: -1}}
+  end
+  defp handle_incomplete_data(%{buffer: buffer} = acc, data, _) do
+    {:skip, Map.put(acc, :buffer, buffer <> data)}
   end
 
   defp parse_req_opts(list) when is_list(list) do

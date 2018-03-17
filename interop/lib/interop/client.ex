@@ -31,11 +31,12 @@ defmodule Interop.Client do
 
   def client_streaming!(ch) do
     IO.puts("Run client_streaming!")
-    stream = Grpc.Testing.TestService.Stub.streaming_input_call(ch)
-    GRPC.Stub.stream_send(stream, Grpc.Testing.StreamingInputCallRequest.new(payload: payload(27182)))
-    GRPC.Stub.stream_send(stream, Grpc.Testing.StreamingInputCallRequest.new(payload: payload(8)))
-    GRPC.Stub.stream_send(stream, Grpc.Testing.StreamingInputCallRequest.new(payload: payload(1828)))
-    GRPC.Stub.stream_send(stream, Grpc.Testing.StreamingInputCallRequest.new(payload: payload(45904)), end_stream: true)
+    stream = ch
+      |> Grpc.Testing.TestService.Stub.streaming_input_call()
+      |> GRPC.Stub.stream_send(Grpc.Testing.StreamingInputCallRequest.new(payload: payload(27182)))
+      |> GRPC.Stub.stream_send(Grpc.Testing.StreamingInputCallRequest.new(payload: payload(8)))
+      |> GRPC.Stub.stream_send(Grpc.Testing.StreamingInputCallRequest.new(payload: payload(1828)))
+      |> GRPC.Stub.stream_send(Grpc.Testing.StreamingInputCallRequest.new(payload: payload(45904)), end_stream: true)
     reply = Grpc.Testing.StreamingInputCallResponse.new(aggregated_payload_size: 74922)
     {:ok, ^reply} = GRPC.Stub.recv(stream)
   end
@@ -48,9 +49,9 @@ defmodule Interop.Client do
     IO.puts("Run server_streaming!")
     params = Enum.map([31415, 9, 2653, 58979], &res_param(&1))
     req = Grpc.Testing.StreamingOutputCallRequest.new(response_parameters: params)
-    {:ok, stream} = ch |> Grpc.Testing.TestService.Stub.streaming_output_call(req)
+    {:ok, res_enum} = ch |> Grpc.Testing.TestService.Stub.streaming_output_call(req)
     result = Enum.map([31415, 9, 2653, 58979], &String.duplicate("0", &1))
-    ^result = Enum.map(stream, fn res ->
+    ^result = Enum.map(res_enum, fn {:ok, res} ->
       res.payload.body
     end)
   end
@@ -69,26 +70,23 @@ defmodule Interop.Client do
     GRPC.Stub.stream_send(stream, req.(31415, 27182))
     {:ok, res_enum} = GRPC.Stub.recv(stream)
     reply = String.duplicate("0", 31415)
-    %{payload: %{body: ^reply}} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
+    {:ok, %{payload: %{body: ^reply}}} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
 
-    GRPC.Stub.stream_send(stream, req.(9, 8))
-    reply = String.duplicate("0", 9)
-    %{payload: %{body: ^reply}} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
-
-    GRPC.Stub.stream_send(stream, req.(2653, 1828))
-    reply = String.duplicate("0", 2653)
-    %{payload: %{body: ^reply}} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
-
-    GRPC.Stub.stream_send(stream, req.(58979, 45904), end_stream: true)
-    reply = String.duplicate("0", 58979)
-    %{payload: %{body: ^reply}} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
+    Enum.each([{9, 8}, {2653, 1828}, {58979, 45904}], fn ({res, payload}) ->
+      GRPC.Stub.stream_send(stream, req.(res, payload))
+      reply = String.duplicate("0", res)
+      {:ok, %{payload: %{body: ^reply}}} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
+    end)
+    GRPC.Stub.end_stream(stream)
   end
 
   def empty_stream!(ch) do
     IO.puts("Run empty_stream!")
-    stream = Grpc.Testing.TestService.Stub.full_duplex_call(ch)
-    :ok = GRPC.Stub.end_stream(stream)
-    {:ok, res_enum} = GRPC.Stub.recv(stream)
+    {:ok, res_enum} =
+      ch
+      |> Grpc.Testing.TestService.Stub.full_duplex_call()
+      |> GRPC.Stub.end_stream()
+      |> GRPC.Stub.recv()
     [] = Enum.to_list(res_enum)
   end
 
@@ -104,14 +102,17 @@ defmodule Interop.Client do
     validate_headers!(new_headers, new_trailers)
 
     # FullDuplexCall
-    stream = Grpc.Testing.TestService.Stub.full_duplex_call(ch, metadata: metadata)
     req = Grpc.Testing.StreamingOutputCallRequest.new(response_parameters: [res_param(314159)], payload: payload(271828))
-    :ok = GRPC.Stub.stream_send(stream, req, end_stream: true)
+    {:ok, res_enum, %{headers: new_headers}} =
+      ch
+      |> Grpc.Testing.TestService.Stub.full_duplex_call(metadata: metadata)
+      |> GRPC.Stub.stream_send(req, end_stream: true)
+      |> GRPC.Stub.recv(return_headers: true)
 
-    {:ok, res_enum, %{headers: new_headers}} = GRPC.Stub.recv(stream, return_headers: true)
     reply = String.duplicate("0", 314159)
-    %{payload: %{body: ^reply}} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
-    # validate_headers!(new_headers, %{})
+    {:ok, %{payload: %{body: ^reply}}} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
+    {:trailers, new_trailers} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
+    validate_headers!(new_headers, new_trailers)
   end
 
   def validate_headers!(headers, trailers) do

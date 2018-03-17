@@ -62,8 +62,8 @@ defmodule GRPC.Integration.ServiceTest do
       {:ok, stream} = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
 
       assert Enum.to_list(stream) == [
-               Routeguide.Feature.new(location: low, name: "400000000,-750000000"),
-               Routeguide.Feature.new(location: high, name: "420000000,-730000000")
+               {:ok, Routeguide.Feature.new(location: low, name: "400000000,-750000000")},
+               {:ok, Routeguide.Feature.new(location: high, name: "420000000,-730000000")}
              ]
     end)
   end
@@ -100,7 +100,7 @@ defmodule GRPC.Integration.ServiceTest do
       Task.await(task)
 
       notes =
-        Enum.map(result_enum, fn note ->
+        Enum.map(result_enum, fn {:ok, note} ->
           assert "Reply: " <> _msg = note.message
           note
         end)

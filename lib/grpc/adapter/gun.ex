@@ -35,8 +35,7 @@ defmodule GRPC.Adapter.Gun do
   @spec send_request(GRPC.Client.Stream.t(), struct, keyword) :: struct
   def send_request(stream, message, opts) do
     stream_ref = do_send_request(stream, message, opts)
-    new_stream = GRPC.Client.Stream.put_payload(stream, :stream_ref, stream_ref)
-    {:ok, new_stream}
+    GRPC.Client.Stream.put_payload(stream, :stream_ref, stream_ref)
   end
 
   defp do_send_request(%{channel: %{adapter_payload: %{conn_pid: conn_pid}}, path: path} = stream, message, opts) do
@@ -45,11 +44,10 @@ defmodule GRPC.Adapter.Gun do
     :gun.post(conn_pid, path, headers, data)
   end
 
-  def send_header(%{channel: %{adapter_payload: %{conn_pid: conn_pid}}, path: path} = stream, opts) do
+  def send_headers(%{channel: %{adapter_payload: %{conn_pid: conn_pid}}, path: path} = stream, opts) do
     headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
     stream_ref = :gun.post(conn_pid, path, headers)
-    new_stream = GRPC.Client.Stream.put_payload(stream, :stream_ref, stream_ref)
-    {:ok, new_stream}
+    GRPC.Client.Stream.put_payload(stream, :stream_ref, stream_ref)
   end
 
   def send_body(%{channel: channel, payload: %{stream_ref: stream_ref}} = stream, message, opts) do
@@ -57,13 +55,13 @@ defmodule GRPC.Adapter.Gun do
     fin = if opts[:send_end_stream], do: :fin, else: :nofin
     {:ok, data, _} = GRPC.Message.to_data(message, opts)
     :gun.data(conn_pid, stream_ref, fin, data)
-    {:ok, stream}
+    stream
   end
 
   def end_stream(%{channel: channel, payload: %{stream_ref: stream_ref}} = stream) do
     conn_pid = channel.adapter_payload[:conn_pid]
     :gun.data(conn_pid, stream_ref, :fin, "")
-    {:ok, stream}
+    stream
   end
 
   def recv_headers(%{conn_pid: conn_pid}, %{stream_ref: stream_ref}, opts) do
