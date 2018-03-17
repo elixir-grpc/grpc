@@ -32,10 +32,6 @@ defmodule GRPC.Adapter.Cowboy.Handler do
         trailers = HTTP2.server_trailers(error.status, error.message)
         stream = GRPC.Server.send_trailers(stream, trailers)
         {:ok, stream.payload, state}
-
-      {:error, %{payload: req}, _reason} ->
-        # TODO handle error branch
-        {:ok, req, state}
     end
   end
 end

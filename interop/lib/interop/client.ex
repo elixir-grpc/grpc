@@ -138,6 +138,12 @@ defmodule Interop.Client do
     {:error, ^error} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
   end
 
+  def unimplemented_service!(ch) do
+    IO.puts("Run unimplemented_service!")
+    req = Grpc.Testing.Empty.new()
+    {:error, %GRPC.RPCError{status: 12}} = Grpc.Testing.TestService.Stub.unimplemented_call(ch, req)
+  end
+
   defp validate_headers!(headers, trailers) do
     %{"x-grpc-test-echo-initial" => "test_initial_metadata_value"} = headers
     %{"x-grpc-test-echo-trailing-bin" => "11250603"} = trailers

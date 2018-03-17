@@ -14,6 +14,7 @@ run = fn(i) ->
   Client.empty_stream!(ch)
   Client.custom_metadata!(ch)
   Client.status_code_and_message!(ch)
+  Client.unimplemented_service!(ch)
 end
 
 Enum.each(1..100, run)

@@ -37,10 +37,12 @@ defmodule GRPC.Server do
   """
 
   require Logger
+  @impl_error GRPC.RPCError.exception(GRPC.Status.unimplemented(), "Operation is not implemented or not supported/enabled in this service.")
 
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
       service_name = service_mod.__meta__(:name)
+      @impl_error GRPC.RPCError.exception(GRPC.Status.unimplemented(), "Operation is not implemented or not supported/enabled in this service.")
 
       Enum.each(service_mod.__rpc_calls__, fn {name, _, _} = rpc ->
         func_name = name |> to_string |> Macro.underscore()
@@ -51,12 +53,12 @@ defmodule GRPC.Server do
             unquote(service_mod),
             stream,
             unquote(Macro.escape(rpc)),
-            String.to_atom(unquote(func_name))
+            unquote(String.to_atom(func_name))
           )
         end
       end)
 
-      def __call_rpc__(_, stream), do: {:error, stream, "Error"}
+      def __call_rpc__(_, stream), do: {:error, stream, @impl_error}
 
       def __meta__(:service), do: unquote(service_mod)
     end
@@ -92,7 +94,15 @@ defmodule GRPC.Server do
     end
   end
 
-  defp handle_request(
+  defp handle_request(req_s, res_s, %{server: server} = stream, func_name) do
+    if function_exported?(server, func_name, 2) do
+      do_handle_request(req_s, res_s, stream, func_name)
+    else
+      {:error, stream, @impl_error}
+    end
+  end
+
+  defp do_handle_request(
          false = req_stream,
          res_stream,
          %{unmarshal: unmarshal, adapter: adapter} = stream,
@@ -101,10 +111,10 @@ defmodule GRPC.Server do
     {:ok, data, stream} = adapter.read_body(stream)
     message = GRPC.Message.from_data(data)
     request = unmarshal.(message)
-    handle_request(req_stream, res_stream, stream, func_name, request)
+    do_handle_request(req_stream, res_stream, stream, func_name, request)
   end
 
-  defp handle_request(
+  defp do_handle_request(
          true = req_stream,
          res_stream,
          %{unmarshal: unmarshal, adapter: adapter} = stream,
@@ -117,27 +127,27 @@ defmodule GRPC.Server do
         |> Enum.map(&unmarshal.(&1))
       end)
 
-    handle_request(req_stream, res_stream, stream, func_name, reading_stream)
+    do_handle_request(req_stream, res_stream, stream, func_name, reading_stream)
   end
 
-  defp handle_request(false, false, %{server: server_mod} = stream0, func_name, request) do
+  defp do_handle_request(false, false, %{server: server_mod} = stream0, func_name, request) do
     case apply(server_mod, func_name, [request, stream0]) do
       resp = %{} -> {:ok, stream0, resp}
       {resp, stream} -> {:ok, stream, resp}
     end
   end
 
-  defp handle_request(false, true, %{server: server_mod} = stream, func_name, request) do
+  defp do_handle_request(false, true, %{server: server_mod} = stream, func_name, request) do
     stream = apply(server_mod, func_name, [request, stream])
     {:ok, stream}
   end
 
-  defp handle_request(true, false, %{server: server_mod} = stream, func_name, req_stream) do
+  defp do_handle_request(true, false, %{server: server_mod} = stream, func_name, req_stream) do
     response = apply(server_mod, func_name, [req_stream, stream])
     {:ok, stream, response}
   end
 
-  defp handle_request(true, true, %{server: server_mod} = stream, func_name, req_stream) do
+  defp do_handle_request(true, true, %{server: server_mod} = stream, func_name, req_stream) do
     stream = apply(server_mod, func_name, [req_stream, stream])
     {:ok, stream}
   end
