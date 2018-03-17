@@ -13,6 +13,7 @@ run = fn(i) ->
   Client.ping_pong!(ch)
   Client.empty_stream!(ch)
   Client.custom_metadata!(ch)
+  Client.status_code_and_message!(ch)
 end
 
 Enum.each(1..100, run)

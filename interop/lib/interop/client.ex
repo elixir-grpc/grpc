@@ -115,7 +115,30 @@ defmodule Interop.Client do
     validate_headers!(new_headers, new_trailers)
   end
 
-  def validate_headers!(headers, trailers) do
+  def status_code_and_message!(ch) do
+    IO.puts("Run status_code_and_message!")
+
+    code = 2
+    msg = "test status message"
+    status = Grpc.Testing.EchoStatus.new(code: code, message: msg)
+    error = GRPC.RPCError.exception(code, msg)
+
+    # UnaryCall
+    req = Grpc.Testing.SimpleRequest.new(response_status: status)
+    {:error, ^error} = Grpc.Testing.TestService.Stub.unary_call(ch, req)
+
+    # FullDuplexCall
+    req = Grpc.Testing.StreamingOutputCallRequest.new(response_status: status)
+    {:ok, res_enum} =
+      ch
+      |> Grpc.Testing.TestService.Stub.full_duplex_call()
+      |> GRPC.Stub.stream_send(req, end_stream: true)
+      |> GRPC.Stub.recv()
+
+    {:error, ^error} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
+  end
+
+  defp validate_headers!(headers, trailers) do
     %{"x-grpc-test-echo-initial" => "test_initial_metadata_value"} = headers
     %{"x-grpc-test-echo-trailing-bin" => "11250603"} = trailers
   end

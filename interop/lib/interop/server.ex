@@ -8,6 +8,10 @@ defmodule Interop.Server do
 
   def unary_call(req, stream) do
     stream = handle_metadata(stream)
+    status = req.response_status
+    if status && status.code != 0 do
+      raise GRPC.RPCError, status: status.code, message: status.message
+    end
     payload = Grpc.Testing.Payload.new(body: String.duplicate("0", req.response_size))
     {Grpc.Testing.SimpleResponse.new(payload: payload), stream}
   end
@@ -27,6 +31,10 @@ defmodule Interop.Server do
   def full_duplex_call(req_enum, stream0) do
     stream0 = handle_metadata(stream0)
     Enum.reduce(req_enum, stream0, fn(req, stream) ->
+      status = req.response_status
+      if status && status.code != 0 do
+        raise GRPC.RPCError, status: status.code, message: status.message
+      end
       size = List.first(req.response_parameters).size
       payload = Grpc.Testing.Payload.new(body: String.duplicate("0", size))
       res = Grpc.Testing.StreamingOutputCallResponse.new(payload: payload)
