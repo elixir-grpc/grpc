@@ -97,8 +97,8 @@ defmodule GRPC.Integration.ServerTest do
       rect = Routeguide.Rectangle.new(lo: low, hi: high)
       {:ok, stream} = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
 
-      Enum.each(stream, fn thing ->
-        IO.inspect(thing)
+      Enum.each(stream, fn {:error, error} ->
+        assert %GRPC.RPCError{message: "Please authenticate", status: 16} == error
       end)
     end)
   end

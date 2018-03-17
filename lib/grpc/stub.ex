@@ -224,7 +224,7 @@ defmodule GRPC.Stub do
   def recv(%{payload: payload, unmarshal: unmarshal, channel: channel}, opts) do
     with {:ok, headers} <- recv_headers(channel.adapter, channel.adapter_payload, payload, opts),
          {:ok, body, trailers} <- recv_body(channel.adapter, channel.adapter_payload, payload, opts) do
-      {status, msg} = parse_response(headers, body, trailers, unmarshal)
+      {status, msg} = parse_response(body, trailers, unmarshal)
       if opts[:return_headers] do
         {status, msg, %{headers: headers, trailers: trailers}}
       else
@@ -257,18 +257,21 @@ defmodule GRPC.Stub do
     end
   end
 
-  defp parse_response(_headers, data, trailers, unmarshal) do
+  defp parse_response(data, trailers, unmarshal) do
+    case parse_trailers(trailers) do
+      :ok ->
+        result = decode_data(data, unmarshal)
+        {:ok, result}
+      error -> error
+    end
+  end
+
+  defp parse_trailers(trailers) do
     status = String.to_integer(trailers["grpc-status"])
-
-    if status != GRPC.Status.ok() do
-      {:error, %GRPC.RPCError{status: status, message: trailers["grpc-message"]}}
+    if status == GRPC.Status.ok() do
+      :ok
     else
-      result =
-        data
-        |> GRPC.Message.from_data()
-        |> unmarshal.()
-
-      {:ok, result}
+      {:error, %GRPC.RPCError{status: status, message: trailers["grpc-message"]}}
     end
   end
 
@@ -279,18 +282,24 @@ defmodule GRPC.Stub do
         case channel.adapter.recv_data_or_trailers(channel.adapter_payload, payload, opts) do
           {:data, data} ->
             if GRPC.Message.complete?(data) do
-              reply = data |> GRPC.Message.from_data() |> unmarshal.()
+              reply = decode_data(data, unmarshal)
               {{:ok, reply}, %{buffer: "", message_length: -1}}
             else
               handle_incomplete_data(acc, data, unmarshal)
             end
 
           {:trailers, trailers} ->
-            if opts[:return_headers] do
-              {{:trailers, GRPC.Transport.HTTP2.decode_headers(trailers)}, Map.put(acc, :fin, true)}
-            else
-              nil
+            trailers = GRPC.Transport.HTTP2.decode_headers(trailers)
+            case parse_trailers(trailers) do
+              :ok ->
+                if opts[:return_headers] do
+                  {{:trailers, trailers}, Map.put(acc, :fin, true)}
+                end
+              error ->
+                {error, Map.put(acc, :fin, true)}
             end
+          error = {:error, _} ->
+            {error, Map.put(acc, :fin, true)}
         end
     end)
     Stream.reject(enum, &match?(:skip, &1))
@@ -306,15 +315,18 @@ defmodule GRPC.Stub do
       when byte_size(buffer) + byte_size(data) - 5 == ml and ml > 0 do
     final_buffer = buffer <> data
 
-    reply =
-      final_buffer
-      |> GRPC.Message.from_data()
-      |> unmarshal.()
+    reply = decode_data(final_buffer, unmarshal)
 
     {{:ok, reply}, %{buffer: "", message_length: -1}}
   end
   defp handle_incomplete_data(%{buffer: buffer} = acc, data, _) do
     {:skip, Map.put(acc, :buffer, buffer <> data)}
+  end
+
+  defp decode_data(data, unmarshal) do
+    data
+    |> GRPC.Message.from_data()
+    |> unmarshal.()
   end
 
   defp parse_req_opts(list) when is_list(list) do
