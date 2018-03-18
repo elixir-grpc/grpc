@@ -229,11 +229,12 @@ defmodule GRPC.Stub do
           {:ok, res_enum}
         end
       {:error, reason} ->
+        cancel(stream)
         {:error, reason}
     end
   end
 
-  def recv(%{payload: payload, unmarshal: unmarshal, channel: channel}, opts) do
+  def recv(%{payload: payload, unmarshal: unmarshal, channel: channel} = stream, opts) do
     with {:ok, headers} <- recv_headers(channel.adapter, channel.adapter_payload, payload, opts),
          {:ok, body, trailers} <- recv_body(channel.adapter, channel.adapter_payload, payload, opts) do
       {status, msg} = parse_response(body, trailers, unmarshal)
@@ -244,6 +245,7 @@ defmodule GRPC.Stub do
       end
     else
       error = {:error, _} ->
+        cancel(stream)
         error
     end
   end
@@ -287,7 +289,7 @@ defmodule GRPC.Stub do
     end
   end
 
-  defp response_stream(%{unmarshal: unmarshal, channel: channel, payload: payload}, opts) do
+  defp response_stream(%{unmarshal: unmarshal, channel: channel, payload: payload} = stream, opts) do
     enum = Stream.unfold(%{buffer: "", message_length: -1, fin: false}, fn
       %{fin: true} -> nil
       acc ->
@@ -311,6 +313,7 @@ defmodule GRPC.Stub do
                 {error, Map.put(acc, :fin, true)}
             end
           error = {:error, _} ->
+            cancel(stream)
             {error, Map.put(acc, :fin, true)}
         end
     end)

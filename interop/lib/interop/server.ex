@@ -35,10 +35,15 @@ defmodule Interop.Server do
       if status && status.code != 0 do
         raise GRPC.RPCError, status: status.code, message: status.message
       end
-      size = List.first(req.response_parameters).size
-      payload = Grpc.Testing.Payload.new(body: String.duplicate("0", size))
-      res = Grpc.Testing.StreamingOutputCallResponse.new(payload: payload)
-      GRPC.Server.stream_send(stream, res)
+      resp_param = List.first(req.response_parameters)
+      if resp_param do
+        size = resp_param.size
+        payload = Grpc.Testing.Payload.new(body: String.duplicate("0", size))
+        res = Grpc.Testing.StreamingOutputCallResponse.new(payload: payload)
+        GRPC.Server.stream_send(stream, res)
+      else
+        stream
+      end
     end)
   end
 

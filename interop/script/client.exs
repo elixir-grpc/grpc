@@ -17,6 +17,7 @@ run = fn(i) ->
   Client.unimplemented_service!(ch)
   Client.cancel_after_begin!(ch)
   Client.cancel_after_first_response!(ch)
+  Client.timeout_on_sleeping_server!(ch)
 end
 
 Enum.each(1..100, run)

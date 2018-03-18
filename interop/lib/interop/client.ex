@@ -162,8 +162,17 @@ defmodule Interop.Client do
       |> GRPC.Stub.recv()
     {:ok, _} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
     stream = GRPC.Stub.cancel(stream)
-    error = GRPC.RPCError.exception(1, "The operation was cancelled")
-    {:error, ^error} = GRPC.Stub.recv(stream)
+    {:error, %GRPC.RPCError{status: 1}} = GRPC.Stub.recv(stream)
+  end
+
+  def timeout_on_sleeping_server!(ch) do
+    IO.puts("Run timeout_on_sleeping_server!")
+    req = Grpc.Testing.StreamingOutputCallRequest.new(payload: payload(27182))
+    stream = Grpc.Testing.TestService.Stub.full_duplex_call(ch)
+    {:error, %GRPC.RPCError{status: 4}} =
+      stream
+      |> GRPC.Stub.stream_send(req)
+      |> GRPC.Stub.recv(timeout: 1)
   end
 
   defp validate_headers!(headers, trailers) do
