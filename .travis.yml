@@ -6,10 +6,6 @@ elixir:
 otp_release:
   - 19.3
   - 20.2
-env:
-  matrix:
-    - CLIENT_ADAPTER=gun
-    - CLIENT_ADAPTER=chatterbox
 after_script:
   - mix deps.get --only docs
   - MIX_ENV=docs mix inch.report
