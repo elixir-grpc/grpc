@@ -15,7 +15,7 @@ defmodule GRPC.Client.Stream do
 
   @type marshal :: (struct -> binary)
   @type unmarshal :: (binary -> struct)
-  @type stream_payload :: %{stream_id: :h2_connection.stream_id()}
+  @type stream_payload :: any
   @type t :: %__MODULE__{
           channel: GRPC.Channel.t(),
           payload: stream_payload,
@@ -23,7 +23,8 @@ defmodule GRPC.Client.Stream do
           marshal: marshal,
           unmarshal: unmarshal,
           req_stream: boolean,
-          res_stream: boolean
+          res_stream: boolean,
+          canceled: boolean
         }
   defstruct channel: nil,
             payload: %{},
@@ -31,7 +32,9 @@ defmodule GRPC.Client.Stream do
             marshal: nil,
             unmarshal: nil,
             req_stream: nil,
-            res_stream: nil
+            res_stream: nil,
+            # TODO: it's better to get canceled status from adapter
+            canceled: false
 
   def put_payload(%{payload: payload} = stream, key, val) do
     payload = if payload, do: payload, else: %{}

@@ -15,6 +15,8 @@ run = fn(i) ->
   Client.custom_metadata!(ch)
   Client.status_code_and_message!(ch)
   Client.unimplemented_service!(ch)
+  Client.cancel_after_begin!(ch)
+  Client.cancel_after_first_response!(ch)
 end
 
 Enum.each(1..100, run)

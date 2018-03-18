@@ -144,6 +144,28 @@ defmodule Interop.Client do
     {:error, %GRPC.RPCError{status: 12}} = Grpc.Testing.TestService.Stub.unimplemented_call(ch, req)
   end
 
+  def cancel_after_begin!(ch) do
+    IO.puts("Run cancel_after_begin!")
+    stream = Grpc.Testing.TestService.Stub.streaming_input_call(ch)
+    stream = GRPC.Stub.cancel(stream)
+    error = GRPC.RPCError.exception(1, "The operation was cancelled")
+    {:error, ^error} = GRPC.Stub.recv(stream)
+  end
+
+  def cancel_after_first_response!(ch) do
+    IO.puts("Run cancel_after_first_response!")
+    req = Grpc.Testing.StreamingOutputCallRequest.new(response_parameters: [res_param(31415)], payload: payload(27182))
+    stream = Grpc.Testing.TestService.Stub.full_duplex_call(ch)
+    {:ok, res_enum} =
+      stream
+      |> GRPC.Stub.stream_send(req)
+      |> GRPC.Stub.recv()
+    {:ok, _} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
+    stream = GRPC.Stub.cancel(stream)
+    error = GRPC.RPCError.exception(1, "The operation was cancelled")
+    {:error, ^error} = GRPC.Stub.recv(stream)
+  end
+
   defp validate_headers!(headers, trailers) do
     %{"x-grpc-test-echo-initial" => "test_initial_metadata_value"} = headers
     %{"x-grpc-test-echo-trailing-bin" => "11250603"} = trailers

@@ -36,6 +36,8 @@ defmodule GRPC.Stub do
   alias GRPC.Channel
   @insecure_scheme "http"
   @secure_scheme "https"
+  @canceled_error GRPC.RPCError.exception(GRPC.Status.cancelled(), "The operation was cancelled")
+  @default_timeout 5000 # 5 seconds
 
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
@@ -186,6 +188,13 @@ defmodule GRPC.Stub do
     channel.adapter.end_stream(stream)
   end
 
+  def cancel(%{channel: channel, payload: payload} = stream) do
+    case channel.adapter.cancel(channel.adapter_payload, payload) do
+      :ok -> %{stream | canceled: true}
+      other -> other
+    end
+  end
+
   @doc """
   Receive replies when requests are streaming.
 
@@ -204,6 +213,9 @@ defmodule GRPC.Stub do
   @spec recv(GRPC.Client.Stream.t(), keyword) :: {:ok, struct} | Enumerable.t() | {:error, any}
   def recv(stream, opts \\ [])
 
+  def recv(%{canceled: true}, _) do
+    {:error, @canceled_error}
+  end
   def recv(stream, opts) when is_list(opts) do
     recv(stream, parse_recv_opts(opts))
   end
@@ -330,7 +342,7 @@ defmodule GRPC.Stub do
   end
 
   defp parse_req_opts(list) when is_list(list) do
-    parse_req_opts(list, %{timeout: :infinity})
+    parse_req_opts(list, %{timeout: @default_timeout})
   end
   defp parse_req_opts([{:timeout, timeout}|t], acc) do
     parse_req_opts(t, Map.put(acc, :timeout, timeout))
@@ -359,7 +371,7 @@ defmodule GRPC.Stub do
   defp parse_req_opts(_, acc), do: acc
 
   defp parse_recv_opts(list) when is_list(list) do
-    parse_recv_opts(list, %{timeout: :infinity})
+    parse_recv_opts(list, %{timeout: @default_timeout})
   end
   defp parse_recv_opts([{:timeout, timeout}|t], acc) do
     parse_recv_opts(t, Map.put(acc, :timeout, timeout))

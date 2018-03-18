@@ -64,6 +64,10 @@ defmodule GRPC.Adapter.Gun do
     stream
   end
 
+  def cancel(%{conn_pid: conn_pid}, %{stream_ref: stream_ref}) do
+    :gun.cancel(conn_pid, stream_ref)
+  end
+
   def recv_headers(%{conn_pid: conn_pid}, %{stream_ref: stream_ref}, opts) do
     case await(conn_pid, stream_ref, opts[:timeout]) do
       {:response, headers} ->
