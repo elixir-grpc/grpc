@@ -1,13 +1,12 @@
 defmodule GRPC.Adapter.Cowboy do
-  @moduledoc """
-  A server(`GRPC.Server`) adapter using Cowboy.
+  @moduledoc false
 
-  Cowboy req will be stored in `:payload` of `GRPC.Server.Stream`.
-  """
+  # A server(`GRPC.Server`) adapter using Cowboy.
+  # Cowboy req will be stored in `:payload` of `GRPC.Server.Stream`.
 
   require Logger
 
-  @num_acceptors 100
+  @default_num_acceptors 100
 
   @spec start(GRPC.Server.servers_map(), non_neg_integer, keyword) :: {:ok, pid, non_neg_integer}
   def start(servers, port, opts) do
@@ -111,8 +110,8 @@ defmodule GRPC.Adapter.Cowboy do
     end
   end
 
-  @spec stream_send(GRPC.Client.Stream.t(), binary) :: any
-  def stream_send(%{payload: req}, data) do
+  @spec send_reply(GRPC.Client.Stream.t(), binary) :: any
+  def send_reply(%{payload: req}, data) do
     :cowboy_req.stream_body(data, :nofin, req)
   end
 
@@ -164,7 +163,7 @@ defmodule GRPC.Adapter.Cowboy do
   end
 
   defp transport_opts(port, opts) do
-    list = [port: port, num_acceptors: @num_acceptors]
+    list = [port: port, num_acceptors: @default_num_acceptors]
     list = if opts[:ip], do: [{:ip, opts[:ip]} | list], else: list
 
     if opts[:cred] do

@@ -1,4 +1,9 @@
 defmodule GRPC.Adapter.Gun do
+  @moduledoc false
+
+  # A client adapter using Gun.
+  # conn_pid and stream_ref is stored in `GRPC.Server.Stream`.
+
   @spec connect(GRPC.Channel.t(), any) :: {:ok, GRPC.Channel.t()} | {:error, any}
   def connect(channel, nil), do: connect(channel, %{})
   def connect(%{scheme: "https"} = channel, opts), do: connect_securely(channel, opts)
@@ -50,7 +55,7 @@ defmodule GRPC.Adapter.Gun do
     GRPC.Client.Stream.put_payload(stream, :stream_ref, stream_ref)
   end
 
-  def send_body(%{channel: channel, payload: %{stream_ref: stream_ref}} = stream, message, opts) do
+  def send_data(%{channel: channel, payload: %{stream_ref: stream_ref}} = stream, message, opts) do
     conn_pid = channel.adapter_payload[:conn_pid]
     fin = if opts[:send_end_stream], do: :fin, else: :nofin
     {:ok, data, _} = GRPC.Message.to_data(message, opts)

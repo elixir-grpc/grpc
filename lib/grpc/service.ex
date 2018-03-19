@@ -1,7 +1,7 @@
 defmodule GRPC.Service do
   @moduledoc """
-  Define gRPC service used by Stub and Server. Most of time, it's enough to
-  use generator to generate code instead of using this module directly.
+  Define gRPC service used by Stub and Server. You should use `Protobuf` to
+  to generate code instead of using this module directly.
 
   It imports DSL functions like `rpc/3` and `stream/1` for defining the RPC
   functions easily:
@@ -48,6 +48,9 @@ defmodule GRPC.Service do
     end
   end
 
+  @doc """
+  Specify if the request/reply is streaming.
+  """
   def stream(param) do
     quote do: {unquote(param), true}
   end

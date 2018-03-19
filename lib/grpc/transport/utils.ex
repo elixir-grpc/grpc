@@ -1,4 +1,6 @@
 defmodule GRPC.Transport.Utils do
+  @moduledoc false
+
   @us_ceiling 100_000_000
   @ms_ceiling @us_ceiling * 1000
   @second_ceiling @ms_ceiling * 1000
@@ -6,7 +8,7 @@ defmodule GRPC.Transport.Utils do
   @hour_ceiling @minute_ceiling * 60
 
   @doc """
-  Encode deadline by gRPC guide
+  Encode timeout by gRPC protocol
   """
   def encode_timeout(timeout) when timeout <= 0, do: "0u"
 

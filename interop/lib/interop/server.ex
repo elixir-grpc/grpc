@@ -25,7 +25,7 @@ defmodule Interop.Server do
     req.response_parameters
     |> Enum.map(&Grpc.Testing.Payload.new(body: String.duplicate("0", &1.size)))
     |> Enum.map(&Grpc.Testing.StreamingOutputCallResponse.new(payload: &1))
-    |> Enum.reduce(stream0, &GRPC.Server.stream_send(&2, &1))
+    |> Enum.reduce(stream0, &GRPC.Server.send_reply(&2, &1))
   end
 
   def full_duplex_call(req_enum, stream0) do
@@ -40,7 +40,7 @@ defmodule Interop.Server do
         size = resp_param.size
         payload = Grpc.Testing.Payload.new(body: String.duplicate("0", size))
         res = Grpc.Testing.StreamingOutputCallResponse.new(payload: payload)
-        GRPC.Server.stream_send(stream, res)
+        GRPC.Server.send_reply(stream, res)
       else
         stream
       end

@@ -3,7 +3,7 @@ defmodule GRPC.Stub do
   A module acting as the interface for gRPC client.
 
   You can do everything in the client side via `GRPC.Stub`, including connecting,
-  sending or receiving steaming or non-steaming requests.
+  sending/receiving steaming or non-steaming requests, canceling calls and so on.
 
   A service is needed to define a stub:
 
@@ -13,6 +13,7 @@ defmodule GRPC.Stub do
         rpc :SayHello, Request, Reply
         rpc :SayGoodbye, stream(Request), stream(Reply)
       end
+
       defmodule Greeter.Stub do
         use GRPC.Stub, service: Greeter.Service
       end
@@ -20,18 +21,21 @@ defmodule GRPC.Stub do
   so that functions `say_hello/2` and `say_goodbye/1` will be generated for you:
 
       # Unary call
-      iex> reply = Greeter.Stub.say_hello(channel, request)
+      {:ok, reply} = Greeter.Stub.say_hello(channel, request)
+
       # Streaming call
-      iex> stream = Greeter.Stub.say_goodbye(channel)
-      iex> GRPC.Stub.stream_send(stream, request, end_stream: true)
-      iex> reply_enum = GRPC.Stub.recv(stream)
-      iex> reply = Enum.map reply_enum, &(&1)
+      stream = Greeter.Stub.say_goodbye(channel)
+      GRPC.Stub.send_request(stream, request, end_stream: true)
+      {:ok, reply_enum} = GRPC.Stub.recv(stream)
+      replies = Enum.map(reply_enum, fn({:ok, reply}) -> reply end)
 
   Note that streaming calls are very different with unary calls. If request is
-  streaming, the RPC function only accepts channel as argument and returns a stream
-  `GRPC.Client.Stream`. You can send streaming requests one by one via `stream_send/3`,
+  streaming, the RPC function only accepts channel as argument and returns a
+  `GRPC.Client.Stream`. You can send streaming requests one by one via `send_request/3`,
   then use `recv/1` to receive the reply. And if the reply is streaming, `recv/1`
   returns a `Stream`.
+
+  You can refer to `call/6` for doc of your RPC functions.
   """
   alias GRPC.Channel
   @insecure_scheme "http"
@@ -85,8 +89,8 @@ defmodule GRPC.Stub do
 
   ## Options
 
-    * `:cred` - a `GRPC.Credential` used to indicate it's a secure connection,
-                an insecure connection will be created without this option.
+    * `:cred` - a `GRPC.Credential` used to indicate it's a secure connection.
+      An insecure connection will be created without this option.
     * `:adapter` - custom client adapter
   """
   @spec connect(String.t(), Keyword.t()) :: {:ok, GRPC.Channel.t()} | {:error, any}
@@ -113,13 +117,23 @@ defmodule GRPC.Stub do
   @doc """
   The actual function invoked when invoking a rpc function.
 
+  ## Returns
+
+    * Unary calls. `{:ok, reply} | {:ok, headers_map} | {:error, error}`
+    * Client streaming. A `GRPC.Client.Stream`
+    * Server streaming. `{:ok, Enumerable.t} | {:ok, Enumerable.t, trailers_map} | {:error, error}`
+
   ## Options
 
     * `:timeout` - request timeout
     * `:deadline` - when the request is timeout, will override timeout
-    *
+    * `:metadata` - a map, your custom metadata
+    * `:return_headers` - default is false. When it's true, a three elem tuple will be returned
+      with the last elem being a map of headers `%{headers: headers, trailers: trailers}`(unary) or
+      `%{headers: headers}`(server streaming)
   """
-  @spec call(atom, tuple, String.t(), GRPC.Channel, struct | nil, keyword) :: any
+  @spec call(atom, tuple, String.t(), GRPC.Channel, struct | nil, keyword) ::
+          {:ok, struct} | {:ok, struct, map} | GRPC.Client.Stream.t | {:ok, Enumerable.t} | {:error, GRPC.RPCError.t}
   def call(service_mod, rpc, path, channel, request, opts) do
     {_, {req_mod, req_stream}, {res_mod, res_stream}} = rpc
     marshal = fn req -> service_mod.marshal(req_mod, req) end
@@ -135,41 +149,44 @@ defmodule GRPC.Stub do
     }
     opts = parse_req_opts(opts)
 
-    send_request(req_stream, res_stream, stream, request, opts)
+    do_call(req_stream, res_stream, stream, request, opts)
   end
 
-  defp send_request(false, _, %{marshal: marshal, channel: channel} = stream, request, opts) do
+  defp do_call(false, _, %{marshal: marshal, channel: channel} = stream, request, opts) do
     message = marshal.(request)
     stream
     |> channel.adapter.send_request(message, opts)
     |> recv(opts)
   end
 
-  defp send_request(true, _, %{channel: channel} = stream, _, opts) do
+  defp do_call(true, _, %{channel: channel} = stream, _, opts) do
     channel.adapter.send_headers(stream, opts)
+  end
+
+  @doc """
+  DEPRECATED. Use `send_request/3` instead
+  """
+  @deprecated "Use send_request/3 instead"
+  def stream_send(stream, request, opts \\ []) do
+    send_request(stream, request, opts)
   end
 
   @doc """
   Send streaming requests.
 
   The last request can be sent with `:end_stream` option, or you can call `end_stream/1`
-  to send a frame with END_STREAM flag.
-
-  ## Examples
-
-      iex> GRPC.Stub.stream_send(stream, request, opts)
-      new_stream
+  to send a frame with END_STREAM flag to end the stream.
 
   ## Options
 
     * `:end_stream` - indicates it's the last one request, then the stream will be in
-      half_closed state.
+      half_closed state. Default is false.
   """
-  @spec stream_send(GRPC.Client.Stream, struct, keyword) :: :ok
-  def stream_send(%{marshal: marshal, channel: channel} = stream, request, opts \\ []) do
+  @spec send_request(GRPC.Client.Stream.t, struct, Keyword.t) :: GRPC.Client.Stream.t
+  def send_request(%{marshal: marshal, channel: channel} = stream, request, opts \\ []) do
     message = marshal.(request)
     send_end_stream = Keyword.get(opts, :end_stream, false)
-    channel.adapter.send_body(stream, message, send_end_stream: send_end_stream)
+    channel.adapter.send_data(stream, message, send_end_stream: send_end_stream)
   end
 
   @doc """
@@ -179,15 +196,19 @@ defmodule GRPC.Stub do
 
   ## Examples
 
-      iex> GRPC.Stub.stream_send(stream, request)
-      :ok
+      iex> stream = GRPC.Stub.send_request(stream, request)
       iex> GRPC.Stub.end_stream(stream)
-      :ok
   """
+  @spec end_stream(GRPC.Client.Stream.t) :: GRPC.Client.Stream.t
   def end_stream(%{channel: channel} = stream) do
     channel.adapter.end_stream(stream)
   end
 
+  @doc """
+  Cancel a stream in a streaming client.
+
+  After that, callings to `recv/2` will return a CANCEL error.
+  """
   def cancel(%{channel: channel, payload: payload} = stream) do
     case channel.adapter.cancel(channel.adapter_payload, payload) do
       :ok -> %{stream | canceled: true}
@@ -200,17 +221,27 @@ defmodule GRPC.Stub do
 
   * If the reply is not streaming, a normal reply struct will be returned
   * If the reply is streaming, a enumerable `Stream` will be returned.
+    You can use `Enum` to fetch further replies or `Stream` to manipulate it.
+    Each item in the `Enumrable` is a tuple `{:ok, reply}` or `{:error, error}`.
+    When `:return_headers` is true, the last item in the `Enumrable` will be
+    `{:trailers, map}`
 
   ## Examples
 
       # Reply is not streaming
-      iex> {:ok, reply} = GRPC.Stub.recv(stream)
+      {:ok, reply} = GRPC.Stub.recv(stream)
 
       # Reply is streaming
-      iex> enum = GRPC.Stub.recv(stream)
-      iex> replies_stream = Enum.map enum, &(&1)
+      {:ok, enum} = GRPC.Stub.recv(stream)
+      replies = Enum.map(enum, fn({:ok, reply}) -> reply end)
+
+  ## Options
+
+    * `:timeout` - request timeout
+    * `:deadline` - when the request is timeout, will override timeout
+    * `:return_headers` - when true, headers will be returned.
   """
-  @spec recv(GRPC.Client.Stream.t(), keyword) :: {:ok, struct} | Enumerable.t() | {:error, any}
+  @spec recv(GRPC.Client.Stream.t(), keyword) :: {:ok, struct} | {:ok, struct, map} | Enumerable.t() | {:error, any}
   def recv(stream, opts \\ [])
 
   def recv(%{canceled: true}, _) do

@@ -1,8 +1,8 @@
 defmodule GRPC.Adapter.Cowboy.Handler do
-  @moduledoc """
-  A cowboy handler accepting all requests and calls corresponding functions
-  defined by users.
-  """
+  @moduledoc false
+
+  # A cowboy handler accepting all requests and calls corresponding functions
+  # defined by users.
 
   alias GRPC.Transport.HTTP2
   alias GRPC.RPCError
@@ -20,7 +20,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     case server.__call_rpc__(path, stream) do
       {:ok, stream, response} ->
         stream = stream
-        |> GRPC.Server.stream_send(response)
+        |> GRPC.Server.send_reply(response)
         |> GRPC.Server.send_trailers(@default_trailers)
         {:ok, stream.payload, state}
 

@@ -1,7 +1,7 @@
 defmodule GRPC.Channel do
   @moduledoc """
-  Defines a struct to store the connection data. which should be passed to
-  generated RPC functions as first argument:
+  A struct to store the connection data, which should be passed to
+  RPC functions as the first argument:
 
       Greeter.Stub.say_hello(channel, request)
 

@@ -2,7 +2,7 @@ defmodule GRPC.Server do
   @moduledoc """
   A gRPC server which handles requests by calling user-defined functions.
 
-  You should pass a `GRPC.Service` in when using the module:
+  You should pass a `GRPC.Service` in when *use* the module:
 
       defmodule Greeter.Service do
         use GRPC.Service, name: "ping"
@@ -20,24 +20,24 @@ defmodule GRPC.Server do
 
         def say_goodbye(request_enum, stream) do
           requests = Enum.map request_enum, &(&1)
-          GRPC.Server.stream_send(stream, reply1)
-          GRPC.Server.stream_send(stream, reply2)
+          GRPC.Server.send_reply(stream, reply1)
+          GRPC.Server.send_reply(stream, reply2)
         end
       end
 
   Your functions should accept a client request and a `GRPC.Server.Stream`.
-  The client request will be a `Stream` of requests if it's streaming.
-  If a reply is streaming, you need to call `stream_send/2` to send requests
-  one by one instead of returning reply in the end.
+  The request will be a `Enumerable.t`(created by Elixir's `Stream`) of requests
+  if it's streaming. If a reply is streaming, you need to call `send_reply/2` to send
+  replies one by one instead of returning reply in the end.
 
-  A server can be started and stoped using:
-
-      {:ok, _, port} = GRPC.Server.start(Greeter.Server, 50051)
-      :ok = GRPC.Server.stop(Greeter.Server)
+  For most functions which return stream, you **MUST** use the new stream as argument of
+  other functions in this module.
   """
 
   require Logger
   @impl_error GRPC.RPCError.exception(GRPC.Status.unimplemented(), "Operation is not implemented or not supported/enabled in this service.")
+
+  alias GRPC.Server.Stream
 
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
@@ -68,8 +68,8 @@ defmodule GRPC.Server do
   @type servers_list :: module | [module]
 
   @doc false
-  @spec call(atom, GRPC.Server.Stream.t(), tuple, atom) ::
-          {:ok, GRPC.Server.Stream.t(), struct} | {:ok, struct}
+  @spec call(atom, Stream.t(), tuple, atom) ::
+          {:ok, Stream.t(), struct} | {:ok, struct}
   def call(
         service_mod,
         stream,
@@ -143,8 +143,8 @@ defmodule GRPC.Server do
   end
 
   defp do_handle_request(true, false, %{server: server_mod} = stream, func_name, req_stream) do
-    response = apply(server_mod, func_name, [req_stream, stream])
-    {:ok, stream, response}
+    reply = apply(server_mod, func_name, [req_stream, stream])
+    {:ok, stream, reply}
   end
 
   defp do_handle_request(true, true, %{server: server_mod} = stream, func_name, req_stream) do
@@ -152,21 +152,20 @@ defmodule GRPC.Server do
     {:ok, stream}
   end
 
-  @doc """
-  Start the gRPC server.
-
-  A generated `port` will be returned if the port is `0`.
-
-  ## Examples
-
-      iex> {:ok, _, port} = GRPC.Server.start(Greeter.Server, 50051)
-
-  ## Options
-
-    * `:cred` - a credential created by functions of `GRPC.Credential`,
-                an insecure server will be created without this option
-    * `:adapter` - use a custom server adapter instead of default `GRPC.Adapter.Cowboy`
-  """
+  # Start the gRPC server.
+  #
+  # A generated `port` will be returned if the port is `0`.
+  #
+  # ## Examples
+  #
+  #     iex> {:ok, _, port} = GRPC.Server.start(Greeter.Server, 50051)
+  #
+  # ## Options
+  #
+  #   * `:cred` - a credential created by functions of `GRPC.Credential`,
+  #               an insecure server will be created without this option
+  #   * `:adapter` - use a custom server adapter instead of default `GRPC.Adapter.Cowboy`
+  @doc false
   @spec start(servers_list, non_neg_integer, Keyword.t()) :: {atom, any, non_neg_integer}
   def start(servers, port, opts \\ []) do
     adapter = Keyword.get(opts, :adapter, GRPC.Adapter.Cowboy)
@@ -174,17 +173,16 @@ defmodule GRPC.Server do
     adapter.start(servers, port, opts)
   end
 
-  @doc """
-  Stop the server
-
-  ## Examples
-
-      iex> GRPC.Server.stop(Greeter.Server)
-
-  ## Options
-
-    * `:adapter` - use a custom adapter instead of default `GRPC.Adapter.Cowboy`
-  """
+  # Stop the server
+  #
+  # ## Examples
+  #
+  #     iex> GRPC.Server.stop(Greeter.Server)
+  #
+  # ## Options
+  #
+  #   * `:adapter` - use a custom adapter instead of default `GRPC.Adapter.Cowboy`
+  @doc false
   @spec stop(servers_list, Keyword.t()) :: any
   def stop(servers, opts \\ []) do
     adapter = Keyword.get(opts, :adapter, GRPC.Adapter.Cowboy)
@@ -193,35 +191,60 @@ defmodule GRPC.Server do
   end
 
   @doc """
+  DEPRECATED. Use `send_reply/2` instead
+  """
+  @deprecated "Use send_reply/2 instead"
+  def stream_send(stream, reply) do
+    send_reply(stream, reply)
+  end
+
+  @doc """
   Send streaming reply.
 
   ## Examples
 
-      iex> GRPC.Server.stream_send(stream, reply)
+      iex> GRPC.Server.send_reply(stream, reply)
   """
-  @spec stream_send(GRPC.Server.Stream.t(), struct) :: any
-  def stream_send(%{adapter: adapter, marshal: marshal} = stream, response) do
+  @spec send_reply(Stream.t(), struct) :: Stream.t()
+  def send_reply(%{adapter: adapter, marshal: marshal} = stream, reply) do
     stream = cond do
       !adapter.has_sent_headers?(stream) -> send_headers(stream, %{})
       true -> stream
     end
-    {:ok, data, _size} = response |> marshal.() |> GRPC.Message.to_data(iolist: true)
-    adapter.stream_send(stream, data)
+    {:ok, data, _size} = reply |> marshal.() |> GRPC.Message.to_data(iolist: true)
+    adapter.send_reply(stream, data)
     stream
   end
 
+  @doc """
+  Send custom metadata(headers).
+
+  You can send headers only once, before that you can set headers using `set_headers/2`.
+  """
+  @spec send_headers(Stream.t(), map) :: Stream.t
   def send_headers(%{adapter: adapter} = stream, headers) do
     adapter.send_headers(stream, headers)
   end
 
+  @doc """
+  Set custom metadata(headers).
+
+  You can set headers more than once.
+  """
+  @spec set_headers(Stream.t(), map) :: Stream.t
   def set_headers(%{adapter: adapter} = stream, headers) do
     adapter.set_headers(stream, headers)
   end
 
+  @doc """
+  Set custom trailers, which will be sent in the end.
+  """
+  @spec set_trailers(Stream.t(), map) :: Stream.t
   def set_trailers(stream, trailers) do
     Map.put(stream, :resp_trailers, trailers)
   end
 
+  @doc false
   def send_trailers(%{adapter: adapter, resp_trailers: resp_trailers} = stream, trailers) do
     stream = cond do
       !adapter.has_sent_headers?(stream) -> send_headers(stream, %{})

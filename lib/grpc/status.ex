@@ -1,6 +1,12 @@
-# https://github.com/grpc/grpc/blob/master/include/grpc/status.h
 defmodule GRPC.Status do
+  @moduledoc """
+  Collection of gRPC status.
+
+  Please refer to https://github.com/grpc/grpc/blob/master/include/grpc/impl/codegen/status.h
+  """
+
   @type t :: non_neg_integer
+
   @doc """
   Not an error; returned on success.
   """
@@ -12,7 +18,9 @@ defmodule GRPC.Status do
   def cancelled, do: 1
 
   @doc """
-  Unknown error.  An example of where this error may be returned is
+  Unknown error.
+
+  An example of where this error may be returned is
   if a Status value received from another address space belongs to
   an error-space that is not known in this address space.  Also
   errors raised by APIs that do not return enough error information
@@ -21,17 +29,19 @@ defmodule GRPC.Status do
   def unknown, do: 2
 
   @doc """
-  Client specified an invalid argument.  Note that this differs
-  from FAILED_PRECONDITION.  INVALID_ARGUMENT indicates arguments
-  that are problematic regardless of the state of the system
-  (e.g., a malformed file name).
+  Client specified an invalid argument.
+
+  Note that this differs from FAILED_PRECONDITION.
+  INVALID_ARGUMENT indicates arguments that are problematic regardless of
+  the state of the system (e.g., a malformed file name).
   """
   def invalid_argument, do: 3
 
   @doc """
-  Deadline expired before operation could complete.  For operations
-  that change the state of the system, this error may be returned
-  even if the operation has completed successfully.  For example, a
+  Deadline expired before operation could complete.
+
+  For operations that change the state of the system, this error may be returned
+  even if the operation has completed successfully. For example, a
   successful response from a server could have been delayed long
   enough for the deadline to expire.
   """
@@ -49,7 +59,9 @@ defmodule GRPC.Status do
 
   @doc """
   The caller does not have permission to execute the specified
-  operation.  PERMISSION_DENIED must not be used for rejections
+  operation.
+
+  PERMISSION_DENIED must not be used for rejections
   caused by exhausting some resource (use RESOURCE_EXHAUSTED
   instead for those errors).  PERMISSION_DENIED must not be
   used if the caller can not be identified (use UNAUTHENTICATED
@@ -65,21 +77,25 @@ defmodule GRPC.Status do
 
   @doc """
   Operation was rejected because the system is not in a state
-  required for the operation's execution.  For example, directory
-  to be deleted may be non-empty, an rmdir operation is applied to
-  a non-directory, etc.
+  required for the operation's execution.
+
+  For example, directory to be deleted may be non-empty,
+  an rmdir operation is applied to a non-directory, etc.
   """
   def failed_precondition, do: 9
 
   @doc """
-  The operation was aborted, typically due to a concurrency issue
-  like sequencer check failures, transaction aborts, etc.
+  The operation was aborted.
+
+  Typically due to a concurrency issue like sequencer check failures,
+  transaction aborts, etc.
   """
   def aborted, do: 10
 
   @doc """
-  Operation was attempted past the valid range.  E.g., seeking or
-  reading past end of file.
+  Operation was attempted past the valid range.
+
+  E.g., seeking or reading past end of file.
   """
   def out_of_range, do: 11
 
@@ -89,16 +105,18 @@ defmodule GRPC.Status do
   def unimplemented, do: 12
 
   @doc """
-  Internal errors. Means some invariants expected by underlying
-  system has been broken. If you see one of these errors,
-  something is very broken.
+  Internal errors.
+
+  Means some invariants expected by underlying system has been broken.
+  If you see one of these errors, something is very broken.
   """
   def internal, do: 13
 
   @doc """
-  The service is currently unavailable.  This is a most likely a
-  transient condition and may be corrected by retrying with
-  a backoff
+  The service is currently unavailable.
+
+  This is a most likely a transient condition and may be corrected by retrying with
+  a backoff.
   """
   def unavailable, do: 14
 

@@ -1,6 +1,6 @@
 defmodule GRPC.Client.Stream do
   @moduledoc """
-  Defines a stream struct used in requests sent by the client.
+  A struct that *streaming* clients get from rpc function calls and use to send further requests.
 
   ## Fields
 
@@ -36,6 +36,7 @@ defmodule GRPC.Client.Stream do
             # TODO: it's better to get canceled status from adapter
             canceled: false
 
+  @doc false
   def put_payload(%{payload: payload} = stream, key, val) do
     payload = if payload, do: payload, else: %{}
     %{stream | payload: Map.put(payload, key, val)}

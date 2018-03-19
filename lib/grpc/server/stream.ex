@@ -1,6 +1,10 @@
 defmodule GRPC.Server.Stream do
   @moduledoc """
-  Defines a stream struct used in a request handled by the server.
+  A struct as an argument that servers get in rpc function definitions and use to handle headers,
+  send streaming replies.
+
+  Notice that you MUST use new stream returned by `GRPC.Server` as an argument to invoke next
+  functions defined by `GRPC.Server`.
 
   ## Fields
 

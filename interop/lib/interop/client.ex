@@ -33,10 +33,10 @@ defmodule Interop.Client do
     IO.puts("Run client_streaming!")
     stream = ch
       |> Grpc.Testing.TestService.Stub.streaming_input_call()
-      |> GRPC.Stub.stream_send(Grpc.Testing.StreamingInputCallRequest.new(payload: payload(27182)))
-      |> GRPC.Stub.stream_send(Grpc.Testing.StreamingInputCallRequest.new(payload: payload(8)))
-      |> GRPC.Stub.stream_send(Grpc.Testing.StreamingInputCallRequest.new(payload: payload(1828)))
-      |> GRPC.Stub.stream_send(Grpc.Testing.StreamingInputCallRequest.new(payload: payload(45904)), end_stream: true)
+      |> GRPC.Stub.send_request(Grpc.Testing.StreamingInputCallRequest.new(payload: payload(27182)))
+      |> GRPC.Stub.send_request(Grpc.Testing.StreamingInputCallRequest.new(payload: payload(8)))
+      |> GRPC.Stub.send_request(Grpc.Testing.StreamingInputCallRequest.new(payload: payload(1828)))
+      |> GRPC.Stub.send_request(Grpc.Testing.StreamingInputCallRequest.new(payload: payload(45904)), end_stream: true)
     reply = Grpc.Testing.StreamingInputCallResponse.new(aggregated_payload_size: 74922)
     {:ok, ^reply} = GRPC.Stub.recv(stream)
   end
@@ -67,13 +67,13 @@ defmodule Interop.Client do
       Grpc.Testing.StreamingOutputCallRequest.new(response_parameters: [res_param(size1)], payload: payload(size2))
     end
 
-    GRPC.Stub.stream_send(stream, req.(31415, 27182))
+    GRPC.Stub.send_request(stream, req.(31415, 27182))
     {:ok, res_enum} = GRPC.Stub.recv(stream)
     reply = String.duplicate("0", 31415)
     {:ok, %{payload: %{body: ^reply}}} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
 
     Enum.each([{9, 8}, {2653, 1828}, {58979, 45904}], fn ({res, payload}) ->
-      GRPC.Stub.stream_send(stream, req.(res, payload))
+      GRPC.Stub.send_request(stream, req.(res, payload))
       reply = String.duplicate("0", res)
       {:ok, %{payload: %{body: ^reply}}} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
     end)
@@ -106,7 +106,7 @@ defmodule Interop.Client do
     {:ok, res_enum, %{headers: new_headers}} =
       ch
       |> Grpc.Testing.TestService.Stub.full_duplex_call(metadata: metadata)
-      |> GRPC.Stub.stream_send(req, end_stream: true)
+      |> GRPC.Stub.send_request(req, end_stream: true)
       |> GRPC.Stub.recv(return_headers: true)
 
     reply = String.duplicate("0", 314159)
@@ -132,7 +132,7 @@ defmodule Interop.Client do
     {:ok, res_enum} =
       ch
       |> Grpc.Testing.TestService.Stub.full_duplex_call()
-      |> GRPC.Stub.stream_send(req, end_stream: true)
+      |> GRPC.Stub.send_request(req, end_stream: true)
       |> GRPC.Stub.recv()
 
     {:error, ^error} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
@@ -158,7 +158,7 @@ defmodule Interop.Client do
     stream = Grpc.Testing.TestService.Stub.full_duplex_call(ch)
     {:ok, res_enum} =
       stream
-      |> GRPC.Stub.stream_send(req)
+      |> GRPC.Stub.send_request(req)
       |> GRPC.Stub.recv()
     {:ok, _} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
     stream = GRPC.Stub.cancel(stream)
@@ -171,7 +171,7 @@ defmodule Interop.Client do
     stream = Grpc.Testing.TestService.Stub.full_duplex_call(ch)
     {:error, %GRPC.RPCError{status: 4}} =
       stream
-      |> GRPC.Stub.stream_send(req)
+      |> GRPC.Stub.send_request(req)
       |> GRPC.Stub.recv(timeout: 1)
   end
 

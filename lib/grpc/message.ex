@@ -2,17 +2,17 @@ defmodule GRPC.Message do
   use Bitwise, only_operators: true
   @max_message_length 1 <<< (32 - 1)
 
-  @moduledoc """
-  Transform data between encoded protobuf and HTTP/2 body of gRPC.
+  @moduledoc false
 
-  gRPC body format is:
-
-      # http://www.grpc.io/docs/guides/wire.html
-      Delimited-Message -> Compressed-Flag Message-Length Message
-      Compressed-Flag -> 0 / 1 # encoded as 1 byte unsigned integer
-      Message-Length -> {length of Message} # encoded as 4 byte unsigned integer
-      Message -> *{binary octet}
-  """
+  # Transform data between encoded protobuf and HTTP/2 body of gRPC.
+  #
+  # gRPC body format is:
+  #
+  #     # http://www.grpc.io/docs/guides/wire.html
+  #     Delimited-Message -> Compressed-Flag Message-Length Message
+  #     Compressed-Flag -> 0 / 1 # encoded as 1 byte unsigned integer
+  #     Message-Length -> {length of Message} # encoded as 4 byte unsigned integer
+  #     Message -> *{binary octet}
 
   @doc """
   Transform protobuf data to gRPC body

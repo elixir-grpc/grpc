@@ -1,7 +1,7 @@
 defmodule GRPC.Transport.HTTP2 do
-  @moduledoc """
-  A module providing functions for sending HTTP/2 requests.
-  """
+  @moduledoc false
+
+  # A module providing functions for sending HTTP/2 requests.
 
   alias GRPC.Transport.Utils
   alias GRPC.Status

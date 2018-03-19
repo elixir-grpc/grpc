@@ -6,8 +6,6 @@ defmodule GRPC do
   """
   def version, do: @version
 
-  @doc """
-  Returns user agent used by HTTP/2.
-  """
+  @doc false
   def user_agent, do: "grpc-elixir/#{version()}"
 end

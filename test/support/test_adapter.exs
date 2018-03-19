@@ -11,7 +11,7 @@ defmodule GRPC.Test.ServerAdapter do
     {server}
   end
 
-  def stream_send(stream, data) do
+  def send_reply(stream, data) do
     {stream, data}
   end
 
