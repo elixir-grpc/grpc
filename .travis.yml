@@ -6,6 +6,10 @@ elixir:
 otp_release:
   - 19.3
   - 20.2
+script:
+  - if [[ `elixir -v` = *"1.6"* ]]; then mix format --check-formatted; fi
+  - mix test
+  - cd interop && mix run script/run.exs
 after_script:
   - mix deps.get --only docs
   - MIX_ENV=docs mix inch.report
