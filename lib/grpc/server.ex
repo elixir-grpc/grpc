@@ -31,7 +31,8 @@ defmodule GRPC.Server do
   replies one by one instead of returning reply in the end.
 
   For most functions which return stream, you **MUST** use the new stream as argument of
-  other functions in this module.
+  other functions in this module. And you **MUST** return that stream in the end in your
+  rpc functions.
   """
 
   require Logger

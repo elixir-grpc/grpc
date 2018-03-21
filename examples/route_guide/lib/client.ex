@@ -25,9 +25,9 @@ defmodule RouteGuide.Client do
 
   def print_features(channel, rect) do
     IO.puts("Looking for features within #{inspect(rect)}")
-    stream = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
+    {:ok, stream} = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
 
-    Enum.each(stream, fn feature ->
+    Enum.each(stream, fn {:ok, feature} ->
       IO.inspect(feature)
     end)
   end
@@ -49,7 +49,7 @@ defmodule RouteGuide.Client do
 
     Enum.reduce(points, points, fn _, [point | tail] ->
       opts = if length(tail) == 0, do: [end_stream: true], else: []
-      GRPC.Stub.stream_send(stream, point, opts)
+      GRPC.Stub.send_request(stream, point, opts)
       tail
     end)
 
@@ -79,15 +79,15 @@ defmodule RouteGuide.Client do
       Task.async(fn ->
         Enum.reduce(notes, notes, fn _, [note | tail] ->
           opts = if length(tail) == 0, do: [end_stream: true], else: []
-          GRPC.Stub.stream_send(stream, note, opts)
+          GRPC.Stub.send_request(stream, note, opts)
           tail
         end)
       end)
 
-    result_enum = GRPC.Stub.recv(stream)
+    {:ok, result_enum} = GRPC.Stub.recv(stream)
     Task.await(task)
 
-    Enum.each(result_enum, fn note ->
+    Enum.each(result_enum, fn {:ok, note} ->
       IO.puts(
         "Got message #{note.message} at point(#{note.location.latitude}, #{
           note.location.longitude

@@ -15,7 +15,7 @@ defmodule RouteGuide.Mixfile do
   # Type "mix help compile.app" for more information
   def application do
     [mod: {Routeguide.App, []},
-     applications: [:lager, :logger, :grpc, :poison]]
+     applications: [:logger, :grpc, :poison]]
   end
 
   # Dependencies can be Hex packages:
@@ -29,8 +29,7 @@ defmodule RouteGuide.Mixfile do
   # Type "mix help deps" for more examples and options
   defp deps do
     [
-      # {:grpc, path: "../../"},
-      {:grpc, github: "tony612/grpc-elixir"},
+      {:grpc, path: "../../"},
       {:poison, "~> 3.0"},
       {:dialyxir, "~> 0.5", only: [:dev, :test], runtime: false},
     ]

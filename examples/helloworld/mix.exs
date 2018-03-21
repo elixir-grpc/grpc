@@ -12,13 +12,12 @@ defmodule Helloworld.Mixfile do
 
   def application do
     [mod: {HelloworldApp, []},
-     applications: [:lager, :logger, :grpc]]
+     applications: [:logger, :grpc]]
   end
 
   defp deps do
     [
-      {:grpc, github: "tony612/grpc-elixir"},
-      # {:grpc, path: "../../"},
+      {:grpc, path: "../../"},
       {:dialyxir, "~> 0.5", only: [:dev, :test], runtime: false},
     ]
   end
