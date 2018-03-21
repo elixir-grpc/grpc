@@ -1,7 +1,7 @@
 defmodule GRPC.Mixfile do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "0.3.0-alpha"
 
   def project do
     [
@@ -33,8 +33,8 @@ defmodule GRPC.Mixfile do
   defp deps do
     [
       {:protobuf, "~> 0.5"},
-      {:cowboy, "~> 2.2.0"},
-      {:gun, "1.0.0-pre.5"},
+      {:cowboy, "~> 2.2"},
+      {:gun, ">= 1.0.0-pre.5"},
       {:ex_doc, "~> 0.14", only: :dev},
       {:inch_ex, ">= 0.0.0", only: :docs},
       {:dialyxir, "~> 0.5", only: :dev, runtime: false}
@@ -45,7 +45,8 @@ defmodule GRPC.Mixfile do
     %{
       maintainers: ["Tony Han"],
       licenses: ["Apache 2"],
-      links: %{"GitHub" => "https://github.com/tony612/grpc-elixir"}
+      links: %{"GitHub" => "https://github.com/tony612/grpc-elixir"},
+      files: ~w(mix.exs README.md lib src config LICENSE .formatter.exs)
     }
   end
 

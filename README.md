@@ -81,7 +81,7 @@ config :grpc, start_server: true
 $ iex -S mix
 ```
 
-Check [examples](examples) for all examples
+Check [examples](examples) and [interop](interop)(Interoperability Test) for all examples
 
 ## TODO
 
