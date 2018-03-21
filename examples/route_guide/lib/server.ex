@@ -52,10 +52,11 @@ defmodule Routeguide.RouteGuide.Server do
         key = serialize_location(note.location)
         new_notes = Map.update(notes, key, [note], &(&1 ++ [note]))
 
-        stream = Enum.reduce(new_notes[key], stream, fn note, stream ->
-          IO.inspect(note)
-          Server.send_reply(stream, note)
-        end)
+        stream =
+          Enum.reduce(new_notes[key], stream, fn note, stream ->
+            IO.inspect(note)
+            Server.send_reply(stream, note)
+          end)
 
         {new_notes, stream}
       end)
