@@ -1,5 +1,7 @@
 alias Interop.Client
-ch = Client.connect("127.0.0.1", 50051)
+servers = [Interop.Server]
+{:ok, _pid, port} = GRPC.Server.start(servers, 0)
+ch = Client.connect("127.0.0.1", port)
 run = fn(i) ->
   IO.puts("Round #{i}")
   Client.empty_unary!(ch)
@@ -22,3 +24,4 @@ end
 
 Enum.each(1..100, run)
 IO.puts("Succeed!")
+:ok = GRPC.Server.stop(servers)
