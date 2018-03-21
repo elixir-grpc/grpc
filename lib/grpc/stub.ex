@@ -41,7 +41,8 @@ defmodule GRPC.Stub do
   @insecure_scheme "http"
   @secure_scheme "https"
   @canceled_error GRPC.RPCError.exception(GRPC.Status.cancelled(), "The operation was cancelled")
-  @default_timeout 5000 # 5 seconds
+  # 5 seconds
+  @default_timeout 5000
 
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
@@ -106,7 +107,13 @@ defmodule GRPC.Stub do
   end
 
   def connect(host, port, opts) when is_integer(port) do
-    adapter = Keyword.get(opts, :adapter, Application.get_env(:grpc, :http2_client_adapter, GRPC.Adapter.Gun))
+    adapter =
+      Keyword.get(
+        opts,
+        :adapter,
+        Application.get_env(:grpc, :http2_client_adapter, GRPC.Adapter.Gun)
+      )
+
     cred = Keyword.get(opts, :cred)
     scheme = if cred, do: @secure_scheme, else: @insecure_scheme
 
@@ -133,7 +140,11 @@ defmodule GRPC.Stub do
       `%{headers: headers}`(server streaming)
   """
   @spec call(atom, tuple, String.t(), GRPC.Channel, struct | nil, keyword) ::
-          {:ok, struct} | {:ok, struct, map} | GRPC.Client.Stream.t | {:ok, Enumerable.t} | {:error, GRPC.RPCError.t}
+          {:ok, struct}
+          | {:ok, struct, map}
+          | GRPC.Client.Stream.t()
+          | {:ok, Enumerable.t()}
+          | {:error, GRPC.RPCError.t()}
   def call(service_mod, rpc, path, channel, request, opts) do
     {_, {req_mod, req_stream}, {res_mod, res_stream}} = rpc
     marshal = fn req -> service_mod.marshal(req_mod, req) end
@@ -147,6 +158,7 @@ defmodule GRPC.Stub do
       res_stream: res_stream,
       channel: channel
     }
+
     opts = parse_req_opts(opts)
 
     do_call(req_stream, res_stream, stream, request, opts)
@@ -154,6 +166,7 @@ defmodule GRPC.Stub do
 
   defp do_call(false, _, %{marshal: marshal, channel: channel} = stream, request, opts) do
     message = marshal.(request)
+
     stream
     |> channel.adapter.send_request(message, opts)
     |> recv(opts)
@@ -182,7 +195,7 @@ defmodule GRPC.Stub do
     * `:end_stream` - indicates it's the last one request, then the stream will be in
       half_closed state. Default is false.
   """
-  @spec send_request(GRPC.Client.Stream.t, struct, Keyword.t) :: GRPC.Client.Stream.t
+  @spec send_request(GRPC.Client.Stream.t(), struct, Keyword.t()) :: GRPC.Client.Stream.t()
   def send_request(%{marshal: marshal, channel: channel} = stream, request, opts \\ []) do
     message = marshal.(request)
     send_end_stream = Keyword.get(opts, :end_stream, false)
@@ -199,7 +212,7 @@ defmodule GRPC.Stub do
       iex> stream = GRPC.Stub.send_request(stream, request)
       iex> GRPC.Stub.end_stream(stream)
   """
-  @spec end_stream(GRPC.Client.Stream.t) :: GRPC.Client.Stream.t
+  @spec end_stream(GRPC.Client.Stream.t()) :: GRPC.Client.Stream.t()
   def end_stream(%{channel: channel} = stream) do
     channel.adapter.end_stream(stream)
   end
@@ -241,24 +254,30 @@ defmodule GRPC.Stub do
     * `:deadline` - when the request is timeout, will override timeout
     * `:return_headers` - when true, headers will be returned.
   """
-  @spec recv(GRPC.Client.Stream.t(), keyword | map) :: {:ok, struct} | {:ok, struct, map} | Enumerable.t() | {:error, any}
+  @spec recv(GRPC.Client.Stream.t(), keyword | map) ::
+          {:ok, struct} | {:ok, struct, map} | Enumerable.t() | {:error, any}
   def recv(stream, opts \\ [])
 
   def recv(%{canceled: true}, _) do
     {:error, @canceled_error}
   end
+
   def recv(stream, opts) when is_list(opts) do
     recv(stream, parse_recv_opts(opts))
   end
-  def recv(%{res_stream: true, channel: channel, payload: payload} = stream, opts) when is_map(opts) do
+
+  def recv(%{res_stream: true, channel: channel, payload: payload} = stream, opts)
+      when is_map(opts) do
     case recv_headers(channel.adapter, channel.adapter_payload, payload, opts) do
       {:ok, headers} ->
         res_enum = response_stream(stream, opts)
+
         if opts[:return_headers] do
           {:ok, res_enum, %{headers: headers}}
         else
           {:ok, res_enum}
         end
+
       {:error, reason} ->
         cancel(stream)
         {:error, reason}
@@ -267,8 +286,10 @@ defmodule GRPC.Stub do
 
   def recv(%{payload: payload, unmarshal: unmarshal, channel: channel} = stream, opts) do
     with {:ok, headers} <- recv_headers(channel.adapter, channel.adapter_payload, payload, opts),
-         {:ok, body, trailers} <- recv_body(channel.adapter, channel.adapter_payload, payload, opts) do
+         {:ok, body, trailers} <-
+           recv_body(channel.adapter, channel.adapter_payload, payload, opts) do
       {status, msg} = parse_response(body, trailers, unmarshal)
+
       if opts[:return_headers] do
         {status, msg, %{headers: headers, trailers: trailers}}
       else
@@ -285,6 +306,7 @@ defmodule GRPC.Stub do
     case adapter.recv_headers(conn_payload, stream_payload, opts) do
       {:ok, headers} ->
         {:ok, GRPC.Transport.HTTP2.decode_headers(headers)}
+
       other ->
         other
     end
@@ -293,10 +315,12 @@ defmodule GRPC.Stub do
   defp recv_body(adapter, conn_payload, stream_payload, opts) do
     recv_body(adapter, conn_payload, stream_payload, "", opts)
   end
+
   defp recv_body(adapter, conn_payload, stream_payload, acc, opts) do
     case adapter.recv_data_or_trailers(conn_payload, stream_payload, opts) do
       {:data, data} ->
         recv_body(adapter, conn_payload, stream_payload, <<acc::binary, data::binary>>, opts)
+
       {:trailers, trailers} ->
         {:ok, acc, GRPC.Transport.HTTP2.decode_headers(trailers)}
     end
@@ -307,12 +331,15 @@ defmodule GRPC.Stub do
       :ok ->
         result = decode_data(data, unmarshal)
         {:ok, result}
-      error -> error
+
+      error ->
+        error
     end
   end
 
   defp parse_trailers(trailers) do
     status = String.to_integer(trailers["grpc-status"])
+
     if status == GRPC.Status.ok() do
       :ok
     else
@@ -321,50 +348,61 @@ defmodule GRPC.Stub do
   end
 
   defp response_stream(%{unmarshal: unmarshal, channel: channel, payload: payload} = stream, opts) do
-    enum = Stream.unfold(%{buffer: "", message_length: -1, fin: false}, fn
-      %{fin: true} -> nil
-      acc ->
-        case channel.adapter.recv_data_or_trailers(channel.adapter_payload, payload, opts) do
-          {:data, data} ->
-            if GRPC.Message.complete?(data) do
-              reply = decode_data(data, unmarshal)
-              {{:ok, reply}, %{buffer: "", message_length: -1}}
-            else
-              handle_incomplete_data(acc, data, unmarshal)
-            end
+    enum =
+      Stream.unfold(%{buffer: "", message_length: -1, fin: false}, fn
+        %{fin: true} ->
+          nil
 
-          {:trailers, trailers} ->
-            trailers = GRPC.Transport.HTTP2.decode_headers(trailers)
-            case parse_trailers(trailers) do
-              :ok ->
-                if opts[:return_headers] do
-                  {{:trailers, trailers}, Map.put(acc, :fin, true)}
-                end
-              error ->
-                {error, Map.put(acc, :fin, true)}
-            end
-          error = {:error, _} ->
-            cancel(stream)
-            {error, Map.put(acc, :fin, true)}
-        end
-    end)
+        acc ->
+          case channel.adapter.recv_data_or_trailers(channel.adapter_payload, payload, opts) do
+            {:data, data} ->
+              if GRPC.Message.complete?(data) do
+                reply = decode_data(data, unmarshal)
+                {{:ok, reply}, %{buffer: "", message_length: -1}}
+              else
+                handle_incomplete_data(acc, data, unmarshal)
+              end
+
+            {:trailers, trailers} ->
+              trailers = GRPC.Transport.HTTP2.decode_headers(trailers)
+
+              case parse_trailers(trailers) do
+                :ok ->
+                  if opts[:return_headers] do
+                    {{:trailers, trailers}, Map.put(acc, :fin, true)}
+                  end
+
+                error ->
+                  {error, Map.put(acc, :fin, true)}
+              end
+
+            error = {:error, _} ->
+              cancel(stream)
+              {error, Map.put(acc, :fin, true)}
+          end
+      end)
+
     Stream.reject(enum, &match?(:skip, &1))
   end
 
   defp handle_incomplete_data(%{buffer: ""} = acc, data, _) do
-    new_acc = acc
+    new_acc =
+      acc
       |> Map.put(:buffer, data)
       |> Map.put(:message_length, GRPC.Message.message_length(data))
+
     {:skip, new_acc}
   end
+
   defp handle_incomplete_data(%{buffer: buffer, message_length: ml}, data, unmarshal)
-      when byte_size(buffer) + byte_size(data) - 5 == ml and ml > 0 do
+       when byte_size(buffer) + byte_size(data) - 5 == ml and ml > 0 do
     final_buffer = buffer <> data
 
     reply = decode_data(final_buffer, unmarshal)
 
     {{:ok, reply}, %{buffer: "", message_length: -1}}
   end
+
   defp handle_incomplete_data(%{buffer: buffer} = acc, data, _) do
     {:skip, Map.put(acc, :buffer, buffer <> data)}
   end
@@ -378,46 +416,60 @@ defmodule GRPC.Stub do
   defp parse_req_opts(list) when is_list(list) do
     parse_req_opts(list, %{timeout: @default_timeout})
   end
-  defp parse_req_opts([{:timeout, timeout}|t], acc) do
+
+  defp parse_req_opts([{:timeout, timeout} | t], acc) do
     parse_req_opts(t, Map.put(acc, :timeout, timeout))
   end
-  defp parse_req_opts([{:deadline, deadline}|t], acc) do
+
+  defp parse_req_opts([{:deadline, deadline} | t], acc) do
     parse_req_opts(t, Map.put(acc, :deadline, GRPC.TimeUtils.to_relative(deadline)))
   end
-  defp parse_req_opts([{:compressor, compressor}|t], acc) do
+
+  defp parse_req_opts([{:compressor, compressor} | t], acc) do
     parse_req_opts(t, Map.put(acc, :compressor, compressor))
   end
-  defp parse_req_opts([{:grpc_encoding, grpc_encoding}|t], acc) do
+
+  defp parse_req_opts([{:grpc_encoding, grpc_encoding} | t], acc) do
     parse_req_opts(t, Map.put(acc, :grpc_encoding, grpc_encoding))
   end
-  defp parse_req_opts([{:metadata, metadata}|t], acc) do
+
+  defp parse_req_opts([{:metadata, metadata} | t], acc) do
     parse_req_opts(t, Map.put(acc, :metadata, metadata))
   end
-  defp parse_req_opts([{:content_type, content_type}|t], acc) do
+
+  defp parse_req_opts([{:content_type, content_type} | t], acc) do
     parse_req_opts(t, Map.put(acc, :content_type, content_type))
   end
-  defp parse_req_opts([{:return_headers, return_headers}|t], acc) do
+
+  defp parse_req_opts([{:return_headers, return_headers} | t], acc) do
     parse_req_opts(t, Map.put(acc, :return_headers, return_headers))
   end
+
   defp parse_req_opts([{key, _} | _], _) do
     raise ArgumentError, "option #{inspect(key)} is not supported"
   end
+
   defp parse_req_opts(_, acc), do: acc
 
   defp parse_recv_opts(list) when is_list(list) do
     parse_recv_opts(list, %{timeout: @default_timeout})
   end
-  defp parse_recv_opts([{:timeout, timeout}|t], acc) do
+
+  defp parse_recv_opts([{:timeout, timeout} | t], acc) do
     parse_recv_opts(t, Map.put(acc, :timeout, timeout))
   end
-  defp parse_recv_opts([{:deadline, deadline}|t], acc) do
+
+  defp parse_recv_opts([{:deadline, deadline} | t], acc) do
     parse_recv_opts(t, Map.put(acc, :deadline, GRPC.TimeUtils.to_relative(deadline)))
   end
-  defp parse_recv_opts([{:return_headers, return_headers}|t], acc) do
+
+  defp parse_recv_opts([{:return_headers, return_headers} | t], acc) do
     parse_recv_opts(t, Map.put(acc, :return_headers, return_headers))
   end
+
   defp parse_recv_opts([{key, _} | _], _) do
     raise ArgumentError, "option #{inspect(key)} is not supported"
   end
+
   defp parse_recv_opts(_, acc), do: acc
 end

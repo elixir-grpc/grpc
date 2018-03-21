@@ -37,7 +37,7 @@ defmodule GRPC.Mixfile do
       {:gun, "1.0.0-pre.5"},
       {:ex_doc, "~> 0.14", only: :dev},
       {:inch_ex, ">= 0.0.0", only: :docs},
-      {:dialyxir, "~> 0.5", only: :dev, runtime: false},
+      {:dialyxir, "~> 0.5", only: :dev, runtime: false}
     ]
   end
 

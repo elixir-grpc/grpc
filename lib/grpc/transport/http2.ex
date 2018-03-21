@@ -10,7 +10,7 @@ defmodule GRPC.Transport.HTTP2 do
     %{":status" => 200, "content-type" => "application/grpc+proto"}
   end
 
-  @spec server_trailers(integer, String.t) :: map
+  @spec server_trailers(integer, String.t()) :: map
   def server_trailers(status \\ Status.ok(), message \\ "") do
     %{
       "grpc-status" => Integer.to_string(status),
@@ -24,7 +24,7 @@ defmodule GRPC.Transport.HTTP2 do
       {":method", "POST"},
       {":scheme", channel.scheme},
       {":path", path},
-      {":authority", channel.host},
+      {":authority", channel.host}
     ] ++ client_headers_without_reserved(s, opts)
   end
 
@@ -45,14 +45,14 @@ defmodule GRPC.Transport.HTTP2 do
 
   def extract_metadata(headers) do
     headers
-    |> Enum.filter(fn({k, _}) -> is_metadata(k) end)
+    |> Enum.filter(fn {k, _} -> is_metadata(k) end)
     |> Enum.map(&decode_metadata/1)
     |> Enum.into(%{})
   end
 
   def decode_headers(headers) do
     headers
-    |> Enum.map(fn({k, v}) ->
+    |> Enum.map(fn {k, v} ->
       if is_metadata(k) do
         decode_metadata({k, v})
       else
@@ -65,7 +65,7 @@ defmodule GRPC.Transport.HTTP2 do
   def encode_metadata(metadata) do
     metadata
     |> Enum.filter(fn {k, _v} -> !is_reserved_header(to_string(k)) end)
-    |> Enum.reduce(%{}, fn({k, v}, acc) ->
+    |> Enum.reduce(%{}, fn {k, v}, acc ->
       {new_k, new_v} = encode_metadata_pair({k, v})
       Map.update(acc, new_k, new_v, fn old_v -> Enum.join([old_v, new_v], ",") end)
     end)
@@ -80,6 +80,7 @@ defmodule GRPC.Transport.HTTP2 do
   defp append_timeout(headers, timeout) when is_integer(timeout) do
     headers ++ [{"grpc-timeout", Utils.encode_timeout(timeout)}]
   end
+
   defp append_timeout(headers, _), do: headers
 
   defp append_custom_metadata(headers, metadata) when is_map(metadata) or is_list(metadata) do
@@ -114,6 +115,7 @@ defmodule GRPC.Transport.HTTP2 do
 
   defp is_metadata("content-length"), do: false
   defp is_metadata("user-agent"), do: false
+
   defp is_metadata(key) do
     !is_reserved_header(key)
   end

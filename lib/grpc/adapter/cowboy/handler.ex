@@ -20,9 +20,11 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
     case server.__call_rpc__(path, stream) do
       {:ok, stream, response} ->
-        stream = stream
-        |> GRPC.Server.send_reply(response)
-        |> GRPC.Server.send_trailers(@default_trailers)
+        stream =
+          stream
+          |> GRPC.Server.send_reply(response)
+          |> GRPC.Server.send_trailers(@default_trailers)
+
         {:ok, stream.payload, state}
 
       {:ok, stream} ->

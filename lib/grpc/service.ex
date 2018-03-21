@@ -21,12 +21,12 @@ defmodule GRPC.Service do
       @before_compile GRPC.Service
 
       def marshal(mod, message) do
-        func = unquote(opts[:marshal]) || &GRPC.Message.Protobuf.encode/2
+        func = unquote(opts[:marshal]) || (&GRPC.Message.Protobuf.encode/2)
         func.(mod, message)
       end
 
       def unmarshal(mod, message) do
-        func = unquote(opts[:unmarshal]) || &GRPC.Message.Protobuf.decode/2
+        func = unquote(opts[:unmarshal]) || (&GRPC.Message.Protobuf.decode/2)
         func.(mod, message)
       end
 

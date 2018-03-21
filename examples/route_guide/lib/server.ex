@@ -28,7 +28,8 @@ defmodule Routeguide.RouteGuide.Server do
     start_time = now_ts()
 
     {_, distance, point_count, feature_count} =
-      Enum.reduce(req_enum, {nil, 0, 0, 0}, fn point, {last, distance, point_count, feature_count} ->
+      Enum.reduce(req_enum, {nil, 0, 0, 0}, fn point,
+                                               {last, distance, point_count, feature_count} ->
         point_count = point_count + 1
         found_feature = Enum.find(features, fn f -> f.location == point end)
         feature_count = if found_feature, do: feature_count + 1, else: feature_count

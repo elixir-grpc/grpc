@@ -35,12 +35,14 @@ defmodule GRPC.Server.Supervisor do
     Supervisor.start_link(__MODULE__, servers, name: __MODULE__)
   end
 
-  @spec init({module | [module], integer}) :: {:ok, {:supervisor.sup_flags(), [:supervisor.child_spec()]}} | :ignore
+  @spec init({module | [module], integer}) ::
+          {:ok, {:supervisor.sup_flags(), [:supervisor.child_spec()]}} | :ignore
   def init({servers, port}) do
     init({servers, port, []})
   end
 
-  @spec init({module | [module], integer, Keyword.t()}) :: {:ok, {:supervisor.sup_flags(), [:supervisor.child_spec()]}} | :ignore
+  @spec init({module | [module], integer, Keyword.t()}) ::
+          {:ok, {:supervisor.sup_flags(), [:supervisor.child_spec()]}} | :ignore
   def init({servers, port, opts}) do
     children =
       if Application.get_env(:grpc, :start_server, false) do
@@ -60,7 +62,7 @@ defmodule GRPC.Server.Supervisor do
     * `:cred` - a credential created by functions of `GRPC.Credential`,
       an insecure server will be created without this option
   """
-  @spec child_spec(atom | [atom], integer, Keyword.t) :: Supervisor.Spec.spec
+  @spec child_spec(atom | [atom], integer, Keyword.t()) :: Supervisor.Spec.spec()
   def child_spec(servers, port, opts \\ []) do
     adapter = Keyword.get(opts, :adapter, @default_adapter)
     servers = GRPC.Server.servers_to_map(servers)

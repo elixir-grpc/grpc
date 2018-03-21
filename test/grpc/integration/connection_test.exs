@@ -27,11 +27,18 @@ defmodule GRPC.Integration.ConnectionTest do
 
   test "authentication works" do
     server = FeatureServer
-    cred = GRPC.Credential.new(ssl: [
-      certfile: @cert_path,
-      cacertfile: @ca_path,
-      keyfile: @key_path,
-      verify: :verify_peer, fail_if_no_peer_cert: true])
+
+    cred =
+      GRPC.Credential.new(
+        ssl: [
+          certfile: @cert_path,
+          cacertfile: @ca_path,
+          keyfile: @key_path,
+          verify: :verify_peer,
+          fail_if_no_peer_cert: true
+        ]
+      )
+
     {:ok, _, port} = GRPC.Server.start(server, 0, cred: cred)
 
     try do

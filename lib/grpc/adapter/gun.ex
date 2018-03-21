@@ -13,11 +13,14 @@ defmodule GRPC.Adapter.Gun do
     open_opts = %{transport: :ssl, protocols: [:http2], transport_opts: ssl}
     open_opts = Map.merge(opts, open_opts)
     {:ok, conn_pid} = :gun.open(String.to_charlist(host), port, open_opts)
+
     case :gun.await_up(conn_pid) do
       {:ok, :http2} ->
         {:ok, Map.put(channel, :adapter_payload, %{conn_pid: conn_pid})}
+
       {:ok, proto} ->
         {:error, "Error when opening connection: protocol #{proto} is not http2"}
+
       {:error, reason} ->
         {:error, "Error when opening connection: #{inspect(reason)}"}
     end
@@ -27,11 +30,14 @@ defmodule GRPC.Adapter.Gun do
     open_opts = %{transport: :tcp, protocols: [:http2]}
     open_opts = Map.merge(opts, open_opts)
     {:ok, conn_pid} = :gun.open(String.to_charlist(host), port, open_opts)
+
     case :gun.await_up(conn_pid) do
       {:ok, :http2} ->
         {:ok, Map.put(channel, :adapter_payload, %{conn_pid: conn_pid})}
+
       {:ok, proto} ->
         {:error, "Error when opening connection: protocol #{proto} is not http2"}
+
       {:error, reason} ->
         {:error, "Error when opening connection: #{inspect(reason)}"}
     end
@@ -43,13 +49,20 @@ defmodule GRPC.Adapter.Gun do
     GRPC.Client.Stream.put_payload(stream, :stream_ref, stream_ref)
   end
 
-  defp do_send_request(%{channel: %{adapter_payload: %{conn_pid: conn_pid}}, path: path} = stream, message, opts) do
+  defp do_send_request(
+         %{channel: %{adapter_payload: %{conn_pid: conn_pid}}, path: path} = stream,
+         message,
+         opts
+       ) do
     headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
     {:ok, data, _} = GRPC.Message.to_data(message, opts)
     :gun.post(conn_pid, path, headers, data)
   end
 
-  def send_headers(%{channel: %{adapter_payload: %{conn_pid: conn_pid}}, path: path} = stream, opts) do
+  def send_headers(
+        %{channel: %{adapter_payload: %{conn_pid: conn_pid}}, path: path} = stream,
+        opts
+      ) do
     headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
     stream_ref = :gun.post(conn_pid, path, headers)
     GRPC.Client.Stream.put_payload(stream, :stream_ref, stream_ref)
@@ -77,10 +90,16 @@ defmodule GRPC.Adapter.Gun do
     case await(conn_pid, stream_ref, opts[:timeout]) do
       {:response, headers} ->
         {:ok, headers}
+
       error = {:error, _} ->
         error
+
       other ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "unexpected when waiting for headers: #{inspect(other)}")}
+        {:error,
+         GRPC.RPCError.exception(
+           GRPC.Status.unknown(),
+           "unexpected when waiting for headers: #{inspect(other)}"
+         )}
     end
   end
 
@@ -88,39 +107,60 @@ defmodule GRPC.Adapter.Gun do
     case await(conn_pid, stream_ref, opts[:timeout]) do
       data = {:data, _} ->
         data
+
       trailers = {:trailers, _} ->
         trailers
+
       error = {:error, _} ->
         error
+
       other ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "unexpected when waiting for data: #{inspect(other)}")}
+        {:error,
+         GRPC.RPCError.exception(
+           GRPC.Status.unknown(),
+           "unexpected when waiting for data: #{inspect(other)}"
+         )}
     end
   end
 
   defp await(conn_pid, stream_ref, timeout) do
     case :gun.await(conn_pid, stream_ref, timeout) do
       {:response, :fin, _, _} ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.internal(), "shouldn't finish when getting headers")}
+        {:error,
+         GRPC.RPCError.exception(GRPC.Status.internal(), "shouldn't finish when getting headers")}
+
       {:response, :nofin, status, headers} ->
         if status == 200 do
           {:response, headers}
         else
           {:error, GRPC.RPCError.exception(GRPC.Status.internal(), "status got is not 200")}
         end
+
       {:data, :fin, _} ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.internal(), "shouldn't finish when getting data")}
+        {:error,
+         GRPC.RPCError.exception(GRPC.Status.internal(), "shouldn't finish when getting data")}
+
       {:data, :nofin, data} ->
         {:data, data}
+
       trailers = {:trailers, _} ->
         trailers
+
       {:error, :timeout} ->
         {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "deadline exceeded")}
+
       {:error, {reason, msg}} ->
         {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "#{reason}: #{msg}")}
+
       {:error, reason} ->
         {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}")}
+
       other ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "unexpected message when waiting: #{inspect(other)}")}
+        {:error,
+         GRPC.RPCError.exception(
+           GRPC.Status.unknown(),
+           "unexpected message when waiting: #{inspect(other)}"
+         )}
     end
   end
 end

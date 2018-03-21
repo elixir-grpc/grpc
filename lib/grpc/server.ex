@@ -35,14 +35,22 @@ defmodule GRPC.Server do
   """
 
   require Logger
-  @impl_error GRPC.RPCError.exception(GRPC.Status.unimplemented(), "Operation is not implemented or not supported/enabled in this service.")
+
+  @impl_error GRPC.RPCError.exception(
+                GRPC.Status.unimplemented(),
+                "Operation is not implemented or not supported/enabled in this service."
+              )
 
   alias GRPC.Server.Stream
 
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
       service_name = service_mod.__meta__(:name)
-      @impl_error GRPC.RPCError.exception(GRPC.Status.unimplemented(), "Operation is not implemented or not supported/enabled in this service.")
+
+      @impl_error GRPC.RPCError.exception(
+                    GRPC.Status.unimplemented(),
+                    "Operation is not implemented or not supported/enabled in this service."
+                  )
 
       Enum.each(service_mod.__rpc_calls__, fn {name, _, _} = rpc ->
         func_name = name |> to_string |> Macro.underscore()
@@ -68,8 +76,7 @@ defmodule GRPC.Server do
   @type servers_list :: module | [module]
 
   @doc false
-  @spec call(atom, Stream.t(), tuple, atom) ::
-          {:ok, Stream.t(), struct} | {:ok, struct}
+  @spec call(atom, Stream.t(), tuple, atom) :: {:ok, Stream.t(), struct} | {:ok, struct}
   def call(
         service_mod,
         stream,
@@ -207,10 +214,12 @@ defmodule GRPC.Server do
   """
   @spec send_reply(Stream.t(), struct) :: Stream.t()
   def send_reply(%{adapter: adapter, marshal: marshal} = stream, reply) do
-    stream = cond do
-      !adapter.has_sent_headers?(stream) -> send_headers(stream, %{})
-      true -> stream
-    end
+    stream =
+      cond do
+        !adapter.has_sent_headers?(stream) -> send_headers(stream, %{})
+        true -> stream
+      end
+
     {:ok, data, _size} = reply |> marshal.() |> GRPC.Message.to_data(%{iolist: true})
     adapter.send_reply(stream, data)
     stream
@@ -221,7 +230,7 @@ defmodule GRPC.Server do
 
   You can send headers only once, before that you can set headers using `set_headers/2`.
   """
-  @spec send_headers(Stream.t(), map) :: Stream.t
+  @spec send_headers(Stream.t(), map) :: Stream.t()
   def send_headers(%{adapter: adapter} = stream, headers) do
     adapter.send_headers(stream, headers)
   end
@@ -231,7 +240,7 @@ defmodule GRPC.Server do
 
   You can set headers more than once.
   """
-  @spec set_headers(Stream.t(), map) :: Stream.t
+  @spec set_headers(Stream.t(), map) :: Stream.t()
   def set_headers(%{adapter: adapter} = stream, headers) do
     adapter.set_headers(stream, headers)
   end
@@ -239,17 +248,19 @@ defmodule GRPC.Server do
   @doc """
   Set custom trailers, which will be sent in the end.
   """
-  @spec set_trailers(Stream.t(), map) :: Stream.t
+  @spec set_trailers(Stream.t(), map) :: Stream.t()
   def set_trailers(stream, trailers) do
     Map.put(stream, :resp_trailers, trailers)
   end
 
   @doc false
   def send_trailers(%{adapter: adapter, resp_trailers: resp_trailers} = stream, trailers) do
-    stream = cond do
-      !adapter.has_sent_headers?(stream) -> send_headers(stream, %{})
-      true -> stream
-    end
+    stream =
+      cond do
+        !adapter.has_sent_headers?(stream) -> send_headers(stream, %{})
+        true -> stream
+      end
+
     metadata = GRPC.Transport.HTTP2.encode_metadata(resp_trailers || %{})
     adapter.send_trailers(stream, Map.merge(metadata, trailers))
   end

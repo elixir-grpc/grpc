@@ -41,7 +41,7 @@ defmodule GRPC.Adapter.Cowboy do
   end
 
   # spec: :supervisor.mfargs doesn't work
-  @spec start_link(atom, GRPC.Server.servers_map, any) :: {:ok, pid} | {:error, any}
+  @spec start_link(atom, GRPC.Server.servers_map(), any) :: {:ok, pid} | {:error, any}
   def start_link(scheme, servers, {m, f, [ref | _] = a}) do
     case apply(m, f, a) do
       {:ok, pid} ->
@@ -90,7 +90,8 @@ defmodule GRPC.Adapter.Cowboy do
 
   defp read_stream({%{payload: req0} = st, %{frames: [], buffer: buffer} = s}, func) do
     case :cowboy_req.read_body(req0) do
-      {:ok, "", _} -> nil
+      {:ok, "", _} ->
+        nil
 
       {:ok, data, req} ->
         [request | rest] = func.(buffer <> data)
@@ -100,6 +101,7 @@ defmodule GRPC.Adapter.Cowboy do
 
       {:more, data, req} ->
         data = buffer <> data
+
         if GRPC.Message.complete?(data) do
           [request | rest] = func.(data)
           new_stream = %{st | payload: req}
