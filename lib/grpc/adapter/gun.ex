@@ -37,7 +37,7 @@ defmodule GRPC.Adapter.Gun do
     end
   end
 
-  @spec send_request(GRPC.Client.Stream.t(), struct, keyword) :: struct
+  @spec send_request(GRPC.Client.Stream.t(), binary, map) :: GRPC.Client.Stream.t()
   def send_request(stream, message, opts) do
     stream_ref = do_send_request(stream, message, opts)
     GRPC.Client.Stream.put_payload(stream, :stream_ref, stream_ref)

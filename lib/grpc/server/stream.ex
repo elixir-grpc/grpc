@@ -17,8 +17,8 @@ defmodule GRPC.Server.Stream do
 
   defstruct [:server, :marshal, :unmarshal, :payload, :adapter, :resp_trailers]
 
-  @type marshal :: (struct -> binary)
-  @type unmarshal :: (binary -> struct)
+  @typep marshal :: (struct -> binary)
+  @typep unmarshal :: (binary -> struct)
   @type t :: %__MODULE__{
           server: atom,
           marshal: marshal,

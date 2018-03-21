@@ -40,7 +40,8 @@ defmodule GRPC.Adapter.Cowboy do
     {ref, mfa, type, timeout, kind, modules}
   end
 
-  @spec start_link(atom, GRPC.Server.servers_map(), [any]) :: {:ok, pid} | {:error, any}
+  # spec: :supervisor.mfargs doesn't work
+  @spec start_link(atom, GRPC.Server.servers_map, any) :: {:ok, pid} | {:error, any}
   def start_link(scheme, servers, {m, f, [ref | _] = a}) do
     case apply(m, f, a) do
       {:ok, pid} ->

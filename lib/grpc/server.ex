@@ -85,9 +85,9 @@ defmodule GRPC.Server do
     rescue
       e in GRPC.RPCError ->
         {:error, stream, e}
-
-      e ->
-        Logger.error("Error when calling #{inspect(service_mod)}.#{func_name}: #{inspect(e)}")
+    catch
+      kind, e ->
+        Logger.error(Exception.format(kind, e))
 
         {:error, stream,
          %GRPC.RPCError{status: GRPC.Status.unknown(), message: "Internal Server Error"}}
@@ -211,7 +211,7 @@ defmodule GRPC.Server do
       !adapter.has_sent_headers?(stream) -> send_headers(stream, %{})
       true -> stream
     end
-    {:ok, data, _size} = reply |> marshal.() |> GRPC.Message.to_data(iolist: true)
+    {:ok, data, _size} = reply |> marshal.() |> GRPC.Message.to_data(%{iolist: true})
     adapter.send_reply(stream, data)
     stream
   end

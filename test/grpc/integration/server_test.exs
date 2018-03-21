@@ -26,7 +26,7 @@ defmodule GRPC.Integration.ServerTest do
     use GRPC.Server, service: Helloworld.Greeter.Service
 
     def say_hello(%{name: "unknown error"}, _stream) do
-      raise "unknown error(This is a test)"
+      raise "unknown error(This is a test, please ignore it)"
     end
 
     def say_hello(_req, _stream) do

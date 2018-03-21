@@ -22,17 +22,17 @@ defmodule GRPC.Message do
       iex> message = <<1, 2, 3, 4, 5, 6, 7, 8>>
       iex> GRPC.Message.to_data(message)
       {:ok, <<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>, 13}
-      iex> GRPC.Message.to_data(message, iolist: true)
+      iex> GRPC.Message.to_data(message, %{iolist: true})
       {:ok, [<<0>>, <<0, 0, 0, 8>>, <<1, 2, 3, 4, 5, 6, 7, 8>>], 13}
       iex> message = <<1, 2, 3, 4, 5, 6, 7, 8>>
-      iex> GRPC.Message.to_data(message, compressor: true)
+      iex> GRPC.Message.to_data(message, %{compressor: true})
       {:ok, <<1, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>, 13}
       iex> message = <<1, 2, 3, 4, 5, 6, 7, 8, 9>>
-      iex> GRPC.Message.to_data(message, max_message_length: 8)
+      iex> GRPC.Message.to_data(message, %{max_message_length: 8})
       {:error, "Encoded message is too large (9 bytes)"}
   """
-  @spec to_data(binary, keyword) :: {:ok, binary, non_neg_integer} | {:error, String.t()}
-  def to_data(message, opts \\ []) do
+  @spec to_data(binary, map) :: {:ok, binary, non_neg_integer} | {:error, String.t()}
+  def to_data(message, opts \\ %{}) do
     compress_flag = if opts[:compressor], do: <<1>>, else: <<0>>
     length = byte_size(message)
     max_length = opts[:max_message_length] || @max_message_length

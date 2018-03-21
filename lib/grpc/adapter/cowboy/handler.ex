@@ -9,8 +9,9 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
   @adapter GRPC.Adapter.Cowboy
   @default_trailers HTTP2.server_trailers()
+  @typep state :: {GRPC.Server.servers_map(), keyword}
 
-  @spec init(any, {GRPC.Server.servers_map(), keyword}) :: {:ok, any, {atom, keyword}}
+  @spec init(map, state) :: {:ok, map, state}
   def init(req, {servers, _opts} = state) do
     path = :cowboy_req.path(req)
     server = Map.get(servers, GRPC.Server.service_name(path))

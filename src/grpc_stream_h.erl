@@ -20,7 +20,7 @@
 	read_body_ref = undefined :: reference() | undefined,
 	read_body_timer_ref = undefined :: reference() | undefined,
 	read_body_length = 0 :: non_neg_integer() | infinity,
-	read_body_is_fin = nofin :: nofin | {fin, non_neg_integer()},
+	read_body_is_fin = nofin :: nofin | fin,
 	read_body_buffer = <<>> :: binary(),
 	body_length = 0 :: non_neg_integer()
 }).

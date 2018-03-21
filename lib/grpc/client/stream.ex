@@ -13,9 +13,9 @@ defmodule GRPC.Client.Stream do
     * `:res_stream` - indicates if reply is streaming
   """
 
-  @type marshal :: (struct -> binary)
-  @type unmarshal :: (binary -> struct)
-  @type stream_payload :: any
+  @typep marshal :: (struct -> binary)
+  @typep unmarshal :: (binary -> struct)
+  @typep stream_payload :: any
   @type t :: %__MODULE__{
           channel: GRPC.Channel.t(),
           payload: stream_payload,
