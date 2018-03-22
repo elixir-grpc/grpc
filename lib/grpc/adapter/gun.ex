@@ -124,7 +124,11 @@ defmodule GRPC.Adapter.Gun do
   end
 
   defp await(conn_pid, stream_ref, timeout) do
-    case :gun.await(conn_pid, stream_ref, timeout) do
+    res = :gun.await(conn_pid, stream_ref, timeout)
+
+    IO.inspect(res)
+
+    case res do
       {:response, :fin, _, _} ->
         {:error,
          GRPC.RPCError.exception(GRPC.Status.internal(), "shouldn't finish when getting headers")}
