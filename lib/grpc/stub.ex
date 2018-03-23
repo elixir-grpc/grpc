@@ -422,7 +422,7 @@ defmodule GRPC.Stub do
   end
 
   defp parse_req_opts([{:deadline, deadline} | t], acc) do
-    parse_req_opts(t, Map.put(acc, :deadline, GRPC.TimeUtils.to_relative(deadline)))
+    parse_req_opts(t, Map.put(acc, :timeout, GRPC.TimeUtils.to_relative(deadline)))
   end
 
   defp parse_req_opts([{:compressor, compressor} | t], acc) do

@@ -2,23 +2,23 @@ defmodule GRPC.TimeUtils do
   @moduledoc false
 
   @doc """
-  Returns relative time in ms.
+  Returns relative time in milliseconds.
 
   ## Examples
 
       iex> from = DateTime.utc_now
       iex> us = DateTime.to_unix(from, :microseconds)
-      iex> datetime = DateTime.from_unix!(us + 5, :microseconds)
-      iex> GRPC.TimeUtils.to_relative(datetime, from)
-      5
+      iex> datetime = DateTime.from_unix!(us + 5005, :microseconds)
+      iex> Float.round(GRPC.TimeUtils.to_relative(datetime, from), 3)
+      5.005
   """
   def to_relative(datetime, from \\ DateTime.utc_now()) do
-    ms = datetime_to_microsecond(datetime)
-    now_ms = datetime_to_microsecond(from)
+    ms = datetime_to_milliseconds(datetime)
+    now_ms = datetime_to_milliseconds(from)
     ms - now_ms
   end
 
-  defp datetime_to_microsecond(datetime) do
-    DateTime.to_unix(datetime) * 1000_000 + elem(datetime.microsecond, 0)
+  defp datetime_to_milliseconds(datetime) do
+    DateTime.to_unix(datetime, :seconds) * 1000 + elem(datetime.microsecond, 0) * 0.001
   end
 end

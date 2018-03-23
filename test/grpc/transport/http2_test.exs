@@ -72,7 +72,7 @@ defmodule GRPC.Transport.HTTP2Test do
   test "client_headers/3 has timeout with :timeout option" do
     stream = %{channel: @channel, path: "/foo/bar"}
     headers = HTTP2.client_headers(stream, %{timeout: 5})
-    assert [{"grpc-timeout", "5u"} | _] = Enum.reverse(headers)
+    assert [{"grpc-timeout", "5000u"} | _] = Enum.reverse(headers)
   end
 
   test "client_headers/3 support custom content-type" do

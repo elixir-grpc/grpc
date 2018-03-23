@@ -43,7 +43,7 @@ defmodule GRPC.Mixfile do
 
   defp package do
     %{
-      maintainers: ["Tony Han"],
+      maintainers: ["Bing Han"],
       licenses: ["Apache 2"],
       links: %{"GitHub" => "https://github.com/tony612/grpc-elixir"},
       files: ~w(mix.exs README.md lib src config LICENSE .formatter.exs)
