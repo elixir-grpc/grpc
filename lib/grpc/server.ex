@@ -37,10 +37,7 @@ defmodule GRPC.Server do
 
   require Logger
 
-  @impl_error GRPC.RPCError.exception(
-                GRPC.Status.unimplemented(),
-                "Operation is not implemented or not supported/enabled in this service."
-              )
+  @impl_error_msg "Operation is not implemented or not supported/enabled in this service."
 
   alias GRPC.Server.Stream
 
@@ -48,10 +45,7 @@ defmodule GRPC.Server do
     quote bind_quoted: [service_mod: opts[:service]] do
       service_name = service_mod.__meta__(:name)
 
-      @impl_error GRPC.RPCError.exception(
-                    GRPC.Status.unimplemented(),
-                    "Operation is not implemented or not supported/enabled in this service."
-                  )
+      @impl_error_msg "Operation is not implemented or not supported/enabled in this service."
 
       Enum.each(service_mod.__rpc_calls__, fn {name, _, _} = rpc ->
         func_name = name |> to_string |> Macro.underscore()
@@ -67,7 +61,9 @@ defmodule GRPC.Server do
         end
       end)
 
-      def __call_rpc__(_, stream), do: {:error, stream, @impl_error}
+      def __call_rpc__(_, stream) do
+        raise GRPC.RPCError, status: GRPC.Status.unimplemented(), message: @impl_error_msg
+      end
 
       def __meta__(:service), do: unquote(service_mod)
     end
@@ -88,25 +84,14 @@ defmodule GRPC.Server do
     unmarshal_func = fn req -> service_mod.unmarshal(req_mod, req) end
     stream = %{stream | marshal: marshal_func, unmarshal: unmarshal_func}
 
-    try do
-      handle_request(req_stream, res_stream, stream, func_name)
-    rescue
-      e in GRPC.RPCError ->
-        {:error, stream, e}
-    catch
-      kind, e ->
-        Logger.error(Exception.format(kind, e))
-
-        {:error, stream,
-         %GRPC.RPCError{status: GRPC.Status.unknown(), message: "Internal Server Error"}}
-    end
+    handle_request(req_stream, res_stream, stream, func_name)
   end
 
   defp handle_request(req_s, res_s, %{server: server} = stream, func_name) do
     if function_exported?(server, func_name, 2) do
       do_handle_request(req_s, res_s, stream, func_name)
     else
-      {:error, stream, @impl_error}
+      raise GRPC.RPCError, status: GRPC.Status.unimplemented(), message: @impl_error_msg
     end
   end
 
@@ -116,7 +101,7 @@ defmodule GRPC.Server do
          %{unmarshal: unmarshal, adapter: adapter} = stream,
          func_name
        ) do
-    {:ok, data, stream} = adapter.read_body(stream)
+    {:ok, data} = adapter.read_body(stream.payload)
     message = GRPC.Message.from_data(data)
     request = unmarshal.(message)
     do_handle_request(req_stream, res_stream, stream, func_name, request)
@@ -129,7 +114,7 @@ defmodule GRPC.Server do
          func_name
        ) do
     reading_stream =
-      adapter.reading_stream(stream, fn data ->
+      adapter.reading_stream(stream.payload, fn data ->
         data
         |> GRPC.Message.from_frame()
         |> Enum.map(&unmarshal.(&1))
@@ -160,7 +145,7 @@ defmodule GRPC.Server do
     {:ok, stream}
   end
 
-  # Start the gRPC server.
+  # Start the gRPC server. Only used in starting a server manually using `GRPC.Server.start(servers)`
   #
   # A generated `port` will be returned if the port is `0`.
   #
@@ -215,14 +200,8 @@ defmodule GRPC.Server do
   """
   @spec send_reply(Stream.t(), struct) :: Stream.t()
   def send_reply(%{adapter: adapter, marshal: marshal} = stream, reply) do
-    stream =
-      cond do
-        !adapter.has_sent_headers?(stream) -> send_headers(stream, %{})
-        true -> stream
-      end
-
     {:ok, data, _size} = reply |> marshal.() |> GRPC.Message.to_data(%{iolist: true})
-    adapter.send_reply(stream, data)
+    adapter.send_reply(stream.payload, data)
     stream
   end
 
@@ -233,7 +212,8 @@ defmodule GRPC.Server do
   """
   @spec send_headers(Stream.t(), map) :: Stream.t()
   def send_headers(%{adapter: adapter} = stream, headers) do
-    adapter.send_headers(stream, headers)
+    adapter.send_headers(stream.payload, headers)
+    stream
   end
 
   @doc """
@@ -243,27 +223,23 @@ defmodule GRPC.Server do
   """
   @spec set_headers(Stream.t(), map) :: Stream.t()
   def set_headers(%{adapter: adapter} = stream, headers) do
-    adapter.set_headers(stream, headers)
+    adapter.set_headers(stream.payload, headers)
+    stream
   end
 
   @doc """
   Set custom trailers, which will be sent in the end.
   """
   @spec set_trailers(Stream.t(), map) :: Stream.t()
-  def set_trailers(stream, trailers) do
-    Map.put(stream, :resp_trailers, trailers)
+  def set_trailers(%{adapter: adapter} = stream, trailers) do
+    adapter.set_resp_trailers(stream.payload, trailers)
+    stream
   end
 
   @doc false
-  def send_trailers(%{adapter: adapter, resp_trailers: resp_trailers} = stream, trailers) do
-    stream =
-      cond do
-        !adapter.has_sent_headers?(stream) -> send_headers(stream, %{})
-        true -> stream
-      end
-
-    metadata = GRPC.Transport.HTTP2.encode_metadata(resp_trailers || %{})
-    adapter.send_trailers(stream, Map.merge(metadata, trailers))
+  def send_trailers(%{adapter: adapter} = stream, trailers) do
+    adapter.send_trailers(stream.payload, trailers)
+    stream
   end
 
   @doc false

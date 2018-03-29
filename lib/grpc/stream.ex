@@ -11,8 +11,7 @@ defmodule GRPC.Stream do
   """
   @spec get_headers(GRPC.Server.Stream.t()) :: map
   def get_headers(%GRPC.Server.Stream{adapter: adapter} = stream) do
-    stream
-    |> adapter.get_headers()
-    |> GRPC.Transport.HTTP2.decode_headers()
+    headers = adapter.get_headers(stream.payload)
+    GRPC.Transport.HTTP2.decode_headers(headers)
   end
 end

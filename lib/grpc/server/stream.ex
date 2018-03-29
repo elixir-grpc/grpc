@@ -15,7 +15,7 @@ defmodule GRPC.Server.Stream do
     * `:payload` - the payload needed by the adapter
   """
 
-  defstruct [:server, :marshal, :unmarshal, :payload, :adapter, :resp_trailers]
+  defstruct [:server, :marshal, :unmarshal, :payload, :adapter]
 
   @typep marshal :: (struct -> binary)
   @typep unmarshal :: (binary -> struct)
@@ -24,7 +24,6 @@ defmodule GRPC.Server.Stream do
           marshal: marshal,
           unmarshal: unmarshal,
           payload: any,
-          adapter: atom,
-          resp_trailers: map
+          adapter: atom
         }
 end

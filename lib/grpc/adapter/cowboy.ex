@@ -5,9 +5,11 @@ defmodule GRPC.Adapter.Cowboy do
   # Cowboy req will be stored in `:payload` of `GRPC.Server.Stream`.
 
   require Logger
+  alias GRPC.Adapter.Cowboy.Handler, as: Handler
 
   @default_num_acceptors 100
 
+  # Only used in starting a server manually using `GRPC.Server.start(servers)`
   @spec start(GRPC.Server.servers_map(), non_neg_integer, keyword) :: {:ok, pid, non_neg_integer}
   def start(servers, port, opts) do
     server_args = cowboy_start_args(servers, port, opts)
@@ -36,6 +38,7 @@ defmodule GRPC.Adapter.Cowboy do
       end
 
     scheme = if opts[:cred], do: :https, else: :http
+    # Wrap real mfa to print starting log
     mfa = {__MODULE__, :start_link, [scheme, servers, mfa]}
     {ref, mfa, type, timeout, kind, modules}
   end
@@ -63,89 +66,68 @@ defmodule GRPC.Adapter.Cowboy do
   end
 
   @spec read_body(GRPC.Client.Stream.t()) :: {:ok, binary, GRPC.Client.Stream.t()}
-  def read_body(%{payload: req} = stream) do
-    {:ok, data, req} = read_body("", req)
-    {:ok, data, %{stream | payload: req}}
-  end
-
-  defp read_body(body, req) do
-    case :cowboy_req.read_body(req) do
-      {:ok, data, req} -> {:ok, body <> data, req}
-      {:more, data, req} -> read_body(body <> data, req)
-    end
+  def read_body(%{pid: pid}) do
+    Handler.read_full_body(pid)
   end
 
   @spec reading_stream(GRPC.Client.Stream.t(), ([binary] -> [struct])) :: Enumerable.t()
-  def reading_stream(stream, func) do
-    Stream.unfold({stream, %{frames: [], buffer: ""}}, fn acc -> read_stream(acc, func) end)
+  def reading_stream(%{pid: pid}, func) do
+    Stream.unfold(%{pid: pid, frames: [], buffer: ""}, fn acc -> read_stream(acc, func) end)
   end
 
   defp read_stream(nil, _), do: nil
-  defp read_stream({_, %{frames: [], finished: true}}, _), do: nil
+  defp read_stream(%{frames: [], finished: true}, _), do: nil
 
-  defp read_stream({stream, %{frames: [curr | rest]} = s}, _) do
-    new_s = Map.put(s, :frames, rest)
-    {curr, {stream, new_s}}
+  defp read_stream(%{frames: [curr | rest]} = s, _) do
+    {curr, Map.put(s, :frames, rest)}
   end
 
-  defp read_stream({%{payload: req0} = st, %{frames: [], buffer: buffer} = s}, func) do
-    case :cowboy_req.read_body(req0) do
-      {:ok, "", _} ->
+  defp read_stream(%{pid: pid, frames: [], buffer: buffer} = s, func) do
+    case Handler.read_body(pid) do
+      {:ok, ""} ->
         nil
 
-      {:ok, data, req} ->
+      {:ok, data} ->
         [request | rest] = func.(buffer <> data)
-        new_stream = %{st | payload: req}
         new_s = s |> Map.put(:frames, rest) |> Map.put(:finished, true)
-        {request, {new_stream, new_s}}
+        {request, new_s}
 
-      {:more, data, req} ->
+      {:more, data} ->
         data = buffer <> data
 
         if GRPC.Message.complete?(data) do
           [request | rest] = func.(data)
-          new_stream = %{st | payload: req}
           new_s = s |> Map.put(:frames, rest) |> Map.put(:buffer, "")
-          {request, {new_stream, new_s}}
+          {request, new_s}
         else
-          read_stream({%{st | payload: req}, Map.put(s, :buffer, data)}, func)
+          read_stream(Map.put(s, :buffer, data), func)
         end
     end
   end
 
   @spec send_reply(GRPC.Client.Stream.t(), binary) :: any
-  def send_reply(%{payload: req}, data) do
-    :cowboy_req.stream_body(data, :nofin, req)
+  def send_reply(%{pid: pid}, data) do
+    Handler.stream_body(pid, data, :nofin)
   end
 
-  @doc false
-  @spec flow_control(GRPC.Client.Stream.t(), non_neg_integer) :: any
-  def flow_control(%{payload: req}, size) do
-    pid = req[:pid]
-    send(pid, {{pid, req[:streamid]}, {:flow, size}})
+  def send_headers(%{pid: pid}, headers) do
+    Handler.stream_reply(pid, 200, headers)
   end
 
-  def has_sent_headers?(%{payload: req}) do
-    req[:has_sent_resp] != nil
+  def set_headers(%{pid: pid}, headers) do
+    Handler.set_resp_headers(pid, headers)
   end
 
-  def send_headers(%{payload: req} = stream, headers) do
-    req = :cowboy_req.stream_reply(200, headers, req)
-    %{stream | payload: req}
+  def set_resp_trailers(%{pid: pid}, trailers) do
+    Handler.set_resp_trailers(pid, trailers)
   end
 
-  def set_headers(%{payload: req} = stream, headers) do
-    req = :cowboy_req.set_resp_headers(headers, req)
-    %{stream | payload: req}
+  def send_trailers(%{pid: pid}, trailers) do
+    Handler.stream_trailers(pid, trailers)
   end
 
-  def send_trailers(%{payload: req} = stream, trailers) do
-    :cowboy_req.stream_trailers(trailers, req)
-    %{stream | payload: req}
-  end
-
-  def get_headers(%{payload: req}) do
-    :cowboy_req.headers(req)
+  def get_headers(%{pid: pid}) do
+    Handler.get_headers(pid)
   end
 
   defp cowboy_start_args(servers, port, opts) do

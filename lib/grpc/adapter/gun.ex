@@ -125,15 +125,20 @@ defmodule GRPC.Adapter.Gun do
 
   defp await(conn_pid, stream_ref, timeout) do
     case :gun.await(conn_pid, stream_ref, timeout) do
-      {:response, :fin, _, _} ->
-        {:error,
-         GRPC.RPCError.exception(GRPC.Status.internal(), "shouldn't finish when getting headers")}
+      {:response, :fin, status, _headers} ->
+        if status == 200 do
+          {:error,
+           GRPC.RPCError.exception(GRPC.Status.internal(), "shouldn't finish when getting headers")}
+        else
+          {:error,
+           GRPC.RPCError.exception(GRPC.Status.internal(), "status got is #{status} instead of 200")}
+        end
 
       {:response, :nofin, status, headers} ->
         if status == 200 do
           {:response, headers}
         else
-          {:error, GRPC.RPCError.exception(GRPC.Status.internal(), "status got is not 200")}
+          {:error, GRPC.RPCError.exception(GRPC.Status.internal(), "status got is #{status} instead of 200")}
         end
 
       {:data, :fin, _} ->
