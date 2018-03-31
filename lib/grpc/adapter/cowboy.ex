@@ -65,12 +65,12 @@ defmodule GRPC.Adapter.Cowboy do
     :cowboy.stop_listener(servers_name(servers))
   end
 
-  @spec read_body(GRPC.Client.Stream.t()) :: {:ok, binary, GRPC.Client.Stream.t()}
+  @spec read_body(GRPC.Adapter.Cowboy.Handler.state()) :: {:ok, binary}
   def read_body(%{pid: pid}) do
     Handler.read_full_body(pid)
   end
 
-  @spec reading_stream(GRPC.Client.Stream.t(), ([binary] -> [struct])) :: Enumerable.t()
+  @spec reading_stream(GRPC.Adapter.Cowboy.Handler.state(), ([binary] -> [struct])) :: Enumerable.t()
   def reading_stream(%{pid: pid}, func) do
     Stream.unfold(%{pid: pid, frames: [], buffer: ""}, fn acc -> read_stream(acc, func) end)
   end
@@ -105,7 +105,7 @@ defmodule GRPC.Adapter.Cowboy do
     end
   end
 
-  @spec send_reply(GRPC.Client.Stream.t(), binary) :: any
+  @spec send_reply(GRPC.Adapter.Cowboy.Handler.state(), binary) :: any
   def send_reply(%{pid: pid}, data) do
     Handler.stream_body(pid, data, :nofin)
   end
