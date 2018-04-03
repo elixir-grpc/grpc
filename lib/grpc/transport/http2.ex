@@ -78,7 +78,7 @@ defmodule GRPC.Transport.HTTP2 do
   defp append_encoding(headers, _), do: headers
 
   defp append_timeout(headers, timeout) when is_integer(timeout) do
-    headers ++ [{"grpc-timeout", Utils.encode_timeout(timeout * 1000)}]
+    headers ++ [{"grpc-timeout", Utils.encode_timeout(timeout)}]
   end
 
   defp append_timeout(headers, _), do: headers

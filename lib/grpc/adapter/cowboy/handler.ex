@@ -21,7 +21,11 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
     req = :cowboy_req.set_resp_headers(HTTP2.server_headers(), req)
     Process.flag(:trap_exit, true)
-    {:cowboy_loop, req, %{pid: pid}}
+
+    timeout = :cowboy_req.header("grpc-timeout", req)
+    timer_ref = Process.send_after(self(), {:handling_timeout, self()}, GRPC.Transport.Utils.decode_timeout(timeout))
+
+    {:cowboy_loop, req, %{pid: pid, handling_timeout: timer_ref}}
   end
 
   # APIs begin
@@ -101,6 +105,14 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     headers = :cowboy_req.headers(req)
     send(pid, headers)
     {:ok, req, state}
+  end
+
+  def info({:handling_timeout, _pid}, req, state = %{pid: pid}) do
+    IO.inspect(pid)
+    error = %RPCError{status: GRPC.Status.deadline_exceeded(), message: "Deadline expired"}
+    trailers = HTTP2.server_trailers(error.status, error.message)
+    send_stream_trailers(req, trailers)
+    {:stop, req, state}
   end
 
   def info({:EXIT, pid, :normal}, req, state = %{pid: pid}) do
