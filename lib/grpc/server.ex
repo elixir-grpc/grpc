@@ -131,7 +131,7 @@ defmodule GRPC.Server do
   end
 
   defp do_handle_request(false, true, %{server: server_mod} = stream, func_name, request) do
-    stream = apply(server_mod, func_name, [request, stream])
+    apply(server_mod, func_name, [request, stream])
     {:ok, stream}
   end
 
@@ -141,7 +141,7 @@ defmodule GRPC.Server do
   end
 
   defp do_handle_request(true, true, %{server: server_mod} = stream, func_name, req_stream) do
-    stream = apply(server_mod, func_name, [req_stream, stream])
+    apply(server_mod, func_name, [req_stream, stream])
     {:ok, stream}
   end
 

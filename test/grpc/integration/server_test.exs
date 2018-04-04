@@ -52,6 +52,31 @@ defmodule GRPC.Integration.ServerTest do
     end
   end
 
+  defmodule TimeoutServer do
+    use GRPC.Server, service: Routeguide.RouteGuide.Service
+
+    def list_features(_rectangle, _stream) do
+      Process.sleep(500)
+    end
+  end
+
+  defmodule SlowServer do
+    use GRPC.Server, service: Routeguide.RouteGuide.Service
+
+    def list_features(rectangle, stream) do
+      Process.sleep(400)
+
+      Enum.each([rectangle.lo, rectangle.hi], fn point ->
+        feature = simple_feature(point)
+        GRPC.Server.stream_send(stream, feature)
+      end)
+    end
+
+    defp simple_feature(point) do
+      Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
+    end
+  end
+
   test "multiple servers works" do
     run_server([FeatureServer, HelloServer], fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
@@ -92,14 +117,9 @@ defmodule GRPC.Integration.ServerTest do
   test "returns appropriate error for stream requests" do
     run_server([FeatureErrorServer], fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-      low = Routeguide.Point.new(latitude: 400_000_000, longitude: -750_000_000)
-      high = Routeguide.Point.new(latitude: 420_000_000, longitude: -730_000_000)
-      rect = Routeguide.Rectangle.new(lo: low, hi: high)
-      {:ok, stream} = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
-
-      Enum.each(stream, fn {:error, error} ->
-        assert %GRPC.RPCError{message: "Please authenticate", status: 16} == error
-      end)
+      rect = Routeguide.Rectangle.new()
+      error = %GRPC.RPCError{message: "Please authenticate", status: 16}
+      assert {:error, ^error} = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
     end)
   end
 
@@ -110,6 +130,30 @@ defmodule GRPC.Integration.ServerTest do
       {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
       name = String.duplicate("a", round(:math.pow(2, 14)))
       assert "Hello, #{name}" == reply.message
+    end)
+  end
+
+  test "return deadline error for slow server" do
+    run_server([TimeoutServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      rect = Routeguide.Rectangle.new()
+      error = %GRPC.RPCError{message: "Deadline expired", status: 4}
+      assert {:error, ^error} = channel |> Routeguide.RouteGuide.Stub.list_features(rect, timeout: 500)
+    end)
+  end
+
+
+  test "return normally for a little slow server" do
+    run_server([SlowServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      low = Routeguide.Point.new(latitude: 400_000_000, longitude: -750_000_000)
+      high = Routeguide.Point.new(latitude: 420_000_000, longitude: -730_000_000)
+      rect = Routeguide.Rectangle.new(lo: low, hi: high)
+      {:ok, stream} = channel |> Routeguide.RouteGuide.Stub.list_features(rect, timeout: 500)
+
+      Enum.each(stream, fn {:ok, feature} ->
+        assert feature
+      end)
     end)
   end
 end

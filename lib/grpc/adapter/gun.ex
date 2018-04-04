@@ -124,11 +124,22 @@ defmodule GRPC.Adapter.Gun do
   end
 
   defp await(conn_pid, stream_ref, timeout) do
+    # We should use server timeout for most time
+    timeout = if is_integer(timeout) do
+      timeout * 2
+    else
+      timeout
+    end
     case :gun.await(conn_pid, stream_ref, timeout) do
-      {:response, :fin, status, _headers} ->
+      {:response, :fin, status, headers} ->
         if status == 200 do
-          {:error,
-           GRPC.RPCError.exception(GRPC.Status.internal(), "shouldn't finish when getting headers")}
+          if headers["grpc-status"] && headers["grpc-status"] != "0" do
+            {:error,
+             GRPC.RPCError.exception(String.to_integer(headers["grpc-status"]), headers["grpc-message"])}
+          else
+            {:error,
+             GRPC.RPCError.exception(GRPC.Status.internal(), "shouldn't finish when getting headers")}
+          end
         else
           {:error,
            GRPC.RPCError.exception(GRPC.Status.internal(), "status got is #{status} instead of 200")}
@@ -136,7 +147,13 @@ defmodule GRPC.Adapter.Gun do
 
       {:response, :nofin, status, headers} ->
         if status == 200 do
-          {:response, headers}
+          headers = Enum.into(headers, %{})
+          if headers["grpc-status"] && headers["grpc-status"] != "0" do
+            {:error,
+             GRPC.RPCError.exception(String.to_integer(headers["grpc-status"]), headers["grpc-message"])}
+          else
+            {:response, headers}
+          end
         else
           {:error, GRPC.RPCError.exception(GRPC.Status.internal(), "status got is #{status} instead of 200")}
         end
@@ -152,7 +169,7 @@ defmodule GRPC.Adapter.Gun do
         trailers
 
       {:error, :timeout} ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "deadline exceeded")}
+        {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "timeout when waiting for server")}
 
       {:error, {reason, msg}} ->
         {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "#{reason}: #{msg}")}

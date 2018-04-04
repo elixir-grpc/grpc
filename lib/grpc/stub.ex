@@ -41,8 +41,8 @@ defmodule GRPC.Stub do
   @insecure_scheme "http"
   @secure_scheme "https"
   @canceled_error GRPC.RPCError.exception(GRPC.Status.cancelled(), "The operation was cancelled")
-  # 5 seconds
-  @default_timeout 5000
+  # 10 seconds
+  @default_timeout 10000
 
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
