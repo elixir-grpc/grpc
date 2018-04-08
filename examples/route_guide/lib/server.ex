@@ -14,12 +14,12 @@ defmodule Routeguide.RouteGuide.Server do
   end
 
   @spec list_features(Routeguide.Rectangle.t(), GRPC.Server.Stream.t()) :: any
-  def list_features(rect, stream0) do
+  def list_features(rect, stream) do
     features = Data.fetch_features()
 
     features
     |> Enum.filter(fn %{location: loc} -> in_range?(loc, rect) end)
-    |> Enum.reduce(stream0, fn feature, stream -> Server.send_reply(stream, feature) end)
+    |> Enum.each(fn feature -> Server.send_reply(stream, feature) end)
   end
 
   @spec record_route(Enumerable.t(), GRPC.Server.Stream.t()) :: Routeguide.RouteSummary.t()
@@ -46,23 +46,21 @@ defmodule Routeguide.RouteGuide.Server do
   end
 
   @spec record_route(Enumerable.t(), GRPC.Server.Stream.t()) :: any
-  def route_chat(req_enum, stream0) do
-    {notes, stream} =
-      Enum.reduce(req_enum, {Data.fetch_notes(), stream0}, fn note, {notes, stream} ->
+  def route_chat(req_enum, stream) do
+    notes =
+      Enum.reduce(req_enum, Data.fetch_notes(), fn note, notes ->
         key = serialize_location(note.location)
         new_notes = Map.update(notes, key, [note], &(&1 ++ [note]))
 
-        stream =
-          Enum.reduce(new_notes[key], stream, fn note, stream ->
-            IO.inspect(note)
-            Server.send_reply(stream, note)
-          end)
+        Enum.each(new_notes[key], fn note ->
+          IO.inspect(note)
+          Server.send_reply(stream, note)
+        end)
 
-        {new_notes, stream}
+        new_notes
       end)
 
     Data.update_notes(notes)
-    stream
   end
 
   defp in_range?(%{longitude: long, latitude: lat}, %{lo: low, hi: high}) do

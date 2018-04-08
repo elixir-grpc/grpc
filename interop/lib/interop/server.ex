@@ -7,13 +7,13 @@ defmodule Interop.Server do
   end
 
   def unary_call(req, stream) do
-    stream = handle_metadata(stream)
+    handle_metadata(stream)
     status = req.response_status
     if status && status.code != 0 do
       raise GRPC.RPCError, status: status.code, message: status.message
     end
     payload = Grpc.Testing.Payload.new(body: String.duplicate("0", req.response_size))
-    {Grpc.Testing.SimpleResponse.new(payload: payload), stream}
+    Grpc.Testing.SimpleResponse.new(payload: payload)
   end
 
   def streaming_input_call(req_enum, _stream) do
@@ -21,16 +21,16 @@ defmodule Interop.Server do
     Grpc.Testing.StreamingInputCallResponse.new(aggregated_payload_size: size)
   end
 
-  def streaming_output_call(req, stream0) do
+  def streaming_output_call(req, stream) do
     req.response_parameters
     |> Enum.map(&Grpc.Testing.Payload.new(body: String.duplicate("0", &1.size)))
     |> Enum.map(&Grpc.Testing.StreamingOutputCallResponse.new(payload: &1))
-    |> Enum.reduce(stream0, &GRPC.Server.send_reply(&2, &1))
+    |> Enum.each(&GRPC.Server.send_reply(stream, &1))
   end
 
-  def full_duplex_call(req_enum, stream0) do
-    stream0 = handle_metadata(stream0)
-    Enum.reduce(req_enum, stream0, fn(req, stream) ->
+  def full_duplex_call(req_enum, stream) do
+    handle_metadata(stream)
+    Enum.each(req_enum, fn(req) ->
       status = req.response_status
       if status && status.code != 0 do
         raise GRPC.RPCError, status: status.code, message: status.message
@@ -41,23 +41,17 @@ defmodule Interop.Server do
         payload = Grpc.Testing.Payload.new(body: String.duplicate("0", size))
         res = Grpc.Testing.StreamingOutputCallResponse.new(payload: payload)
         GRPC.Server.send_reply(stream, res)
-      else
-        stream
       end
     end)
   end
 
   defp handle_metadata(stream) do
     headers = GRPC.Stream.get_headers(stream)
-    stream = case headers["x-grpc-test-echo-initial"] do
-      nil -> stream
-      val ->
-        GRPC.Server.send_headers(stream, %{"x-grpc-test-echo-initial" => val})
+    if header = headers["x-grpc-test-echo-initial"] do
+      GRPC.Server.send_headers(stream, %{"x-grpc-test-echo-initial" => header})
     end
-    case headers["x-grpc-test-echo-trailing-bin"] do
-      nil -> stream
-      val ->
-        GRPC.Server.set_trailers(stream, %{"x-grpc-test-echo-trailing-bin" => val})
+    if header = headers["x-grpc-test-echo-trailing-bin"] do
+      GRPC.Server.set_trailers(stream, %{"x-grpc-test-echo-trailing-bin" => header})
     end
   end
 end

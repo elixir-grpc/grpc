@@ -12,7 +12,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   @default_trailers HTTP2.server_trailers()
   @type state :: %{pid: pid, handling_timer: reference, resp_trailers: map}
 
-  @spec init(map, {GRPC.Server.servers_map(), keyword}) :: {:cowboy_loop, map, state}
+  @spec init(map, {GRPC.Server.servers_map(), keyword}) :: {:cowboy_loop, map, map}
   def init(req, {servers, _opts}) do
     path = :cowboy_req.path(req)
     server = Map.get(servers, GRPC.Server.service_name(path))
@@ -23,7 +23,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     Process.flag(:trap_exit, true)
 
     timeout = :cowboy_req.header("grpc-timeout", req)
-    timer_ref = if timeout do
+    timer_ref = if timeout && timeout != :undefined do
       Process.send_after(self(), {:handling_timeout, self()}, GRPC.Transport.Utils.decode_timeout(timeout))
     end
 

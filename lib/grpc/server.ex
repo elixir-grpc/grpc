@@ -29,10 +29,6 @@ defmodule GRPC.Server do
   The request will be a `Enumerable.t`(created by Elixir's `Stream`) of requests
   if it's streaming. If a reply is streaming, you need to call `send_reply/2` to send
   replies one by one instead of returning reply in the end.
-
-  For most functions which return stream, you **MUST** use the new stream as argument of
-  other functions in this module. And you **MUST** return that stream in the end in your
-  rpc functions.
   """
 
   require Logger
@@ -123,11 +119,9 @@ defmodule GRPC.Server do
     do_handle_request(req_stream, res_stream, stream, func_name, reading_stream)
   end
 
-  defp do_handle_request(false, false, %{server: server_mod} = stream0, func_name, request) do
-    case apply(server_mod, func_name, [request, stream0]) do
-      resp = %{} -> {:ok, stream0, resp}
-      {resp, stream} -> {:ok, stream, resp}
-    end
+  defp do_handle_request(false, false, %{server: server_mod} = stream, func_name, request) do
+    reply = apply(server_mod, func_name, [request, stream])
+    {:ok, stream, reply}
   end
 
   defp do_handle_request(false, true, %{server: server_mod} = stream, func_name, request) do

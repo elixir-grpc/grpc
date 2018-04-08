@@ -9,8 +9,8 @@ defmodule GRPC.Integration.ServiceTest do
       simple_feature(point)
     end
 
-    def list_features(rectangle, stream0) do
-      Enum.reduce([rectangle.lo, rectangle.hi], stream0, fn point, stream ->
+    def list_features(rectangle, stream) do
+      Enum.each([rectangle.lo, rectangle.hi], fn point ->
         feature = simple_feature(point)
         Server.stream_send(stream, feature)
       end)
@@ -32,8 +32,8 @@ defmodule GRPC.Integration.ServiceTest do
       )
     end
 
-    def route_chat(req_enum, stream0) do
-      Enum.reduce(req_enum, stream0, fn note, stream ->
+    def route_chat(req_enum, stream) do
+      Enum.each(req_enum, fn note ->
         note = %{note | message: "Reply: #{note.message}"}
         Server.stream_send(stream, note)
       end)
