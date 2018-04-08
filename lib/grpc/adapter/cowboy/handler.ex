@@ -10,7 +10,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
   @adapter GRPC.Adapter.Cowboy
   @default_trailers HTTP2.server_trailers()
-  @type state :: %{pid: pid, handling_timeout: reference, resp_trailers: map}
+  @type state :: %{pid: pid, handling_timer: reference, resp_trailers: map}
 
   @spec init(map, {GRPC.Server.servers_map(), keyword}) :: {:cowboy_loop, map, state}
   def init(req, {servers, _opts}) do
@@ -27,7 +27,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
       Process.send_after(self(), {:handling_timeout, self()}, GRPC.Transport.Utils.decode_timeout(timeout))
     end
 
-    {:cowboy_loop, req, %{pid: pid, handling_timeout: timer_ref}}
+    {:cowboy_loop, req, %{pid: pid, handling_timer: timer_ref}}
   end
 
   # APIs begin
@@ -72,14 +72,25 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   # APIs end
 
   def info({:read_full_body, pid}, req, state = %{pid: pid}) do
-    {s, body, req} = read_full_body(req, "")
-    send(pid, {s, body})
-    {:ok, req, state}
+    try do
+      {s, body, req} = read_full_body(req, "", state[:handling_timer])
+      send(pid, {s, body})
+      {:ok, req, state}
+    catch
+      :exit, :timeout ->
+        info({:handling_timeout, self()}, req, state)
+    end
   end
   def info({:read_body, pid}, req, state = %{pid: pid}) do
-    {s, body, req} = :cowboy_req.read_body(req)
-    send(pid, {s, body})
-    {:ok, req, state}
+    try do
+      opts = timeout_left_opt(state[:handling_timer])
+      {s, body, req} = :cowboy_req.read_body(req, opts)
+      send(pid, {s, body})
+      {:ok, req, state}
+    catch
+      :exit, :timeout ->
+        info({:handling_timeout, self()}, req, state)
+    end
   end
   def info({:stream_body, pid, data, is_fin}, req, state = %{pid: pid}) do
     req = check_sent_resp(req)
@@ -173,10 +184,10 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     end
   end
 
-  defp read_full_body(req, body) do
-    case :cowboy_req.read_body(req) do
+  defp read_full_body(req, body, timer) do
+    case :cowboy_req.read_body(req, timeout_left_opt(timer)) do
       {:ok, data, req} -> {:ok, body <> data, req}
-      {:more, data, req} -> read_full_body(req, body <> data)
+      {:more, data, req} -> read_full_body(req, body <> data, timer)
     end
   end
 
@@ -195,6 +206,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
   defp send_error_trailers(req, trailers) do
     if req[:has_sent_resp] == nil do
+      # TODO: only send trailers
       :cowboy_req.stream_reply(200, trailers, req)
     else
       :cowboy_req.stream_trailers(trailers, req)
@@ -204,6 +216,18 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   def exit_handler(pid, reason) do
     if Process.alive?(pid) do
       Process.exit(pid, reason)
+    end
+  end
+
+  defp timeout_left_opt(timer, opts \\ %{}) do
+    case timer do
+      nil -> opts
+      timer ->
+        case Process.read_timer(timer) do
+          ms when is_integer(ms) ->
+            Map.put(opts, :timeout, ms)
+          _ -> 0
+        end
     end
   end
 end

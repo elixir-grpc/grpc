@@ -22,6 +22,20 @@ run = fn(i) ->
   Client.timeout_on_sleeping_server!(ch)
 end
 
+# TODO: flush useless messages on client side
+# defmodule Helper do
+#   def flush() do
+#     receive do
+#      msg ->
+#        IO.inspect(msg)
+#        flush()
+#     after
+#      0 -> :ok
+#     end
+#   end
+# end
+# Helper.flush()
+
 Enum.each(1..100, run)
 IO.puts("Succeed!")
 :ok = GRPC.Server.stop(servers)

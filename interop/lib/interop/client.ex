@@ -129,13 +129,11 @@ defmodule Interop.Client do
 
     # FullDuplexCall
     req = Grpc.Testing.StreamingOutputCallRequest.new(response_status: status)
-    {:ok, res_enum} =
+    {:error, ^error} =
       ch
       |> Grpc.Testing.TestService.Stub.full_duplex_call()
       |> GRPC.Stub.send_request(req, end_stream: true)
       |> GRPC.Stub.recv()
-
-    {:error, ^error} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
   end
 
   def unimplemented_service!(ch) do
@@ -167,12 +165,22 @@ defmodule Interop.Client do
 
   def timeout_on_sleeping_server!(ch) do
     IO.puts("Run timeout_on_sleeping_server!")
-    req = Grpc.Testing.StreamingOutputCallRequest.new(payload: payload(27182))
-    stream = Grpc.Testing.TestService.Stub.full_duplex_call(ch)
-    {:error, %GRPC.RPCError{status: 4}} =
-      stream
-      |> GRPC.Stub.send_request(req)
-      |> GRPC.Stub.recv(timeout: 1)
+    req = Grpc.Testing.StreamingOutputCallRequest.new(
+      payload: payload(27182),
+      response_parameters: [res_param(31415)]
+    )
+    stream = Grpc.Testing.TestService.Stub.full_duplex_call(ch, timeout: 1)
+    resp = stream |> GRPC.Stub.send_request(req) |> GRPC.Stub.recv()
+    case resp do
+      {:error, %GRPC.RPCError{status: 4}} -> :ok
+      {:ok, enum} ->
+        Enum.each(enum, fn
+          {:ok, _msg} ->
+            :ok
+          {:error, %GRPC.RPCError{status: 4}} ->
+            :ok
+        end)
+    end
   end
 
   defp validate_headers!(headers, trailers) do
