@@ -33,15 +33,11 @@ defmodule GRPC.Server do
 
   require Logger
 
-  @impl_error_msg "Operation is not implemented or not supported/enabled in this service."
-
   alias GRPC.Server.Stream
 
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
       service_name = service_mod.__meta__(:name)
-
-      @impl_error_msg "Operation is not implemented or not supported/enabled in this service."
 
       Enum.each(service_mod.__rpc_calls__, fn {name, _, _} = rpc ->
         func_name = name |> to_string |> Macro.underscore()
@@ -58,7 +54,7 @@ defmodule GRPC.Server do
       end)
 
       def __call_rpc__(_, stream) do
-        raise GRPC.RPCError, status: GRPC.Status.unimplemented(), message: @impl_error_msg
+        raise GRPC.RPCError, status: :unimplemented
       end
 
       def __meta__(:service), do: unquote(service_mod)
@@ -87,7 +83,7 @@ defmodule GRPC.Server do
     if function_exported?(server, func_name, 2) do
       do_handle_request(req_s, res_s, stream, func_name)
     else
-      raise GRPC.RPCError, status: GRPC.Status.unimplemented(), message: @impl_error_msg
+      raise GRPC.RPCError, status: :unimplemented
     end
   end
 
