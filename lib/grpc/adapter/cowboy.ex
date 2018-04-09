@@ -84,13 +84,15 @@ defmodule GRPC.Adapter.Cowboy do
 
   defp read_stream(%{pid: pid, frames: [], buffer: buffer} = s, func) do
     case Handler.read_body(pid) do
-      {:ok, ""} ->
-        nil
-
       {:ok, data} ->
-        [request | rest] = func.(buffer <> data)
-        new_s = s |> Map.put(:frames, rest) |> Map.put(:finished, true)
-        {request, new_s}
+        new_data = buffer <> data
+        if byte_size(new_data) > 0 do
+          [request | rest] = func.(new_data)
+          new_s = s |> Map.put(:frames, rest) |> Map.put(:finished, true)
+          {request, new_s}
+        else
+          nil
+        end
 
       {:more, data} ->
         data = buffer <> data
