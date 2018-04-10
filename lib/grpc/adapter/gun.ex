@@ -133,6 +133,7 @@ defmodule GRPC.Adapter.Gun do
     case :gun.await(conn_pid, stream_ref, timeout) do
       {:response, :fin, status, headers} ->
         if status == 200 do
+          headers = Enum.into(headers, %{})
           if headers["grpc-status"] && headers["grpc-status"] != "0" do
             {:error,
              GRPC.RPCError.exception(String.to_integer(headers["grpc-status"]), headers["grpc-message"])}
