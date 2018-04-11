@@ -51,11 +51,11 @@ defmodule GRPC.Transport.Utils do
   end
 
   defp decode_timeout("n", timeout) do
-    timeout / 1000_000
+    div(timeout, 1000_000)
   end
 
   defp decode_timeout("u", timeout) do
-    timeout / 1000
+    div(timeout, 1000)
   end
 
   defp decode_timeout("m", timeout) do

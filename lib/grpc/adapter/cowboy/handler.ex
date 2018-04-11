@@ -213,8 +213,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
   defp send_error_trailers(req, trailers) do
     if req[:has_sent_resp] == nil do
-      # TODO: only send trailers
-      :cowboy_req.stream_reply(200, trailers, req)
+      :cowboy_req.reply(200, trailers, req)
     else
       :cowboy_req.stream_trailers(trailers, req)
     end
