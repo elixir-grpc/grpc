@@ -1,6 +1,8 @@
 alias Interop.Client
 servers = [Interop.Server]
-{:ok, _pid, port} = GRPC.Server.start(servers, 0)
+port = 0
+# port = 10000
+{:ok, _pid, port} = GRPC.Server.start(servers, port)
 ch = Client.connect("127.0.0.1", port)
 run = fn(i) ->
   IO.puts("Round #{i}")

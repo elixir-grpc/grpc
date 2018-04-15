@@ -88,8 +88,8 @@ defmodule GRPC.Adapter.Gun do
 
   def recv_headers(%{conn_pid: conn_pid}, %{stream_ref: stream_ref}, opts) do
     case await(conn_pid, stream_ref, opts[:timeout]) do
-      {:response, headers} ->
-        {:ok, headers}
+      {:response, headers, fin} ->
+        {:ok, headers, fin}
 
       error = {:error, _} ->
         error
@@ -134,12 +134,13 @@ defmodule GRPC.Adapter.Gun do
       {:response, :fin, status, headers} ->
         if status == 200 do
           headers = Enum.into(headers, %{})
-          if headers["grpc-status"] && headers["grpc-status"] != "0" do
-            {:error,
-             GRPC.RPCError.exception(String.to_integer(headers["grpc-status"]), headers["grpc-message"])}
-          else
-            {:error,
-             GRPC.RPCError.exception(GRPC.Status.internal(), "shouldn't finish when getting headers")}
+          case headers["grpc-status"] do
+            nil ->
+              {:error, GRPC.RPCError.exception(GRPC.Status.internal(), "shouldn't finish when getting headers")}
+            "0" ->
+              {:response, headers, :fin}
+            _ ->
+              {:error, GRPC.RPCError.exception(String.to_integer(headers["grpc-status"]), headers["grpc-message"])}
           end
         else
           {:error,
@@ -153,7 +154,7 @@ defmodule GRPC.Adapter.Gun do
             {:error,
              GRPC.RPCError.exception(String.to_integer(headers["grpc-status"]), headers["grpc-message"])}
           else
-            {:response, headers}
+            {:response, headers, :nofin}
           end
         else
           {:error, GRPC.RPCError.exception(GRPC.Status.internal(), "status got is #{status} instead of 200")}
@@ -173,7 +174,7 @@ defmodule GRPC.Adapter.Gun do
         {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "timeout when waiting for server")}
 
       {:error, {reason, msg}} ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "#{reason}: #{msg}")}
+        {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}: #{inspect(msg)}")}
 
       {:error, reason} ->
         {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}")}

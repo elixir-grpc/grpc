@@ -12,7 +12,7 @@ defmodule Interop.Server do
     if status && status.code != 0 do
       raise GRPC.RPCError, status: status.code, message: status.message
     end
-    payload = Grpc.Testing.Payload.new(body: String.duplicate("0", req.response_size))
+    payload = Grpc.Testing.Payload.new(body: String.duplicate(<<0>>, req.response_size))
     Grpc.Testing.SimpleResponse.new(payload: payload)
   end
 
@@ -23,7 +23,7 @@ defmodule Interop.Server do
 
   def streaming_output_call(req, stream) do
     req.response_parameters
-    |> Enum.map(&Grpc.Testing.Payload.new(body: String.duplicate("0", &1.size)))
+    |> Enum.map(&Grpc.Testing.Payload.new(body: String.duplicate(<<0>>, &1.size)))
     |> Enum.map(&Grpc.Testing.StreamingOutputCallResponse.new(payload: &1))
     |> Enum.each(&GRPC.Server.send_reply(stream, &1))
   end
@@ -38,7 +38,7 @@ defmodule Interop.Server do
       resp_param = List.first(req.response_parameters)
       if resp_param do
         size = resp_param.size
-        payload = Grpc.Testing.Payload.new(body: String.duplicate("0", size))
+        payload = Grpc.Testing.Payload.new(body: String.duplicate(<<0>>, size))
         res = Grpc.Testing.StreamingOutputCallResponse.new(payload: payload)
         GRPC.Server.send_reply(stream, res)
       end

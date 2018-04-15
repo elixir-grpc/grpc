@@ -50,7 +50,7 @@ defmodule Interop.Client do
     params = Enum.map([31415, 9, 2653, 58979], &res_param(&1))
     req = Grpc.Testing.StreamingOutputCallRequest.new(response_parameters: params)
     {:ok, res_enum} = ch |> Grpc.Testing.TestService.Stub.streaming_output_call(req)
-    result = Enum.map([31415, 9, 2653, 58979], &String.duplicate("0", &1))
+    result = Enum.map([31415, 9, 2653, 58979], &String.duplicate(<<0>>, &1))
     ^result = Enum.map(res_enum, fn {:ok, res} ->
       res.payload.body
     end)
@@ -69,12 +69,12 @@ defmodule Interop.Client do
 
     GRPC.Stub.send_request(stream, req.(31415, 27182))
     {:ok, res_enum} = GRPC.Stub.recv(stream)
-    reply = String.duplicate("0", 31415)
+    reply = String.duplicate(<<0>>, 31415)
     {:ok, %{payload: %{body: ^reply}}} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
 
     Enum.each([{9, 8}, {2653, 1828}, {58979, 45904}], fn ({res, payload}) ->
       GRPC.Stub.send_request(stream, req.(res, payload))
-      reply = String.duplicate("0", res)
+      reply = String.duplicate(<<0>>, res)
       {:ok, %{payload: %{body: ^reply}}} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
     end)
     GRPC.Stub.end_stream(stream)
@@ -109,7 +109,7 @@ defmodule Interop.Client do
       |> GRPC.Stub.send_request(req, end_stream: true)
       |> GRPC.Stub.recv(return_headers: true)
 
-    reply = String.duplicate("0", 314159)
+    reply = String.duplicate(<<0>>, 314159)
     {:ok, %{payload: %{body: ^reply}}} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
     {:trailers, new_trailers} = Stream.take(res_enum, 1) |> Enum.to_list |> List.first
     validate_headers!(new_headers, new_trailers)
@@ -193,6 +193,6 @@ defmodule Interop.Client do
   end
 
   defp payload(n) do
-    Grpc.Testing.Payload.new(body: String.duplicate("0", n))
+    Grpc.Testing.Payload.new(body: String.duplicate(<<0>>, n))
   end
 end

@@ -103,7 +103,7 @@ defmodule GRPC.Transport.HTTP2 do
   end
 
   defp decode_metadata({key, val}) do
-    val = if String.ends_with?(key, "-bin"), do: Base.decode64!(val), else: val
+    val = if String.ends_with?(key, "-bin"), do: Base.decode64!(val, padding: false), else: val
     {key, val}
   end
 

@@ -57,7 +57,7 @@ defmodule GRPC.Transport.UtilsTest do
   end
 
   test "decode_timeout/1 returns 0.123" do
-    assert decode_timeout("123u") == 0.123
+    assert decode_timeout("123u") == 0
   end
 
   test "decode_timeout/1 returns 123 ms" do
