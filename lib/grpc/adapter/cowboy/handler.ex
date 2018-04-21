@@ -71,28 +71,29 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   end
 
   defp sync_call(pid, key) do
-    send(pid, {key, self()})
+    ref = make_ref()
+    send(pid, {key, ref, self()})
     receive do
-      msg -> msg
+      {^ref, msg} -> msg
     end
   end
   # APIs end
 
-  def info({:read_full_body, pid}, req, state = %{pid: pid}) do
+  def info({:read_full_body, ref, pid}, req, state = %{pid: pid}) do
     try do
       {s, body, req} = read_full_body(req, "", state[:handling_timer])
-      send(pid, {s, body})
+      send(pid, {ref, {s, body}})
       {:ok, req, state}
     catch
       :exit, :timeout ->
         info({:handling_timeout, self()}, req, state)
     end
   end
-  def info({:read_body, pid}, req, state = %{pid: pid}) do
+  def info({:read_body, ref, pid}, req, state = %{pid: pid}) do
     try do
       opts = timeout_left_opt(state[:handling_timer])
       {s, body, req} = :cowboy_req.read_body(req, opts)
-      send(pid, {s, body})
+      send(pid, {ref, {s, body}})
       {:ok, req, state}
     catch
       :exit, :timeout ->
@@ -121,9 +122,9 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     send_stream_trailers(req, Map.merge(metadata, trailers))
     {:ok, req, state}
   end
-  def info({:get_headers, pid}, req, state = %{pid: pid}) do
+  def info({:get_headers, ref, pid}, req, state = %{pid: pid}) do
     headers = :cowboy_req.headers(req)
-    send(pid, headers)
+    send(pid, {ref, headers})
     {:ok, req, state}
   end
 
