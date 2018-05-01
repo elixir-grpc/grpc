@@ -13,12 +13,13 @@ defmodule GRPC.Integration.EndpointTest do
   defmodule HelloEndpoint do
     use GRPC.Endpoint
 
-    intercept GRPC.Logger
+    intercept GRPC.Logger, level: :info
     run HelloServer
   end
 
   defmodule HelloHaltInterceptor do
-    def call(_, stream, _next) do
+    def init(_), do: []
+    def call(_, stream, _next, _) do
       {:ok, stream, Helloworld.HelloReply.new(message: "Hello by interceptor")}
     end
   end

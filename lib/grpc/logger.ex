@@ -1,11 +1,15 @@
 defmodule GRPC.Logger do
   require Logger
+  @behaviour GRPC.Interceptor
 
-  def call(_req, stream, next) do
-    call(stream, next)
+  def init(opts) do
+    Keyword.get(opts, :level, :info)
   end
-  def call(stream, next) do
-    level = :info
+
+  def call(_req, stream, next, level) do
+    call(stream, next, level)
+  end
+  def call(stream, next, level) do
     Logger.log(level, fn ->
       [inspect(stream.server), ".", to_string(elem(stream.rpc, 0))]
     end)
