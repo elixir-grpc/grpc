@@ -10,7 +10,7 @@ defmodule GRPC.ServerTest do
   end
 
   test "stop/2 works" do
-    assert {%{"hello" => GRPC.ServerTest.Greeter.Server}} =
+    assert {nil, %{"hello" => GRPC.ServerTest.Greeter.Server}} =
              GRPC.Server.stop(Greeter.Server, adapter: GRPC.Test.ServerAdapter)
   end
 

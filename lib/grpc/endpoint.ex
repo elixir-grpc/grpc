@@ -17,9 +17,9 @@ defmodule GRPC.Endpoint do
     servers = parse_servers(servers)
 
     quote do
-      def __metadata__(:interceptors), do: unquote(interceptors |> Macro.escape() |> Enum.reverse())
-      def __metadata__(:servers), do: unquote(servers)
-      def __metadata__(:server_interceptors), do: unquote(Macro.escape(server_interceptors))
+      def __meta__(:interceptors), do: unquote(interceptors |> Macro.escape() |> Enum.reverse())
+      def __meta__(:servers), do: unquote(servers)
+      def __meta__(:server_interceptors), do: unquote(Macro.escape(server_interceptors))
     end
   end
 
