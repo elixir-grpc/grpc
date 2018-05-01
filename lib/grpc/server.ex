@@ -83,7 +83,7 @@ defmodule GRPC.Server do
     if function_exported?(server, func_name, 2) do
       do_handle_request(req_s, res_s, stream, func_name)
     else
-      raise GRPC.RPCError, status: :unimplemented
+      {:error, GRPC.RPCError.new(:unimplemented)}
     end
   end
 
