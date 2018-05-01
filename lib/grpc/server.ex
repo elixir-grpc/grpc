@@ -131,8 +131,7 @@ defmodule GRPC.Server do
       end
     end
 
-    interceptors = if endpoint, do: endpoint.__meta__(:interceptors), else: []
-    interceptors = interceptors |> Enum.reverse
+    interceptors = interceptors(endpoint, server)
 
     next = Enum.reduce(interceptors, last, fn(interceptor, acc) ->
       if req_stream do
@@ -142,6 +141,12 @@ defmodule GRPC.Server do
       end
     end)
     next.(stream)
+  end
+
+  defp interceptors(nil, _), do: []
+  defp interceptors(endpoint, server) do
+    interceptors = endpoint.__meta__(:interceptors) ++ Map.get(endpoint.__meta__(:server_interceptors), server, [])
+    interceptors |> Enum.reverse
   end
 
   # Start the gRPC server. Only used in starting a server manually using `GRPC.Server.start(servers)`
