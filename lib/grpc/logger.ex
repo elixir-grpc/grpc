@@ -6,17 +6,14 @@ defmodule GRPC.Logger do
     Keyword.get(opts, :level, :info)
   end
 
-  def call(_req, stream, next, level) do
-    call(stream, next, level)
-  end
-  def call(stream, next, level) do
+  def call(req, stream, next, level) do
     Logger.log(level, fn ->
       [inspect(stream.server), ".", to_string(elem(stream.rpc, 0))]
     end)
 
     start = System.monotonic_time()
 
-    result = next.(stream)
+    result = next.(req, stream)
     status = elem(result, 0)
 
     Logger.log(level, fn ->

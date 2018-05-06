@@ -42,11 +42,12 @@ defmodule GRPC.Server do
       Enum.each(service_mod.__rpc_calls__, fn {name, _, _} = rpc ->
         func_name = name |> to_string |> Macro.underscore()
         path = "/#{service_name}/#{name}"
+        grpc_type = GRPC.Service.grpc_type(rpc)
 
         def __call_rpc__(unquote(path), stream) do
           GRPC.Server.call(
             unquote(service_mod),
-            stream,
+            %{stream | service_name: unquote(service_name), method_name: unquote(name), grpc_type: unquote(grpc_type)},
             unquote(Macro.escape(rpc)),
             unquote(String.to_atom(func_name))
           )
@@ -88,7 +89,7 @@ defmodule GRPC.Server do
   end
 
   defp do_handle_request(
-         false = req_stream,
+         false,
          res_stream,
          %{unmarshal: unmarshal, adapter: adapter, payload: payload} = stream,
          func_name
@@ -97,11 +98,11 @@ defmodule GRPC.Server do
     message = GRPC.Message.from_data(data)
     request = unmarshal.(message)
 
-    call_with_interceptors(req_stream, res_stream, func_name, stream, request)
+    call_with_interceptors(res_stream, func_name, stream, request)
   end
 
   defp do_handle_request(
-         true = req_stream,
+         true,
          res_stream,
          %{unmarshal: unmarshal, adapter: adapter, payload: payload} = stream,
          func_name
@@ -113,13 +114,13 @@ defmodule GRPC.Server do
         |> Enum.map(&unmarshal.(&1))
       end)
 
-    call_with_interceptors(req_stream, res_stream, func_name, stream, reading_stream)
+    call_with_interceptors(res_stream, func_name, stream, reading_stream)
   end
 
-  defp call_with_interceptors(req_stream, res_stream, func_name, %{server: server, endpoint: endpoint} = stream, req) do
-    last = fn(s) ->
+  defp call_with_interceptors(res_stream, func_name, %{server: server, endpoint: endpoint} = stream, req) do
+    last = fn(r, s) ->
       try do
-        reply = apply(server, func_name, [req, s])
+        reply = apply(server, func_name, [r, s])
         if res_stream do
           {:ok, stream}
         else
@@ -135,19 +136,11 @@ defmodule GRPC.Server do
 
     next = Enum.reduce(interceptors, last, fn
       ({interceptor, opts}, acc) ->
-        if req_stream do
-          fn(s) -> interceptor.call(s, acc, interceptor.init(opts)) end
-        else
-          fn(s) -> interceptor.call(req, s, acc, interceptor.init(opts)) end
-        end
+        fn(r, s) -> interceptor.call(r, s, acc, interceptor.init(opts)) end
       (interceptor, acc) ->
-        if req_stream do
-          fn(s) -> interceptor.call(s, acc, interceptor.init([])) end
-        else
-          fn(s) -> interceptor.call(req, s, acc, interceptor.init([])) end
-        end
+        fn(r, s) -> interceptor.call(r, s, acc, interceptor.init([])) end
     end)
-    next.(stream)
+    next.(req, stream)
   end
 
   defp interceptors(nil, _), do: []
@@ -228,10 +221,8 @@ defmodule GRPC.Server do
       iex> GRPC.Server.send_reply(stream, reply)
   """
   @spec send_reply(Stream.t(), struct) :: Stream.t()
-  def send_reply(%{adapter: adapter, marshal: marshal} = stream, reply) do
-    {:ok, data, _size} = reply |> marshal.() |> GRPC.Message.to_data(%{iolist: true})
-    adapter.send_reply(stream.payload, data)
-    stream
+  def send_reply(%{__interface__: interface} = stream, reply) do
+    interface[:send_reply].(stream, reply)
   end
 
   @doc """

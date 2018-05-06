@@ -15,12 +15,18 @@ defmodule GRPC.Server.Stream do
     * `:payload` - the payload needed by the adapter
   """
 
-  defstruct [:server, :endpoint, :rpc, :marshal, :unmarshal, :payload, :adapter]
+  defstruct [
+    server: nil, service_name: nil, method_name: nil, grpc_type: nil, endpoint: nil, rpc: nil,
+    marshal: nil, unmarshal: nil, payload: nil, adapter: nil,
+    __interface__: %{send_reply: &__MODULE__.send_reply/2}]
 
   @typep marshal :: (struct -> binary)
   @typep unmarshal :: (binary -> struct)
   @type t :: %__MODULE__{
           server: atom,
+          service_name: String.t,
+          method_name: atom,
+          grpc_type: atom,
           endpoint: atom,
           rpc: tuple,
           marshal: marshal,
@@ -28,4 +34,10 @@ defmodule GRPC.Server.Stream do
           payload: any,
           adapter: atom
         }
+
+  def send_reply(%{adapter: adapter, marshal: marshal} = stream, reply) do
+    {:ok, data, _size} = reply |> marshal.() |> GRPC.Message.to_data(%{iolist: true})
+    adapter.send_reply(stream.payload, data)
+    stream
+  end
 end
