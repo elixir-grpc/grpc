@@ -129,6 +129,12 @@ defmodule GRPC.Server do
       rescue
         e in GRPC.RPCError ->
           {:error, e}
+      catch
+        kind, reason ->
+          Logger.error(Exception.format(kind, reason))
+          stack = System.stacktrace()
+          reason = Exception.normalize(kind, reason, stack)
+          {:error, %{kind: kind, reason: reason, stack: stack}}
       end
     end
 

@@ -166,19 +166,25 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   end
 
   def call_rpc(server, path, stream) do
-    try do
+    result = try do
       case do_call_rpc(server, path, stream) do
-        {:error, e} ->
-          exit(e)
+        {:error, _} = err ->
+          err
         _ ->
           :ok
       end
     catch
-      :exit, %RPCError{} = e ->
-        exit({e, ""})
       kind, e ->
         Logger.error(Exception.format(kind, e))
         exit({:handle_error, kind})
+    end
+    case result do
+      {:error, %GRPC.RPCError{} = e} ->
+        exit({e, ""})
+      {:error, %{kind: kind}} ->
+        exit({:handle_error, kind})
+      other ->
+        other
     end
   end
 

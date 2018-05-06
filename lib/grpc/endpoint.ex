@@ -1,4 +1,5 @@
 defmodule GRPC.Endpoint do
+  @doc false
   defmacro __using__(_opts) do
     quote do
       import GRPC.Endpoint, only: [intercept: 1, intercept: 2, run: 1, run: 2]
@@ -9,6 +10,7 @@ defmodule GRPC.Endpoint do
     end
   end
 
+  @doc false
   defmacro __before_compile__(env) do
     interceptors = Module.get_attribute(env.module, :interceptors)
     servers = Module.get_attribute(env.module, :servers)
