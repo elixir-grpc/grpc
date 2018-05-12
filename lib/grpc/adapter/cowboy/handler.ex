@@ -47,23 +47,23 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   end
 
   def stream_body(pid, data, is_fin) do
-    send(pid, {:stream_body, self(), data, is_fin})
+    send(pid, {:stream_body, data, is_fin})
   end
 
   def stream_reply(pid, status, headers) do
-    send(pid, {:stream_reply, self(), status, headers})
+    send(pid, {:stream_reply, status, headers})
   end
 
   def set_resp_headers(pid, headers) do
-    send(pid, {:set_resp_headers, self(), headers})
+    send(pid, {:set_resp_headers, headers})
   end
 
   def set_resp_trailers(pid, trailers) do
-    send(pid, {:set_resp_trailers, self(), trailers})
+    send(pid, {:set_resp_trailers, trailers})
   end
 
   def stream_trailers(pid, trailers) do
-    send(pid, {:stream_trailers, self(), trailers})
+    send(pid, {:stream_trailers, trailers})
   end
 
   def get_headers(pid) do
@@ -79,7 +79,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   end
   # APIs end
 
-  def info({:read_full_body, ref, pid}, req, state = %{pid: pid}) do
+  def info({:read_full_body, ref, pid}, req, state) do
     try do
       {s, body, req} = read_full_body(req, "", state[:handling_timer])
       send(pid, {ref, {s, body}})
@@ -89,7 +89,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
         info({:handling_timeout, self()}, req, state)
     end
   end
-  def info({:read_body, ref, pid}, req, state = %{pid: pid}) do
+  def info({:read_body, ref, pid}, req, state) do
     try do
       opts = timeout_left_opt(state[:handling_timer])
       {s, body, req} = :cowboy_req.read_body(req, opts)
@@ -100,31 +100,32 @@ defmodule GRPC.Adapter.Cowboy.Handler do
         info({:handling_timeout, self()}, req, state)
     end
   end
-  def info({:stream_body, pid, data, is_fin}, req, state = %{pid: pid}) do
+  def info({:get_headers, ref, pid}, req, state) do
+    headers = :cowboy_req.headers(req)
+    send(pid, {ref, headers})
+    {:ok, req, state}
+  end
+
+  def info({:stream_body, data, is_fin}, req, state) do
     req = check_sent_resp(req)
     :cowboy_req.stream_body(data, is_fin, req)
     {:ok, req, state}
   end
-  def info({:stream_reply, pid, status, headers}, req, state = %{pid: pid}) do
+  def info({:stream_reply, status, headers}, req, state) do
     req = :cowboy_req.stream_reply(status, headers, req)
     {:ok, req, state}
   end
-  def info({:set_resp_headers, pid, headers}, req, state = %{pid: pid}) do
+  def info({:set_resp_headers, headers}, req, state) do
     req = :cowboy_req.set_resp_headers(headers, req)
     {:ok, req, state}
   end
-  def info({:set_resp_trailers, pid, trailers}, req, state = %{pid: pid}) do
+  def info({:set_resp_trailers, trailers}, req, state) do
     {:ok, req, Map.put(state, :resp_trailers, trailers)}
   end
-  def info({:stream_trailers, pid, trailers}, req, state = %{pid: pid}) do
+  def info({:stream_trailers, trailers}, req, state) do
     metadata = Map.get(state, :resp_trailers, %{})
     metadata = GRPC.Transport.HTTP2.encode_metadata(metadata)
     send_stream_trailers(req, Map.merge(metadata, trailers))
-    {:ok, req, state}
-  end
-  def info({:get_headers, ref, pid}, req, state = %{pid: pid}) do
-    headers = :cowboy_req.headers(req)
-    send(pid, {ref, headers})
     {:ok, req, state}
   end
 
