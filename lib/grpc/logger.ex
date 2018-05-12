@@ -12,12 +12,12 @@ defmodule GRPC.Logger do
     end)
 
     start = System.monotonic_time()
-
     result = next.(req, stream)
+    stop = System.monotonic_time()
+
     status = elem(result, 0)
 
     Logger.log(level, fn ->
-      stop = System.monotonic_time()
       diff = System.convert_time_unit(stop - start, :native, :micro_seconds)
 
       ["Got ", inspect(status), " in ", formatted_diff(diff)]

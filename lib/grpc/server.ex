@@ -40,16 +40,16 @@ defmodule GRPC.Server do
       service_name = service_mod.__meta__(:name)
 
       Enum.each(service_mod.__rpc_calls__, fn {name, _, _} = rpc ->
-        func_name = name |> to_string |> Macro.underscore()
+        func_name = name |> to_string |> Macro.underscore() |> String.to_atom
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
 
         def __call_rpc__(unquote(path), stream) do
           GRPC.Server.call(
             unquote(service_mod),
-            %{stream | service_name: unquote(service_name), method_name: unquote(name), grpc_type: unquote(grpc_type)},
-            unquote(Macro.escape(rpc)),
-            unquote(String.to_atom(func_name))
+            %{stream | service_name: unquote(service_name), method_name: unquote(to_string(name)), grpc_type: unquote(grpc_type)},
+            unquote(Macro.escape(put_elem(rpc, 0, func_name))),
+            unquote(func_name)
           )
         end
       end)
@@ -75,7 +75,7 @@ defmodule GRPC.Server do
       ) do
     marshal_func = fn res -> service_mod.marshal(res_mod, res) end
     unmarshal_func = fn req -> service_mod.unmarshal(req_mod, req) end
-    stream = %{stream | marshal: marshal_func, unmarshal: unmarshal_func, rpc: put_elem(rpc, 0, func_name)}
+    stream = %{stream | marshal: marshal_func, unmarshal: unmarshal_func, rpc: rpc}
 
     handle_request(req_stream, res_stream, stream, func_name)
   end

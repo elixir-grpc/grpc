@@ -25,7 +25,7 @@ defmodule GRPC.Server.Stream do
   @type t :: %__MODULE__{
           server: atom,
           service_name: String.t,
-          method_name: atom,
+          method_name: String.t,
           grpc_type: atom,
           endpoint: atom,
           rpc: tuple,

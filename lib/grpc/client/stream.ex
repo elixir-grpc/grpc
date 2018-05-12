@@ -18,21 +18,27 @@ defmodule GRPC.Client.Stream do
   @typep stream_payload :: any
   @type t :: %__MODULE__{
           channel: GRPC.Channel.t(),
+          service_name: String.t,
+          method_name: String.t,
+          grpc_type: atom,
+          rpc: tuple,
           payload: stream_payload,
           path: String.t(),
           marshal: marshal,
           unmarshal: unmarshal,
-          req_stream: boolean,
-          res_stream: boolean,
+          server_stream: boolean,
           canceled: boolean
         }
   defstruct channel: nil,
+            service_name: nil,
+            method_name: nil,
+            grpc_type: nil,
+            rpc: nil,
             payload: %{},
             path: nil,
             marshal: nil,
             unmarshal: nil,
-            req_stream: nil,
-            res_stream: nil,
+            server_stream: nil,
             # TODO: it's better to get canceled status from adapter
             canceled: false
 
