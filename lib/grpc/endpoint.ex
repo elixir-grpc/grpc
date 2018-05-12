@@ -13,13 +13,16 @@ defmodule GRPC.Endpoint do
   @doc false
   defmacro __before_compile__(env) do
     interceptors = Module.get_attribute(env.module, :interceptors)
+    |> Macro.escape()
+    |> Enum.reverse()
+    |> init_interceptors()
     servers = Module.get_attribute(env.module, :servers)
     servers = Enum.map(servers, fn({ss, opts}) -> {ss, parse_run_opts(opts, %{})} end)
     server_interceptors = server_interceptors(servers, %{})
     servers = parse_servers(servers)
 
     quote do
-      def __meta__(:interceptors), do: unquote(interceptors |> Macro.escape() |> Enum.reverse())
+      def __meta__(:interceptors), do: unquote(interceptors)
       def __meta__(:servers), do: unquote(servers)
       def __meta__(:server_interceptors), do: unquote(Macro.escape(server_interceptors))
     end
@@ -46,7 +49,7 @@ defmodule GRPC.Endpoint do
   defp server_interceptors([], acc), do: acc
   defp server_interceptors([{servers, %{interceptors: interceptors}}|tail], acc0) when is_list(interceptors) do
     acc = Enum.reduce(List.wrap(servers), acc0, fn(server, acc) ->
-      Map.put(acc, server, interceptors)
+      Map.put(acc, server, init_interceptors(interceptors))
     end)
     server_interceptors(tail, acc)
   end
@@ -66,5 +69,14 @@ defmodule GRPC.Endpoint do
   end
   defp parse_run_opts([{k, _}|_], _) do
     raise ArgumentError, message: "Unknown option for GRPC.Endpoint.run/2: #{k}"
+  end
+
+  def init_interceptors(interceptors) do
+    Enum.map(interceptors, fn
+      ({interceptor, opts}) ->
+        {interceptor, interceptor.init(opts)}
+      (interceptor) ->
+        {interceptor, interceptor.init([])}
+    end)
   end
 end

@@ -140,11 +140,8 @@ defmodule GRPC.Server do
 
     interceptors = interceptors(endpoint, server)
 
-    next = Enum.reduce(interceptors, last, fn
-      ({interceptor, opts}, acc) ->
-        fn(r, s) -> interceptor.call(r, s, acc, interceptor.init(opts)) end
-      (interceptor, acc) ->
-        fn(r, s) -> interceptor.call(r, s, acc, interceptor.init([])) end
+    next = Enum.reduce(interceptors, last, fn({interceptor, opts}, acc) ->
+      fn(r, s) -> interceptor.call(r, s, acc, opts) end
     end)
     next.(req, stream)
   end
