@@ -32,7 +32,8 @@ defmodule GRPC.Server.Stream do
           marshal: marshal,
           unmarshal: unmarshal,
           payload: any,
-          adapter: atom
+          adapter: atom,
+          __interface__: map
         }
 
   def send_reply(%{adapter: adapter, marshal: marshal} = stream, reply) do

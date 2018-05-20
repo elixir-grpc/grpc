@@ -35,6 +35,10 @@ defmodule GRPC.Server do
 
   alias GRPC.Server.Stream
 
+  @type rpc_req :: struct | Enumerable.t
+  @type rpc_return :: struct | any
+  @type rpc :: (GRPC.Server.rpc_req, Stream.t -> rpc_return)
+
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
       service_name = service_mod.__meta__(:name)

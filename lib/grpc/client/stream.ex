@@ -27,7 +27,8 @@ defmodule GRPC.Client.Stream do
           marshal: marshal,
           unmarshal: unmarshal,
           server_stream: boolean,
-          canceled: boolean
+          canceled: boolean,
+          __interface__: map
         }
   defstruct channel: nil,
             service_name: nil,
@@ -40,11 +41,20 @@ defmodule GRPC.Client.Stream do
             unmarshal: nil,
             server_stream: nil,
             # TODO: it's better to get canceled status from adapter
-            canceled: false
+            canceled: false,
+            __interface__: %{send_request: &__MODULE__.send_request/3, recv: &GRPC.Stub.do_recv/2}
 
   @doc false
   def put_payload(%{payload: payload} = stream, key, val) do
     payload = if payload, do: payload, else: %{}
     %{stream | payload: Map.put(payload, key, val)}
+  end
+
+  @doc false
+  @spec send_request(GRPC.Client.Stream.t(), struct, Keyword.t()) :: GRPC.Client.Stream.t()
+  def send_request(%{marshal: marshal, channel: channel} = stream, request, opts) do
+    message = marshal.(request)
+    send_end_stream = Keyword.get(opts, :end_stream, false)
+    channel.adapter.send_data(stream, message, send_end_stream: send_end_stream)
   end
 end

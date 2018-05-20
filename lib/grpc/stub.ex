@@ -44,11 +44,19 @@ defmodule GRPC.Stub do
   # 10 seconds
   @default_timeout 10000
 
+  @type rpc_return ::
+          {:ok, struct}
+          | {:ok, struct, map}
+          | GRPC.Client.Stream.t()
+          | {:ok, Enumerable.t()}
+          | {:ok, Enumerable.t(), map}
+          | {:error, GRPC.RPCError.t()}
+
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
       service_name = service_mod.__meta__(:name)
 
-      Enum.each(service_mod.__rpc_calls__, fn {name, {_, req_stream}, _} = rpc ->
+      Enum.each(service_mod.__rpc_calls__, fn {name, {_, req_stream}, {_, res_stream}} = rpc ->
         func_name = name |> to_string |> Macro.underscore()
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
@@ -57,7 +65,8 @@ defmodule GRPC.Stub do
           method_name: to_string(name),
           grpc_type: grpc_type,
           path: path,
-          rpc: put_elem(rpc, 0, func_name)
+          rpc: put_elem(rpc, 0, func_name),
+          server_stream: res_stream
         }
 
         if req_stream do
@@ -122,10 +131,17 @@ defmodule GRPC.Stub do
 
     cred = Keyword.get(opts, :cred)
     scheme = if cred, do: @secure_scheme, else: @insecure_scheme
-    interceptors = Keyword.get(opts, :interceptors, [])
+    interceptors = Keyword.get(opts, :interceptors, []) |> init_interceptors
 
     %Channel{host: host, port: port, scheme: scheme, cred: cred, adapter: adapter, interceptors: interceptors}
     |> adapter.connect(opts[:adapter_opts])
+  end
+
+  defp init_interceptors(interceptors) do
+    Enum.map(interceptors, fn
+      ({interceptor, opts}) -> {interceptor, interceptor.init(opts)}
+      (interceptor) -> {interceptor, interceptor.init([])}
+    end)
   end
 
   @doc """
@@ -146,21 +162,15 @@ defmodule GRPC.Stub do
       with the last elem being a map of headers `%{headers: headers, trailers: trailers}`(unary) or
       `%{headers: headers}`(server streaming)
   """
-  @spec call(atom, tuple, GRPC.Client.Stream.t, struct | nil, keyword) ::
-          {:ok, struct}
-          | {:ok, struct, map}
-          | GRPC.Client.Stream.t()
-          | {:ok, Enumerable.t()}
-          | {:error, GRPC.RPCError.t()}
+  @spec call(atom, tuple, GRPC.Client.Stream.t, struct | nil, keyword) :: rpc_return
   def call(service_mod, rpc, stream, request, opts) do
-    {_, {req_mod, req_stream}, {res_mod, res_stream}} = rpc
+    {_, {req_mod, req_stream}, {res_mod, _}} = rpc
     marshal = fn req -> service_mod.marshal(req_mod, req) end
     unmarshal = fn res -> service_mod.unmarshal(res_mod, res) end
 
     stream = %{stream |
       marshal: marshal,
-      unmarshal: unmarshal,
-      server_stream: res_stream
+      unmarshal: unmarshal
     }
 
     opts = parse_req_opts(opts)
@@ -177,14 +187,21 @@ defmodule GRPC.Stub do
       |> recv(opts)
     end
 
-    next = Enum.reduce(channel.interceptors, last, fn(interceptor, acc) ->
-      fn(s, r) -> interceptor.call(s, r, acc) end
+    next = Enum.reduce(channel.interceptors, last, fn({interceptor, opts}, acc) ->
+      fn(s, r) -> interceptor.call(s, r, acc, opts) end
     end)
     next.(stream, message)
   end
 
-  defp do_call(true, %{channel: channel} = stream, _, opts) do
-    channel.adapter.send_headers(stream, opts)
+  defp do_call(true, %{channel: channel} = stream, req, opts) do
+    last = fn(s, _) ->
+      channel.adapter.send_headers(s, opts)
+    end
+
+    next = Enum.reduce(channel.interceptors, last, fn({interceptor, opts}, acc) ->
+      fn(s, r) -> interceptor.call(s, r, acc, opts) end
+    end)
+    next.(stream, req)
   end
 
   @doc """
@@ -207,10 +224,8 @@ defmodule GRPC.Stub do
       half_closed state. Default is false.
   """
   @spec send_request(GRPC.Client.Stream.t(), struct, Keyword.t()) :: GRPC.Client.Stream.t()
-  def send_request(%{marshal: marshal, channel: channel} = stream, request, opts \\ []) do
-    message = marshal.(request)
-    send_end_stream = Keyword.get(opts, :end_stream, false)
-    channel.adapter.send_data(stream, message, send_end_stream: send_end_stream)
+  def send_request(%{__interface__: interface} = stream, request, opts \\ []) do
+    interface[:send_request].(stream, request, opts)
   end
 
   @doc """
@@ -266,18 +281,24 @@ defmodule GRPC.Stub do
     * `:return_headers` - when true, headers will be returned.
   """
   @spec recv(GRPC.Client.Stream.t(), keyword | map) ::
-          {:ok, struct} | {:ok, struct, map} | Enumerable.t() | {:error, any}
+          {:ok, struct} | {:ok, struct, map} | {:ok, Enumerable.t()} | {:ok, Enumerable.t(), map} | {:error, any}
   def recv(stream, opts \\ [])
 
   def recv(%{canceled: true}, _) do
     {:error, @canceled_error}
   end
 
-  def recv(stream, opts) when is_list(opts) do
-    recv(stream, parse_recv_opts(opts))
+  def recv(%{__interface__: interface} = stream, opts) do
+    opts = if is_list(opts) do
+      parse_recv_opts(opts)
+    else
+      opts
+    end
+    interface[:recv].(stream, opts)
   end
 
-  def recv(%{server_stream: true, channel: channel, payload: payload} = stream, opts) do
+  @doc false
+  def do_recv(%{server_stream: true, channel: channel, payload: payload} = stream, opts) do
     case recv_headers(channel.adapter, channel.adapter_payload, payload, opts) do
       {:ok, headers, is_fin} ->
         res_enum = case is_fin do
@@ -296,7 +317,7 @@ defmodule GRPC.Stub do
     end
   end
 
-  def recv(%{payload: payload, unmarshal: unmarshal, channel: channel}, opts) do
+  def do_recv(%{payload: payload, unmarshal: unmarshal, channel: channel}, opts) do
     with {:ok, headers, _is_fin} <- recv_headers(channel.adapter, channel.adapter_payload, payload, opts),
          {:ok, body, trailers} <-
            recv_body(channel.adapter, channel.adapter_payload, payload, opts) do

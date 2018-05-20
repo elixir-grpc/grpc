@@ -13,7 +13,7 @@ defmodule GRPC.Integration.EndpointTest do
   defmodule HelloEndpoint do
     use GRPC.Endpoint
 
-    intercept GRPC.Logger, level: :info
+    intercept GRPC.Logger.Server, level: :info
     run HelloServer
   end
 
@@ -50,14 +50,14 @@ defmodule GRPC.Integration.EndpointTest do
   defmodule FeatureEndpoint do
     use GRPC.Endpoint
 
-    intercept GRPC.Logger
+    intercept GRPC.Logger.Server
     run FeatureServer
   end
 
   defmodule FeatureAndHelloHaltEndpoint do
     use GRPC.Endpoint
 
-    intercept GRPC.Logger
+    intercept GRPC.Logger.Server
     run HelloServer, interceptors: [HelloHaltInterceptor]
     run FeatureServer
   end
