@@ -1,6 +1,6 @@
 defmodule Interop.Client do
-  def connect(host, port) do
-    {:ok, ch} = GRPC.Stub.connect(host, port, [])
+  def connect(host, port, opts \\ []) do
+    {:ok, ch} = GRPC.Stub.connect(host, port, opts)
     ch
   end
 
