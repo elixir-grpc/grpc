@@ -182,8 +182,17 @@ defmodule GRPC.Adapter.Cowboy do
 
   defp running_info(scheme, servers, ref) do
     {addr, port} = :ranch.get_addr(ref)
-    addr_str = :inet.ntoa(addr)
-    "Running #{servers_name(servers)} with Cowboy using #{scheme}://#{addr_str}:#{port}"
+
+    addr_str =
+      case addr do
+        :local ->
+          port
+
+        addr ->
+          "#{:inet.ntoa(addr)}:#{port}"
+      end
+
+    "Running #{servers_name(servers)} with Cowboy using #{scheme}://#{addr_str}"
   end
 
   defp servers_name(servers) do

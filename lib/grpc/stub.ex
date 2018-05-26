@@ -88,6 +88,9 @@ defmodule GRPC.Stub do
       iex> GRPC.Stub.connect("localhost:50051")
       {:ok, channel}
 
+      iex> GRPC.Stub.connect("/paht/to/unix.sock")
+      {:ok, channel}
+
   ## Options
 
     * `:cred` - a `GRPC.Credential` used to indicate it's a secure connection.
@@ -96,7 +99,12 @@ defmodule GRPC.Stub do
   """
   @spec connect(String.t(), Keyword.t()) :: {:ok, GRPC.Channel.t()} | {:error, any}
   def connect(addr, opts \\ []) when is_binary(addr) and is_list(opts) do
-    [host, port] = String.split(addr, ":")
+    {host, port} =
+      case String.split(addr, ":") do
+        [host, port] -> {host, port}
+        [socket_path] -> {{:local, socket_path}, 0}
+      end
+
     connect(host, port, opts)
   end
 

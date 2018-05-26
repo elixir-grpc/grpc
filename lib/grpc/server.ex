@@ -142,6 +142,7 @@ defmodule GRPC.Server do
   # ## Examples
   #
   #     iex> {:ok, _, port} = GRPC.Server.start(Greeter.Server, 50051)
+  #     iex> {:ok, _, port} = GRPC.Server.start(Greeter.Server, 0, ip: {:local, "path/to/unix.sock"})
   #
   # ## Options
   #
