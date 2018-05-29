@@ -1,0 +1,2 @@
+defmodule Benchmark do
+end
