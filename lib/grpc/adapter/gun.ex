@@ -9,27 +9,22 @@ defmodule GRPC.Adapter.Gun do
   def connect(%{scheme: "https"} = channel, opts), do: connect_securely(channel, opts)
   def connect(channel, opts), do: connect_insecurely(channel, opts)
 
-  defp connect_securely(%{host: host, port: port, cred: %{ssl: ssl}} = channel, opts) do
+  defp connect_securely(%{cred: %{ssl: ssl}} = channel, opts) do
     open_opts = %{transport: :ssl, protocols: [:http2], transport_opts: ssl}
     open_opts = Map.merge(opts, open_opts)
-    {:ok, conn_pid} = :gun.open(String.to_charlist(host), port, open_opts)
 
-    case :gun.await_up(conn_pid) do
-      {:ok, :http2} ->
-        {:ok, Map.put(channel, :adapter_payload, %{conn_pid: conn_pid})}
-
-      {:ok, proto} ->
-        {:error, "Error when opening connection: protocol #{proto} is not http2"}
-
-      {:error, reason} ->
-        {:error, "Error when opening connection: #{inspect(reason)}"}
-    end
+    do_connect(channel, open_opts)
   end
 
-  defp connect_insecurely(%{host: host, port: port} = channel, opts) do
+  defp connect_insecurely(channel, opts) do
     open_opts = %{transport: :tcp, protocols: [:http2]}
     open_opts = Map.merge(opts, open_opts)
-    {:ok, conn_pid} = :gun.open(String.to_charlist(host), port, open_opts)
+
+    do_connect(channel, open_opts)
+  end
+
+  defp do_connect(%{host: host, port: port} = channel, open_opts) do
+    {:ok, conn_pid} = open(host, port, open_opts)
 
     case :gun.await_up(conn_pid) do
       {:ok, :http2} ->
@@ -42,6 +37,12 @@ defmodule GRPC.Adapter.Gun do
         {:error, "Error when opening connection: #{inspect(reason)}"}
     end
   end
+
+  defp open({:local, socket_path}, _port, open_opts),
+    do: :gun.open_unix(socket_path, open_opts)
+
+  defp open(host, port, open_opts),
+    do: :gun.open(String.to_charlist(host), port, open_opts)
 
   @spec send_request(GRPC.Client.Stream.t(), binary, map) :: GRPC.Client.Stream.t()
   def send_request(stream, message, opts) do

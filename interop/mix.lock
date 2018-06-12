@@ -1,7 +1,7 @@
 %{
   "cowboy": {:hex, :cowboy, "2.2.2", "6cde634da1da8b1d17dd2b20f5f6f91ab8ac7fa1b5106d13dad63c905ab76004", [:rebar3], [{:cowlib, "~> 2.1.0", [hex: :cowlib, optional: false]}, {:ranch, "~> 1.4.0", [hex: :ranch, optional: false]}]},
-  "cowlib": {:hex, :cowlib, "2.1.0", "f73658b93dd043af40400c3e4fd997068ebd0c617f8c8f4cd003a1a78ebf94f5", [:rebar3], []},
-  "gun": {:hex, :gun, "1.0.0-pre.5", "69a11e259d5bf7fd9b1a74e1aa98e7979c2ae3ebbda27fe1b1c9cb4481f23ba3", [:rebar3], [{:cowlib, "~> 2.1", [repo: "hexpm", hex: :cowlib, optional: false]}, {:ranch, "~> 1.4", [repo: "hexpm", hex: :ranch, optional: false]}], "hexpm"},
+  "cowlib": {:git, "https://github.com/ninenines/cowlib.git", "804d5262a3369623683213b14d6b936066fc7aab", [tag: "2.4.0"]},
+  "gun": {:git, "https://github.com/ninenines/gun.git", "e49f8af96da160b0417d21d5550fedd216acc263", [tag: "1.0.0-rc.1"]},
   "protobuf": {:hex, :protobuf, "0.5.3", "7216b9814830a92384c4a99ca1ce35884614517c1cdf0c75ea74ea9bb9fabaeb", [:mix], []},
-  "ranch": {:hex, :ranch, "1.4.0", "10272f95da79340fa7e8774ba7930b901713d272905d0012b06ca6d994f8826b", [:rebar3], []},
+  "ranch": {:hex, :ranch, "1.4.0", "10272f95da79340fa7e8774ba7930b901713d272905d0012b06ca6d994f8826b", [:rebar3], [], "hexpm"},
 }

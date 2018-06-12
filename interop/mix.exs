@@ -22,8 +22,7 @@ defmodule Interop.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:grpc, path: ".."},
-      {:gun, ">= 1.0.0-pre.5"}
+      {:grpc, path: ".."}
     ]
   end
 end
