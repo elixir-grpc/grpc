@@ -5,7 +5,7 @@ defmodule Interop.App do
     import Supervisor.Spec
 
     children = [
-      supervisor(GRPC.Server.Supervisor, [{Interop.Server, 50051}])
+      supervisor(GRPC.Server.Supervisor, [{Interop.Server, 10000}])
     ]
 
     opts = [strategy: :one_for_one, name: __MODULE__]
