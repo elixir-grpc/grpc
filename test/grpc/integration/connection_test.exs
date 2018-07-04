@@ -30,7 +30,7 @@ defmodule GRPC.Integration.ConnectionTest do
     server = FeatureServer
     File.rm(socket_path)
 
-    {:ok, _, port} = GRPC.Server.start(server, 0, ip: {:local, socket_path})
+    {:ok, _, _} = GRPC.Server.start(server, 0, ip: {:local, socket_path})
     {:ok, channel} = GRPC.Stub.connect(socket_path, adapter_opts: %{retry_timeout: 10})
 
     point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)

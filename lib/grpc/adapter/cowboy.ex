@@ -70,7 +70,8 @@ defmodule GRPC.Adapter.Cowboy do
     Handler.read_full_body(pid)
   end
 
-  @spec reading_stream(GRPC.Adapter.Cowboy.Handler.state(), ([binary] -> [struct])) :: Enumerable.t()
+  @spec reading_stream(GRPC.Adapter.Cowboy.Handler.state(), ([binary] -> [struct])) ::
+          Enumerable.t()
   def reading_stream(%{pid: pid}, func) do
     Stream.unfold(%{pid: pid, frames: [], buffer: ""}, fn acc -> read_stream(acc, func) end)
   end
@@ -86,6 +87,7 @@ defmodule GRPC.Adapter.Cowboy do
     case Handler.read_body(pid) do
       {:ok, data} ->
         new_data = buffer <> data
+
         if byte_size(new_data) > 0 do
           [request | rest] = func.(new_data)
           new_s = s |> Map.put(:frames, rest) |> Map.put(:finished, true)
@@ -135,15 +137,18 @@ defmodule GRPC.Adapter.Cowboy do
   defp cowboy_start_args(servers, port, opts) do
     dispatch =
       :cowboy_router.compile([
-        {:_, [{:_, GRPC.Adapter.Cowboy.Handler, {servers, opts}}]}
+        {:_, [{:_, GRPC.Adapter.Cowboy.Handler, {servers, Enum.into(opts, %{})}}]}
       ])
+
+    idle_timeout = Keyword.get(opts, :idle_timeout, :infinity)
 
     [
       servers_name(servers),
       transport_opts(port, opts),
       %{
         env: %{dispatch: dispatch},
-        inactivity_timeout: :infinity,
+        inactivity_timeout: idle_timeout,
+        settings_timeout: idle_timeout,
         stream_handlers: [:grpc_stream_h]
       }
     ]
