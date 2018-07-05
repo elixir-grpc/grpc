@@ -23,8 +23,6 @@ mkdir -p lib/grpc
 for proto in "${files[@]}"; do
   echo $proto
   mkdir -p "$(dirname proto/$proto)"
-  cp ${GRPC_REPO}/$proto proto/$proto
-  sed -i "" -e "s/import \"src\/proto\/grpc\//import \"/g" proto/$proto
 
-  protoc -I proto --elixir_out=plugins=grpc:./lib/grpc proto/$proto
+  protoc -I deps/protobuf/src -I proto --elixir_out=plugins=grpc:./lib/grpc proto/$proto
 done

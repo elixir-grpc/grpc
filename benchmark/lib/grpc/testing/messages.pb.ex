@@ -45,12 +45,12 @@ defmodule Grpc.Testing.SimpleRequest do
   @type t :: %__MODULE__{
           response_type: integer,
           response_size: integer,
-          payload: Grpc.Testing.Payload.t(),
+          payload: Grpc.Testing.Payload.t() | nil,
           fill_username: boolean,
           fill_oauth_scope: boolean,
-          response_compressed: Grpc.Testing.BoolValue.t(),
-          response_status: Grpc.Testing.EchoStatus.t(),
-          expect_compressed: Grpc.Testing.BoolValue.t()
+          response_compressed: Grpc.Testing.BoolValue.t() | nil,
+          response_status: Grpc.Testing.EchoStatus.t() | nil,
+          expect_compressed: Grpc.Testing.BoolValue.t() | nil
         }
   defstruct [
     :response_type,
@@ -78,7 +78,7 @@ defmodule Grpc.Testing.SimpleResponse do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          payload: Grpc.Testing.Payload.t(),
+          payload: Grpc.Testing.Payload.t() | nil,
           username: String.t(),
           oauth_scope: String.t()
         }
@@ -94,8 +94,8 @@ defmodule Grpc.Testing.StreamingInputCallRequest do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          payload: Grpc.Testing.Payload.t(),
-          expect_compressed: Grpc.Testing.BoolValue.t()
+          payload: Grpc.Testing.Payload.t() | nil,
+          expect_compressed: Grpc.Testing.BoolValue.t() | nil
         }
   defstruct [:payload, :expect_compressed]
 
@@ -122,7 +122,7 @@ defmodule Grpc.Testing.ResponseParameters do
   @type t :: %__MODULE__{
           size: integer,
           interval_us: integer,
-          compressed: Grpc.Testing.BoolValue.t()
+          compressed: Grpc.Testing.BoolValue.t() | nil
         }
   defstruct [:size, :interval_us, :compressed]
 
@@ -138,8 +138,8 @@ defmodule Grpc.Testing.StreamingOutputCallRequest do
   @type t :: %__MODULE__{
           response_type: integer,
           response_parameters: [Grpc.Testing.ResponseParameters.t()],
-          payload: Grpc.Testing.Payload.t(),
-          response_status: Grpc.Testing.EchoStatus.t()
+          payload: Grpc.Testing.Payload.t() | nil,
+          response_status: Grpc.Testing.EchoStatus.t() | nil
         }
   defstruct [:response_type, :response_parameters, :payload, :response_status]
 
@@ -154,7 +154,7 @@ defmodule Grpc.Testing.StreamingOutputCallResponse do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          payload: Grpc.Testing.Payload.t()
+          payload: Grpc.Testing.Payload.t() | nil
         }
   defstruct [:payload]
 

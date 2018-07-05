@@ -70,14 +70,14 @@ defmodule Grpc.Testing.ClientConfig do
   @type t :: %__MODULE__{
           server_targets: [String.t()],
           client_type: integer,
-          security_params: Grpc.Testing.SecurityParams.t(),
+          security_params: Grpc.Testing.SecurityParams.t() | nil,
           outstanding_rpcs_per_channel: integer,
           client_channels: integer,
           async_client_threads: integer,
           rpc_type: integer,
-          load_params: Grpc.Testing.LoadParams.t(),
-          payload_config: Grpc.Testing.PayloadConfig.t(),
-          histogram_params: Grpc.Testing.HistogramParams.t(),
+          load_params: Grpc.Testing.LoadParams.t() | nil,
+          payload_config: Grpc.Testing.PayloadConfig.t() | nil,
+          histogram_params: Grpc.Testing.HistogramParams.t() | nil,
           core_list: [integer],
           core_limit: integer,
           other_client_api: String.t(),
@@ -130,7 +130,7 @@ defmodule Grpc.Testing.ClientStatus do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          stats: Grpc.Testing.ClientStats.t()
+          stats: Grpc.Testing.ClientStats.t() | nil
         }
   defstruct [:stats]
 
@@ -169,11 +169,11 @@ defmodule Grpc.Testing.ServerConfig do
 
   @type t :: %__MODULE__{
           server_type: integer,
-          security_params: Grpc.Testing.SecurityParams.t(),
+          security_params: Grpc.Testing.SecurityParams.t() | nil,
           port: integer,
           async_server_threads: integer,
           core_limit: integer,
-          payload_config: Grpc.Testing.PayloadConfig.t(),
+          payload_config: Grpc.Testing.PayloadConfig.t() | nil,
           core_list: [integer],
           other_server_api: String.t(),
           threads_per_cq: integer,
@@ -226,7 +226,7 @@ defmodule Grpc.Testing.ServerStatus do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          stats: Grpc.Testing.ServerStats.t(),
+          stats: Grpc.Testing.ServerStats.t() | nil,
           port: integer,
           cores: integer
         }
@@ -269,9 +269,9 @@ defmodule Grpc.Testing.Scenario do
 
   @type t :: %__MODULE__{
           name: String.t(),
-          client_config: Grpc.Testing.ClientConfig.t(),
+          client_config: Grpc.Testing.ClientConfig.t() | nil,
           num_clients: integer,
-          server_config: Grpc.Testing.ServerConfig.t(),
+          server_config: Grpc.Testing.ServerConfig.t() | nil,
           num_servers: integer,
           warmup_seconds: integer,
           benchmark_seconds: integer,
@@ -380,12 +380,12 @@ defmodule Grpc.Testing.ScenarioResult do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          scenario: Grpc.Testing.Scenario.t(),
-          latencies: Grpc.Testing.HistogramData.t(),
+          scenario: Grpc.Testing.Scenario.t() | nil,
+          latencies: Grpc.Testing.HistogramData.t() | nil,
           client_stats: [Grpc.Testing.ClientStats.t()],
           server_stats: [Grpc.Testing.ServerStats.t()],
           server_cores: [integer],
-          summary: Grpc.Testing.ScenarioResultSummary.t(),
+          summary: Grpc.Testing.ScenarioResultSummary.t() | nil,
           client_success: [boolean],
           server_success: [boolean],
           request_results: [Grpc.Testing.RequestResultCount.t()]

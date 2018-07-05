@@ -9,7 +9,7 @@ defmodule Grpc.Testing.ServerStats do
           total_cpu_time: non_neg_integer,
           idle_cpu_time: non_neg_integer,
           cq_poll_count: non_neg_integer,
-          core_stats: Grpc.Core.Stats.t()
+          core_stats: Grpc.Core.Stats.t() | nil
         }
   defstruct [
     :time_elapsed,
@@ -85,13 +85,13 @@ defmodule Grpc.Testing.ClientStats do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          latencies: Grpc.Testing.HistogramData.t(),
+          latencies: Grpc.Testing.HistogramData.t() | nil,
           time_elapsed: float,
           time_user: float,
           time_system: float,
           request_results: [Grpc.Testing.RequestResultCount.t()],
           cq_poll_count: non_neg_integer,
-          core_stats: Grpc.Core.Stats.t()
+          core_stats: Grpc.Core.Stats.t() | nil
         }
   defstruct [
     :latencies,

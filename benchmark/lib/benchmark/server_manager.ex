@@ -7,7 +7,15 @@ defmodule Benchmark.ServerManager do
 
   def start_server(:protobuf, config) do
     {:ok, pid, port} = GRPC.Server.start(Grpc.Testing.BenchmarkService.Server, config.port)
-    %{port: port, pid: pid}
+
+    # relative util will be returned next time calling
+    :cpu_sup.util()
+
+    %Benchmark.Server{
+      port: port,
+      pid: pid,
+      init_time: Time.utc_now()
+    }
   end
 
   def start_server(_, _), do: raise(GRPC.RPCError, status: :unimplemented)

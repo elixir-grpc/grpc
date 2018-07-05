@@ -14,14 +14,15 @@ defmodule Benchmark.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: [:logger, :os_mon]
     ]
   end
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:grpc, path: ".."}
+      {:grpc, path: ".."},
+      {:protobuf, github: "tony612/protobuf-elixir", override: true}
     ]
   end
 end
