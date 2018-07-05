@@ -12,21 +12,34 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   @default_trailers HTTP2.server_trailers()
   @type state :: %{pid: pid, handling_timer: reference, resp_trailers: map}
 
-  @spec init(map, {GRPC.Server.servers_map(), keyword}) :: {:cowboy_loop, map, map}
-  def init(req, {servers, _opts} = state) do
+  @spec init(map, {GRPC.Server.servers_map(), map}) :: {:cowboy_loop, map, map}
+  def init(req, {servers, opts} = state) do
     path = :cowboy_req.path(req)
     server = Map.get(servers, GRPC.Server.service_name(path))
+
     if server do
-      stream = %GRPC.Server.Stream{server: server, adapter: @adapter, payload: %{pid: self()}}
-  	  pid = spawn_link(__MODULE__, :call_rpc, [server, path, stream])
+      stream = %GRPC.Server.Stream{
+        server: server,
+        adapter: @adapter,
+        payload: %{pid: self()},
+        local: opts[:local]
+      }
+
+      pid = spawn_link(__MODULE__, :call_rpc, [server, path, stream])
 
       req = :cowboy_req.set_resp_headers(HTTP2.server_headers(), req)
       Process.flag(:trap_exit, true)
 
       timeout = :cowboy_req.header("grpc-timeout", req)
-      timer_ref = if timeout && timeout != :undefined do
-        Process.send_after(self(), {:handling_timeout, self()}, GRPC.Transport.Utils.decode_timeout(timeout))
-      end
+
+      timer_ref =
+        if timeout && timeout != :undefined do
+          Process.send_after(
+            self(),
+            {:handling_timeout, self()},
+            GRPC.Transport.Utils.decode_timeout(timeout)
+          )
+        end
 
       {:cowboy_loop, req, %{pid: pid, handling_timer: timer_ref}}
     else
@@ -73,10 +86,12 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   defp sync_call(pid, key) do
     ref = make_ref()
     send(pid, {key, ref, self()})
+
     receive do
       {^ref, msg} -> msg
     end
   end
+
   # APIs end
 
   def info({:read_full_body, ref, pid}, req, state) do
@@ -89,6 +104,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
         info({:handling_timeout, self()}, req, state)
     end
   end
+
   def info({:read_body, ref, pid}, req, state) do
     try do
       opts = timeout_left_opt(state[:handling_timer])
@@ -100,6 +116,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
         info({:handling_timeout, self()}, req, state)
     end
   end
+
   def info({:get_headers, ref, pid}, req, state) do
     headers = :cowboy_req.headers(req)
     send(pid, {ref, headers})
@@ -111,17 +128,21 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     :cowboy_req.stream_body(data, is_fin, req)
     {:ok, req, state}
   end
+
   def info({:stream_reply, status, headers}, req, state) do
     req = :cowboy_req.stream_reply(status, headers, req)
     {:ok, req, state}
   end
+
   def info({:set_resp_headers, headers}, req, state) do
     req = :cowboy_req.set_resp_headers(headers, req)
     {:ok, req, state}
   end
+
   def info({:set_resp_trailers, trailers}, req, state) do
     {:ok, req, Map.put(state, :resp_trailers, trailers)}
   end
+
   def info({:stream_trailers, trailers}, req, state) do
     metadata = Map.get(state, :resp_trailers, %{})
     metadata = GRPC.Transport.HTTP2.encode_metadata(metadata)
@@ -141,6 +162,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     exit_handler(pid, :normal)
     {:stop, req, state}
   end
+
   # expected error raised from user to return error immediately
   def info({:EXIT, pid, {%RPCError{} = error, _stacktrace}}, req, state = %{pid: pid}) do
     trailers = HTTP2.server_trailers(error.status, error.message)
@@ -148,6 +170,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     req = send_error_trailers(req, trailers)
     {:stop, req, state}
   end
+
   # unknown error raised from rpc
   def info({:EXIT, pid, {:handle_error, _kind}}, req, state = %{pid: pid}) do
     error = %RPCError{status: GRPC.Status.unknown(), message: "Internal Server Error"}
@@ -156,6 +179,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     req = send_error_trailers(req, trailers)
     {:stop, req, state}
   end
+
   def info({:EXIT, pid, {reason, stacktrace}}, req, state = %{pid: pid}) do
     Logger.error(Exception.format(:error, reason, stacktrace))
     error = %RPCError{status: GRPC.Status.unknown(), message: "Internal Server Error"}
@@ -229,12 +253,16 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
   defp timeout_left_opt(timer, opts \\ %{}) do
     case timer do
-      nil -> opts
+      nil ->
+        opts
+
       timer ->
         case Process.read_timer(timer) do
           ms when is_integer(ms) ->
             Map.put(opts, :timeout, ms)
-          _ -> 0
+
+          _ ->
+            0
         end
     end
   end

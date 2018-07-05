@@ -8,14 +8,15 @@ defmodule GRPC.Server.Stream do
 
   ## Fields
 
-    * `:server` - user defined gRPC server module
-    * `:marshal` - a function encoding the reply
+    * `:server`    - user defined gRPC server module
+    * `:marshal`   - a function encoding the reply
     * `:unmarshal` - a function decoding the request
-    * `:adapter` - a server adapter module, like `GRPC.Adapter.Cowboy`
-    * `:payload` - the payload needed by the adapter
+    * `:adapter`   - a server adapter module, like `GRPC.Adapter.Cowboy`
+    * `:payload`   - the payload needed by the adapter
+    * `:local`     - local data initialized by user
   """
 
-  defstruct [:server, :marshal, :unmarshal, :payload, :adapter]
+  defstruct [:server, :marshal, :unmarshal, :payload, :adapter, :local]
 
   @typep marshal :: (struct -> binary)
   @typep unmarshal :: (binary -> struct)
@@ -24,6 +25,7 @@ defmodule GRPC.Server.Stream do
           marshal: marshal,
           unmarshal: unmarshal,
           payload: any,
-          adapter: atom
+          adapter: atom,
+          local: any
         }
 end
