@@ -2,7 +2,6 @@ defmodule Grpc.Testing.WorkerService.Server do
   use GRPC.Server, service: Grpc.Testing.WorkerService.Service
   alias GRPC.Server
 
-  alias Benchmark.Manager
   alias Benchmark.ServerManager
   alias Benchmark.ClientManager
 
@@ -16,7 +15,6 @@ defmodule Grpc.Testing.WorkerService.Server do
       {server, status} =
         case args.argtype do
           {:setup, config} ->
-            cores = Manager.set_cores(config.core_limit)
             server = ServerManager.start_server(config)
             Logger.debug("Started server: #{inspect(server)}")
 
@@ -26,14 +24,17 @@ defmodule Grpc.Testing.WorkerService.Server do
               Grpc.Testing.ServerStatus.new(
                 stats: stats,
                 port: server.port,
-                cores: cores
+                cores: server.cores
               )
 
             {server, status}
 
           {:mark, mark} ->
             {server, stats} = Benchmark.Server.get_stats(server, mark)
-            status = Grpc.Testing.ServerStatus.new(stats: stats)
+
+            status =
+              Grpc.Testing.ServerStatus.new(cores: server.cores, port: server.port, stats: stats)
+
             {server, status}
         end
 
@@ -62,10 +63,6 @@ defmodule Grpc.Testing.WorkerService.Server do
       Logger.debug("Client send reply #{inspect(status)}")
       Server.send_reply(stream, status)
     end)
-  end
-
-  def core_count(_, _) do
-    Grpc.Testing.CoreResponse.new(cores: Manager.get_cores())
   end
 
   def quit_worker(_, stream) do

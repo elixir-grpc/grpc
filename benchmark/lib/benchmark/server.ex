@@ -1,5 +1,10 @@
 defmodule Benchmark.Server do
-  defstruct port: nil, pid: nil, init_time: nil, cpu_acc: %{sys_t: 0, user_t: 0}, init_util: nil
+  defstruct cores: nil,
+            port: nil,
+            pid: nil,
+            init_time: nil,
+            cpu_acc: %{sys_t: 0, user_t: 0},
+            init_util: nil
 
   def get_stats(server, reset \\ false) do
     now = Time.utc_now()
