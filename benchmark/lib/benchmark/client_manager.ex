@@ -1,7 +1,12 @@
 defmodule Benchmark.ClientManager do
-  alias Benchmark.ClientWorker
+  use GenServer
 
   def start_client(%Grpc.Testing.ClientConfig{} = config) do
+    {:ok, pid} = GenServer.start_link(__MODULE__, config)
+    %{pid: pid}
+  end
+
+  def init(config) do
     # get security
     _payload_type = Benchmark.Manager.payload_type(config.payload_config)
 
@@ -10,37 +15,44 @@ defmodule Benchmark.ClientManager do
       |> Enum.zip(config.server_targets)
       |> Enum.map(fn {_, server} -> new_client(server) end)
 
-    perform_rpcs(config, channels)
+    workers = Enum.map(channels, &start_worker(config, &1)) |> List.flatten()
+
+    {:ok, %{workers: workers}}
+  end
+
+  def handle_call(:get_stats, _from, s) do
+    {:reply, nil, s}
+  end
+
+  def handle_call({:track_rpc, dur}, _f, s) do
+    {:noreply, s}
   end
 
   defp new_client(addr) do
-    {:ok, conn} = GRPC.Stub.connect(addr)
-    conn
+    {:ok, ch} = GRPC.Stub.connect(addr)
+    ch
   end
 
-  def perform_rpcs(config, channels) do
-    payload = client_payload(config.payload_config)
+  defp start_worker(%{rpc_type: rpc_type} = config, channel) do
+    if {:closed_loop, _} = config.load_params.load,
+      do: raise(GRPC.RPCError, status: :unimplemented)
 
-    case config.load_params.load do
-      {:closed_loop, _} ->
-        :ok
-
-      _ ->
-        raise GRPC.RPCError, status: :unimplemented
-    end
+    if Grpc.Testing.RpcType.key(rpc_type) != :UNARY,
+      do: raise(GRPC.RPCError, status: :unimplemented)
 
     rpcs_per_conn = config.outstanding_rpcs_per_channel
 
-    case Grpc.Testing.RpcType.key(config.rpc_type) do
-      :UNARY ->
-        close_loop_unary(channels, rpcs_per_conn, payload)
+    payload =
+      client_payload(config.payload_config)
+      |> Map.put(:rpc_type, rpc_type)
 
-      _ ->
-        :ok
-    end
+    Enum.map(1..rpcs_per_conn, fn _idx ->
+      {:ok, pid} = GenServer.start_link(Benchmark.ClientWorker, {channel, payload, self()})
+      pid
+    end)
   end
 
-  def client_payload(nil), do: %{}
+  def client_payload(nil), do: raise(GRPC.RPCError, status: :unimplemented)
 
   def client_payload(config) do
     case config.payload do
@@ -48,15 +60,7 @@ defmodule Benchmark.ClientManager do
         %{req_size: payload.req_size, resp_size: payload.resp_size, type: :protobuf}
 
       _ ->
-        %{}
+        raise(GRPC.RPCError, status: :unimplemented)
     end
-  end
-
-  def close_loop_unary(channels, rpcs_per_conn, payload) do
-    Enum.each(channels, fn conn ->
-      Enum.each(0..(rpcs_per_conn - 1), fn _idx ->
-        Task.async(ClientWorker, :unary_loop, [conn, payload])
-      end)
-    end)
   end
 end

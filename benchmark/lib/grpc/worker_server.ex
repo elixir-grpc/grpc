@@ -45,23 +45,24 @@ defmodule Grpc.Testing.WorkerService.Server do
   end
 
   def run_client(args_enum, stream) do
-    Enum.each(args_enum, fn args ->
+    Enum.reduce(args_enum, nil, fn args, manager ->
       Logger.debug("Client got args:")
       Logger.debug(inspect(args))
 
-      status =
+      {status, manager} =
         case args.argtype do
           {:setup, client_config} ->
-            ClientManager.start_client(client_config)
-            Grpc.Testing.ClientStatus.new()
+            manager = ClientManager.start_client(client_config)
+            {Grpc.Testing.ClientStatus.new(), manager}
 
           {:mark, mark} ->
             stats = get_stats(mark.reset)
-            Grpc.Testing.ClientStatus.new(stats: stats)
+            {Grpc.Testing.ClientStatus.new(stats: stats), manager}
         end
 
       Logger.debug("Client send reply #{inspect(status)}")
       Server.send_reply(stream, status)
+      manager
     end)
   end
 
