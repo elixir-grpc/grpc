@@ -24,7 +24,7 @@ defmodule Benchmark.ClientManager do
     {:reply, nil, s}
   end
 
-  def handle_call({:track_rpc, dur}, _f, s) do
+  def handle_cast({:track_rpc, dur}, s) do
     {:noreply, s}
   end
 
@@ -34,11 +34,23 @@ defmodule Benchmark.ClientManager do
   end
 
   defp start_worker(%{rpc_type: rpc_type} = config, channel) do
-    if {:closed_loop, _} = config.load_params.load,
-      do: raise(GRPC.RPCError, status: :unimplemented)
+    if elem(config.load_params.load, 0) != :closed_loop,
+      do:
+        raise(
+          GRPC.RPCError,
+          status: :unimplemented,
+          message: "load #{inspect(config.load_params.load)} not support"
+        )
 
-    if Grpc.Testing.RpcType.key(rpc_type) != :UNARY,
-      do: raise(GRPC.RPCError, status: :unimplemented)
+    rpc_type = Grpc.Testing.RpcType.key(rpc_type)
+
+    if rpc_type != :UNARY,
+      do:
+        raise(
+          GRPC.RPCError,
+          status: :unimplemented,
+          message: "rpc_type #{inspect(rpc_type)} not support"
+        )
 
     rpcs_per_conn = config.outstanding_rpcs_per_channel
 

@@ -18,7 +18,7 @@ defmodule Benchmark.ClientWorker do
     start = Time.utc_now()
     unary_call(ch, req_size, resp_size)
     dur = Time.diff(Time.utc_now(), start, :microsecond)
-    GenServer.call(manager, {:track_rpc, dur})
+    GenServer.cast(manager, {:track_rpc, dur})
     unary_loop(ch, payload, manager)
   end
 
@@ -36,7 +36,7 @@ defmodule Benchmark.ClientWorker do
         payload: payload
       )
 
-    Logger.debug("Sending rpc #{req}")
+    Logger.debug("Sending rpc #{inspect(req)}")
     Grpc.Testing.BenchmarkService.Stub.unary_call(ch, req)
   end
 end
