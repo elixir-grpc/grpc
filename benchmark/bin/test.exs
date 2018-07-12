@@ -37,4 +37,6 @@ client =
 
 manager = ClientManager.start_client(client)
 
-Process.sleep(10000)
+Process.sleep(5000)
+
+stats = ClientManager.get_stats(manager, false)

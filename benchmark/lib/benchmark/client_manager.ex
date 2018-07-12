@@ -1,5 +1,8 @@
 defmodule Benchmark.ClientManager do
   use GenServer
+  require Logger
+
+  alias Benchmark.Stats.Histogram
 
   def start_client(%Grpc.Testing.ClientConfig{} = config) do
     {:ok, pid} = GenServer.start_link(__MODULE__, config)
@@ -15,17 +18,37 @@ defmodule Benchmark.ClientManager do
       |> Enum.zip(config.server_targets)
       |> Enum.map(fn {_, server} -> new_client(server) end)
 
-    workers = Enum.map(channels, &start_worker(config, &1)) |> List.flatten()
+    payload = client_payload(config)
+    rpcs_per_conn = config.outstanding_rpcs_per_channel
 
-    {:ok, %{workers: workers}}
+    hs_opts = histogram_opts(config.histogram_params)
+
+    histograms =
+      Enum.reduce(channels, {%{}, 0}, fn ch, {hs, i} ->
+        Enum.reduce(0..(rpcs_per_conn - 1), hs, fn j, hs ->
+          idx = i * rpcs_per_conn + j
+          args = {self(), idx}
+          {:ok, _pid} = GenServer.start_link(Benchmark.ClientWorker, {ch, payload, args})
+          histogram = Histogram.new(hs_opts)
+          Map.put(hs, idx, histogram)
+        end)
+      end)
+
+    {:ok, %{histograms: histograms}}
   end
 
-  def handle_call(:get_stats, _from, s) do
+  def handle_call({:get_stats, reset}, _from, s) do
+    # IO.inspect(s, limit: :infinity)
     {:reply, nil, s}
   end
 
-  def handle_cast({:track_rpc, dur}, s) do
-    {:noreply, s}
+  def handle_cast({:track_rpc, no, dur}, %{histograms: hs}) do
+    new_his = Histogram.add(hs[no], dur)
+    {:noreply, %{histograms: Map.put(hs, no, new_his)}}
+  end
+
+  def get_stats(%{pid: pid}, reset) do
+    GenServer.call(pid, {:get_stats, reset})
   end
 
   defp new_client(addr) do
@@ -33,7 +56,7 @@ defmodule Benchmark.ClientManager do
     ch
   end
 
-  defp start_worker(%{rpc_type: rpc_type} = config, channel) do
+  defp client_payload(%{rpc_type: rpc_type} = config) do
     if elem(config.load_params.load, 0) != :closed_loop,
       do:
         raise(
@@ -41,6 +64,15 @@ defmodule Benchmark.ClientManager do
           status: :unimplemented,
           message: "load #{inspect(config.load_params.load)} not support"
         )
+
+    payload =
+      case config.payload_config.payload do
+        {:simple_params, payload} ->
+          %{req_size: payload.req_size, resp_size: payload.resp_size, type: :protobuf}
+
+        _ ->
+          raise(GRPC.RPCError, status: :unimplemented)
+      end
 
     rpc_type = Grpc.Testing.RpcType.key(rpc_type)
 
@@ -52,27 +84,18 @@ defmodule Benchmark.ClientManager do
           message: "rpc_type #{inspect(rpc_type)} not support"
         )
 
-    rpcs_per_conn = config.outstanding_rpcs_per_channel
-
-    payload =
-      client_payload(config.payload_config)
-      |> Map.put(:rpc_type, rpc_type)
-
-    Enum.map(1..rpcs_per_conn, fn _idx ->
-      {:ok, pid} = GenServer.start_link(Benchmark.ClientWorker, {channel, payload, self()})
-      pid
-    end)
+    Map.put(payload, :rpc_type, rpc_type)
   end
 
-  def client_payload(nil), do: raise(GRPC.RPCError, status: :unimplemented)
+  defp histogram_opts(hs_params) do
+    Logger.debug(inspect(hs_params))
 
-  def client_payload(config) do
-    case config.payload do
-      {:simple_params, payload} ->
-        %{req_size: payload.req_size, resp_size: payload.resp_size, type: :protobuf}
-
-      _ ->
-        raise(GRPC.RPCError, status: :unimplemented)
-    end
+    %Benchmark.Stats.HistogramOpts{
+      num_buckets:
+        trunc(:math.log(hs_params.max_possible) / :math.log(1 + hs_params.resolution)) + 1,
+      growth_factor: hs_params.resolution,
+      base_bucket_size: 1 + hs_params.resolution,
+      min_value: 0
+    }
   end
 end

@@ -14,11 +14,11 @@ defmodule Benchmark.ClientWorker do
     end
   end
 
-  def unary_loop(ch, %{req_size: req_size, resp_size: resp_size} = payload, manager) do
+  def unary_loop(ch, %{req_size: req_size, resp_size: resp_size} = payload, {pid, no} = manager) do
     start = Time.utc_now()
     unary_call(ch, req_size, resp_size)
     dur = Time.diff(Time.utc_now(), start, :microsecond)
-    GenServer.cast(manager, {:track_rpc, dur})
+    GenServer.cast(pid, {:track_rpc, no, dur})
     unary_loop(ch, payload, manager)
   end
 

@@ -56,7 +56,7 @@ defmodule Grpc.Testing.WorkerService.Server do
             {Grpc.Testing.ClientStatus.new(), manager}
 
           {:mark, mark} ->
-            stats = get_stats(mark.reset)
+            stats = ClientManager.get_stats(manager, mark.reset)
             {Grpc.Testing.ClientStatus.new(stats: stats), manager}
         end
 
