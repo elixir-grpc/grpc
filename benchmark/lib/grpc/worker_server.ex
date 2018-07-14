@@ -72,7 +72,4 @@ defmodule Grpc.Testing.WorkerService.Server do
     send(stream.local[:main_pid], {:quit, self()})
     Grpc.Testing.Void.new()
   end
-
-  def get_stats(_) do
-  end
 end

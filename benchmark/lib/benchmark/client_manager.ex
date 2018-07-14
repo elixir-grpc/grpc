@@ -5,7 +5,7 @@ defmodule Benchmark.ClientManager do
   alias Benchmark.Stats.Histogram
 
   defstruct init_time: nil,
-            cpu_acc: %{sys_t: 0, user_t: 0},
+            init_rusage: nil,
             histograms: %{},
             histogram_opts: nil
 
@@ -39,12 +39,10 @@ defmodule Benchmark.ClientManager do
         end)
       end)
 
-    # relative util will be returned next time calling
-    :cpu_sup.util()
-
     state = %__MODULE__{
       histograms: histograms,
       init_time: Time.utc_now(),
+      init_rusage: Benchmark.Syscall.getrusage(),
       histogram_opts: hs_opts
     }
 

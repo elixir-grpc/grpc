@@ -17,26 +17,27 @@ defmodule Benchmark.ClientWorker do
   def unary_loop(ch, %{req_size: req_size, resp_size: resp_size} = payload, {pid, no} = manager) do
     start = Time.utc_now()
     unary_call(ch, req_size, resp_size)
-    dur = Time.diff(Time.utc_now(), start, :microsecond)
+    dur = Time.diff(Time.utc_now(), start, :nanosecond)
     GenServer.cast(pid, {:track_rpc, no, dur})
     unary_loop(ch, payload, manager)
   end
 
   def unary_call(ch, req_size, resp_size) do
+    payload_type = Grpc.Testing.PayloadType.value(:COMPRESSABLE)
+
     payload =
       Grpc.Testing.Payload.new(
-        type: Grpc.Testing.PayloadType.value(:COMPRESSABLE),
-        body: String.duplicate(<<0>>, req_size)
+        type: payload_type,
+        body: List.duplicate(<<0>>, req_size)
       )
 
     req =
       Grpc.Testing.SimpleRequest.new(
-        response_type: payload.type,
+        response_type: payload_type,
         response_size: resp_size,
         payload: payload
       )
 
-    Logger.debug("Sending rpc #{inspect(req)}")
     Grpc.Testing.BenchmarkService.Stub.unary_call(ch, req)
   end
 end

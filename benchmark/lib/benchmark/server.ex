@@ -3,7 +3,7 @@ defmodule Benchmark.Server do
             port: nil,
             pid: nil,
             init_time: nil,
-            cpu_acc: %{sys_t: 0, user_t: 0}
+            init_rusage: nil
 
   def get_stats(server, reset \\ false) do
     {server, stats} = Benchmark.Stats.CpuTime.get_stats(server, reset)
