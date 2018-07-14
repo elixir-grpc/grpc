@@ -2,6 +2,6 @@
   "cowboy": {:hex, :cowboy, "2.4.0", "f1b72fabe9c8a5fc64ac5ac85fb65474d64733d1df52a26fad5d4ba3d9f70a9f", [:rebar3], [{:cowlib, "~> 2.3.0", [hex: :cowlib, repo: "hexpm", optional: false]}, {:ranch, "~> 1.5.0", [hex: :ranch, repo: "hexpm", optional: false]}], "hexpm"},
   "cowlib": {:git, "https://github.com/ninenines/cowlib.git", "804d5262a3369623683213b14d6b936066fc7aab", [tag: "2.4.0"]},
   "gun": {:git, "https://github.com/ninenines/gun.git", "e49f8af96da160b0417d21d5550fedd216acc263", [tag: "1.0.0-rc.1"]},
-  "protobuf": {:git, "https://github.com/tony612/protobuf-elixir.git", "04f40ce430212374a5add2c1149f91568b3c4fd9", []},
+  "protobuf": {:git, "https://github.com/tony612/protobuf-elixir.git", "5d4ed2bcebefad3c2b9b397c1a46b49b41eae7ab", []},
   "ranch": {:hex, :ranch, "1.5.0", "f04166f456790fee2ac1aa05a02745cc75783c2bfb26d39faf6aefc9a3d3a58a", [:rebar3], [], "hexpm"},
 }

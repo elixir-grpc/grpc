@@ -40,3 +40,4 @@ manager = ClientManager.start_client(client)
 Process.sleep(5000)
 
 stats = ClientManager.get_stats(manager, false)
+IO.inspect(stats)

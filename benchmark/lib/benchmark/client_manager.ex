@@ -4,6 +4,11 @@ defmodule Benchmark.ClientManager do
 
   alias Benchmark.Stats.Histogram
 
+  defstruct init_time: nil,
+            cpu_acc: %{sys_t: 0, user_t: 0},
+            histograms: %{},
+            histogram_opts: nil
+
   def start_client(%Grpc.Testing.ClientConfig{} = config) do
     {:ok, pid} = GenServer.start_link(__MODULE__, config)
     %{pid: pid}
@@ -34,17 +39,58 @@ defmodule Benchmark.ClientManager do
         end)
       end)
 
-    {:ok, %{histograms: histograms}}
+    # relative util will be returned next time calling
+    :cpu_sup.util()
+
+    state = %__MODULE__{
+      histograms: histograms,
+      init_time: Time.utc_now(),
+      histogram_opts: hs_opts
+    }
+
+    {:ok, state}
   end
 
-  def handle_call({:get_stats, reset}, _from, s) do
+  def handle_call({:get_stats, reset}, _from, %{histograms: hs} = state) do
     # IO.inspect(s, limit: :infinity)
-    {:reply, nil, s}
+    {state, stats} = Benchmark.Stats.CpuTime.get_stats(state, reset)
+
+    init_hist = Histogram.new(state.histogram_opts)
+
+    merged =
+      Enum.reduce(hs, init_hist, fn {_, hist}, acc ->
+        Histogram.merge(acc, hist)
+      end)
+
+    buckets = Enum.map(merged.buckets, fn b -> b.count end)
+
+    latencies =
+      Grpc.Testing.HistogramData.new(
+        bucket: buckets,
+        min_seen: merged.min,
+        max_seen: merged.max,
+        sum: merged.sum,
+        sum_of_squares: merged.sum_of_squares,
+        count: merged.count
+      )
+
+    stats = %{Grpc.Testing.ClientStats.new(stats) | latencies: latencies}
+
+    state =
+      if reset do
+        keys = Map.keys(hs)
+        hs = keys |> Enum.zip(List.duplicate(init_hist, length(keys))) |> Map.new()
+        %{state | histograms: hs}
+      else
+        state
+      end
+
+    {:reply, stats, state}
   end
 
-  def handle_cast({:track_rpc, no, dur}, %{histograms: hs}) do
+  def handle_cast({:track_rpc, no, dur}, %{histograms: hs} = s) do
     new_his = Histogram.add(hs[no], dur)
-    {:noreply, %{histograms: Map.put(hs, no, new_his)}}
+    {:noreply, %{s | histograms: Map.put(hs, no, new_his)}}
   end
 
   def get_stats(%{pid: pid}, reset) do

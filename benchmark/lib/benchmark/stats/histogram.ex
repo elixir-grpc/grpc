@@ -13,7 +13,7 @@ end
 defmodule Benchmark.Stats.Histogram do
   defstruct buckets: [],
             min: nil,
-            max: nil,
+            max: 0,
             opts: nil,
             count: 0,
             sum: 0,
@@ -88,7 +88,9 @@ defmodule Benchmark.Stats.Histogram do
       count: h1.count + h2.count,
       sum: h1.sum + h2.sum,
       sum_of_squares: h1.sum_of_squares + h2.sum_of_squares,
-      buckets: buckets
+      buckets: buckets,
+      min: min,
+      max: max
     })
   end
 end
