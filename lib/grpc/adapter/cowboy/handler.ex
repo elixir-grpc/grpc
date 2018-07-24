@@ -205,20 +205,20 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     :cowboy_req.stream_trailers(trailers, req)
   end
 
+  defp check_sent_resp(%{has_sent_resp: _} = req) do
+    req
+  end
+
   defp check_sent_resp(req) do
-    if req[:has_sent_resp] == nil do
-      :cowboy_req.stream_reply(200, req)
-    else
-      req
-    end
+    :cowboy_req.stream_reply(200, req)
+  end
+
+  defp send_error_trailers(%{has_sent_resp: _} = req, trailers) do
+    :cowboy_req.stream_trailers(trailers, req)
   end
 
   defp send_error_trailers(req, trailers) do
-    if req[:has_sent_resp] == nil do
-      :cowboy_req.reply(200, trailers, req)
-    else
-      :cowboy_req.stream_trailers(trailers, req)
-    end
+    :cowboy_req.reply(200, trailers, req)
   end
 
   def exit_handler(pid, reason) do

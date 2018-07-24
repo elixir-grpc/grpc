@@ -277,10 +277,11 @@ defmodule GRPC.Stub do
   def recv(%{res_stream: true, channel: channel, payload: payload} = stream, opts) do
     case recv_headers(channel.adapter, channel.adapter_payload, payload, opts) do
       {:ok, headers, is_fin} ->
-        res_enum = case is_fin do
-          :fin -> []
-          :nofin -> response_stream(stream, opts)
-        end
+        res_enum =
+          case is_fin do
+            :fin -> []
+            :nofin -> response_stream(stream, opts)
+          end
 
         if opts[:return_headers] do
           {:ok, res_enum, %{headers: headers}}
@@ -294,7 +295,8 @@ defmodule GRPC.Stub do
   end
 
   def recv(%{payload: payload, unmarshal: unmarshal, channel: channel}, opts) do
-    with {:ok, headers, _is_fin} <- recv_headers(channel.adapter, channel.adapter_payload, payload, opts),
+    with {:ok, headers, _is_fin} <-
+           recv_headers(channel.adapter, channel.adapter_payload, payload, opts),
          {:ok, body, trailers} <-
            recv_body(channel.adapter, channel.adapter_payload, payload, opts) do
       {status, msg} = parse_response(body, trailers, unmarshal)

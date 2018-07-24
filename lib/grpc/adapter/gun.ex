@@ -4,20 +4,24 @@ defmodule GRPC.Adapter.Gun do
   # A client adapter using Gun.
   # conn_pid and stream_ref is stored in `GRPC.Server.Stream`.
 
+  @default_transport_opts [nodelay: true]
+
   @spec connect(GRPC.Channel.t(), any) :: {:ok, GRPC.Channel.t()} | {:error, any}
   def connect(channel, nil), do: connect(channel, %{})
   def connect(%{scheme: "https"} = channel, opts), do: connect_securely(channel, opts)
   def connect(channel, opts), do: connect_insecurely(channel, opts)
 
   defp connect_securely(%{cred: %{ssl: ssl}} = channel, opts) do
-    open_opts = %{transport: :ssl, protocols: [:http2], transport_opts: ssl}
+    transport_opts = Map.get(opts, :transport_opts, @default_transport_opts ++ ssl)
+    open_opts = %{transport: :ssl, protocols: [:http2], transport_opts: transport_opts}
     open_opts = Map.merge(opts, open_opts)
 
     do_connect(channel, open_opts)
   end
 
   defp connect_insecurely(channel, opts) do
-    open_opts = %{transport: :tcp, protocols: [:http2]}
+    transport_opts = Map.get(opts, :transport_opts, @default_transport_opts)
+    open_opts = %{transport: :tcp, protocols: [:http2], transport_opts: transport_opts}
     open_opts = Map.merge(opts, open_opts)
 
     do_connect(channel, open_opts)
@@ -126,39 +130,63 @@ defmodule GRPC.Adapter.Gun do
 
   defp await(conn_pid, stream_ref, timeout) do
     # We should use server timeout for most time
-    timeout = if is_integer(timeout) do
-      timeout * 2
-    else
-      timeout
-    end
+    timeout =
+      if is_integer(timeout) do
+        timeout * 2
+      else
+        timeout
+      end
+
     case :gun.await(conn_pid, stream_ref, timeout) do
       {:response, :fin, status, headers} ->
         if status == 200 do
           headers = Enum.into(headers, %{})
+
           case headers["grpc-status"] do
             nil ->
-              {:error, GRPC.RPCError.exception(GRPC.Status.internal(), "shouldn't finish when getting headers")}
+              {:error,
+               GRPC.RPCError.exception(
+                 GRPC.Status.internal(),
+                 "shouldn't finish when getting headers"
+               )}
+
             "0" ->
               {:response, headers, :fin}
+
             _ ->
-              {:error, GRPC.RPCError.exception(String.to_integer(headers["grpc-status"]), headers["grpc-message"])}
+              {:error,
+               GRPC.RPCError.exception(
+                 String.to_integer(headers["grpc-status"]),
+                 headers["grpc-message"]
+               )}
           end
         else
           {:error,
-           GRPC.RPCError.exception(GRPC.Status.internal(), "status got is #{status} instead of 200")}
+           GRPC.RPCError.exception(
+             GRPC.Status.internal(),
+             "status got is #{status} instead of 200"
+           )}
         end
 
       {:response, :nofin, status, headers} ->
         if status == 200 do
           headers = Enum.into(headers, %{})
+
           if headers["grpc-status"] && headers["grpc-status"] != "0" do
             {:error,
-             GRPC.RPCError.exception(String.to_integer(headers["grpc-status"]), headers["grpc-message"])}
+             GRPC.RPCError.exception(
+               String.to_integer(headers["grpc-status"]),
+               headers["grpc-message"]
+             )}
           else
             {:response, headers, :nofin}
           end
         else
-          {:error, GRPC.RPCError.exception(GRPC.Status.internal(), "status got is #{status} instead of 200")}
+          {:error,
+           GRPC.RPCError.exception(
+             GRPC.Status.internal(),
+             "status got is #{status} instead of 200"
+           )}
         end
 
       {:data, :fin, _} ->
@@ -172,10 +200,15 @@ defmodule GRPC.Adapter.Gun do
         trailers
 
       {:error, :timeout} ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "timeout when waiting for server")}
+        {:error,
+         GRPC.RPCError.exception(
+           GRPC.Status.deadline_exceeded(),
+           "timeout when waiting for server"
+         )}
 
       {:error, {reason, msg}} ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}: #{inspect(msg)}")}
+        {:error,
+         GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}: #{inspect(msg)}")}
 
       {:error, reason} ->
         {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}")}
