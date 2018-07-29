@@ -38,9 +38,9 @@ defmodule GRPC.Transport.HTTP2 do
     |> append_encoding(opts[:grpc_encoding])
     |> append_timeout(opts[:timeout])
     |> append_custom_metadata(opts[:metadata])
+    |> append_authorization(opts[:token])
 
     # TODO: grpc-accept-encoding, grpc-message-type
-    # TODO: Authorization
   end
 
   def extract_metadata(headers) do
@@ -88,6 +88,12 @@ defmodule GRPC.Transport.HTTP2 do
   end
 
   defp append_custom_metadata(headers, _), do: headers
+
+  defp append_authorization(headers, token) when is_binary(token) do
+    headers ++ [{"authorization", "Bearer #{token}"}]
+  end
+
+  defp append_authorization(headers, _), do: headers
 
   defp encode_metadata_pair({key, val}) when not is_binary(key) do
     encode_metadata_pair({to_string(key), val})
