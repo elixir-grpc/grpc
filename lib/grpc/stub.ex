@@ -339,7 +339,11 @@ defmodule GRPC.Stub do
   defp parse_response(data, trailers, unmarshal) do
     case parse_trailers(trailers) do
       :ok ->
-        result = decode_data(data, unmarshal)
+        result =
+          data
+          |> GRPC.Message.from_data()
+          |> unmarshal.()
+
         {:ok, result}
 
       error ->
@@ -357,69 +361,81 @@ defmodule GRPC.Stub do
     end
   end
 
-  defp response_stream(%{unmarshal: unmarshal, channel: channel, payload: payload}, opts) do
-    enum =
-      Stream.unfold(%{buffer: "", message_length: -1, fin: false}, fn
-        %{fin: true} ->
-          nil
+  defp response_stream(
+         %{
+           channel: %{adapter: adapter, adapter_payload: ap},
+           unmarshal: unmarshal,
+           payload: payload
+         },
+         opts
+       ) do
+    state = %{
+      adapter: adapter,
+      adapter_payload: ap,
+      payload: payload,
+      buffer: <<>>,
+      fin: false,
+      need_more: true,
+      opts: opts,
+      unmarshal: unmarshal
+    }
 
-        acc ->
-          case channel.adapter.recv_data_or_trailers(channel.adapter_payload, payload, opts) do
-            {:data, data} ->
-              if GRPC.Message.complete?(data) do
-                reply = decode_data(data, unmarshal)
-                {{:ok, reply}, %{buffer: "", message_length: -1}}
-              else
-                handle_incomplete_data(acc, data, unmarshal)
+    Stream.unfold(state, fn s -> read_stream(s) end)
+  end
+
+  defp read_stream(%{buffer: <<>>, fin: true, fin_resp: nil}), do: nil
+
+  defp read_stream(%{buffer: <<>>, fin: true, fin_resp: fin_resp} = s),
+    do: {fin_resp, Map.put(s, :fin_resp, nil)}
+
+  defp read_stream(
+         %{
+           adapter: adapter,
+           adapter_payload: ap,
+           payload: payload,
+           buffer: buffer,
+           need_more: true,
+           opts: opts
+         } = s
+       ) do
+    case adapter.recv_data_or_trailers(ap, payload, opts) do
+      {:data, data} ->
+        buffer = buffer <> data
+        new_s = s |> Map.put(:need_more, false) |> Map.put(:buffer, buffer)
+        read_stream(new_s)
+
+      {:trailers, trailers} ->
+        trailers = GRPC.Transport.HTTP2.decode_headers(trailers)
+
+        case parse_trailers(trailers) do
+          :ok ->
+            fin_resp =
+              if opts[:return_headers] do
+                {:trailers, trailers}
               end
 
-            {:trailers, trailers} ->
-              trailers = GRPC.Transport.HTTP2.decode_headers(trailers)
+            new_s = s |> Map.put(:fin, true) |> Map.put(:fin_resp, fin_resp)
+            read_stream(new_s)
 
-              case parse_trailers(trailers) do
-                :ok ->
-                  if opts[:return_headers] do
-                    {{:trailers, trailers}, Map.put(acc, :fin, true)}
-                  end
+          error ->
+            {error, %{buffer: <<>>, fin: true, fin_resp: nil}}
+        end
 
-                error ->
-                  {error, Map.put(acc, :fin, true)}
-              end
-
-            error = {:error, _} ->
-              {error, Map.put(acc, :fin, true)}
-          end
-      end)
-
-    Stream.reject(enum, &match?(:skip, &1))
+      error = {:error, _} ->
+        {error, %{buffer: <<>>, fin: true, fin_resp: nil}}
+    end
   end
 
-  defp handle_incomplete_data(%{buffer: ""} = acc, data, _) do
-    new_acc =
-      acc
-      |> Map.put(:buffer, data)
-      |> Map.put(:message_length, GRPC.Message.message_length(data))
+  defp read_stream(%{buffer: buffer, need_more: false, unmarshal: unmarshal} = s) do
+    case GRPC.Message.get_message(buffer) do
+      {message, rest} ->
+        reply = unmarshal.(message)
+        new_s = Map.put(s, :buffer, rest)
+        {{:ok, reply}, new_s}
 
-    {:skip, new_acc}
-  end
-
-  defp handle_incomplete_data(%{buffer: buffer, message_length: ml}, data, unmarshal)
-       when byte_size(buffer) + byte_size(data) - 5 == ml and ml > 0 do
-    final_buffer = buffer <> data
-
-    reply = decode_data(final_buffer, unmarshal)
-
-    {{:ok, reply}, %{buffer: "", message_length: -1}}
-  end
-
-  defp handle_incomplete_data(%{buffer: buffer} = acc, data, _) do
-    {:skip, Map.put(acc, :buffer, buffer <> data)}
-  end
-
-  defp decode_data(data, unmarshal) do
-    data
-    |> GRPC.Message.from_data()
-    |> unmarshal.()
+      _ ->
+        read_stream(Map.put(s, :need_more, true))
+    end
   end
 
   defp parse_req_opts(list) when is_list(list) do
