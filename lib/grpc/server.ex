@@ -106,11 +106,8 @@ defmodule GRPC.Server do
          func_name
        ) do
     reading_stream =
-      adapter.reading_stream(stream.payload, fn data ->
-        data
-        |> GRPC.Message.from_frame()
-        |> Enum.map(&unmarshal.(&1))
-      end)
+      adapter.reading_stream(stream.payload)
+      |> Elixir.Stream.map(&unmarshal.(&1))
 
     do_handle_request(req_stream, res_stream, stream, func_name, reading_stream)
   end

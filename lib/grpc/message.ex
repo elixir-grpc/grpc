@@ -77,4 +77,27 @@ defmodule GRPC.Message do
     <<_flag::bytes-size(1), length::unsigned-integer-size(32), _message::binary>> = data
     length
   end
+
+  @doc """
+  Get message data from data buffer
+
+  ## Examples
+
+      iex> GRPC.Message.get_message(<<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0>>)
+      {<<1, 2, 3, 4, 5, 6, 7, 8>>, <<0, 0, 0>>}
+      iex> GRPC.Message.get_message(<<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>)
+      {<<1, 2, 3, 4, 5, 6, 7, 8>>, <<>>}
+      iex> GRPC.Message.get_message(<<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7>>)
+      false
+  """
+  def get_message(
+        <<_flag::bytes-size(1), length::unsigned-integer-size(32), message::bytes-size(length),
+          rest::binary>>
+      ) do
+    {message, rest}
+  end
+
+  def get_message(_) do
+    false
+  end
 end
