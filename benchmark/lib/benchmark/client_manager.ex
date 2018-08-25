@@ -50,7 +50,6 @@ defmodule Benchmark.ClientManager do
   end
 
   def handle_call({:get_stats, reset}, _from, %{histograms: hs} = state) do
-    # IO.inspect(s, limit: :infinity)
     {state, stats} = Benchmark.Stats.CpuTime.get_stats(state, reset)
 
     init_hist = Histogram.new(state.histogram_opts)
@@ -119,14 +118,6 @@ defmodule Benchmark.ClientManager do
       end
 
     rpc_type = Grpc.Testing.RpcType.key(rpc_type)
-
-    if rpc_type != :UNARY,
-      do:
-        raise(
-          GRPC.RPCError,
-          status: :unimplemented,
-          message: "rpc_type #{inspect(rpc_type)} not support"
-        )
 
     Map.put(payload, :rpc_type, rpc_type)
   end
