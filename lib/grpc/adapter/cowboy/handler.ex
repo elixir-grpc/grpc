@@ -22,7 +22,6 @@ defmodule GRPC.Adapter.Cowboy.Handler do
       pid = spawn_link(__MODULE__, :call_rpc, [server, path, stream])
 
       req = :cowboy_req.set_resp_headers(HTTP2.server_headers(), req)
-      Process.flag(:trap_exit, true)
 
       timeout = :cowboy_req.header("grpc-timeout", req)
 
