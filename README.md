@@ -96,7 +96,7 @@ Check [examples](examples) and [interop](interop)(Interoperability Test) for all
 - [x] Improve code generation from protos ([protobuf-elixir](https://github.com/tony612/protobuf-elixir) [#8](https://github.com/tony612/grpc-elixir/issues/8))
 - [x] Timeout for unary calls
 - [x] Errors handling
-- [ ] Benchmarking
+- [x] Benchmarking
 - [ ] Logging
 - [ ] Data compression
 - [ ] Support other encoding(other than protobuf)

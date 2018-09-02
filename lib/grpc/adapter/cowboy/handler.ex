@@ -26,6 +26,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
       }
 
       pid = spawn_link(__MODULE__, :call_rpc, [server, path, stream])
+      Process.flag(:trap_exit, true)
 
       req = :cowboy_req.set_resp_headers(HTTP2.server_headers(), req)
 
@@ -183,9 +184,14 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     Logger.error(Exception.format(:error, reason, stacktrace))
     error = %RPCError{status: GRPC.Status.unknown(), message: "Internal Server Error"}
     trailers = HTTP2.server_trailers(error.status, error.message)
-    exit_handler(pid, :reason)
+    exit_handler(pid, reason)
     req = send_error_trailers(req, trailers)
     {:stop, req, state}
+  end
+
+  def terminate(reason, _req, %{pid: pid}) do
+    exit_handler(pid, reason)
+    :ok
   end
 
   def call_rpc(server, path, stream) do

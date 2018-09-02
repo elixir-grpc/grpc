@@ -9,15 +9,17 @@ defmodule Interop.Server do
   def unary_call(req, stream) do
     handle_metadata(stream)
     status = req.response_status
+
     if status && status.code != 0 do
       raise GRPC.RPCError, status: status.code, message: status.message
     end
+
     payload = Grpc.Testing.Payload.new(body: String.duplicate(<<0>>, req.response_size))
     Grpc.Testing.SimpleResponse.new(payload: payload)
   end
 
   def streaming_input_call(req_enum, _stream) do
-    size = Enum.reduce(req_enum, 0, fn(req, acc) -> acc + byte_size(req.payload.body) end)
+    size = Enum.reduce(req_enum, 0, fn req, acc -> acc + byte_size(req.payload.body) end)
     Grpc.Testing.StreamingInputCallResponse.new(aggregated_payload_size: size)
   end
 
@@ -30,12 +32,16 @@ defmodule Interop.Server do
 
   def full_duplex_call(req_enum, stream) do
     handle_metadata(stream)
-    Enum.each(req_enum, fn(req) ->
+
+    Enum.each(req_enum, fn req ->
       status = req.response_status
+
       if status && status.code != 0 do
         raise GRPC.RPCError, status: status.code, message: status.message
       end
+
       resp_param = List.first(req.response_parameters)
+
       if resp_param do
         size = resp_param.size
         payload = Grpc.Testing.Payload.new(body: String.duplicate(<<0>>, size))
@@ -47,9 +53,11 @@ defmodule Interop.Server do
 
   defp handle_metadata(stream) do
     headers = GRPC.Stream.get_headers(stream)
+
     if header = headers["x-grpc-test-echo-initial"] do
       GRPC.Server.send_headers(stream, %{"x-grpc-test-echo-initial" => header})
     end
+
     if header = headers["x-grpc-test-echo-trailing-bin"] do
       GRPC.Server.set_trailers(stream, %{"x-grpc-test-echo-trailing-bin" => header})
     end
