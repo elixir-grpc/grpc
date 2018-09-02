@@ -1,12 +1,12 @@
 %{
-  "cowboy": {:hex, :cowboy, "2.2.2", "6cde634da1da8b1d17dd2b20f5f6f91ab8ac7fa1b5106d13dad63c905ab76004", [:rebar3], [{:cowlib, "~> 2.1.0", [hex: :cowlib, repo: "hexpm", optional: false]}, {:ranch, "~> 1.4.0", [hex: :ranch, repo: "hexpm", optional: false]}], "hexpm"},
-  "cowlib": {:git, "https://github.com/ninenines/cowlib.git", "804d5262a3369623683213b14d6b936066fc7aab", [tag: "2.4.0"]},
+  "cowboy": {:git, "https://github.com/ninenines/cowboy.git", "8d634d0ff4ea1ca744a8a789aa5edf6682e8cd87", []},
+  "cowlib": {:hex, :cowlib, "2.5.1", "1481324d35b2844767cf988d8e4ce42f0f3b11c29a9e5a430aaa608d4757e3c6", [:rebar3], [], "hexpm"},
   "dialyxir": {:hex, :dialyxir, "0.5.1", "b331b091720fd93e878137add264bac4f644e1ddae07a70bf7062c7862c4b952", [:mix], []},
   "earmark": {:hex, :earmark, "1.0.3", "89bdbaf2aca8bbb5c97d8b3b55c5dd0cff517ecc78d417e87f1d0982e514557b", [:mix], []},
   "ex_doc": {:hex, :ex_doc, "0.14.3", "e61cec6cf9731d7d23d254266ab06ac1decbb7651c3d1568402ec535d387b6f7", [:mix], [{:earmark, "~> 1.0", [hex: :earmark, optional: false]}]},
-  "gun": {:git, "https://github.com/ninenines/gun.git", "e49f8af96da160b0417d21d5550fedd216acc263", [tag: "1.0.0-rc.1"]},
+  "gun": {:hex, :gun, "1.1.0", "66be4ebb3a8018b2ca0216eb0c5fe89820f3ce3610e9ec0652f525690956f69f", [:rebar3], [{:cowlib, "~> 2.5.1", [hex: :cowlib, repo: "hexpm", optional: false]}], "hexpm"},
   "inch_ex": {:hex, :inch_ex, "0.5.5", "b63f57e281467bd3456461525fdbc9e158c8edbe603da6e3e4671befde796a3d", [:mix], [{:poison, "~> 1.5 or ~> 2.0 or ~> 3.0", [hex: :poison, optional: false]}]},
   "poison": {:hex, :poison, "3.0.0", "625ebd64d33ae2e65201c2c14d6c85c27cc8b68f2d0dd37828fde9c6920dd131", [:mix], []},
   "protobuf": {:hex, :protobuf, "0.5.2", "c1338db827614cbe03a479ac9ef22bd8f3d0ff8a6bb44db5f63037688cd7806c", [:mix], []},
-  "ranch": {:hex, :ranch, "1.4.0", "10272f95da79340fa7e8774ba7930b901713d272905d0012b06ca6d994f8826b", [:rebar3], []},
+  "ranch": {:git, "https://github.com/ninenines/ranch", "cbe24f6fb9833474b22a06fc22cb1a8f168f7fbc", [ref: "1.6.1"]},
 }

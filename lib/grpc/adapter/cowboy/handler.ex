@@ -12,13 +12,19 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   @default_trailers HTTP2.server_trailers()
   @type state :: %{pid: pid, handling_timer: reference, resp_trailers: map}
 
-  @spec init(map, {GRPC.Server.servers_map(), keyword}) :: {:cowboy_loop, map, map}
-  def init(req, {servers, _opts} = state) do
+  @spec init(map, {GRPC.Server.servers_map(), map}) :: {:cowboy_loop, map, map}
+  def init(req, {servers, opts} = state) do
     path = :cowboy_req.path(req)
     server = Map.get(servers, GRPC.Server.service_name(path))
 
     if server do
-      stream = %GRPC.Server.Stream{server: server, adapter: @adapter, payload: %{pid: self()}}
+      stream = %GRPC.Server.Stream{
+        server: server,
+        adapter: @adapter,
+        payload: %{pid: self()},
+        local: opts[:local]
+      }
+
       pid = spawn_link(__MODULE__, :call_rpc, [server, path, stream])
 
       req = :cowboy_req.set_resp_headers(HTTP2.server_headers(), req)
