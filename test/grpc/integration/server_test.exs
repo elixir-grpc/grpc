@@ -138,10 +138,11 @@ defmodule GRPC.Integration.ServerTest do
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       rect = Routeguide.Rectangle.new()
       error = %GRPC.RPCError{message: "Deadline expired", status: 4}
-      assert {:error, ^error} = channel |> Routeguide.RouteGuide.Stub.list_features(rect, timeout: 500)
+
+      assert {:error, ^error} =
+               channel |> Routeguide.RouteGuide.Stub.list_features(rect, timeout: 500)
     end)
   end
-
 
   test "return normally for a little slow server" do
     run_server([SlowServer], fn port ->

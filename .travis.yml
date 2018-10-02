@@ -10,6 +10,8 @@ script:
   # Released inch_ex does not support Elixir 1.7 yet:
   # https://github.com/rrrene/inch_ex/issues/60
   - '[[ "$TRAVIS_ELIXIR_VERSION" = 1.7 ]] || mix inch.report'
+  # mix format not available on Elixir 1.4/1.5
+  - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-5] ]] || mix format --check-formatted'
 
 jobs:
   include:
