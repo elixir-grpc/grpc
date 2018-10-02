@@ -4,6 +4,13 @@ language: elixir
 elixir: '1.6'
 otp_release: '20.3'
 
+script:
+  - mix test
+  - (cd interop && mix deps.get && mix run script/run.exs)
+  # Released inch_ex does not support Elixir 1.7 yet:
+  # https://github.com/rrrene/inch_ex/issues/60
+  - '[[ "$TRAVIS_ELIXIR_VERSION" = 1.7 ]] || mix inch.report'
+
 jobs:
   include:
     - elixir: '1.4'
@@ -11,10 +18,3 @@ jobs:
     - elixir: '1.6'
     - elixir: '1.7'
       otp_release: '21.1'
-
-script:
-  - mix test
-  - (cd interop && mix deps.get && mix run script/run.exs)
-  # Released inch_ex does not support Elixir 1.7 yet:
-  # https://github.com/rrrene/inch_ex/issues/60
-  - '[[ "$TRAVIS_ELIXIR_VERSION" = 1.7 ]] || mix inch.report'
