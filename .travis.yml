@@ -14,7 +14,7 @@ jobs:
 
 script:
   - mix test
-  - cd interop && mix deps.get && mix run script/run.exs
-after_script:
-  - mix deps.get --only docs
-  - MIX_ENV=docs mix inch.report
+  - (cd interop && mix deps.get && mix run script/run.exs)
+  # Released inch_ex does not support Elixir 1.7 yet:
+  # https://github.com/rrrene/inch_ex/issues/60
+  - [[ "$TRAVIS_ELIXIR_VERSION" = 1.7.* ]] || mix inch.report
