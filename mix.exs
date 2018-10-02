@@ -33,7 +33,8 @@ defmodule GRPC.Mixfile do
   defp deps do
     [
       {:protobuf, "~> 0.5"},
-      {:cowboy, github: "ninenines/cowboy"},
+      # FIXME 2018-10-02: We need features of Cowboy only available in the unreleased v2.5.0
+      {:cowboy, github: "ninenines/cowboy", ref: "c998673eb009da2ea4dc0e6ef0332534cf679cc4"},
       {:gun, "~> 1.1"},
       {:cowlib, "~> 2.1", override: true},
       {:ex_doc, "~> 0.14", only: :dev},
