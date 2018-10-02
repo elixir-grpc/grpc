@@ -157,6 +157,9 @@ defmodule GRPC.Adapter.Cowboy do
     if opts[:cred] do
       opts[:cred].ssl ++
         [
+          # These NPN/ALPN options are hardcoded in :cowboy.start_tls/3 (when calling start/3),
+          # but not in :ranch.child_spec/5 (when calling child_spec/3). We must make sure they
+          # are always provided.
           {:next_protocols_advertised, ["h2", "http/1.1"]},
           {:alpn_preferred_protocols, ["h2", "http/1.1"]}
           | socket_opts
