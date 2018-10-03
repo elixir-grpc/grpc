@@ -33,10 +33,10 @@ defmodule GRPC.Mixfile do
   defp deps do
     [
       {:protobuf, "~> 0.5"},
-      # FIXME 2018-10-02: We need features of Cowboy only available in the unreleased v2.5.0
-      {:cowboy, github: "ninenines/cowboy", ref: "c998673eb009da2ea4dc0e6ef0332534cf679cc4"},
-      {:gun, "~> 1.1"},
-      {:cowlib, "~> 2.1", override: true},
+      {:cowboy, "~> 2.5"},
+      # FIXME 2018-10-03: gun 1.3.0 currently causes the interop tests to fail:
+      # https://github.com/tony612/grpc-elixir/issues/77
+      {:gun, "~> 1.2.0"},
       {:ex_doc, "~> 0.14", only: :dev},
       {:inch_ex, ">= 0.0.0", only: :docs},
       {:dialyxir, "~> 0.5", only: :dev, runtime: false}
