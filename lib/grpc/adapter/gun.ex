@@ -48,6 +48,10 @@ defmodule GRPC.Adapter.Gun do
     {:ok, %{channel | adapter_payload: %{conn_pid: nil}}}
   end
 
+  def disconnect(%{adapter_payload: %{conn_pid: nil}} = channel) do
+    {:ok, channel}
+  end
+
   defp open({:local, socket_path}, _port, open_opts),
     do: :gun.open_unix(socket_path, open_opts)
 

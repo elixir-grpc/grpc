@@ -32,7 +32,6 @@ defmodule GRPC.Integration.StubTest do
 
   test "you can disconnect stubs" do
     run_server(HelloServer, fn port ->
-      port_count_before = :erlang.ports() |> Enum.count()
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
       %{adapter_payload: %{conn_pid: gun_conn_pid}} = channel
@@ -45,6 +44,14 @@ defmodule GRPC.Integration.StubTest do
       assert %{adapter_payload: %{conn_pid: nil}} = channel
       assert_receive {:DOWN, _, :port, ^gun_port, _}
       assert port_for(gun_conn_pid) == nil
+    end)
+  end
+
+  test "disconnecting a disconnected channel is a no-op" do
+    run_server(HelloServer, fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      {:ok, channel} = GRPC.Stub.disconnect(channel)
+      {:ok, channel} = GRPC.Stub.disconnect(channel)
     end)
   end
 
