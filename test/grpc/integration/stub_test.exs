@@ -38,12 +38,12 @@ defmodule GRPC.Integration.StubTest do
 
       gun_port = port_for(gun_conn_pid)
       # Using :erlang.monitor to be compatible with <= 1.5
-      :erlang.monitor(:port, gun_port)
+      ref = :erlang.monitor(:port, gun_port)
 
       {:ok, channel} = GRPC.Stub.disconnect(channel)
 
       assert %{adapter_payload: %{conn_pid: nil}} = channel
-      assert_receive {:DOWN, _, :port, ^gun_port, _}
+      assert_receive {:DOWN, ^ref, :port, ^gun_port, _}
       assert port_for(gun_conn_pid) == nil
     end)
   end
@@ -52,7 +52,7 @@ defmodule GRPC.Integration.StubTest do
     run_server(HelloServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       {:ok, channel} = GRPC.Stub.disconnect(channel)
-      {:ok, channel} = GRPC.Stub.disconnect(channel)
+      {:ok, _channel} = GRPC.Stub.disconnect(channel)
     end)
   end
 
