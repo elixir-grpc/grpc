@@ -37,7 +37,8 @@ defmodule GRPC.Integration.StubTest do
       %{adapter_payload: %{conn_pid: gun_conn_pid}} = channel
 
       gun_port = port_for(gun_conn_pid)
-      Port.monitor(gun_port)
+      # Using :erlang.monitor to be compatible with <= 1.5
+      :erlang.monitor(:port, gun_port)
 
       {:ok, channel} = GRPC.Stub.disconnect(channel)
 
