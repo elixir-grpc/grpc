@@ -38,7 +38,7 @@ defmodule GRPC.Mixfile do
       # https://github.com/tony612/grpc-elixir/issues/77
       {:gun, "~> 1.2.0"},
       {:ex_doc, "~> 0.14", only: :dev},
-      {:inch_ex, ">= 0.0.0", only: :docs},
+      {:inch_ex, "~> 1.0", only: [:dev, :test]},
       {:dialyxir, "~> 0.5", only: :dev, runtime: false}
     ]
   end

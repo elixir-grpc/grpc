@@ -130,6 +130,14 @@ defmodule GRPC.Stub do
   end
 
   @doc """
+  Disconnects the adapter and frees any resources the adapter is consuming
+  """
+  @spec disconnect(Channel.t()) :: {:ok, Channel.t()} | {:error, any}
+  def disconnect(%Channel{adapter: adapter} = channel) do
+    adapter.disconnect(channel)
+  end
+
+  @doc """
   The actual function invoked when invoking a rpc function.
 
   ## Returns
