@@ -42,6 +42,16 @@ defmodule GRPC.Adapter.Gun do
     end
   end
 
+  def disconnect(%{adapter_payload: %{conn_pid: gun_pid}} = channel)
+      when is_pid(gun_pid) do
+    :ok = :gun.close(gun_pid)
+    {:ok, %{channel | adapter_payload: %{conn_pid: nil}}}
+  end
+
+  def disconnect(%{adapter_payload: %{conn_pid: nil}} = channel) do
+    {:ok, channel}
+  end
+
   defp open({:local, socket_path}, _port, open_opts),
     do: :gun.open_unix(socket_path, open_opts)
 
