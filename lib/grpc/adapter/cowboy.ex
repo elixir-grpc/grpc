@@ -12,14 +12,10 @@ defmodule GRPC.Adapter.Cowboy do
   # Only used in starting a server manually using `GRPC.Server.start(servers)`
   @spec start(GRPC.Server.servers_map(), non_neg_integer, keyword) :: {:ok, pid, non_neg_integer}
   def start(servers, port, opts) do
-    server_args = cowboy_start_args(servers, port, opts)
+    start_args = cowboy_start_args(servers, port, opts)
+    start_func = if opts[:cred], do: :start_tls, else: :start_clear
 
-    {:ok, pid} =
-      if opts[:cred] do
-        apply(:cowboy, :start_tls, server_args)
-      else
-        apply(:cowboy, :start_clear, server_args)
-      end
+    {:ok, pid} = apply(:cowboy, start_func, start_args)
 
     port = :ranch.get_port(servers_name(servers))
     {:ok, pid, port}
@@ -28,14 +24,18 @@ defmodule GRPC.Adapter.Cowboy do
   @spec child_spec(GRPC.Server.servers_map(), non_neg_integer, Keyword.t()) ::
           Supervisor.Spec.spec()
   def child_spec(servers, port, opts) do
-    args = cowboy_start_args(servers, port, opts)
+    [ref, trans_opts, proto_opts] = cowboy_start_args(servers, port, opts)
+    trans_opts = Map.put(trans_opts, :connection_type, :supervisor)
+
+    {transport, protocol} =
+      if opts[:cred] do
+        {:ranch_ssl, :cowboy_tls}
+      else
+        {:ranch_tcp, :cowboy_clear}
+      end
 
     {ref, mfa, type, timeout, kind, modules} =
-      if opts[:cred] do
-        tls_ranch_start_args(args)
-      else
-        clear_ranch_start_args(args)
-      end
+      :ranch.child_spec(ref, transport, trans_opts, protocol, proto_opts)
 
     scheme = if opts[:cred], do: :https, else: :http
     # Wrap real mfa to print starting log
@@ -137,7 +137,10 @@ defmodule GRPC.Adapter.Cowboy do
 
     [
       servers_name(servers),
-      transport_opts(port, opts),
+      %{
+        num_acceptors: @default_num_acceptors,
+        socket_opts: socket_opts(port, opts)
+      },
       %{
         env: %{dispatch: dispatch},
         inactivity_timeout: idle_timeout,
@@ -147,35 +150,23 @@ defmodule GRPC.Adapter.Cowboy do
     ]
   end
 
-  defp transport_opts(port, opts) do
-    list = [port: port, num_acceptors: @default_num_acceptors]
-    list = if opts[:ip], do: [{:ip, opts[:ip]} | list], else: list
+  defp socket_opts(port, opts) do
+    socket_opts = [port: port]
+    socket_opts = if opts[:ip], do: [{:ip, opts[:ip]} | socket_opts], else: socket_opts
 
     if opts[:cred] do
-      opts[:cred].ssl ++ list
+      opts[:cred].ssl ++
+        [
+          # These NPN/ALPN options are hardcoded in :cowboy.start_tls/3 (when calling start/3),
+          # but not in :ranch.child_spec/5 (when calling child_spec/3). We must make sure they
+          # are always provided.
+          {:next_protocols_advertised, ["h2", "http/1.1"]},
+          {:alpn_preferred_protocols, ["h2", "http/1.1"]}
+          | socket_opts
+        ]
     else
-      list
+      socket_opts
     end
-  end
-
-  defp clear_ranch_start_args([ref, trans_opts, proto_opts]) do
-    trans_opts = [connection_type(proto_opts) | trans_opts]
-    :ranch.child_spec(ref, :ranch_tcp, trans_opts, :cowboy_clear, proto_opts)
-  end
-
-  defp tls_ranch_start_args([ref, trans_opts, proto_opts]) do
-    trans_opts = [
-      connection_type(proto_opts),
-      {:next_protocols_advertised, ["h2", "http/1.1"]},
-      {:alpn_preferred_protocols, ["h2", "http/1.1"]}
-      | trans_opts
-    ]
-
-    :ranch.child_spec(ref, :ranch_ssl, trans_opts, :cowboy_tls, proto_opts)
-  end
-
-  defp connection_type(_) do
-    {:connection_type, :supervisor}
   end
 
   defp running_info(scheme, servers, ref) do

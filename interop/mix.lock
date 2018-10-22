@@ -1,7 +1,7 @@
 %{
-  "cowboy": {:git, "https://github.com/ninenines/cowboy.git", "8d634d0ff4ea1ca744a8a789aa5edf6682e8cd87", []},
-  "cowlib": {:hex, :cowlib, "2.5.1", "1481324d35b2844767cf988d8e4ce42f0f3b11c29a9e5a430aaa608d4757e3c6", [:rebar3], [], "hexpm"},
-  "gun": {:hex, :gun, "1.1.0", "66be4ebb3a8018b2ca0216eb0c5fe89820f3ce3610e9ec0652f525690956f69f", [:rebar3], [{:cowlib, "~> 2.5.1", [hex: :cowlib, repo: "hexpm", optional: false]}], "hexpm"},
+  "cowboy": {:hex, :cowboy, "2.5.0", "4ef3ae066ee10fe01ea3272edc8f024347a0d3eb95f6fbb9aed556dacbfc1337", [:rebar3], [{:cowlib, "~> 2.6.0", [hex: :cowlib, repo: "hexpm", optional: false]}, {:ranch, "~> 1.6.2", [hex: :ranch, repo: "hexpm", optional: false]}], "hexpm"},
+  "cowlib": {:hex, :cowlib, "2.6.0", "8aa629f81a0fc189f261dc98a42243fa842625feea3c7ec56c48f4ccdb55490f", [:rebar3], [], "hexpm"},
+  "gun": {:hex, :gun, "1.2.0", "9878541161fb9e0d2fd1b3b38f001ac9c68e3f9075ed647b7827208dc8b3ec2b", [:rebar3], [{:cowlib, "~> 2.6.0", [hex: :cowlib, repo: "hexpm", optional: false]}], "hexpm"},
   "protobuf": {:hex, :protobuf, "0.5.3", "7216b9814830a92384c4a99ca1ce35884614517c1cdf0c75ea74ea9bb9fabaeb", [:mix], []},
-  "ranch": {:git, "https://github.com/ninenines/ranch", "cbe24f6fb9833474b22a06fc22cb1a8f168f7fbc", [ref: "1.6.1"]},
+  "ranch": {:hex, :ranch, "1.6.2", "6db93c78f411ee033dbb18ba8234c5574883acb9a75af0fb90a9b82ea46afa00", [:rebar3], [], "hexpm"},
 }
