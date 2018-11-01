@@ -28,5 +28,5 @@ jobs:
 
     # Dialyxer build
     - env: [DIALYZER=1] # So we can see this is the dialyzer build in the matrix
-      before_script: .ci/build-plt-cache.sh
+      before_script: travis_wait .ci/build-plt-cache.sh
       script: mix dialyzer --halt-exit-status

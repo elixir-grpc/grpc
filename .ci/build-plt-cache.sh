@@ -20,7 +20,7 @@ mkdir -p "$HOME"/.pltcache
 cp "$HOME"/.pltcache/*-"$MIX_ENV".plt _build/"$MIX_ENV"/ || true
 
 # Build the PLT cache (uses the existing one if present)
-travis_wait mix dialyzer --plt
+mix dialyzer --plt
 
 # Copy the PLT files into the cache so they can be used next time
 cp _build/"$MIX_ENV"/*-"$MIX_ENV".plt "$HOME"/.pltcache/
