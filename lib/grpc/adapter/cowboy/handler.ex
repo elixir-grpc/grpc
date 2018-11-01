@@ -30,15 +30,18 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
       req = :cowboy_req.set_resp_headers(HTTP2.server_headers(), req)
 
-      timeout = :cowboy_req.header("grpc-timeout", req)
+      timeout_header = :cowboy_req.header("grpc-timeout", req)
+
+      timeout =
+        case timeout_header do
+          :undefined -> nil
+          "" -> nil
+          _ -> GRPC.Transport.Utils.decode_timeout(timeout_header)
+        end
 
       timer_ref =
-        if timeout && timeout != :undefined do
-          Process.send_after(
-            self(),
-            {:handling_timeout, self()},
-            GRPC.Transport.Utils.decode_timeout(timeout)
-          )
+        if timeout != nil do
+          Process.send_after(self(), {:handling_timeout, self()}, timeout)
         end
 
       {:cowboy_loop, req, %{pid: pid, handling_timer: timer_ref}}
