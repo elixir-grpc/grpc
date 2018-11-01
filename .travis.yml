@@ -27,6 +27,7 @@ jobs:
       otp_release: '21.1'
 
     # Dialyxer build
-    - env: [DIALYZER=1] # So we can see this is the dialyzer build in the matrix
+    - otp_release: '21.1'
+      env: [DIALYZER=1] # So we can see this is the dialyzer build in the matrix
       before_script: travis_wait .ci/build-plt-cache.sh
       script: mix dialyzer --halt-exit-status
