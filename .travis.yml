@@ -4,6 +4,11 @@ language: elixir
 elixir: '1.6'
 otp_release: '20.3'
 
+cache:
+  directories:
+    $HOME/.mix
+    $HOME/.pltcache
+
 script:
   - mix test
   - (cd interop && mix deps.get && mix run script/run.exs)
@@ -20,3 +25,8 @@ jobs:
     - elixir: '1.6'
     - elixir: '1.7'
       otp_release: '21.1'
+
+    # Dialyxer build
+    - env: [DIALYZER=1] # So we can see this is the dialyzer build in the matrix
+      before_script: .ci/build-plt-cache.sh
+      script: mix dialyzer --halt-exit-status
