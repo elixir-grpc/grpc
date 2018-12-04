@@ -155,7 +155,7 @@ defmodule GRPC.Stub do
       with the last elem being a map of headers `%{headers: headers, trailers: trailers}`(unary) or
       `%{headers: headers}`(server streaming)
   """
-  @spec call(atom, tuple, String.t(), GRPC.Channel, struct | nil, keyword) ::
+  @spec call(atom, tuple, String.t(), GRPC.Channel.t(), struct | nil, keyword) ::
           {:ok, struct}
           | {:ok, struct, map}
           | GRPC.Client.Stream.t()
