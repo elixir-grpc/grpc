@@ -43,7 +43,7 @@ defmodule GRPC.Integration.ServerTest do
 
       Enum.each([rectangle.lo, rectangle.hi], fn point ->
         feature = simple_feature(point)
-        Server.stream_send(stream, feature)
+        Server.send_reply(stream, feature)
       end)
     end
 
@@ -68,7 +68,7 @@ defmodule GRPC.Integration.ServerTest do
 
       Enum.each([rectangle.lo, rectangle.hi], fn point ->
         feature = simple_feature(point)
-        GRPC.Server.stream_send(stream, feature)
+        GRPC.Server.send_reply(stream, feature)
       end)
     end
 
