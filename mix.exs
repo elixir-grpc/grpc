@@ -1,7 +1,7 @@
 defmodule GRPC.Mixfile do
   use Mix.Project
 
-  @version "0.3.0-alpha.2"
+  @version "0.3.1"
 
   def project do
     [
@@ -35,7 +35,6 @@ defmodule GRPC.Mixfile do
       {:protobuf, "~> 0.5"},
       {:cowboy, "~> 2.5"},
       {:gun, "~> 1.2"},
-      {:cowlib, "~> 2.6", override: true},
       {:ex_doc, "~> 0.14", only: :dev},
       {:inch_ex, "~> 1.0", only: [:dev, :test]},
       {:dialyxir, "~> 0.5", only: :dev, runtime: false}
