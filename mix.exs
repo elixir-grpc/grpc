@@ -1,7 +1,7 @@
 defmodule GRPC.Mixfile do
   use Mix.Project
 
-  @version "0.3.0-alpha.2"
+  @version "0.3.1"
 
   def project do
     [
@@ -37,9 +37,7 @@ defmodule GRPC.Mixfile do
     [
       {:protobuf, "~> 0.5"},
       {:cowboy, "~> 2.5"},
-      # FIXME 2018-10-03: gun 1.3.0 currently causes the interop tests to fail:
-      # https://github.com/tony612/grpc-elixir/issues/77
-      {:gun, "~> 1.2.0"},
+      {:gun, "~> 1.2"},
       {:ex_doc, "~> 0.14", only: :dev},
       {:inch_ex, "~> 1.0", only: [:dev, :test]},
       {:dialyxir, "~> 1.0.0-rc.4", only: :dev, runtime: false}

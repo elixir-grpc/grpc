@@ -7,7 +7,7 @@ defmodule GRPC.Transport.HTTP2 do
   alias GRPC.Status
 
   def server_headers() do
-    %{":status" => 200, "content-type" => "application/grpc+proto"}
+    %{"content-type" => "application/grpc+proto"}
   end
 
   @spec server_trailers(integer, String.t()) :: map

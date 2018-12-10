@@ -62,24 +62,29 @@ expect(Req) ->
 -spec data(cowboy_stream:streamid(), cowboy_stream:fin(), cowboy_req:resp_body(), State)
 	-> {cowboy_stream:commands(), State} when State::#state{}.
 data(_StreamID, IsFin, Data, State=#state{pid=Pid, read_body_ref=Ref,
-		read_body_timer_ref=TRef, read_body_buffer=Buffer, body_length=BodyLen0})
-		when TRef =/= undefined ->
+		read_body_timer_ref=TRef, read_body_buffer=Buffer, body_length=BodyLen0}) ->
+	NewBody0 = <<Buffer/binary, Data/binary>>,
 	BodyLen = BodyLen0 + byte_size(Data),
-	ok = erlang:cancel_timer(TRef, [{async, true}, {info, false}]),
-	send_request_body(Pid, Ref, IsFin, BodyLen, <<Buffer/binary, Data/binary>>),
-	{[], State#state{
+	NewBody = case TRef of
+		undefined ->
+			NewBody0;
+		_ ->
+			ok = erlang:cancel_timer(TRef, [{async, true}, {info, false}]),
+			send_request_body(Pid, Ref, IsFin, BodyLen, NewBody0),
+			<<>>
+	end,
+	Commands = case BodyLen of
+		0 ->
+			[];
+		_ ->
+			[{flow, BodyLen}]
+	end,
+	{Commands, State#state{
 		read_body_is_fin=IsFin,
 		expect=undefined,
 		read_body_timer_ref=undefined,
-		read_body_buffer= <<>>,
-		body_length=BodyLen}};
-data(_StreamID, IsFin, Data, State=#state{
-		read_body_buffer=Buffer, body_length=BodyLen}) ->
-	{[], State#state{
-		expect=undefined,
-		read_body_is_fin=IsFin,
-		read_body_buffer= << Buffer/binary, Data/binary >>,
-		body_length=BodyLen + byte_size(Data)}}.
+		read_body_buffer=NewBody,
+		body_length=BodyLen}}.
 
 -spec info(cowboy_stream:streamid(), any(), State)
 	-> {cowboy_stream:commands(), State} when State::#state{}.
@@ -119,7 +124,7 @@ info(_StreamID, {read_body, Ref, _Length, _}, State=#state{pid=Pid,
 info(StreamID, {read_body, Ref, Length, Period}, State=#state{expect=Expect}) ->
 	Commands = case Expect of
 		continue -> [{inform, 100, #{}}, {flow, Length}];
-		undefined -> [{flow, Length}]
+		undefined -> []
 	end,
 	TRef = erlang:send_after(Period, self(), {{self(), StreamID}, {read_body_timeout, Ref}}),
 	{Commands, State#state{
