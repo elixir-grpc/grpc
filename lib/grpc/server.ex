@@ -35,20 +35,30 @@ defmodule GRPC.Server do
 
   alias GRPC.Server.Stream
 
+  @type rpc_req :: struct | Enumerable.t()
+  @type rpc_return :: struct | any
+  @type rpc :: (GRPC.Server.rpc_req(), Stream.t() -> rpc_return)
+
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
       service_name = service_mod.__meta__(:name)
 
       Enum.each(service_mod.__rpc_calls__, fn {name, _, _} = rpc ->
-        func_name = name |> to_string |> Macro.underscore()
+        func_name = name |> to_string |> Macro.underscore() |> String.to_atom()
         path = "/#{service_name}/#{name}"
+        grpc_type = GRPC.Service.grpc_type(rpc)
 
         def __call_rpc__(unquote(path), stream) do
           GRPC.Server.call(
             unquote(service_mod),
-            stream,
-            unquote(Macro.escape(rpc)),
-            unquote(String.to_atom(func_name))
+            %{
+              stream
+              | service_name: unquote(service_name),
+                method_name: unquote(to_string(name)),
+                grpc_type: unquote(grpc_type)
+            },
+            unquote(Macro.escape(put_elem(rpc, 0, func_name))),
+            unquote(func_name)
           )
         end
       end)
@@ -69,12 +79,12 @@ defmodule GRPC.Server do
   def call(
         service_mod,
         stream,
-        {_, {req_mod, req_stream}, {res_mod, res_stream}} = _rpc,
+        {_, {req_mod, req_stream}, {res_mod, res_stream}} = rpc,
         func_name
       ) do
     marshal_func = fn res -> service_mod.marshal(res_mod, res) end
     unmarshal_func = fn req -> service_mod.unmarshal(req_mod, req) end
-    stream = %{stream | marshal: marshal_func, unmarshal: unmarshal_func}
+    stream = %{stream | marshal: marshal_func, unmarshal: unmarshal_func, rpc: rpc}
 
     handle_request(req_stream, res_stream, stream, func_name)
   end
@@ -83,53 +93,81 @@ defmodule GRPC.Server do
     if function_exported?(server, func_name, 2) do
       do_handle_request(req_s, res_s, stream, func_name)
     else
-      raise GRPC.RPCError, status: :unimplemented
+      {:error, GRPC.RPCError.new(:unimplemented)}
     end
   end
 
   defp do_handle_request(
-         false = req_stream,
+         false,
          res_stream,
-         %{unmarshal: unmarshal, adapter: adapter} = stream,
+         %{unmarshal: unmarshal, adapter: adapter, payload: payload} = stream,
          func_name
        ) do
-    {:ok, data} = adapter.read_body(stream.payload)
+    {:ok, data} = adapter.read_body(payload)
     message = GRPC.Message.from_data(data)
     request = unmarshal.(message)
-    do_handle_request(req_stream, res_stream, stream, func_name, request)
+
+    call_with_interceptors(res_stream, func_name, stream, request)
   end
 
   defp do_handle_request(
-         true = req_stream,
+         true,
          res_stream,
-         %{unmarshal: unmarshal, adapter: adapter} = stream,
+         %{unmarshal: unmarshal, adapter: adapter, payload: payload} = stream,
          func_name
        ) do
     reading_stream =
       adapter.reading_stream(stream.payload)
       |> Elixir.Stream.map(&unmarshal.(&1))
 
-    do_handle_request(req_stream, res_stream, stream, func_name, reading_stream)
+    call_with_interceptors(res_stream, func_name, stream, reading_stream)
   end
 
-  defp do_handle_request(false, false, %{server: server_mod} = stream, func_name, request) do
-    reply = apply(server_mod, func_name, [request, stream])
-    {:ok, stream, reply}
+  defp call_with_interceptors(
+         res_stream,
+         func_name,
+         %{server: server, endpoint: endpoint} = stream,
+         req
+       ) do
+    last = fn r, s ->
+      try do
+        reply = apply(server, func_name, [r, s])
+
+        if res_stream do
+          {:ok, stream}
+        else
+          {:ok, stream, reply}
+        end
+      rescue
+        e in GRPC.RPCError ->
+          {:error, e}
+      catch
+        kind, reason ->
+          Logger.error(Exception.format(kind, reason))
+          stack = System.stacktrace()
+          reason = Exception.normalize(kind, reason, stack)
+          {:error, %{kind: kind, reason: reason, stack: stack}}
+      end
+    end
+
+    interceptors = interceptors(endpoint, server)
+
+    next =
+      Enum.reduce(interceptors, last, fn {interceptor, opts}, acc ->
+        fn r, s -> interceptor.call(r, s, acc, opts) end
+      end)
+
+    next.(req, stream)
   end
 
-  defp do_handle_request(false, true, %{server: server_mod} = stream, func_name, request) do
-    apply(server_mod, func_name, [request, stream])
-    {:ok, stream}
-  end
+  defp interceptors(nil, _), do: []
 
-  defp do_handle_request(true, false, %{server: server_mod} = stream, func_name, req_stream) do
-    reply = apply(server_mod, func_name, [req_stream, stream])
-    {:ok, stream, reply}
-  end
+  defp interceptors(endpoint, server) do
+    interceptors =
+      endpoint.__meta__(:interceptors) ++
+        Map.get(endpoint.__meta__(:server_interceptors), server, [])
 
-  defp do_handle_request(true, true, %{server: server_mod} = stream, func_name, req_stream) do
-    apply(server_mod, func_name, [req_stream, stream])
-    {:ok, stream}
+    interceptors |> Enum.reverse()
   end
 
   # Start the gRPC server. Only used in starting a server manually using `GRPC.Server.start(servers)`
@@ -151,7 +189,16 @@ defmodule GRPC.Server do
   def start(servers, port, opts \\ []) do
     adapter = Keyword.get(opts, :adapter, GRPC.Adapter.Cowboy)
     servers = GRPC.Server.servers_to_map(servers)
-    adapter.start(servers, port, opts)
+    adapter.start(nil, servers, port, opts)
+  end
+
+  @doc false
+  @spec start_endpoint(atom, non_neg_integer, Keyword.t()) :: {atom, any, non_neg_integer}
+  def start_endpoint(endpoint, port, opts \\ []) do
+    servers = endpoint.__meta__(:servers)
+    servers = GRPC.Server.servers_to_map(servers)
+    adapter = Keyword.get(opts, :adapter, GRPC.Adapter.Cowboy)
+    adapter.start(endpoint, servers, port, opts)
   end
 
   # Stop the server
@@ -168,7 +215,16 @@ defmodule GRPC.Server do
   def stop(servers, opts \\ []) do
     adapter = Keyword.get(opts, :adapter, GRPC.Adapter.Cowboy)
     servers = GRPC.Server.servers_to_map(servers)
-    adapter.stop(servers)
+    adapter.stop(nil, servers)
+  end
+
+  @doc false
+  @spec stop_endpoint(atom, Keyword.t()) :: any
+  def stop_endpoint(endpoint, opts \\ []) do
+    adapter = Keyword.get(opts, :adapter, GRPC.Adapter.Cowboy)
+    servers = endpoint.__meta__(:servers)
+    servers = GRPC.Server.servers_to_map(servers)
+    adapter.stop(endpoint, servers)
   end
 
   @doc """
@@ -187,10 +243,8 @@ defmodule GRPC.Server do
       iex> GRPC.Server.send_reply(stream, reply)
   """
   @spec send_reply(Stream.t(), struct) :: Stream.t()
-  def send_reply(%{adapter: adapter, marshal: marshal} = stream, reply) do
-    {:ok, data, _size} = reply |> marshal.() |> GRPC.Message.to_data(%{iolist: true})
-    adapter.send_reply(stream.payload, data)
-    stream
+  def send_reply(%{__interface__: interface} = stream, reply) do
+    interface[:send_reply].(stream, reply)
   end
 
   @doc """

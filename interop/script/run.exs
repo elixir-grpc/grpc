@@ -3,9 +3,8 @@ servers = [Interop.Server]
 port = 0
 # port = 10000
 {:ok, _pid, port} = GRPC.Server.start(servers, port)
-ch = Client.connect("127.0.0.1", port)
-
-run = fn i ->
+ch = Client.connect("127.0.0.1", port, interceptors: [GRPCPrometheus.ClientInterceptor])
+run = fn(i) ->
   IO.puts("Round #{i}")
   Client.empty_unary!(ch)
   Client.cacheable_unary!(ch)

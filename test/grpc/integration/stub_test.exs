@@ -58,7 +58,7 @@ defmodule GRPC.Integration.StubTest do
 
   test "body larger than 2^14 works" do
     run_server(HelloServer, fn port ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", interceptors: [GRPC.Logger.Client])
       name = String.duplicate("a", round(:math.pow(2, 15)))
       req = Helloworld.HelloRequest.new(name: name)
       {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)

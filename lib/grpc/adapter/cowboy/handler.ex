@@ -12,14 +12,15 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   @default_trailers HTTP2.server_trailers()
   @type state :: %{pid: pid, handling_timer: reference, resp_trailers: map}
 
-  @spec init(map, {GRPC.Server.servers_map(), map}) :: {:cowboy_loop, map, map}
-  def init(req, {servers, opts} = state) do
+  @spec init(map, {atom, GRPC.Server.servers_map(), map}) :: {:cowboy_loop, map, map}
+  def init(req, {endpoint, servers, opts} = state) do
     path = :cowboy_req.path(req)
     server = Map.get(servers, GRPC.Server.service_name(path))
 
     if server do
       stream = %GRPC.Server.Stream{
         server: server,
+        endpoint: endpoint,
         adapter: @adapter,
         payload: %{pid: self()},
         local: opts[:local]
@@ -195,15 +196,30 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   end
 
   def call_rpc(server, path, stream) do
-    try do
-      do_call_rpc(server, path, stream)
-    rescue
-      e in RPCError ->
+    result =
+      try do
+        case do_call_rpc(server, path, stream) do
+          {:error, _} = err ->
+            err
+
+          _ ->
+            :ok
+        end
+      catch
+        kind, e ->
+          Logger.error(Exception.format(kind, e))
+          exit({:handle_error, kind})
+      end
+
+    case result do
+      {:error, %GRPC.RPCError{} = e} ->
         exit({e, ""})
-    catch
-      kind, e ->
-        Logger.error(Exception.format(kind, e))
+
+      {:error, %{kind: kind}} ->
         exit({:handle_error, kind})
+
+      other ->
+        other
     end
   end
 
@@ -219,6 +235,9 @@ defmodule GRPC.Adapter.Cowboy.Handler do
       {:ok, stream} ->
         GRPC.Server.send_trailers(stream, @default_trailers)
         {:ok, stream}
+
+      error ->
+        error
     end
   end
 

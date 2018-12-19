@@ -129,4 +129,22 @@ defmodule GRPC.Status do
   The request does not have valid authentication credentials for the operation.
   """
   def unauthenticated, do: 16
+
+  def code_name(0), do: "OK"
+  def code_name(1), do: "Canceled"
+  def code_name(2), do: "Unknown"
+  def code_name(3), do: "InvalidArgument"
+  def code_name(4), do: "DeadlineExceeded"
+  def code_name(5), do: "NotFound"
+  def code_name(6), do: "AlreadyExists"
+  def code_name(7), do: "PermissionDenied"
+  def code_name(8), do: "ResourceExhausted"
+  def code_name(9), do: "FailedPrecondition"
+  def code_name(10), do: "Aborted"
+  def code_name(11), do: "OutOfRange"
+  def code_name(12), do: "Unimplemented"
+  def code_name(13), do: "Internal"
+  def code_name(14), do: "Unavailable"
+  def code_name(15), do: "DataLoss"
+  def code_name(16), do: "Unauthenticated"
 end
