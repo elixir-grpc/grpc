@@ -12,12 +12,14 @@ defmodule GRPC.Endpoint do
 
   @doc false
   defmacro __before_compile__(env) do
-    interceptors = Module.get_attribute(env.module, :interceptors)
-    |> Macro.escape()
-    |> Enum.reverse()
-    |> init_interceptors()
+    interceptors =
+      Module.get_attribute(env.module, :interceptors)
+      |> Macro.escape()
+      |> Enum.reverse()
+      |> init_interceptors()
+
     servers = Module.get_attribute(env.module, :servers)
-    servers = Enum.map(servers, fn({ss, opts}) -> {ss, parse_run_opts(opts, %{})} end)
+    servers = Enum.map(servers, fn {ss, opts} -> {ss, parse_run_opts(opts, %{})} end)
     server_interceptors = server_interceptors(servers, %{})
     servers = parse_servers(servers)
 
@@ -47,35 +49,43 @@ defmodule GRPC.Endpoint do
   end
 
   defp server_interceptors([], acc), do: acc
-  defp server_interceptors([{servers, %{interceptors: interceptors}}|tail], acc0) when is_list(interceptors) do
-    acc = Enum.reduce(List.wrap(servers), acc0, fn(server, acc) ->
-      Map.put(acc, server, init_interceptors(interceptors))
-    end)
+
+  defp server_interceptors([{servers, %{interceptors: interceptors}} | tail], acc0)
+       when is_list(interceptors) do
+    acc =
+      Enum.reduce(List.wrap(servers), acc0, fn server, acc ->
+        Map.put(acc, server, init_interceptors(interceptors))
+      end)
+
     server_interceptors(tail, acc)
   end
-  defp server_interceptors([_|tail], acc) do
+
+  defp server_interceptors([_ | tail], acc) do
     server_interceptors(tail, acc)
   end
 
   defp parse_servers(servers) do
     servers
-    |> Enum.map(fn({server, _}) -> server end)
-    |> List.flatten
+    |> Enum.map(fn {server, _} -> server end)
+    |> List.flatten()
   end
 
   defp parse_run_opts([], acc), do: acc
-  defp parse_run_opts([{:interceptors, interceptors}|tail], acc) do
+
+  defp parse_run_opts([{:interceptors, interceptors} | tail], acc) do
     parse_run_opts(tail, Map.put(acc, :interceptors, interceptors))
   end
-  defp parse_run_opts([{k, _}|_], _) do
+
+  defp parse_run_opts([{k, _} | _], _) do
     raise ArgumentError, message: "Unknown option for GRPC.Endpoint.run/2: #{k}"
   end
 
   def init_interceptors(interceptors) do
     Enum.map(interceptors, fn
-      ({interceptor, opts}) ->
+      {interceptor, opts} ->
         {interceptor, interceptor.init(opts)}
-      (interceptor) ->
+
+      interceptor ->
         {interceptor, interceptor.init([])}
     end)
   end

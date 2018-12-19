@@ -65,18 +65,25 @@ defmodule GRPC.Server.Supervisor do
   """
   @spec child_spec(atom | [atom], integer, Keyword.t()) :: Supervisor.Spec.spec()
   def child_spec(endpoint, port, opts \\ [])
+
   def child_spec(endpoint, port, opts) when is_atom(endpoint) do
-    servers = try do
-      endpoint.__meta__(:servers)
-    rescue
-      MatchError ->
-        Logger.warn("deprecated: servers as argument of GRPC.Server.Supervisor, please use GRPC.Endpoint")
-        endpoint
-    end
+    servers =
+      try do
+        endpoint.__meta__(:servers)
+      rescue
+        MatchError ->
+          Logger.warn(
+            "deprecated: servers as argument of GRPC.Server.Supervisor, please use GRPC.Endpoint"
+          )
+
+          endpoint
+      end
+
     adapter = Keyword.get(opts, :adapter, @default_adapter)
     servers = GRPC.Server.servers_to_map(servers)
     adapter.child_spec(endpoint, servers, port, opts)
   end
+
   def child_spec(servers, port, opts) when is_list(servers) do
     adapter = Keyword.get(opts, :adapter, @default_adapter)
     servers = GRPC.Server.servers_to_map(servers)

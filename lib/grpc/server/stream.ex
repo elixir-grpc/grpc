@@ -16,17 +16,25 @@ defmodule GRPC.Server.Stream do
     * `:local`     - local data initialized by user
   """
 
-  defstruct [
-    server: nil, service_name: nil, method_name: nil, grpc_type: nil, endpoint: nil, rpc: nil,
-    marshal: nil, unmarshal: nil, payload: nil, adapter: nil, local: nil,
-    __interface__: %{send_reply: &__MODULE__.send_reply/2}]
+  defstruct server: nil,
+            service_name: nil,
+            method_name: nil,
+            grpc_type: nil,
+            endpoint: nil,
+            rpc: nil,
+            marshal: nil,
+            unmarshal: nil,
+            payload: nil,
+            adapter: nil,
+            local: nil,
+            __interface__: %{send_reply: &__MODULE__.send_reply/2}
 
   @typep marshal :: (struct -> binary)
   @typep unmarshal :: (binary -> struct)
   @type t :: %__MODULE__{
           server: atom,
-          service_name: String.t,
-          method_name: String.t,
+          service_name: String.t(),
+          method_name: String.t(),
           grpc_type: atom,
           endpoint: atom,
           rpc: tuple,

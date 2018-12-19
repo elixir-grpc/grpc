@@ -10,7 +10,8 @@ defmodule GRPC.Adapter.Cowboy do
   @default_num_acceptors 20
 
   # Only used in starting a server manually using `GRPC.Server.start(servers)`
-  @spec start(atom, GRPC.Server.servers_map(), non_neg_integer, keyword) :: {:ok, pid, non_neg_integer}
+  @spec start(atom, GRPC.Server.servers_map(), non_neg_integer, keyword) ::
+          {:ok, pid, non_neg_integer}
   def start(endpoint, servers, port, opts) do
     start_args = cowboy_start_args(endpoint, servers, port, opts)
     start_func = if opts[:cred], do: :start_tls, else: :start_clear
@@ -52,7 +53,11 @@ defmodule GRPC.Adapter.Cowboy do
         {:ok, pid}
 
       {:error, {:shutdown, {_, _, {{_, {:error, :eaddrinuse}}, _}}}} = error ->
-        Logger.error([running_info(scheme, endpoint, servers, ref), " failed, port already in use"])
+        Logger.error([
+          running_info(scheme, endpoint, servers, ref),
+          " failed, port already in use"
+        ])
+
         error
 
       {:error, _} = error ->
@@ -187,6 +192,7 @@ defmodule GRPC.Adapter.Cowboy do
   defp servers_name(nil, servers) do
     servers |> Map.values() |> Enum.map(fn s -> inspect(s) end) |> Enum.join(",")
   end
+
   defp servers_name(endpoint, _) do
     inspect(endpoint)
   end

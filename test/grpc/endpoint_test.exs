@@ -20,11 +20,11 @@ defmodule GRPC.EndpointTest do
   defmodule FooEndpoint do
     use GRPC.Endpoint
 
-    intercept Interceptor1
-    intercept Interceptor2, foo: 1
+    intercept(Interceptor1)
+    intercept(Interceptor2, foo: 1)
 
-    run Server1, interceptors: [Interceptor3]
-    run [Server2, Server3], interceptors: [{Interceptor4, []}]
+    run(Server1, interceptors: [Interceptor3])
+    run([Server2, Server3], interceptors: [{Interceptor4, []}])
   end
 
   test "intercept works" do
@@ -37,6 +37,8 @@ defmodule GRPC.EndpointTest do
 
   test "run creates server_interceptors" do
     mw = [{Interceptor4, []}]
-    assert %{Server1 => [{Interceptor3, [foo: :bar]}], Server2 => mw, Server3 => mw} == FooEndpoint.__meta__(:server_interceptors)
+
+    assert %{Server1 => [{Interceptor3, [foo: :bar]}], Server2 => mw, Server3 => mw} ==
+             FooEndpoint.__meta__(:server_interceptors)
   end
 end

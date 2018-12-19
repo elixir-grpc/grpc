@@ -35,23 +35,28 @@ defmodule GRPC.Server do
 
   alias GRPC.Server.Stream
 
-  @type rpc_req :: struct | Enumerable.t
+  @type rpc_req :: struct | Enumerable.t()
   @type rpc_return :: struct | any
-  @type rpc :: (GRPC.Server.rpc_req, Stream.t -> rpc_return)
+  @type rpc :: (GRPC.Server.rpc_req(), Stream.t() -> rpc_return)
 
   defmacro __using__(opts) do
     quote bind_quoted: [service_mod: opts[:service]] do
       service_name = service_mod.__meta__(:name)
 
       Enum.each(service_mod.__rpc_calls__, fn {name, _, _} = rpc ->
-        func_name = name |> to_string |> Macro.underscore() |> String.to_atom
+        func_name = name |> to_string |> Macro.underscore() |> String.to_atom()
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
 
         def __call_rpc__(unquote(path), stream) do
           GRPC.Server.call(
             unquote(service_mod),
-            %{stream | service_name: unquote(service_name), method_name: unquote(to_string(name)), grpc_type: unquote(grpc_type)},
+            %{
+              stream
+              | service_name: unquote(service_name),
+                method_name: unquote(to_string(name)),
+                grpc_type: unquote(grpc_type)
+            },
             unquote(Macro.escape(put_elem(rpc, 0, func_name))),
             unquote(func_name)
           )
@@ -118,10 +123,16 @@ defmodule GRPC.Server do
     call_with_interceptors(res_stream, func_name, stream, reading_stream)
   end
 
-  defp call_with_interceptors(res_stream, func_name, %{server: server, endpoint: endpoint} = stream, req) do
-    last = fn(r, s) ->
+  defp call_with_interceptors(
+         res_stream,
+         func_name,
+         %{server: server, endpoint: endpoint} = stream,
+         req
+       ) do
+    last = fn r, s ->
       try do
         reply = apply(server, func_name, [r, s])
+
         if res_stream do
           {:ok, stream}
         else
@@ -141,16 +152,22 @@ defmodule GRPC.Server do
 
     interceptors = interceptors(endpoint, server)
 
-    next = Enum.reduce(interceptors, last, fn({interceptor, opts}, acc) ->
-      fn(r, s) -> interceptor.call(r, s, acc, opts) end
-    end)
+    next =
+      Enum.reduce(interceptors, last, fn {interceptor, opts}, acc ->
+        fn r, s -> interceptor.call(r, s, acc, opts) end
+      end)
+
     next.(req, stream)
   end
 
   defp interceptors(nil, _), do: []
+
   defp interceptors(endpoint, server) do
-    interceptors = endpoint.__meta__(:interceptors) ++ Map.get(endpoint.__meta__(:server_interceptors), server, [])
-    interceptors |> Enum.reverse
+    interceptors =
+      endpoint.__meta__(:interceptors) ++
+        Map.get(endpoint.__meta__(:server_interceptors), server, [])
+
+    interceptors |> Enum.reverse()
   end
 
   # Start the gRPC server. Only used in starting a server manually using `GRPC.Server.start(servers)`

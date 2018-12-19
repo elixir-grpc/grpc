@@ -53,6 +53,7 @@ defmodule GRPC.Logger.Client do
 
       ["Got ", inspect(status), " in ", GRPC.Logger.Server.formatted_diff(diff)]
     end)
+
     result
   end
 end

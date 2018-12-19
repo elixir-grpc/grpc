@@ -196,23 +196,28 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   end
 
   def call_rpc(server, path, stream) do
-    result = try do
-      case do_call_rpc(server, path, stream) do
-        {:error, _} = err ->
-          err
-        _ ->
-          :ok
+    result =
+      try do
+        case do_call_rpc(server, path, stream) do
+          {:error, _} = err ->
+            err
+
+          _ ->
+            :ok
+        end
+      catch
+        kind, e ->
+          Logger.error(Exception.format(kind, e))
+          exit({:handle_error, kind})
       end
-    catch
-      kind, e ->
-        Logger.error(Exception.format(kind, e))
-        exit({:handle_error, kind})
-    end
+
     case result do
       {:error, %GRPC.RPCError{} = e} ->
         exit({e, ""})
+
       {:error, %{kind: kind}} ->
         exit({:handle_error, kind})
+
       other ->
         other
     end
@@ -230,6 +235,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
       {:ok, stream} ->
         GRPC.Server.send_trailers(stream, @default_trailers)
         {:ok, stream}
+
       error ->
         error
     end

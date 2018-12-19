@@ -3,7 +3,8 @@ defmodule GRPC.Integration.TestCase do
 
   using do
     quote do
-      import GRPC.Integration.TestCase, only: [run_server: 2, run_server: 3, run_endpoint: 2, run_endpoint: 3]
+      import GRPC.Integration.TestCase,
+        only: [run_server: 2, run_server: 3, run_endpoint: 2, run_endpoint: 3]
     end
   end
 
