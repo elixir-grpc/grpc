@@ -17,6 +17,45 @@ defmodule GRPC.Integration.StubTest do
     end
   end
 
+  def port_for(pid) do
+    Port.list()
+    |> Enum.find(fn port ->
+      case Port.info(port, :links) do
+        {:links, links} ->
+          pid in links
+
+        _ ->
+          false
+      end
+    end)
+  end
+
+  test "you can disconnect stubs" do
+    run_server(HelloServer, fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+
+      %{adapter_payload: %{conn_pid: gun_conn_pid}} = channel
+
+      gun_port = port_for(gun_conn_pid)
+      # Using :erlang.monitor to be compatible with <= 1.5
+      ref = :erlang.monitor(:port, gun_port)
+
+      {:ok, channel} = GRPC.Stub.disconnect(channel)
+
+      assert %{adapter_payload: %{conn_pid: nil}} = channel
+      assert_receive {:DOWN, ^ref, :port, ^gun_port, _}
+      assert port_for(gun_conn_pid) == nil
+    end)
+  end
+
+  test "disconnecting a disconnected channel is a no-op" do
+    run_server(HelloServer, fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      {:ok, channel} = GRPC.Stub.disconnect(channel)
+      {:ok, _channel} = GRPC.Stub.disconnect(channel)
+    end)
+  end
+
   test "body larger than 2^14 works" do
     run_server(HelloServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", interceptors: [GRPC.Logger.Client])

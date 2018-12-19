@@ -34,7 +34,7 @@ defmodule GRPC.Integration.EndpointTest do
     def list_features(rectangle, stream) do
       Enum.each([rectangle.lo, rectangle.hi], fn point ->
         feature = simple_feature(point)
-        GRPC.Server.stream_send(stream, feature)
+        GRPC.Server.send_reply(stream, feature)
       end)
     end
 

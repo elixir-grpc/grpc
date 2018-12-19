@@ -1,14 +1,22 @@
 language: elixir
-elixir:
-  - 1.4.5
-  - 1.5.3
-  - 1.6.1
-otp_release:
-  - 19.3
-  - 20.2
+
+# Default Elixir and OTP versions
+elixir: '1.6'
+otp_release: '20.3'
+
 script:
   - mix test
-  - cd interop && mix deps.get && mix run script/run.exs
-after_script:
-  - mix deps.get --only docs
-  - MIX_ENV=docs mix inch.report
+  - cd interop && mix deps.get && mix run script/run.exs && cd -
+  # Released inch_ex does not support Elixir 1.7 yet:
+  # https://github.com/rrrene/inch_ex/issues/60
+  # - '[[ "$TRAVIS_ELIXIR_VERSION" = 1.7 ]] || mix inch.report'
+  # mix format not available on Elixir 1.4/1.5
+  - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-5] ]] || mix format --check-formatted'
+
+jobs:
+  include:
+    - elixir: '1.4'
+    - elixir: '1.5'
+    - elixir: '1.6'
+    - elixir: '1.7'
+      otp_release: '21.1'

@@ -12,14 +12,10 @@ defmodule GRPC.Adapter.Cowboy do
   # Only used in starting a server manually using `GRPC.Server.start(servers)`
   @spec start(atom, GRPC.Server.servers_map(), non_neg_integer, keyword) :: {:ok, pid, non_neg_integer}
   def start(endpoint, servers, port, opts) do
-    server_args = cowboy_start_args(endpoint, servers, port, opts)
+    start_args = cowboy_start_args(endpoint, servers, port, opts)
+    start_func = if opts[:cred], do: :start_tls, else: :start_clear
 
-    {:ok, pid} =
-      if opts[:cred] do
-        apply(:cowboy, :start_tls, server_args)
-      else
-        apply(:cowboy, :start_clear, server_args)
-      end
+    {:ok, pid} = apply(:cowboy, start_func, start_args)
 
     port = :ranch.get_port(servers_name(endpoint, servers))
     {:ok, pid, port}
@@ -28,14 +24,18 @@ defmodule GRPC.Adapter.Cowboy do
   @spec child_spec(atom, GRPC.Server.servers_map(), non_neg_integer, Keyword.t()) ::
           Supervisor.Spec.spec()
   def child_spec(endpoint, servers, port, opts) do
-    args = cowboy_start_args(endpoint, servers, port, opts)
+    [ref, trans_opts, proto_opts] = cowboy_start_args(endpoint, servers, port, opts)
+    trans_opts = Map.put(trans_opts, :connection_type, :supervisor)
+
+    {transport, protocol} =
+      if opts[:cred] do
+        {:ranch_ssl, :cowboy_tls}
+      else
+        {:ranch_tcp, :cowboy_clear}
+      end
 
     {ref, mfa, type, timeout, kind, modules} =
-      if opts[:cred] do
-        tls_ranch_start_args(args)
-      else
-        clear_ranch_start_args(args)
-      end
+      :ranch.child_spec(ref, transport, trans_opts, protocol, proto_opts)
 
     scheme = if opts[:cred], do: :https, else: :http
     # Wrap real mfa to print starting log
@@ -70,40 +70,35 @@ defmodule GRPC.Adapter.Cowboy do
     Handler.read_full_body(pid)
   end
 
-  @spec reading_stream(GRPC.Adapter.Cowboy.Handler.state(), ([binary] -> [struct])) :: Enumerable.t()
-  def reading_stream(%{pid: pid}, func) do
-    Stream.unfold(%{pid: pid, frames: [], buffer: ""}, fn acc -> read_stream(acc, func) end)
+  @spec reading_stream(GRPC.Adapter.Cowboy.Handler.state()) :: Enumerable.t()
+  def reading_stream(%{pid: pid}) do
+    Stream.unfold(%{pid: pid, need_more: true, buffer: <<>>}, fn acc -> read_stream(acc) end)
   end
 
-  defp read_stream(nil, _), do: nil
-  defp read_stream(%{frames: [], finished: true}, _), do: nil
+  defp read_stream(%{buffer: <<>>, finished: true}), do: nil
 
-  defp read_stream(%{frames: [curr | rest]} = s, _) do
-    {curr, Map.put(s, :frames, rest)}
-  end
-
-  defp read_stream(%{pid: pid, frames: [], buffer: buffer} = s, func) do
+  defp read_stream(%{pid: pid, buffer: buffer, need_more: true} = s) do
     case Handler.read_body(pid) do
       {:ok, data} ->
         new_data = buffer <> data
-        if byte_size(new_data) > 0 do
-          [request | rest] = func.(new_data)
-          new_s = s |> Map.put(:frames, rest) |> Map.put(:finished, true)
-          {request, new_s}
-        else
-          nil
-        end
+        new_s = %{pid: pid, finished: true, need_more: false, buffer: new_data}
+        read_stream(new_s)
 
       {:more, data} ->
         data = buffer <> data
+        new_s = s |> Map.put(:need_more, false) |> Map.put(:buffer, data)
+        read_stream(new_s)
+    end
+  end
 
-        if GRPC.Message.complete?(data) do
-          [request | rest] = func.(data)
-          new_s = s |> Map.put(:frames, rest) |> Map.put(:buffer, "")
-          {request, new_s}
-        else
-          read_stream(Map.put(s, :buffer, data), func)
-        end
+  defp read_stream(%{buffer: buffer} = s) do
+    case GRPC.Message.get_message(buffer) do
+      {message, rest} ->
+        new_s = s |> Map.put(:buffer, rest)
+        {message, new_s}
+
+      _ ->
+        read_stream(Map.put(s, :need_more, true))
     end
   end
 
@@ -135,54 +130,57 @@ defmodule GRPC.Adapter.Cowboy do
   defp cowboy_start_args(endpoint, servers, port, opts) do
     dispatch =
       :cowboy_router.compile([
-        {:_, [{:_, GRPC.Adapter.Cowboy.Handler, {endpoint, servers, opts}}]}
+        {:_, [{:_, GRPC.Adapter.Cowboy.Handler, {endpoint, servers, Enum.into(opts, %{})}}]}
       ])
+
+    idle_timeout = Keyword.get(opts, :idle_timeout, :infinity)
 
     [
       servers_name(endpoint, servers),
-      transport_opts(port, opts),
+      %{
+        num_acceptors: @default_num_acceptors,
+        socket_opts: socket_opts(port, opts)
+      },
       %{
         env: %{dispatch: dispatch},
-        inactivity_timeout: :infinity,
+        inactivity_timeout: idle_timeout,
+        settings_timeout: idle_timeout,
         stream_handlers: [:grpc_stream_h]
       }
     ]
   end
 
-  defp transport_opts(port, opts) do
-    list = [port: port, num_acceptors: @default_num_acceptors]
-    list = if opts[:ip], do: [{:ip, opts[:ip]} | list], else: list
+  defp socket_opts(port, opts) do
+    socket_opts = [port: port]
+    socket_opts = if opts[:ip], do: [{:ip, opts[:ip]} | socket_opts], else: socket_opts
 
     if opts[:cred] do
-      opts[:cred].ssl ++ list
+      opts[:cred].ssl ++
+        [
+          # These NPN/ALPN options are hardcoded in :cowboy.start_tls/3 (when calling start/3),
+          # but not in :ranch.child_spec/5 (when calling child_spec/3). We must make sure they
+          # are always provided.
+          {:next_protocols_advertised, ["h2", "http/1.1"]},
+          {:alpn_preferred_protocols, ["h2", "http/1.1"]}
+          | socket_opts
+        ]
     else
-      list
+      socket_opts
     end
-  end
-
-  defp clear_ranch_start_args([ref, trans_opts, proto_opts]) do
-    trans_opts = [connection_type(proto_opts) | trans_opts]
-    :ranch.child_spec(ref, :ranch_tcp, trans_opts, :cowboy_clear, proto_opts)
-  end
-
-  defp tls_ranch_start_args([ref, trans_opts, proto_opts]) do
-    trans_opts = [
-      connection_type(proto_opts),
-      {:next_protocols_advertised, ["h2", "http/1.1"]},
-      {:alpn_preferred_protocols, ["h2", "http/1.1"]}
-      | trans_opts
-    ]
-
-    :ranch.child_spec(ref, :ranch_ssl, trans_opts, :cowboy_tls, proto_opts)
-  end
-
-  defp connection_type(_) do
-    {:connection_type, :supervisor}
   end
 
   defp running_info(scheme, endpoint, servers, ref) do
     {addr, port} = :ranch.get_addr(ref)
-    addr_str = :inet.ntoa(addr)
+
+    addr_str =
+      case addr do
+        :local ->
+          port
+
+        addr ->
+          "#{:inet.ntoa(addr)}:#{port}"
+      end
+
     "Running #{servers_name(endpoint, servers)} with Cowboy using #{scheme}://#{addr_str}:#{port}"
   end
 

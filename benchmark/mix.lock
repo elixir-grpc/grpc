@@ -1,0 +1,7 @@
+%{
+  "cowboy": {:git, "https://github.com/ninenines/cowboy.git", "8d634d0ff4ea1ca744a8a789aa5edf6682e8cd87", []},
+  "cowlib": {:hex, :cowlib, "2.5.1", "1481324d35b2844767cf988d8e4ce42f0f3b11c29a9e5a430aaa608d4757e3c6", [:rebar3], [], "hexpm"},
+  "gun": {:hex, :gun, "1.1.0", "66be4ebb3a8018b2ca0216eb0c5fe89820f3ce3610e9ec0652f525690956f69f", [:rebar3], [{:cowlib, "~> 2.5.1", [hex: :cowlib, repo: "hexpm", optional: false]}], "hexpm"},
+  "protobuf": {:git, "https://github.com/tony612/protobuf-elixir.git", "5d4ed2bcebefad3c2b9b397c1a46b49b41eae7ab", []},
+  "ranch": {:git, "https://github.com/ninenines/ranch", "cbe24f6fb9833474b22a06fc22cb1a8f168f7fbc", [ref: "1.6.1"]},
+}

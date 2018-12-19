@@ -112,11 +112,8 @@ defmodule GRPC.Server do
          func_name
        ) do
     reading_stream =
-      adapter.reading_stream(payload, fn data ->
-        data
-        |> GRPC.Message.from_frame()
-        |> Enum.map(&unmarshal.(&1))
-      end)
+      adapter.reading_stream(stream.payload)
+      |> Elixir.Stream.map(&unmarshal.(&1))
 
     call_with_interceptors(res_stream, func_name, stream, reading_stream)
   end
@@ -163,6 +160,7 @@ defmodule GRPC.Server do
   # ## Examples
   #
   #     iex> {:ok, _, port} = GRPC.Server.start(Greeter.Server, 50051)
+  #     iex> {:ok, _, port} = GRPC.Server.start(Greeter.Server, 0, ip: {:local, "path/to/unix.sock"})
   #
   # ## Options
   #

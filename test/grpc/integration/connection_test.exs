@@ -25,6 +25,19 @@ defmodule GRPC.Integration.ConnectionTest do
     :ok = GRPC.Server.stop(server)
   end
 
+  test "connecting with a domain socket works" do
+    socket_path = "/tmp/grpc.sock"
+    server = FeatureServer
+    File.rm(socket_path)
+
+    {:ok, _, _} = GRPC.Server.start(server, 0, ip: {:local, socket_path})
+    {:ok, channel} = GRPC.Stub.connect(socket_path, adapter_opts: %{retry_timeout: 10})
+
+    point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
+    assert {:ok, _} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
+    :ok = GRPC.Server.stop(server)
+  end
+
   test "authentication works" do
     server = FeatureServer
 

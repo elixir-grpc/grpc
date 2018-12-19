@@ -4,15 +4,31 @@ defmodule GRPC.Adapter.Gun do
   # A client adapter using Gun.
   # conn_pid and stream_ref is stored in `GRPC.Server.Stream`.
 
+  @default_transport_opts [nodelay: true]
+
   @spec connect(GRPC.Channel.t(), any) :: {:ok, GRPC.Channel.t()} | {:error, any}
   def connect(channel, nil), do: connect(channel, %{})
   def connect(%{scheme: "https"} = channel, opts), do: connect_securely(channel, opts)
   def connect(channel, opts), do: connect_insecurely(channel, opts)
 
-  defp connect_securely(%{host: host, port: port, cred: %{ssl: ssl}} = channel, opts) do
-    open_opts = %{transport: :ssl, protocols: [:http2], transport_opts: ssl}
+  defp connect_securely(%{cred: %{ssl: ssl}} = channel, opts) do
+    transport_opts = Map.get(opts, :transport_opts, @default_transport_opts ++ ssl)
+    open_opts = %{transport: :ssl, protocols: [:http2], transport_opts: transport_opts}
     open_opts = Map.merge(opts, open_opts)
-    {:ok, conn_pid} = :gun.open(String.to_charlist(host), port, open_opts)
+
+    do_connect(channel, open_opts)
+  end
+
+  defp connect_insecurely(channel, opts) do
+    transport_opts = Map.get(opts, :transport_opts, @default_transport_opts)
+    open_opts = %{transport: :tcp, protocols: [:http2], transport_opts: transport_opts}
+    open_opts = Map.merge(opts, open_opts)
+
+    do_connect(channel, open_opts)
+  end
+
+  defp do_connect(%{host: host, port: port} = channel, open_opts) do
+    {:ok, conn_pid} = open(host, port, open_opts)
 
     case :gun.await_up(conn_pid) do
       {:ok, :http2} ->
@@ -26,22 +42,21 @@ defmodule GRPC.Adapter.Gun do
     end
   end
 
-  defp connect_insecurely(%{host: host, port: port} = channel, opts) do
-    open_opts = %{transport: :tcp, protocols: [:http2]}
-    open_opts = Map.merge(opts, open_opts)
-    {:ok, conn_pid} = :gun.open(String.to_charlist(host), port, open_opts)
-
-    case :gun.await_up(conn_pid) do
-      {:ok, :http2} ->
-        {:ok, Map.put(channel, :adapter_payload, %{conn_pid: conn_pid})}
-
-      {:ok, proto} ->
-        {:error, "Error when opening connection: protocol #{proto} is not http2"}
-
-      {:error, reason} ->
-        {:error, "Error when opening connection: #{inspect(reason)}"}
-    end
+  def disconnect(%{adapter_payload: %{conn_pid: gun_pid}} = channel)
+      when is_pid(gun_pid) do
+    :ok = :gun.close(gun_pid)
+    {:ok, %{channel | adapter_payload: %{conn_pid: nil}}}
   end
+
+  def disconnect(%{adapter_payload: %{conn_pid: nil}} = channel) do
+    {:ok, channel}
+  end
+
+  defp open({:local, socket_path}, _port, open_opts),
+    do: :gun.open_unix(socket_path, open_opts)
+
+  defp open(host, port, open_opts),
+    do: :gun.open(String.to_charlist(host), port, open_opts)
 
   @spec send_request(GRPC.Client.Stream.t(), binary, map) :: GRPC.Client.Stream.t()
   def send_request(stream, message, opts) do
@@ -125,39 +140,63 @@ defmodule GRPC.Adapter.Gun do
 
   defp await(conn_pid, stream_ref, timeout) do
     # We should use server timeout for most time
-    timeout = if is_integer(timeout) do
-      timeout * 2
-    else
-      timeout
-    end
+    timeout =
+      if is_integer(timeout) do
+        timeout * 2
+      else
+        timeout
+      end
+
     case :gun.await(conn_pid, stream_ref, timeout) do
       {:response, :fin, status, headers} ->
         if status == 200 do
           headers = Enum.into(headers, %{})
+
           case headers["grpc-status"] do
             nil ->
-              {:error, GRPC.RPCError.exception(GRPC.Status.internal(), "shouldn't finish when getting headers")}
+              {:error,
+               GRPC.RPCError.exception(
+                 GRPC.Status.internal(),
+                 "shouldn't finish when getting headers"
+               )}
+
             "0" ->
               {:response, headers, :fin}
+
             _ ->
-              {:error, GRPC.RPCError.exception(String.to_integer(headers["grpc-status"]), headers["grpc-message"])}
+              {:error,
+               GRPC.RPCError.exception(
+                 String.to_integer(headers["grpc-status"]),
+                 headers["grpc-message"]
+               )}
           end
         else
           {:error,
-           GRPC.RPCError.exception(GRPC.Status.internal(), "status got is #{status} instead of 200")}
+           GRPC.RPCError.exception(
+             GRPC.Status.internal(),
+             "status got is #{status} instead of 200"
+           )}
         end
 
       {:response, :nofin, status, headers} ->
         if status == 200 do
           headers = Enum.into(headers, %{})
+
           if headers["grpc-status"] && headers["grpc-status"] != "0" do
             {:error,
-             GRPC.RPCError.exception(String.to_integer(headers["grpc-status"]), headers["grpc-message"])}
+             GRPC.RPCError.exception(
+               String.to_integer(headers["grpc-status"]),
+               headers["grpc-message"]
+             )}
           else
             {:response, headers, :nofin}
           end
         else
-          {:error, GRPC.RPCError.exception(GRPC.Status.internal(), "status got is #{status} instead of 200")}
+          {:error,
+           GRPC.RPCError.exception(
+             GRPC.Status.internal(),
+             "status got is #{status} instead of 200"
+           )}
         end
 
       {:data, :fin, _} ->
@@ -171,10 +210,15 @@ defmodule GRPC.Adapter.Gun do
         trailers
 
       {:error, :timeout} ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "timeout when waiting for server")}
+        {:error,
+         GRPC.RPCError.exception(
+           GRPC.Status.deadline_exceeded(),
+           "timeout when waiting for server"
+         )}
 
       {:error, {reason, msg}} ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}: #{inspect(msg)}")}
+        {:error,
+         GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}: #{inspect(msg)}")}
 
       {:error, reason} ->
         {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}")}

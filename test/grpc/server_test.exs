@@ -14,9 +14,9 @@ defmodule GRPC.ServerTest do
              GRPC.Server.stop(Greeter.Server, adapter: GRPC.Test.ServerAdapter)
   end
 
-  test "stream_send/2 works" do
+  test "send_reply/2 works" do
     stream = %GRPC.Server.Stream{adapter: GRPC.Test.ServerAdapter, marshal: & &1}
     response = <<1, 2, 3, 4, 5, 6, 7, 8>>
-    assert %GRPC.Server.Stream{} = GRPC.Server.stream_send(stream, response)
+    assert %GRPC.Server.Stream{} = GRPC.Server.send_reply(stream, response)
   end
 end

@@ -12,7 +12,7 @@ defmodule GRPC.Integration.ServiceTest do
     def list_features(rectangle, stream) do
       Enum.each([rectangle.lo, rectangle.hi], fn point ->
         feature = simple_feature(point)
-        Server.stream_send(stream, feature)
+        Server.send_reply(stream, feature)
       end)
     end
 
@@ -35,7 +35,7 @@ defmodule GRPC.Integration.ServiceTest do
     def route_chat(req_enum, stream) do
       Enum.each(req_enum, fn note ->
         note = %{note | message: "Reply: #{note.message}"}
-        Server.stream_send(stream, note)
+        Server.send_reply(stream, note)
       end)
     end
 
@@ -74,8 +74,8 @@ defmodule GRPC.Integration.ServiceTest do
       point1 = Routeguide.Point.new(latitude: 400_000_000, longitude: -750_000_000)
       point2 = Routeguide.Point.new(latitude: 420_000_000, longitude: -730_000_000)
       stream = channel |> Routeguide.RouteGuide.Stub.record_route()
-      GRPC.Stub.stream_send(stream, point1)
-      GRPC.Stub.stream_send(stream, point2, end_stream: true)
+      GRPC.Stub.send_request(stream, point1)
+      GRPC.Stub.send_request(stream, point2, end_stream: true)
       {:ok, res} = GRPC.Stub.recv(stream)
       assert %Routeguide.RouteSummary{point_count: 2} = res
     end)
@@ -92,7 +92,7 @@ defmodule GRPC.Integration.ServiceTest do
             point = Routeguide.Point.new(latitude: 0, longitude: rem(i, 3) + 1)
             note = Routeguide.RouteNote.new(location: point, message: "Message #{i}")
             opts = if i == 6, do: [end_stream: true], else: []
-            GRPC.Stub.stream_send(stream, note, opts)
+            GRPC.Stub.send_request(stream, note, opts)
           end)
         end)
 
