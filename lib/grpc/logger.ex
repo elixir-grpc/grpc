@@ -63,7 +63,7 @@ defmodule GRPC.Logger.Client do
     Keyword.get(opts, :level, :info)
   end
 
-  def call(stream, req, next, level) do
+  def call(%{grpc_type: grpc_type} = stream, req, next, level) do
     Logger.log(level, fn ->
       ["Call ", to_string(elem(stream.rpc, 0)), " of ", stream.service_name]
     end)
@@ -72,13 +72,15 @@ defmodule GRPC.Logger.Client do
     result = next.(stream, req)
     stop = System.monotonic_time()
 
-    status = elem(result, 0)
+    if grpc_type == :unary do
+      status = elem(result, 0)
 
-    Logger.log(level, fn ->
-      diff = System.convert_time_unit(stop - start, :native, :micro_seconds)
+      Logger.log(level, fn ->
+        diff = System.convert_time_unit(stop - start, :native, :micro_seconds)
 
-      ["Got ", inspect(status), " in ", GRPC.Logger.Server.formatted_diff(diff)]
-    end)
+        ["Got ", inspect(status), " in ", GRPC.Logger.Server.formatted_diff(diff)]
+      end)
+    end
 
     result
   end

@@ -20,9 +20,9 @@ defmodule Routeguide.App do
     if System.get_env("TLS") do
       cred = GRPC.Credential.new(ssl: [certfile: @cert_path, keyfile: @key_path])
       IO.inspect(cred)
-      {Routeguide.RouteGuide.Server, 10000, cred: cred}
+      {Routeguide.Endpoint, 10000, cred: cred}
     else
-      {Routeguide.RouteGuide.Server, 10000}
+      {Routeguide.Endpoint, 10000}
     end
   end
 end
