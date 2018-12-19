@@ -1,4 +1,18 @@
 defmodule GRPC.Logger.Server do
+  @moduledoc """
+  Print log around server rpc calls, like:
+
+      17:18:45.151 [info]  Handled by HelloServer.say_hello
+      17:18:45.151 [info]  Response :ok in 11µs
+
+  ## Usage
+
+      defmodule Your.Endpoint do
+        use GRPC.Endpoint
+
+        intercept GRPC.Logger.Server, level: :info
+      end
+  """
   require Logger
   @behaviour GRPC.ServerInterceptor
 
@@ -8,7 +22,7 @@ defmodule GRPC.Logger.Server do
 
   def call(req, stream, next, level) do
     Logger.log(level, fn ->
-      [inspect(stream.server), ".", to_string(elem(stream.rpc, 0))]
+      ["Handled by ", inspect(stream.server), ".", to_string(elem(stream.rpc, 0))]
     end)
 
     start = System.monotonic_time()
@@ -20,7 +34,7 @@ defmodule GRPC.Logger.Server do
     Logger.log(level, fn ->
       diff = System.convert_time_unit(stop - start, :native, :micro_seconds)
 
-      ["Got ", inspect(status), " in ", formatted_diff(diff)]
+      ["Response ", inspect(status), " in ", formatted_diff(diff)]
     end)
 
     result
@@ -32,6 +46,18 @@ end
 
 defmodule GRPC.Logger.Client do
   require Logger
+
+  @moduledoc """
+  Print log around client rpc calls, like
+
+      17:13:33.021 [info]  Call say_hello of helloworld.Greeter
+      17:13:33.079 [info]  Got :ok in 58ms
+
+  ## Usage
+
+      {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Logger.Client])
+      {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Logger.Client, level: :info}])
+  """
 
   def init(opts) do
     Keyword.get(opts, :level, :info)

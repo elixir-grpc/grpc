@@ -13,7 +13,7 @@ defmodule GRPC.Server.Supervisor do
           import Supervisor.Spec
 
           children = [
-            supervisor(GRPC.Server.Supervisor, [{Your.Server, 50051}])
+            supervisor(GRPC.Server.Supervisor, [{Your.Endpoint, 50051(, opts)}])
           ]
 
           opts = [strategy: :one_for_one, name: __MODULE__]
@@ -26,7 +26,7 @@ defmodule GRPC.Server.Supervisor do
       or
       run `mix grpc.server` on local
 
-  View `child_spec/3` for arguments.
+  View `child_spec/3` for opts.
   """
 
   @default_adapter GRPC.Adapter.Cowboy
@@ -67,16 +67,16 @@ defmodule GRPC.Server.Supervisor do
   def child_spec(endpoint, port, opts \\ [])
 
   def child_spec(endpoint, port, opts) when is_atom(endpoint) do
-    servers =
+    {endpoint, servers} =
       try do
-        endpoint.__meta__(:servers)
+        {endpoint, endpoint.__meta__(:servers)}
       rescue
-        MatchError ->
+        FunctionClauseError ->
           Logger.warn(
             "deprecated: servers as argument of GRPC.Server.Supervisor, please use GRPC.Endpoint"
           )
 
-          endpoint
+          {nil, endpoint}
       end
 
     adapter = Keyword.get(opts, :adapter, @default_adapter)

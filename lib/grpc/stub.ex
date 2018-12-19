@@ -112,6 +112,7 @@ defmodule GRPC.Stub do
     * `:cred` - a `GRPC.Credential` used to indicate it's a secure connection.
       An insecure connection will be created without this option.
     * `:adapter` - custom client adapter
+    * `:interceptors` - client interceptors
   """
   @spec connect(String.t(), Keyword.t()) :: {:ok, GRPC.Channel.t()} | {:error, any}
   def connect(addr, opts \\ []) when is_binary(addr) and is_list(opts) do

@@ -186,7 +186,7 @@ defmodule GRPC.Adapter.Cowboy do
           "#{:inet.ntoa(addr)}:#{port}"
       end
 
-    "Running #{servers_name(endpoint, servers)} with Cowboy using #{scheme}://#{addr_str}:#{port}"
+    "Running #{servers_name(endpoint, servers)} with Cowboy using #{scheme}://#{addr_str}"
   end
 
   defp servers_name(nil, servers) do

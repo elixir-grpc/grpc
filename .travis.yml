@@ -12,6 +12,8 @@ script:
   # - '[[ "$TRAVIS_ELIXIR_VERSION" = 1.7 ]] || mix inch.report'
   # mix format not available on Elixir 1.4/1.5
   - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-5] ]] || mix format --check-formatted'
+  - mix hex.build
+  - mix docs
 
 jobs:
   include:

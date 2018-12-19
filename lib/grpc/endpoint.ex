@@ -1,4 +1,24 @@
 defmodule GRPC.Endpoint do
+  @moduledoc """
+  GRPC endpoint for multiple servers and interceptors.
+
+  ## Usage
+
+      defmodule Your.Endpoint do
+        use GRPC.Endpoint
+
+        intercept GRPC.Logger.Server, level: :info
+        intercept Other.Interceptor
+        run HelloServer, interceptors: [HelloHaltInterceptor]
+        run FeatureServer
+      end
+
+  Interceptors will be run around your rpc calls from top to bottom. And you can even set
+  interceptors for some of servers. In the above example, `[GRPC.Logger.Server, Other.Interceptor,
+  HelloHaltInterceptor]` will be run for `HelloServer`, and `[GRPC.Logger.Server, Other.Interceptor]`
+  will be run for `FeatureServer`.
+  """
+
   @doc false
   defmacro __using__(_opts) do
     quote do
@@ -36,12 +56,22 @@ defmodule GRPC.Endpoint do
     end
   end
 
+  @doc """
+  ## Options
+
+  `opts` keyword will be passed to Interceptor's init/1
+  """
   defmacro intercept(name, opts) do
     quote do
       @interceptors {unquote(name), unquote(opts)}
     end
   end
 
+  @doc """
+  ## Options
+
+    * `:interceptors` - custom interceptors for these servers
+  """
   defmacro run(servers, opts \\ []) do
     quote do
       @servers {unquote(servers), unquote(opts)}
@@ -80,7 +110,7 @@ defmodule GRPC.Endpoint do
     raise ArgumentError, message: "Unknown option for GRPC.Endpoint.run/2: #{k}"
   end
 
-  def init_interceptors(interceptors) do
+  defp init_interceptors(interceptors) do
     Enum.map(interceptors, fn
       {interceptor, opts} ->
         {interceptor, interceptor.init(opts)}

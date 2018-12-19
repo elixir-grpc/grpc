@@ -207,7 +207,12 @@ defmodule GRPC.Adapter.Cowboy.Handler do
         end
       catch
         kind, e ->
-          Logger.error(Exception.format(kind, e))
+          if macro_exported?(Kernel.SpecialForms, :__STACKTRACE__, 0) do
+            Logger.error(Exception.format(kind, e, __STACKTRACE__))
+          else
+            Logger.error(Exception.format(kind, e, System.stacktrace()))
+          end
+
           exit({:handle_error, kind})
       end
 

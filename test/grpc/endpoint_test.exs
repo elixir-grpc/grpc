@@ -20,11 +20,11 @@ defmodule GRPC.EndpointTest do
   defmodule FooEndpoint do
     use GRPC.Endpoint
 
-    intercept(Interceptor1)
-    intercept(Interceptor2, foo: 1)
+    intercept Interceptor1
+    intercept Interceptor2, foo: 1
 
-    run(Server1, interceptors: [Interceptor3])
-    run([Server2, Server3], interceptors: [{Interceptor4, []}])
+    run Server1, interceptors: [Interceptor3]
+    run [Server2, Server3], interceptors: [{Interceptor4, []}]
   end
 
   test "intercept works" do
