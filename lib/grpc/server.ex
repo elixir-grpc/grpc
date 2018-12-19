@@ -145,13 +145,7 @@ defmodule GRPC.Server do
         kind, reason ->
           Logger.error(Exception.format(kind, reason))
 
-          stack =
-            if macro_exported?(Kernel.SpecialForms, :__STACKTRACE__, 0) do
-              __STACKTRACE__
-            else
-              System.stacktrace()
-            end
-
+          stack = System.stacktrace()
           reason = Exception.normalize(kind, reason, stack)
           {:error, %{kind: kind, reason: reason, stack: stack}}
       end
