@@ -10,21 +10,22 @@ defmodule GRPC.Adapter.Cowboy do
   @default_num_acceptors 20
 
   # Only used in starting a server manually using `GRPC.Server.start(servers)`
-  @spec start(GRPC.Server.servers_map(), non_neg_integer, keyword) :: {:ok, pid, non_neg_integer}
-  def start(servers, port, opts) do
-    start_args = cowboy_start_args(servers, port, opts)
+  @spec start(atom, GRPC.Server.servers_map(), non_neg_integer, keyword) ::
+          {:ok, pid, non_neg_integer}
+  def start(endpoint, servers, port, opts) do
+    start_args = cowboy_start_args(endpoint, servers, port, opts)
     start_func = if opts[:cred], do: :start_tls, else: :start_clear
 
     {:ok, pid} = apply(:cowboy, start_func, start_args)
 
-    port = :ranch.get_port(servers_name(servers))
+    port = :ranch.get_port(servers_name(endpoint, servers))
     {:ok, pid, port}
   end
 
-  @spec child_spec(GRPC.Server.servers_map(), non_neg_integer, Keyword.t()) ::
+  @spec child_spec(atom, GRPC.Server.servers_map(), non_neg_integer, Keyword.t()) ::
           Supervisor.Spec.spec()
-  def child_spec(servers, port, opts) do
-    [ref, trans_opts, proto_opts] = cowboy_start_args(servers, port, opts)
+  def child_spec(endpoint, servers, port, opts) do
+    [ref, trans_opts, proto_opts] = cowboy_start_args(endpoint, servers, port, opts)
     trans_opts = Map.put(trans_opts, :connection_type, :supervisor)
 
     {transport, protocol} =
@@ -39,20 +40,24 @@ defmodule GRPC.Adapter.Cowboy do
 
     scheme = if opts[:cred], do: :https, else: :http
     # Wrap real mfa to print starting log
-    mfa = {__MODULE__, :start_link, [scheme, servers, mfa]}
+    mfa = {__MODULE__, :start_link, [scheme, endpoint, servers, mfa]}
     {ref, mfa, type, timeout, kind, modules}
   end
 
   # spec: :supervisor.mfargs doesn't work
-  @spec start_link(atom, GRPC.Server.servers_map(), any) :: {:ok, pid} | {:error, any}
-  def start_link(scheme, servers, {m, f, [ref | _] = a}) do
+  @spec start_link(atom, atom, GRPC.Server.servers_map(), any) :: {:ok, pid} | {:error, any}
+  def start_link(scheme, endpoint, servers, {m, f, [ref | _] = a}) do
     case apply(m, f, a) do
       {:ok, pid} ->
-        Logger.info(running_info(scheme, servers, ref))
+        Logger.info(running_info(scheme, endpoint, servers, ref))
         {:ok, pid}
 
       {:error, {:shutdown, {_, _, {{_, {:error, :eaddrinuse}}, _}}}} = error ->
-        Logger.error([running_info(scheme, servers, ref), " failed, port already in use"])
+        Logger.error([
+          running_info(scheme, endpoint, servers, ref),
+          " failed, port already in use"
+        ])
+
         error
 
       {:error, _} = error ->
@@ -60,9 +65,9 @@ defmodule GRPC.Adapter.Cowboy do
     end
   end
 
-  @spec stop(GRPC.Server.servers_map()) :: :ok | {:error, :not_found}
-  def stop(servers) do
-    :cowboy.stop_listener(servers_name(servers))
+  @spec stop(atom, GRPC.Server.servers_map()) :: :ok | {:error, :not_found}
+  def stop(endpoint, servers) do
+    :cowboy.stop_listener(servers_name(endpoint, servers))
   end
 
   @spec read_body(GRPC.Adapter.Cowboy.Handler.state()) :: {:ok, binary}
@@ -127,16 +132,16 @@ defmodule GRPC.Adapter.Cowboy do
     Handler.get_headers(pid)
   end
 
-  defp cowboy_start_args(servers, port, opts) do
+  defp cowboy_start_args(endpoint, servers, port, opts) do
     dispatch =
       :cowboy_router.compile([
-        {:_, [{:_, GRPC.Adapter.Cowboy.Handler, {servers, Enum.into(opts, %{})}}]}
+        {:_, [{:_, GRPC.Adapter.Cowboy.Handler, {endpoint, servers, Enum.into(opts, %{})}}]}
       ])
 
     idle_timeout = Keyword.get(opts, :idle_timeout, :infinity)
 
     [
-      servers_name(servers),
+      servers_name(endpoint, servers),
       %{
         num_acceptors: @default_num_acceptors,
         socket_opts: socket_opts(port, opts)
@@ -169,15 +174,19 @@ defmodule GRPC.Adapter.Cowboy do
     end
   end
 
-  defp running_info(scheme, servers, ref) do
+  defp running_info(scheme, endpoint, servers, ref) do
     {addr, port} = :ranch.get_addr(ref)
 
     addr_str = "#{:inet.ntoa(addr)}:#{port}"
 
-    "Running #{servers_name(servers)} with Cowboy using #{scheme}://#{addr_str}"
+    "Running #{servers_name(endpoint, servers)} with Cowboy using #{scheme}://#{addr_str}"
   end
 
-  defp servers_name(servers) do
+  defp servers_name(nil, servers) do
     servers |> Map.values() |> Enum.map(fn s -> inspect(s) end) |> Enum.join(",")
+  end
+
+  defp servers_name(endpoint, _) do
+    inspect(endpoint)
   end
 end

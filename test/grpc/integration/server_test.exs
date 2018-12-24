@@ -96,10 +96,10 @@ defmodule GRPC.Integration.ServerTest do
       req = Helloworld.HelloRequest.new(name: "Elixir")
       {:error, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
 
-      assert reply == %GRPC.RPCError{
+      assert %GRPC.RPCError{
                status: GRPC.Status.unauthenticated(),
                message: "Please authenticate"
-             }
+             } == reply
     end)
   end
 

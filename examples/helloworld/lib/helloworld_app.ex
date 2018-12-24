@@ -5,7 +5,7 @@ defmodule HelloworldApp do
     import Supervisor.Spec
 
     children = [
-      supervisor(GRPC.Server.Supervisor, [{Helloworld.Greeter.Server, 50051}])
+      supervisor(GRPC.Server.Supervisor, [{Helloworld.Endpoint, 50051}])
     ]
 
     opts = [strategy: :one_for_one, name: HelloworldApp]

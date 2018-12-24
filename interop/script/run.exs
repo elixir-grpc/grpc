@@ -1,11 +1,9 @@
 alias Interop.Client
-servers = [Interop.Server]
 port = 0
 # port = 10000
-{:ok, _pid, port} = GRPC.Server.start(servers, port)
-ch = Client.connect("127.0.0.1", port)
-
-run = fn i ->
+{:ok, _pid, port} = GRPC.Server.start_endpoint(Interop.Endpoint, port)
+ch = Client.connect("127.0.0.1", port, interceptors: [GRPCPrometheus.ClientInterceptor, GRPC.Logger.Client])
+run = fn(i) ->
   IO.puts("Round #{i}")
   Client.empty_unary!(ch)
   Client.cacheable_unary!(ch)
@@ -41,4 +39,4 @@ end
 
 Enum.each(1..100, run)
 IO.puts("Succeed!")
-:ok = GRPC.Server.stop(servers)
+:ok = GRPC.Server.stop_endpoint(Interop.Endpoint)

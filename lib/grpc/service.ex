@@ -63,4 +63,9 @@ defmodule GRPC.Service do
   def wrap_stream(param) do
     quote do: {unquote(param), false}
   end
+
+  def grpc_type({_, {_, false}, {_, false}}), do: :unary
+  def grpc_type({_, {_, true}, {_, false}}), do: :client_stream
+  def grpc_type({_, {_, false}, {_, true}}), do: :server_stream
+  def grpc_type({_, {_, true}, {_, true}}), do: :bidi_stream
 end

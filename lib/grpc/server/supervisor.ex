@@ -13,7 +13,7 @@ defmodule GRPC.Server.Supervisor do
           import Supervisor.Spec
 
           children = [
-            supervisor(GRPC.Server.Supervisor, [{Your.Server, 50051}])
+            supervisor(GRPC.Server.Supervisor, [{Your.Endpoint, 50051(, opts)}])
           ]
 
           opts = [strategy: :one_for_one, name: __MODULE__]
@@ -26,27 +26,28 @@ defmodule GRPC.Server.Supervisor do
       or
       run `mix grpc.server` on local
 
-  View `child_spec/3` for arguments.
+  View `child_spec/3` for opts.
   """
 
   @default_adapter GRPC.Adapter.Cowboy
+  require Logger
 
-  def start_link(servers) do
-    Supervisor.start_link(__MODULE__, servers, name: __MODULE__)
+  def start_link(endpoint) do
+    Supervisor.start_link(__MODULE__, endpoint, name: __MODULE__)
   end
 
   @spec init({module | [module], integer}) ::
           {:ok, {:supervisor.sup_flags(), [:supervisor.child_spec()]}} | :ignore
-  def init({servers, port}) do
-    init({servers, port, []})
+  def init({endpoint, port}) do
+    init({endpoint, port, []})
   end
 
   @spec init({module | [module], integer, Keyword.t()}) ::
           {:ok, {:supervisor.sup_flags(), [:supervisor.child_spec()]}} | :ignore
-  def init({servers, port, opts}) do
+  def init({endpoint, port, opts}) do
     children =
       if Application.get_env(:grpc, :start_server, false) do
-        [child_spec(servers, port, opts)]
+        [child_spec(endpoint, port, opts)]
       else
         []
       end
@@ -63,9 +64,29 @@ defmodule GRPC.Server.Supervisor do
       an insecure server will be created without this option
   """
   @spec child_spec(atom | [atom], integer, Keyword.t()) :: Supervisor.Spec.spec()
-  def child_spec(servers, port, opts \\ []) do
+  def child_spec(endpoint, port, opts \\ [])
+
+  def child_spec(endpoint, port, opts) when is_atom(endpoint) do
+    {endpoint, servers} =
+      try do
+        {endpoint, endpoint.__meta__(:servers)}
+      rescue
+        FunctionClauseError ->
+          Logger.warn(
+            "deprecated: servers as argument of GRPC.Server.Supervisor, please use GRPC.Endpoint"
+          )
+
+          {nil, endpoint}
+      end
+
     adapter = Keyword.get(opts, :adapter, @default_adapter)
     servers = GRPC.Server.servers_to_map(servers)
-    adapter.child_spec(servers, port, opts)
+    adapter.child_spec(endpoint, servers, port, opts)
+  end
+
+  def child_spec(servers, port, opts) when is_list(servers) do
+    adapter = Keyword.get(opts, :adapter, @default_adapter)
+    servers = GRPC.Server.servers_to_map(servers)
+    adapter.child_spec(nil, servers, port, opts)
   end
 end
