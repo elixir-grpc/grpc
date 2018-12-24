@@ -4,11 +4,6 @@ language: elixir
 elixir: '1.6'
 otp_release: '20.3'
 
-cache:
-  directories:
-    $HOME/.mix
-    $HOME/.pltcache
-
 script:
   - mix test
   - cd interop && mix deps.get && mix run script/run.exs && cd -
@@ -31,5 +26,9 @@ jobs:
     - name: dialyzer
       # FIXME: Elixir 1.6.6's logger seems to fail Dialyzer with OTP/20.
       otp_release: '21.1'
+      cache:
+        directories:
+          - $HOME/.mix
+          - $HOME/.pltcache
       before_script: travis_wait .ci/build-plt-cache.sh
       script: mix dialyzer --halt-exit-status
