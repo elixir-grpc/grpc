@@ -28,8 +28,7 @@ jobs:
     - elixir: '1.7'
       otp_release: '21.1'
 
-    # Dialyxer build
-    - env: [DIALYZER=1] # So we can see this is the dialyzer build in the matrix
+    - name: dialyzer
       # FIXME: Elixir 1.6.6's logger seems to fail Dialyzer with OTP/20.
       otp_release: '21.1'
       before_script: travis_wait .ci/build-plt-cache.sh
