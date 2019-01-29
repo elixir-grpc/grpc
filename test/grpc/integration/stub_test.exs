@@ -11,9 +11,22 @@ defmodule GRPC.Integration.StubTest do
 
   defmodule SlowServer do
     use GRPC.Server, service: Helloworld.Greeter.Service
+    alias GRPC.Server
 
     def say_hello(_req, _stream) do
       Process.sleep(1000)
+    end
+
+    def say_hello_stream(_req, stream) do
+      Enum.each(1..3, fn(x)->
+        send_message(x, stream)
+      end)
+    end
+
+    def send_message(message, stream) do
+      response = Helloworld.HelloReply.new(message: "Stream, #{inspect message}")
+      Process.sleep(200)
+      Server.send_reply(stream, response)
     end
   end
 
@@ -76,6 +89,21 @@ defmodule GRPC.Integration.StubTest do
                 message: "Deadline expired",
                 status: GRPC.Status.deadline_exceeded()
               }} == channel |> Helloworld.Greeter.Stub.say_hello(req, timeout: 500)
+    end)
+  end
+
+  @tag :stream_deadline
+  test "doesn't timeout on streaming reply" do
+    run_server(SlowServer, fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      req = Helloworld.HelloRequest.new(name: "Elixir")
+
+      {:ok, stream} = channel |> Helloworld.Greeter.Stub.say_hello_stream(req, timeout: 500)
+
+      response =
+        Enum.map stream, &(&1)
+
+      assert [{:ok, %Helloworld.HelloRequest{name: "Stream, 3"}}] == Enum.take(response, -1)
     end)
   end
 end

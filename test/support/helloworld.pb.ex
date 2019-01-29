@@ -24,6 +24,7 @@ defmodule Helloworld.Greeter.Service do
   use GRPC.Service, name: "helloworld.Greeter"
 
   rpc :SayHello, Helloworld.HelloRequest, Helloworld.HelloReply
+  rpc :SayHelloStream, Helloworld.HelloRequest, stream(Helloworld.HelloRequest)
 end
 
 defmodule Helloworld.Greeter.Stub do
