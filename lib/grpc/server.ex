@@ -143,9 +143,8 @@ defmodule GRPC.Server do
           {:error, e}
       catch
         kind, reason ->
-          Logger.error(Exception.format(kind, reason))
-
           stack = System.stacktrace()
+          Logger.error(Exception.format(kind, reason, stack))
           reason = Exception.normalize(kind, reason, stack)
           {:error, %{kind: kind, reason: reason, stack: stack}}
       end
