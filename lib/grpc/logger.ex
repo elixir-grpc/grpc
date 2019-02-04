@@ -32,7 +32,7 @@ defmodule GRPC.Logger.Server do
     status = elem(result, 0)
 
     Logger.log(level, fn ->
-      diff = System.convert_time_unit(stop - start, :native, :micro_seconds)
+      diff = System.convert_time_unit(stop - start, :native, :microsecond)
 
       ["Response ", inspect(status), " in ", formatted_diff(diff)]
     end)
@@ -76,7 +76,7 @@ defmodule GRPC.Logger.Client do
       status = elem(result, 0)
 
       Logger.log(level, fn ->
-        diff = System.convert_time_unit(stop - start, :native, :micro_seconds)
+        diff = System.convert_time_unit(stop - start, :native, :microsecond)
 
         ["Got ", inspect(status), " in ", GRPC.Logger.Server.formatted_diff(diff)]
       end)
