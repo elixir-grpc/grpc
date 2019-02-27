@@ -8,6 +8,7 @@ run = fn(i) ->
   Client.empty_unary!(ch)
   Client.cacheable_unary!(ch)
   Client.large_unary!(ch)
+  Client.large_unary2!(ch)
   Client.client_compressed_unary!(ch)
   Client.server_compressed_unary!(ch)
   Client.client_streaming!(ch)

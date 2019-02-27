@@ -21,6 +21,13 @@ defmodule Interop.Client do
     {:ok, ^reply} = Grpc.Testing.TestService.Stub.unary_call(ch, req)
   end
 
+  def large_unary2!(ch) do
+    IO.puts("Run large_unary2!")
+    req = Grpc.Testing.SimpleRequest.new(response_size: 1024*1024*8, payload: payload(1024*1024*8))
+    reply = Grpc.Testing.SimpleResponse.new(payload: payload(1024*1024*8))
+    {:ok, ^reply} = Grpc.Testing.TestService.Stub.unary_call(ch, req)
+  end
+
   def client_compressed_unary!(_ch) do
     # TODO
   end

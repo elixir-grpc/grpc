@@ -63,6 +63,7 @@ expect(Req) ->
 	-> {cowboy_stream:commands(), State} when State::#state{}.
 data(_StreamID, IsFin, Data, State=#state{pid=Pid, read_body_ref=Ref,
 		read_body_timer_ref=TRef, read_body_buffer=Buffer, body_length=BodyLen0}) ->
+	NewSize = byte_size(Data),
 	NewBody0 = <<Buffer/binary, Data/binary>>,
 	BodyLen = BodyLen0 + byte_size(Data),
 	NewBody = case TRef of
@@ -73,11 +74,11 @@ data(_StreamID, IsFin, Data, State=#state{pid=Pid, read_body_ref=Ref,
 			send_request_body(Pid, Ref, IsFin, BodyLen, NewBody0),
 			<<>>
 	end,
-	Commands = case BodyLen of
+	Commands = case NewSize of
 		0 ->
 			[];
 		_ ->
-			[{flow, BodyLen}]
+			[{flow, NewSize}]
 	end,
 	{Commands, State#state{
 		read_body_is_fin=IsFin,

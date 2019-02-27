@@ -221,13 +221,13 @@ defmodule GRPC.Adapter.Gun do
          GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}: #{inspect(msg)}")}
 
       {:error, reason} ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}")}
+        {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "error when waiting for server: #{inspect(reason)}")}
 
       other ->
         {:error,
          GRPC.RPCError.exception(
            GRPC.Status.unknown(),
-           "unexpected message when waiting: #{inspect(other)}"
+           "unexpected message when waiting for server: #{inspect(other)}"
          )}
     end
   end
