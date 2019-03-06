@@ -117,7 +117,7 @@ defmodule GRPC.Server do
          func_name
        ) do
     reading_stream =
-      adapter.reading_stream(stream.payload)
+      adapter.reading_stream(payload)
       |> Elixir.Stream.map(&unmarshal.(&1))
 
     call_with_interceptors(res_stream, func_name, stream, reading_stream)
