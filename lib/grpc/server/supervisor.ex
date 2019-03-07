@@ -33,7 +33,7 @@ defmodule GRPC.Server.Supervisor do
   require Logger
 
   def start_link(endpoint) do
-    Supervisor.start_link(__MODULE__, endpoint, name: __MODULE__)
+    Supervisor.start_link(__MODULE__, endpoint)
   end
 
   @spec init({module | [module], integer}) ::
