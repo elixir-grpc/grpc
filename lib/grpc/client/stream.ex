@@ -24,8 +24,8 @@ defmodule GRPC.Client.Stream do
           rpc: tuple,
           payload: stream_payload,
           path: String.t(),
-          marshal: marshal,
-          unmarshal: unmarshal,
+          marshal: marshal | nil,
+          unmarshal: unmarshal | nil,
           server_stream: boolean,
           canceled: boolean,
           __interface__: map
