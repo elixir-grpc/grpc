@@ -47,6 +47,10 @@ defmodule GRPC.RPCError do
     parse_args(t, acc)
   end
 
+  def exception(status, message) when is_atom(status) do
+    exception(apply(GRPC.Status, status, []), message)
+  end
+  
   def exception(status, message) do
     %GRPC.RPCError{status: status, message: message}
   end
