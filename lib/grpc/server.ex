@@ -130,23 +130,12 @@ defmodule GRPC.Server do
          req
        ) do
     last = fn r, s ->
-      try do
-        reply = apply(server, func_name, [r, s])
+      reply = apply(server, func_name, [r, s])
 
-        if res_stream do
-          {:ok, stream}
-        else
-          {:ok, stream, reply}
-        end
-      rescue
-        e in GRPC.RPCError ->
-          {:error, e}
-      catch
-        kind, reason ->
-          stack = System.stacktrace()
-          Logger.error(Exception.format(kind, reason, stack))
-          reason = Exception.normalize(kind, reason, stack)
-          {:error, %{kind: kind, reason: reason, stack: stack}}
+      if res_stream do
+        {:ok, stream}
+      else
+        {:ok, stream, reply}
       end
     end
 
@@ -157,7 +146,18 @@ defmodule GRPC.Server do
         fn r, s -> interceptor.call(r, s, acc, opts) end
       end)
 
-    next.(req, stream)
+    try do
+      next.(req, stream)
+    rescue
+      e in GRPC.RPCError ->
+        {:error, e}
+    catch
+      kind, reason ->
+        stack = System.stacktrace()
+        Logger.error(Exception.format(kind, reason, stack))
+        reason = Exception.normalize(kind, reason, stack)
+        {:error, %{kind: kind, reason: reason, stack: stack}}
+    end
   end
 
   defp interceptors(nil, _), do: []
