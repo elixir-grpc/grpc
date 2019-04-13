@@ -18,7 +18,7 @@ The package can be installed as:
 
       ```elixir
       def deps do
-        [{:grpc, github: "tony612/grpc-elixir"}]
+        [{:grpc, github: "elixir-grpc/grpc"}]
       end
       ```
 
@@ -113,7 +113,7 @@ Check [examples](examples) and [interop](interop)(Interoperability Test) for som
 - [x] Helloworld and RouteGuide examples
 - [x] Doc and more tests
 - [x] Authentication with TLS
-- [x] Improve code generation from protos ([protobuf-elixir](https://github.com/tony612/protobuf-elixir) [#8](https://github.com/tony612/grpc-elixir/issues/8))
+- [x] Improve code generation from protos ([protobuf-elixir](https://github.com/tony612/protobuf-elixir) [#8](https://github.com/elixir-grpc/grpc/issues/8))
 - [x] Timeout for unary calls
 - [x] Errors handling
 - [x] Benchmarking

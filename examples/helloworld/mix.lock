@@ -2,7 +2,6 @@
   "cowboy": {:git, "https://github.com/elixir-grpc/cowboy.git", "1bfa03d0c1cc1ace9730e67b206c0c2dee92c4a9", []},
   "cowlib": {:git, "https://github.com/elixir-grpc/cowlib", "98327c5732b5b867734a82b18d0702d0a7b90a40", [ref: "master"]},
   "dialyxir": {:hex, :dialyxir, "0.5.1", "b331b091720fd93e878137add264bac4f644e1ddae07a70bf7062c7862c4b952", [:mix], [], "hexpm"},
-  "grpc": {:git, "https://github.com/tony612/grpc-elixir.git", "feda0730acceaa21af3ef69f972985b2d2461001", []},
   "gun": {:git, "https://github.com/elixir-grpc/gun.git", "278296b49093949b279a484d7bfbfcbfa459a89e", []},
   "protobuf": {:hex, :protobuf, "0.5.4", "2e1b8eec211aff034ad8a14e3674220b0158bfb9a3c7128ac9d2a1ed1b3724d3", [:mix], [], "hexpm"},
   "ranch": {:git, "https://github.com/ninenines/ranch", "3190aef88aea04d6dce8545fe9b4574288903f44", [ref: "1.7.1"]},
