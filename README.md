@@ -6,7 +6,9 @@
 
 An Elixir implementation of [gRPC](http://www.grpc.io/).
 
-**WARNING: APIs are unstable now. Be careful to use it in production!**
+**WARNING: Be careful to use it in production! Test and benchmark in advance.**
+
+**NOTICE: Erlang/OTP needs >= 20.3.2**
 
 ## Installation
 

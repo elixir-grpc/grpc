@@ -5,7 +5,7 @@ elixir: '1.6'
 otp_release: '20.3.8'
 
 script:
-  - mix test
+  - travis_retry mix test
   - cd interop && mix deps.get && mix run script/run.exs && cd -
   # Released inch_ex does not support Elixir 1.7 yet:
   # https://github.com/rrrene/inch_ex/issues/60
