@@ -28,7 +28,9 @@ defmodule GRPC.Adapter.Gun do
   end
 
   defp do_connect(%{host: host, port: port} = channel, open_opts) do
-    open_opts = Map.merge(%{retry: :infinity, retry_timeout: &GRPC.Stub.retry_timeout/1}, open_opts)
+    open_opts =
+      Map.merge(%{retry: :infinity, retry_timeout: &GRPC.Stub.retry_timeout/1}, open_opts)
+
     {:ok, conn_pid} = open(host, port, open_opts)
 
     case :gun.await_up(conn_pid) do
@@ -222,7 +224,11 @@ defmodule GRPC.Adapter.Gun do
          GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}: #{inspect(msg)}")}
 
       {:error, reason} ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.unknown(), "error when waiting for server: #{inspect(reason)}")}
+        {:error,
+         GRPC.RPCError.exception(
+           GRPC.Status.unknown(),
+           "error when waiting for server: #{inspect(reason)}"
+         )}
 
       other ->
         {:error,
