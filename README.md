@@ -4,7 +4,7 @@
 [![Build Status](https://travis-ci.org/tony612/grpc-elixir.svg?branch=master)](https://travis-ci.org/tony612/grpc-elixir)
 [![Inline docs](http://inch-ci.org/github/tony612/grpc-elixir.svg?branch=master)](http://inch-ci.org/github/tony612/grpc-elixir)
 
-The Elixir implementation of [gRPC](http://www.grpc.io/).
+An Elixir implementation of [gRPC](http://www.grpc.io/).
 
 **WARNING: APIs are unstable now. Be careful to use it in production!**
 
@@ -42,47 +42,65 @@ defmodule Helloworld.Greeter.Server do
   end
 end
 ```
-3. Run the server and client like this:
-```elixir
-iex> GRPC.Server.start(Helloworld.Greeter.Server, 50051)
-iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051")
-iex> request = Helloworld.HelloRequest.new(name: "grpc-elixir")
-iex> {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(request)
-```
 
-### Start the server
+3. Start the server
 
 You can start the gRPC server as a supervised process. First, add `GRPC.Server.Supervisor` to your supervision tree.
 
 ```elixir
-# In the start function of your Application
-def start(_type, _args) do
-  children = [
-    # ...
-    supervisor(GRPC.Server.Supervisor, [{Helloworld.Greeter.Server, 50051}])
-  ]
+# Define your endpoint
+defmodule Helloworld.Endpoint do
+  use GRPC.Endpoint
 
-  opts = [strategy: :one_for_one, name: YourApp]
-  Supervisor.start_link(children, opts)
+  intercept GRPC.Logger.Server
+  run Helloworld.Greeter.Server
+end
+
+# In the start function of your Application
+defmodule HelloworldApp do
+  use Application
+  def start(_type, _args) do
+    children = [
+      # ...
+      supervisor(GRPC.Server.Supervisor, [{Helloworld.Endpoint, 50051}])
+    ]
+
+    opts = [strategy: :one_for_one, name: YourApp]
+    Supervisor.start_link(children, opts)
+  end
 end
 ```
 
-Then run grpc.server using a mix task
-
-```
-$ mix grpc.server
-```
-
-or start it when starting your application:
+Then start it when starting your application:
 
 ```elixir
 # config.exs
 config :grpc, start_server: true
 
+# test.exs
+config :grpc, start_server: false
+
 $ iex -S mix
 ```
 
-Check [examples](examples) and [interop](interop)(Interoperability Test) for all examples
+or run grpc.server using a mix task
+
+```
+$ mix grpc.server
+```
+
+4. Call rpc:
+```elixir
+iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051")
+iex> request = Helloworld.HelloRequest.new(name: "grpc-elixir")
+iex> {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(request)
+
+# With interceptors
+iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Logger.Client])
+...
+```
+
+Check [examples](examples) and [interop](interop)(Interoperability Test) for some examples.
 
 ## TODO
 
@@ -97,7 +115,8 @@ Check [examples](examples) and [interop](interop)(Interoperability Test) for all
 - [x] Timeout for unary calls
 - [x] Errors handling
 - [x] Benchmarking
-- [ ] Logging
+- [x] Logging
+- [x] Interceptors(See `GRPC.Endpoint`)
 - [ ] Data compression
 - [ ] Support other encoding(other than protobuf)
 
