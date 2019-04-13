@@ -23,7 +23,6 @@ defmodule Interop.MixProject do
   defp deps do
     [
       {:grpc, path: "..", override: true},
-      {:gun, ">= 1.0.0-pre.5"},
       {:grpc_prometheus, github: "tony612/elixir-grpc-prometheus"},
       {:prometheus, "~> 4.0", override: true},
       {:prometheus_httpd, "~> 2.0"}

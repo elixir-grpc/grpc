@@ -225,7 +225,8 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   end
 
   defp do_call_rpc(server, path, stream) do
-    case server.__call_rpc__(path, stream) do
+    result = server.__call_rpc__(path, stream)
+    case result do
       {:ok, stream, response} ->
         stream
         |> GRPC.Server.send_reply(response)
@@ -243,7 +244,8 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   end
 
   defp read_full_body(req, body, timer) do
-    case :cowboy_req.read_body(req, timeout_left_opt(timer)) do
+    result = :cowboy_req.read_body(req, timeout_left_opt(timer))
+    case result do
       {:ok, data, req} -> {:ok, body <> data, req}
       {:more, data, req} -> read_full_body(req, body <> data, timer)
     end
