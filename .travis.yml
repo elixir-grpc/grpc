@@ -21,5 +21,6 @@ jobs:
     - elixir: '1.5'
     - elixir: '1.6'
     - elixir: '1.7'
-      otp_release: '21.1'
+      otp_release: '21.3'
     - elixir: '1.8'
+      otp_release: '21.3'

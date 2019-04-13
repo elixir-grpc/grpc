@@ -117,6 +117,7 @@ Check [examples](examples) and [interop](interop)(Interoperability Test) for som
 - [x] Benchmarking
 - [x] Logging
 - [x] Interceptors(See `GRPC.Endpoint`)
+- [x] Client-side exponential retry
 - [ ] Data compression
 - [ ] Support other encoding(other than protobuf)
 

@@ -28,6 +28,7 @@ defmodule GRPC.Adapter.Gun do
   end
 
   defp do_connect(%{host: host, port: port} = channel, open_opts) do
+    open_opts = Map.merge(%{retry: :infinity, retry_timeout: &GRPC.Stub.retry_timeout/1}, open_opts)
     {:ok, conn_pid} = open(host, port, open_opts)
 
     case :gun.await_up(conn_pid) do
