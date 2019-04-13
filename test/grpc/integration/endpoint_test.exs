@@ -1,5 +1,5 @@
 defmodule GRPC.Integration.EndpointTest do
-  use GRPC.Integration.TestCase, async: true
+  use GRPC.Integration.TestCase
   import ExUnit.CaptureLog
 
   defmodule HelloServer do

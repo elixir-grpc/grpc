@@ -1,5 +1,5 @@
 defmodule GRPC.Integration.ConnectionTest do
-  use GRPC.Integration.TestCase, async: true
+  use GRPC.Integration.TestCase
 
   @cert_path Path.expand("./tls/server1.pem", :code.priv_dir(:grpc))
   @key_path Path.expand("./tls/server1.key", :code.priv_dir(:grpc))

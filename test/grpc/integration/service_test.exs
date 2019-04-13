@@ -1,5 +1,5 @@
 defmodule GRPC.Integration.ServiceTest do
-  use GRPC.Integration.TestCase, async: true
+  use GRPC.Integration.TestCase
 
   defmodule FeatureServer do
     use GRPC.Server, service: Routeguide.RouteGuide.Service
