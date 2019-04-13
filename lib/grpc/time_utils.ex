@@ -7,8 +7,8 @@ defmodule GRPC.TimeUtils do
   ## Examples
 
       iex> from = DateTime.utc_now
-      iex> us = DateTime.to_unix(from, :microseconds)
-      iex> datetime = DateTime.from_unix!(us + 5005, :microseconds)
+      iex> us = DateTime.to_unix(from, :microsecond)
+      iex> datetime = DateTime.from_unix!(us + 5005, :microsecond)
       iex> Float.round(GRPC.TimeUtils.to_relative(datetime, from), 3)
       5.005
   """
@@ -19,6 +19,6 @@ defmodule GRPC.TimeUtils do
   end
 
   defp datetime_to_milliseconds(datetime) do
-    DateTime.to_unix(datetime, :seconds) * 1000 + elem(datetime.microsecond, 0) * 0.001
+    DateTime.to_unix(datetime, :second) * 1000 + elem(datetime.microsecond, 0) * 0.001
   end
 end
