@@ -155,12 +155,20 @@ defmodule GRPC.Stub do
   end
 
   def retry_timeout(curr) when curr < 11 do
-    timeout = if curr < 11 do
-      :math.pow(1.6, curr - 1) * 1000
-    else
-      120_000
-    end
-    jitter = (:rand.uniform_real() - 0.5) / 2.5
+    timeout =
+      if curr < 11 do
+        :math.pow(1.6, curr - 1) * 1000
+      else
+        120_000
+      end
+
+    jitter =
+      if function_exported?(:rand, :uniform_real, 0) do
+        (:rand.uniform_real() - 0.5) / 2.5
+      else
+        (:rand.uniform() - 0.5) / 2.5
+      end
+
     round(timeout + jitter * timeout)
   end
 
