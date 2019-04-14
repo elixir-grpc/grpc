@@ -7,6 +7,7 @@ otp_release: '20.3.8'
 script:
   - travis_retry mix test
   - cd interop && mix deps.get && mix run script/run.exs && cd -
+  - if [ "$TRAVIS_EVENT_TYPE" = "cron" ]; then cd interop && mix deps.get && mix run script/run.exs --rounds 10000 && cd -; fi
   # Released inch_ex does not support Elixir 1.7 yet:
   # https://github.com/rrrene/inch_ex/issues/60
   # - '[[ "$TRAVIS_ELIXIR_VERSION" = 1.7 ]] || mix inch.report'
@@ -14,7 +15,6 @@ script:
   - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-5] ]] || mix format --check-formatted'
   # TODO: After deps are in hex
   # - mix hex.build
-  - if [ "$TRAVIS_EVENT_TYPE" = "cron" ]; then mix run script/run.exs --rounds 10000; fi
   - mix docs
 
 jobs:
