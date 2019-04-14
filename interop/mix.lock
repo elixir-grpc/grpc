@@ -1,9 +1,10 @@
 %{
   "accept": {:hex, :accept, "0.3.5", "b33b127abca7cc948bbe6caa4c263369abf1347cfa9d8e699c6d214660f10cd1", [:rebar3], [], "hexpm"},
-  "cowboy": {:git, "https://github.com/elixir-grpc/cowboy.git", "a227b77e7aa2d9942df5551cc7d52bed4c5a94d3", [tag: "grpc-2.6.3"]},
+  "cowboy": {:git, "https://github.com/elixir-grpc/cowboy.git", "db1b09fb06038415e5c643282554c0b9f8e6a976", [tag: "grpc-2.6.3"]},
   "cowlib": {:git, "https://github.com/elixir-grpc/cowlib.git", "1cc32e27d917bfe615da6957006fd9f8d6e604bd", [tag: "grpc-2.7.3"]},
+  "grpc": {:git, "https://github.com/elixir-grpc/grpc.git", "21422839798e49bf6d29327fab0a7add51becedd", []},
   "grpc_prometheus": {:git, "https://github.com/tony612/elixir-grpc-prometheus.git", "f9b2fc0ef447ff9c8458fca55bd6e1c7629ebe51", []},
-  "gun": {:git, "https://github.com/elixir-grpc/gun.git", "7a1089926926a5556e37d9580b13ada44e255a9a", [tag: "grpc-1.3.0"]},
+  "gun": {:git, "https://github.com/elixir-grpc/gun.git", "8bf6e838c51ce792236db0a9d9cb2513f6cc6b12", [tag: "grpc-1.3.0"]},
   "prometheus": {:hex, :prometheus, "4.2.2", "a830e77b79dc6d28183f4db050a7cac926a6c58f1872f9ef94a35cd989aceef8", [:mix, :rebar3], [], "hexpm"},
   "prometheus_ex": {:hex, :prometheus_ex, "3.0.5", "fa58cfd983487fc5ead331e9a3e0aa622c67232b3ec71710ced122c4c453a02f", [:mix], [{:prometheus, "~> 4.0", [hex: :prometheus, repo: "hexpm", optional: false]}], "hexpm"},
   "prometheus_httpd": {:hex, :prometheus_httpd, "2.1.11", "f616ed9b85b536b195d94104063025a91f904a4cfc20255363f49a197d96c896", [:rebar3], [{:accept, "~> 0.3", [hex: :accept, repo: "hexpm", optional: false]}, {:prometheus, "~> 4.2", [hex: :prometheus, repo: "hexpm", optional: false]}], "hexpm"},

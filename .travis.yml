@@ -19,7 +19,6 @@ script:
 
 jobs:
   include:
-    - elixir: '1.4'
     - elixir: '1.5'
     - elixir: '1.6'
     - elixir: '1.7'
