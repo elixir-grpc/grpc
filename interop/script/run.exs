@@ -1,3 +1,14 @@
+OptionParser.parse(["--rounds"], strict: [rounds: :integer])
+rounds = case OptionParser.parse(System.argv(), strict: [rounds: :integer]) do
+  {[rounds: rounds], [], []} ->
+    rounds
+  _ ->
+    100
+end
+
+IO.puts "Total rounds: #{rounds}"
+IO.puts ""
+
 alias Interop.Client
 port = 0
 # port = 10000
@@ -38,6 +49,6 @@ end
 # end
 # Helper.flush()
 
-Enum.each(1..100, run)
+Enum.each(1..rounds, run)
 IO.puts("Succeed!")
 :ok = GRPC.Server.stop_endpoint(Interop.Endpoint)
