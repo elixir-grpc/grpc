@@ -291,7 +291,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
             Map.put(opts, :timeout, ms)
 
           _ ->
-            0
+            Map.put(opts, :timeout, 0)
         end
     end
   end
