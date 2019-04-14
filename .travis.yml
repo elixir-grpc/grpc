@@ -14,7 +14,7 @@ script:
   - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-5] ]] || mix format --check-formatted'
   # TODO: After deps are in hex
   # - mix hex.build
-  - if [ "$TRAVIS_EVENT_TYPE" != "cron" ]; then mix run script/run.exs --rounds 10000; fi
+  - if [ "$TRAVIS_EVENT_TYPE" = "cron" ]; then mix run script/run.exs --rounds 10000; fi
   - mix docs
 
 jobs:
