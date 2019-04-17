@@ -15,7 +15,7 @@ defmodule GRPC.ServerTest do
   end
 
   test "send_reply/2 works" do
-    stream = %GRPC.Server.Stream{adapter: GRPC.Test.ServerAdapter, marshal: & &1}
+    stream = %GRPC.Server.Stream{adapter: GRPC.Test.ServerAdapter, codec: GRPC.Codec.Erlpack}
     response = <<1, 2, 3, 4, 5, 6, 7, 8>>
     assert %GRPC.Server.Stream{} = GRPC.Server.send_reply(stream, response)
   end

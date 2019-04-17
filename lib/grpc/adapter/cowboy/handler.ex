@@ -17,19 +17,23 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     path = :cowboy_req.path(req)
     server = Map.get(servers, GRPC.Server.service_name(path))
 
+    # TODO figure out from the request ...
+    codec = server.get_codec()
+
     if server do
       stream = %GRPC.Server.Stream{
         server: server,
         endpoint: endpoint,
         adapter: @adapter,
         payload: %{pid: self()},
-        local: opts[:local]
+        local: opts[:local],
+        codec: codec
       }
 
       pid = spawn_link(__MODULE__, :call_rpc, [server, path, stream])
       Process.flag(:trap_exit, true)
 
-      req = :cowboy_req.set_resp_headers(HTTP2.server_headers(), req)
+      req = :cowboy_req.set_resp_headers(HTTP2.server_headers(stream), req)
 
       timeout = :cowboy_req.header("grpc-timeout", req)
 

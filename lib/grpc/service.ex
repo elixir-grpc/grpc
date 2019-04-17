@@ -20,16 +20,6 @@ defmodule GRPC.Service do
       Module.register_attribute(__MODULE__, :rpc_calls, accumulate: true)
       @before_compile GRPC.Service
 
-      def marshal(mod, message) do
-        func = unquote(opts[:marshal]) || (&GRPC.Message.Protobuf.encode/2)
-        func.(mod, message)
-      end
-
-      def unmarshal(mod, message) do
-        func = unquote(opts[:unmarshal]) || (&GRPC.Message.Protobuf.decode/2)
-        func.(mod, message)
-      end
-
       def __meta__(:name), do: unquote(opts[:name])
     end
   end
