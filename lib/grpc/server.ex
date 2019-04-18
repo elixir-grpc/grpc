@@ -42,7 +42,6 @@ defmodule GRPC.Server do
   defmacro __using__(opts) do
     quote bind_quoted: [opts: opts] do
       service_mod = opts[:service]
-      codec = opts[:codec]
       service_name = service_mod.__meta__(:name)
 
       Enum.each(service_mod.__rpc_calls__, fn {name, _, _} = rpc ->
@@ -50,8 +49,8 @@ defmodule GRPC.Server do
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
 
-        def get_codec() do
-          unquote(codec) || GRPC.Codec.Proto
+        def get_codecs() do
+          unquote(opts[:codecs]) || [GRPC.Codec.Proto]
         end
 
         def __call_rpc__(unquote(path), stream) do

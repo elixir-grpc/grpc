@@ -55,7 +55,6 @@ defmodule GRPC.Stub do
   defmacro __using__(opts) do
     quote bind_quoted: [opts: opts] do
       service_mod = opts[:service]
-      codec = opts[:codec]
       service_name = service_mod.__meta__(:name)
 
       Enum.each(service_mod.__rpc_calls__, fn {name, {_, req_stream}, {_, res_stream}} = rpc ->
@@ -69,8 +68,7 @@ defmodule GRPC.Stub do
           grpc_type: grpc_type,
           path: path,
           rpc: put_elem(rpc, 0, func_name),
-          server_stream: res_stream,
-          codec: codec || GRPC.Codec.Proto
+          server_stream: res_stream
         }
 
         if req_stream do
@@ -145,6 +143,7 @@ defmodule GRPC.Stub do
     cred = Keyword.get(opts, :cred)
     scheme = if cred, do: @secure_scheme, else: @insecure_scheme
     interceptors = Keyword.get(opts, :interceptors, []) |> init_interceptors
+    codec = Keyword.get(opts, :codec, GRPC.Codec.Proto)
 
     %Channel{
       host: host,
@@ -152,7 +151,8 @@ defmodule GRPC.Stub do
       scheme: scheme,
       cred: cred,
       adapter: adapter,
-      interceptors: interceptors
+      interceptors: interceptors,
+      codec: codec
     }
     |> adapter.connect(opts[:adapter_opts])
   end
@@ -209,12 +209,14 @@ defmodule GRPC.Stub do
       `%{headers: headers}`(server streaming)
   """
   @spec call(atom, tuple, GRPC.Client.Stream.t(), struct | nil, keyword) :: rpc_return
-  def call(_service_mod, rpc, stream, request, opts) do
+  def call(_service_mod, rpc, %{channel: channel} = stream, request, opts) do
     {_, {req_mod, req_stream}, {res_mod, _}} = rpc
 
     stream = %{stream | request_mod: req_mod, response_mod: res_mod}
 
     opts = parse_req_opts(opts)
+
+    stream = %{stream | codec: opts[:codec] || channel.codec}
 
     do_call(req_stream, stream, request, opts)
   end
@@ -539,8 +541,8 @@ defmodule GRPC.Stub do
     parse_req_opts(t, Map.put(acc, :metadata, metadata))
   end
 
-  defp parse_req_opts([{:content_type, content_type} | t], acc) do
-    parse_req_opts(t, Map.put(acc, :content_type, content_type))
+  defp parse_req_opts([{:codec, codec} | t], acc) do
+    parse_req_opts(t, Map.put(acc, :codec, codec))
   end
 
   defp parse_req_opts([{:return_headers, return_headers} | t], acc) do

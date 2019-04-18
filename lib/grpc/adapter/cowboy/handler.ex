@@ -17,37 +17,45 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     path = :cowboy_req.path(req)
     server = Map.get(servers, GRPC.Server.service_name(path))
 
-    # TODO figure out from the request ...
-    codec = server.get_codec()
+    req_content_type = :cowboy_req.header("content-type", req)
+    codec = Enum.find(server.get_codecs(), nil, fn c -> c.content_type() == req_content_type end)
 
-    if server do
-      stream = %GRPC.Server.Stream{
-        server: server,
-        endpoint: endpoint,
-        adapter: @adapter,
-        payload: %{pid: self()},
-        local: opts[:local],
-        codec: codec
-      }
+    if codec do
+      if server do
+        stream = %GRPC.Server.Stream{
+          server: server,
+          endpoint: endpoint,
+          adapter: @adapter,
+          payload: %{pid: self()},
+          local: opts[:local],
+          codec: codec
+        }
 
-      pid = spawn_link(__MODULE__, :call_rpc, [server, path, stream])
-      Process.flag(:trap_exit, true)
+        pid = spawn_link(__MODULE__, :call_rpc, [server, path, stream])
+        Process.flag(:trap_exit, true)
 
-      req = :cowboy_req.set_resp_headers(HTTP2.server_headers(stream), req)
+        req = :cowboy_req.set_resp_headers(HTTP2.server_headers(stream), req)
 
-      timeout = :cowboy_req.header("grpc-timeout", req)
+        timeout = :cowboy_req.header("grpc-timeout", req)
 
-      timer_ref =
-        if timeout && timeout != :undefined do
-          Process.send_after(
-            self(),
-            {:handling_timeout, self()},
-            GRPC.Transport.Utils.decode_timeout(timeout)
-          )
-        end
+        timer_ref =
+          if timeout && timeout != :undefined do
+            Process.send_after(
+              self(),
+              {:handling_timeout, self()},
+              GRPC.Transport.Utils.decode_timeout(timeout)
+            )
+          end
 
-      {:cowboy_loop, req, %{pid: pid, handling_timer: timer_ref}}
+        {:cowboy_loop, req, %{pid: pid, handling_timer: timer_ref}}
+      else
+        error = RPCError.new(:unimplemented)
+        trailers = HTTP2.server_trailers(error.status, error.message)
+        req = send_error_trailers(req, trailers)
+        {:ok, req, state}
+      end
     else
+      # TODO what's here?
       error = RPCError.new(:unimplemented)
       trailers = HTTP2.server_trailers(error.status, error.message)
       req = send_error_trailers(req, trailers)
