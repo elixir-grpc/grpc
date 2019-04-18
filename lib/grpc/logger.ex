@@ -21,23 +21,27 @@ defmodule GRPC.Logger.Server do
   end
 
   def call(req, stream, next, level) do
-    Logger.log(level, fn ->
-      ["Handled by ", inspect(stream.server), ".", to_string(elem(stream.rpc, 0))]
-    end)
+    if Logger.compare_levels(level, Logger.level()) != :lt do
+      Logger.log(level, fn ->
+        ["Handled by ", inspect(stream.server), ".", to_string(elem(stream.rpc, 0))]
+      end)
 
-    start = System.monotonic_time()
-    result = next.(req, stream)
-    stop = System.monotonic_time()
+      start = System.monotonic_time()
+      result = next.(req, stream)
+      stop = System.monotonic_time()
 
-    status = elem(result, 0)
+      status = elem(result, 0)
 
-    Logger.log(level, fn ->
-      diff = System.convert_time_unit(stop - start, :native, :microsecond)
+      Logger.log(level, fn ->
+        diff = System.convert_time_unit(stop - start, :native, :microsecond)
 
-      ["Response ", inspect(status), " in ", formatted_diff(diff)]
-    end)
+        ["Response ", inspect(status), " in ", formatted_diff(diff)]
+      end)
 
-    result
+      result
+    else
+      next.(req, stream)
+    end
   end
 
   def formatted_diff(diff) when diff > 1000, do: [diff |> div(1000) |> Integer.to_string(), "ms"]
@@ -64,24 +68,28 @@ defmodule GRPC.Logger.Client do
   end
 
   def call(%{grpc_type: grpc_type} = stream, req, next, level) do
-    Logger.log(level, fn ->
-      ["Call ", to_string(elem(stream.rpc, 0)), " of ", stream.service_name]
-    end)
-
-    start = System.monotonic_time()
-    result = next.(stream, req)
-    stop = System.monotonic_time()
-
-    if grpc_type == :unary do
-      status = elem(result, 0)
-
+    if Logger.compare_levels(level, Logger.level()) != :lt do
       Logger.log(level, fn ->
-        diff = System.convert_time_unit(stop - start, :native, :microsecond)
-
-        ["Got ", inspect(status), " in ", GRPC.Logger.Server.formatted_diff(diff)]
+        ["Call ", to_string(elem(stream.rpc, 0)), " of ", stream.service_name]
       end)
-    end
 
-    result
+      start = System.monotonic_time()
+      result = next.(stream, req)
+      stop = System.monotonic_time()
+
+      if grpc_type == :unary do
+        status = elem(result, 0)
+
+        Logger.log(level, fn ->
+          diff = System.convert_time_unit(stop - start, :native, :microsecond)
+
+          ["Got ", inspect(status), " in ", GRPC.Logger.Server.formatted_diff(diff)]
+        end)
+      end
+
+      result
+    else
+      next.(stream, req)
+    end
   end
 end
