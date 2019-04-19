@@ -22,7 +22,8 @@ defmodule GRPC.Integration.ErplackNotypesTest do
   test "Says hello over erlpack" do
     run_server(HelloServer, fn port ->
       {:ok, channel} =
-        GRPC.Stub.connect("localhost:#{port}",
+        GRPC.Stub.connect(
+          "localhost:#{port}",
           interceptors: [GRPC.Logger.Client],
           codec: GRPC.Codec.Erlpack
         )
