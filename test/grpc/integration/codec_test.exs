@@ -1,6 +1,22 @@
 defmodule GRPC.Integration.CoderTest do
   use GRPC.Integration.TestCase, async: true
 
+  defmodule NotRegisteredCodec do
+    @behaviour GRPC.Codec
+
+    def content_subtype() do
+      "not-registered"
+    end
+
+    def encode(struct) do
+      :erlang.term_to_binary(struct)
+    end
+
+    def decode(binary, _module) do
+      :fail
+    end
+  end
+
   defmodule HelloServer do
     use GRPC.Server,
       service: Helloworld.Greeter.Service,
@@ -17,7 +33,7 @@ defmodule GRPC.Integration.CoderTest do
 
   test "Says hello over erlpack" do
     run_server(HelloServer, fn port ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", interceptors: [GRPC.Logger.Client])
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       name = "Mairbek"
       req = Helloworld.HelloRequest.new(name: name)
 
@@ -27,6 +43,14 @@ defmodule GRPC.Integration.CoderTest do
       # verify that proto still works
       {:ok, reply} = channel |> HelloErlpackStub.say_hello(req, codec: GRPC.Codec.Proto)
       assert reply.message == "Hello, #{name}"
+
+      # codec not registered
+      {:error, reply} = channel |> HelloErlpackStub.say_hello(req, codec: NotRegisteredCodec)
+
+      assert %GRPC.RPCError{
+               status: GRPC.Status.internal(),
+               message: "No codec registered for content type application/grpc+not-registered"
+             } == reply
     end)
   end
 end

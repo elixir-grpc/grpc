@@ -3,7 +3,8 @@ defmodule GRPC.Codec do
   Contains code to serialize a deserialize the message.
   """
 
-  @callback content_type() :: String.t()
+  # Content subtype is a suffix after "application/grpc+" such as "proto".
+  @callback content_subtype() :: String.t()
   @callback encode(any) :: binary
   @callback decode(any, atom) :: any
 end

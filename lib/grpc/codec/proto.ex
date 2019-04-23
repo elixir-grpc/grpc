@@ -1,8 +1,8 @@
 defmodule GRPC.Codec.Proto do
   @behaviour GRPC.Codec
 
-  def content_type() do
-    "application/grpc+proto"
+  def content_subtype() do
+    "proto"
   end
 
   def encode(struct) do

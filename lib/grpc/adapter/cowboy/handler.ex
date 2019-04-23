@@ -18,7 +18,13 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     server = Map.get(servers, GRPC.Server.service_name(path))
 
     req_content_type = :cowboy_req.header("content-type", req)
-    codec = Enum.find(server.get_codecs(), nil, fn c -> c.content_type() == req_content_type end)
+
+    codec =
+      with {:ok, subtype} <- extract_subtype(req_content_type) do
+        Enum.find(server.get_codecs(), nil, fn c -> c.content_subtype() == subtype end)
+      else
+        _ -> nil
+      end
 
     if codec do
       if server do
@@ -55,9 +61,14 @@ defmodule GRPC.Adapter.Cowboy.Handler do
         {:ok, req, state}
       end
     else
-      # TODO what's here?
-      error = RPCError.new(:unimplemented)
-      trailers = HTTP2.server_trailers(error.status, error.message)
+      error = RPCError.new(:internal)
+
+      trailers =
+        HTTP2.server_trailers(
+          error.status,
+          "No codec registered for content type #{req_content_type}"
+        )
+
       req = send_error_trailers(req, trailers)
       {:ok, req, state}
     end
@@ -207,6 +218,10 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     :ok
   end
 
+  def terminate(_reason, _req, _state) do
+    :ok
+  end
+
   def call_rpc(server, path, stream) do
     result =
       try do
@@ -307,4 +322,12 @@ defmodule GRPC.Adapter.Cowboy.Handler do
         end
     end
   end
+
+  defp extract_subtype("application/grpc"), do: {:ok, "proto"}
+  defp extract_subtype("application/grpc+"), do: {:ok, "proto"}
+  defp extract_subtype("application/grpc;"), do: {:ok, "proto"}
+
+  defp extract_subtype(<<"application/grpc+", rest::binary>>), do: {:ok, rest}
+  defp extract_subtype(<<"application/grpc;", rest::binary>>), do: {:ok, rest}
+  defp extract_subtype(_), do: :error
 end

@@ -1,8 +1,8 @@
 defmodule GRPC.Codec.Erlpack do
   @behaviour GRPC.Codec
 
-  def content_type() do
-    "application/grpc+erlpack"
+  def content_subtype() do
+    "erlpack"
   end
 
   def encode(struct) do
