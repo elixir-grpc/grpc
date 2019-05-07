@@ -12,7 +12,7 @@ defmodule GRPC.Integration.CoderTest do
       :erlang.term_to_binary(struct)
     end
 
-    def decode(binary, _module) do
+    def decode(_binary, _module) do
       :fail
     end
   end
