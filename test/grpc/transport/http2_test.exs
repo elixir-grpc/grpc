@@ -4,9 +4,10 @@ defmodule GRPC.Transport.HTTP2Test do
   alias GRPC.Transport.HTTP2
 
   @channel %Channel{scheme: "http", host: "grpc.io"}
+  @codec GRPC.Codec.Proto
 
   test "client_headers/3 returns basic headers" do
-    stream = %{channel: @channel, path: "/foo/bar"}
+    stream = %{channel: @channel, path: "/foo/bar", codec: @codec}
     headers = HTTP2.client_headers(stream, %{grpc_version: "1.0.0"})
 
     assert headers == [
@@ -21,19 +22,19 @@ defmodule GRPC.Transport.HTTP2Test do
   end
 
   test "client_headers/3 returns grpc-encoding" do
-    stream = %{channel: @channel, path: "/foo/bar"}
+    stream = %{channel: @channel, path: "/foo/bar", codec: @codec}
     headers = HTTP2.client_headers(stream, %{grpc_encoding: "gzip"})
     assert List.last(headers) == {"grpc-encoding", "gzip"}
   end
 
   test "client_headers/3 returns custom metadata" do
-    stream = %{channel: @channel, path: "/foo/bar"}
+    stream = %{channel: @channel, path: "/foo/bar", codec: @codec}
     headers = HTTP2.client_headers(stream, %{metadata: %{foo: "bar", foo1: :bar1}})
     assert [{"foo1", "bar1"}, {"foo", "bar"} | _] = Enum.reverse(headers)
   end
 
   test "client_headers/3 returns custom metadata with *-bin key" do
-    stream = %{channel: @channel, path: "/foo/bar"}
+    stream = %{channel: @channel, path: "/foo/bar", codec: @codec}
 
     headers =
       HTTP2.client_headers(stream, %{metadata: %{"key1-bin" => "abc", "key2-bin" => <<194, 128>>}})
@@ -42,7 +43,7 @@ defmodule GRPC.Transport.HTTP2Test do
   end
 
   test "client_headers/3 rejects reserved headers in metadata" do
-    stream = %{channel: @channel, path: "/foo/bar"}
+    stream = %{channel: @channel, path: "/foo/bar", codec: @codec}
 
     metadata = %{
       "foo" => "bar",
@@ -57,27 +58,37 @@ defmodule GRPC.Transport.HTTP2Test do
   end
 
   test "client_headers/3 downcase keys of metadata" do
-    stream = %{channel: @channel, path: "/foo/bar"}
+    stream = %{channel: @channel, path: "/foo/bar", codec: @codec}
     metadata = %{:Foo => "bar", "Foo-Bar" => "bar"}
     headers = HTTP2.client_headers(stream, %{metadata: metadata})
     assert [{"foo-bar", "bar"}, {"foo", "bar"} | _] = Enum.reverse(headers)
   end
 
   test "client_headers/3 merges metadata with same keys" do
-    stream = %{channel: @channel, path: "/foo/bar"}
+    stream = %{channel: @channel, path: "/foo/bar", codec: @codec}
     headers = HTTP2.client_headers(stream, %{metadata: [foo: "bar", foo: :bar1]})
     assert [{"foo", "bar,bar1"} | _] = Enum.reverse(headers)
   end
 
   test "client_headers/3 has timeout with :timeout option" do
-    stream = %{channel: @channel, path: "/foo/bar"}
+    stream = %{channel: @channel, path: "/foo/bar", codec: @codec}
     headers = HTTP2.client_headers(stream, %{timeout: 5})
     assert [{"grpc-timeout", "5m"} | _] = Enum.reverse(headers)
   end
 
   test "client_headers/3 support custom content-type" do
-    stream = %{channel: @channel, path: "/foo/bar"}
+    stream = %{channel: @channel, path: "/foo/bar", codec: @codec}
     headers = HTTP2.client_headers(stream, %{content_type: "application/grpc"})
-    assert {_, "application/grpc"} = Enum.find(headers, fn {key, _} -> key == "content-type" end)
+
+    assert {_, "application/grpc"} =
+             Enum.find(headers, fn {key, _} -> key == "content-type" end)
+  end
+
+  test "client_headers/3 support custom codec" do
+    stream = %{channel: @channel, path: "/foo/bar", codec: %{name: "custom-codec"}}
+    headers = HTTP2.client_headers(stream, %{})
+
+    assert {_, "application/grpc+custom-codec"} =
+             Enum.find(headers, fn {key, _} -> key == "content-type" end)
   end
 end

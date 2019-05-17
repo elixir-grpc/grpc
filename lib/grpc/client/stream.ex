@@ -4,17 +4,16 @@ defmodule GRPC.Client.Stream do
 
   ## Fields
 
-    * `:channel` - `GRPC.Channel`, the channel established by client
-    * `:payload` - data used by adapter in a request
-    * `:path` - the request path to sent
-    * `:marshal` - a function encoding the request
-    * `:unmarshal` - a function decoding the reply
-    * `:req_stream` - indicates if request is streaming
-    * `:res_stream` - indicates if reply is streaming
+    * `:channel`           - `GRPC.Channel`, the channel established by client
+    * `:payload`           - data used by adapter in a request
+    * `:path`              - the request path to sent
+    * `request_mod`        - the request module, or nil for untyped protocols
+    * `response_mod`       - the response module, or nil for untyped protocols
+    * `:codec`             - the codec
+    * `:req_stream`        - indicates if request is streaming
+    * `:res_stream`        - indicates if reply is streaming
   """
 
-  @typep marshal :: (struct -> binary)
-  @typep unmarshal :: (binary -> struct)
   @typep stream_payload :: any
   @type t :: %__MODULE__{
           channel: GRPC.Channel.t(),
@@ -24,12 +23,14 @@ defmodule GRPC.Client.Stream do
           rpc: tuple,
           payload: stream_payload,
           path: String.t(),
-          marshal: marshal | nil,
-          unmarshal: unmarshal | nil,
+          request_mod: atom,
+          response_mod: atom,
+          codec: atom,
           server_stream: boolean,
           canceled: boolean,
           __interface__: map
         }
+
   defstruct channel: nil,
             service_name: nil,
             method_name: nil,
@@ -37,8 +38,9 @@ defmodule GRPC.Client.Stream do
             rpc: nil,
             payload: %{},
             path: nil,
-            marshal: nil,
-            unmarshal: nil,
+            request_mod: nil,
+            response_mod: nil,
+            codec: GRPC.Codec.Proto,
             server_stream: nil,
             # TODO: it's better to get canceled status from adapter
             canceled: false,
@@ -52,8 +54,8 @@ defmodule GRPC.Client.Stream do
 
   @doc false
   @spec send_request(GRPC.Client.Stream.t(), struct, Keyword.t()) :: GRPC.Client.Stream.t()
-  def send_request(%{marshal: marshal, channel: channel} = stream, request, opts) do
-    message = marshal.(request)
+  def send_request(%{codec: codec, channel: channel} = stream, request, opts) do
+    message = codec.encode(request)
     send_end_stream = Keyword.get(opts, :end_stream, false)
     channel.adapter.send_data(stream, message, send_end_stream: send_end_stream)
   end

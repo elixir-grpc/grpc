@@ -52,8 +52,11 @@ defmodule GRPC.Stub do
           | {:ok, Enumerable.t(), map}
           | {:error, GRPC.RPCError.t()}
 
+  require Logger
+
   defmacro __using__(opts) do
-    quote bind_quoted: [service_mod: opts[:service]] do
+    quote bind_quoted: [opts: opts] do
+      service_mod = opts[:service]
       service_name = service_mod.__meta__(:name)
 
       Enum.each(service_mod.__rpc_calls__, fn {name, {_, req_stream}, {_, res_stream}} = rpc ->
@@ -142,6 +145,7 @@ defmodule GRPC.Stub do
     cred = Keyword.get(opts, :cred)
     scheme = if cred, do: @secure_scheme, else: @insecure_scheme
     interceptors = Keyword.get(opts, :interceptors, []) |> init_interceptors
+    codec = Keyword.get(opts, :codec, GRPC.Codec.Proto)
 
     %Channel{
       host: host,
@@ -149,7 +153,8 @@ defmodule GRPC.Stub do
       scheme: scheme,
       cred: cred,
       adapter: adapter,
-      interceptors: interceptors
+      interceptors: interceptors,
+      codec: codec
     }
     |> adapter.connect(opts[:adapter_opts])
   end
@@ -206,20 +211,20 @@ defmodule GRPC.Stub do
       `%{headers: headers}`(server streaming)
   """
   @spec call(atom, tuple, GRPC.Client.Stream.t(), struct | nil, keyword) :: rpc_return
-  def call(service_mod, rpc, stream, request, opts) do
+  def call(_service_mod, rpc, %{channel: channel} = stream, request, opts) do
     {_, {req_mod, req_stream}, {res_mod, _}} = rpc
-    marshal = fn req -> service_mod.marshal(req_mod, req) end
-    unmarshal = fn res -> service_mod.unmarshal(res_mod, res) end
 
-    stream = %{stream | marshal: marshal, unmarshal: unmarshal}
+    stream = %{stream | request_mod: req_mod, response_mod: res_mod}
 
     opts = parse_req_opts(opts)
+
+    stream = %{stream | codec: opts[:codec] || channel.codec}
 
     do_call(req_stream, stream, request, opts)
   end
 
-  defp do_call(false, %{marshal: marshal, channel: channel} = stream, request, opts) do
-    message = marshal.(request)
+  defp do_call(false, %{codec: codec, channel: channel} = stream, request, opts) do
+    message = codec.encode(request)
 
     last = fn s, r ->
       s
@@ -368,12 +373,12 @@ defmodule GRPC.Stub do
     end
   end
 
-  def do_recv(%{payload: payload, unmarshal: unmarshal, channel: channel}, opts) do
+  def do_recv(%{payload: payload, response_mod: res_mod, codec: codec, channel: channel}, opts) do
     with {:ok, headers, _is_fin} <-
            recv_headers(channel.adapter, channel.adapter_payload, payload, opts),
          {:ok, body, trailers} <-
            recv_body(channel.adapter, channel.adapter_payload, payload, opts) do
-      {status, msg} = parse_response(body, trailers, unmarshal)
+      {status, msg} = parse_response(body, trailers, codec, res_mod)
 
       if opts[:return_headers] do
         {status, msg, %{headers: headers, trailers: trailers}}
@@ -410,13 +415,13 @@ defmodule GRPC.Stub do
     end
   end
 
-  defp parse_response(data, trailers, unmarshal) do
+  defp parse_response(data, trailers, codec, res_mod) do
     case parse_trailers(trailers) do
       :ok ->
         result =
           data
           |> GRPC.Message.from_data()
-          |> unmarshal.()
+          |> codec.decode(res_mod)
 
         {:ok, result}
 
@@ -438,7 +443,8 @@ defmodule GRPC.Stub do
   defp response_stream(
          %{
            channel: %{adapter: adapter, adapter_payload: ap},
-           unmarshal: unmarshal,
+           response_mod: res_mod,
+           codec: codec,
            payload: payload
          },
          opts
@@ -451,7 +457,8 @@ defmodule GRPC.Stub do
       fin: false,
       need_more: true,
       opts: opts,
-      unmarshal: unmarshal
+      response_mod: res_mod,
+      codec: codec
     }
 
     Stream.unfold(state, fn s -> read_stream(s) end)
@@ -500,10 +507,10 @@ defmodule GRPC.Stub do
     end
   end
 
-  defp read_stream(%{buffer: buffer, need_more: false, unmarshal: unmarshal} = s) do
+  defp read_stream(%{buffer: buffer, need_more: false, response_mod: res_mod, codec: codec} = s) do
     case GRPC.Message.get_message(buffer) do
       {message, rest} ->
-        reply = unmarshal.(message)
+        reply = codec.decode(message, res_mod)
         new_s = Map.put(s, :buffer, rest)
         {{:ok, reply}, new_s}
 
@@ -537,7 +544,12 @@ defmodule GRPC.Stub do
   end
 
   defp parse_req_opts([{:content_type, content_type} | t], acc) do
+    Logger.warn(":content_type has been deprecated, please use :codec")
     parse_req_opts(t, Map.put(acc, :content_type, content_type))
+  end
+
+  defp parse_req_opts([{:codec, codec} | t], acc) do
+    parse_req_opts(t, Map.put(acc, :codec, codec))
   end
 
   defp parse_req_opts([{:return_headers, return_headers} | t], acc) do

@@ -8,29 +8,15 @@ defmodule GRPC.Server.Stream do
 
   ## Fields
 
-    * `:server`    - user defined gRPC server module
-    * `:marshal`   - a function encoding the reply
-    * `:unmarshal` - a function decoding the request
-    * `:adapter`   - a server adapter module, like `GRPC.Adapter.Cowboy`
-    * `:payload`   - the payload needed by the adapter
-    * `:local`     - local data initialized by user
+    * `:server`            - user defined gRPC server module
+    * `:adapter`           - a server adapter module, like `GRPC.Adapter.Cowboy`
+    * `request_mod`        - the request module, or nil for untyped protocols
+    * `response_mod`       - the response module, or nil for untyped protocols
+    * `:codec`             - the codec
+    * `:payload`           - the payload needed by the adapter
+    * `:local`             - local data initialized by user
   """
 
-  defstruct server: nil,
-            service_name: nil,
-            method_name: nil,
-            grpc_type: nil,
-            endpoint: nil,
-            rpc: nil,
-            marshal: nil,
-            unmarshal: nil,
-            payload: nil,
-            adapter: nil,
-            local: nil,
-            __interface__: %{send_reply: &__MODULE__.send_reply/2}
-
-  @typep marshal :: (struct -> binary)
-  @typep unmarshal :: (binary -> struct)
   @type t :: %__MODULE__{
           server: atom,
           service_name: String.t(),
@@ -38,16 +24,31 @@ defmodule GRPC.Server.Stream do
           grpc_type: atom,
           endpoint: atom,
           rpc: tuple,
-          marshal: marshal,
-          unmarshal: unmarshal,
+          request_mod: atom,
+          response_mod: atom,
+          codec: atom,
           payload: any,
           adapter: atom,
           local: any,
           __interface__: map
         }
 
-  def send_reply(%{adapter: adapter, marshal: marshal} = stream, reply) do
-    {:ok, data, _size} = reply |> marshal.() |> GRPC.Message.to_data(%{iolist: true})
+  defstruct server: nil,
+            service_name: nil,
+            method_name: nil,
+            grpc_type: nil,
+            endpoint: nil,
+            rpc: nil,
+            request_mod: nil,
+            response_mod: nil,
+            codec: GRPC.Codec.Proto,
+            payload: nil,
+            adapter: nil,
+            local: nil,
+            __interface__: %{send_reply: &__MODULE__.send_reply/2}
+
+  def send_reply(%{adapter: adapter, codec: codec} = stream, reply) do
+    {:ok, data, _size} = reply |> codec.encode() |> GRPC.Message.to_data(%{iolist: true})
     adapter.send_reply(stream.payload, data)
     stream
   end

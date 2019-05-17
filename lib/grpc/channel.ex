@@ -12,6 +12,7 @@ defmodule GRPC.Channel do
     * `:scheme` - scheme of connection, like `http`
     * `:cred` - credentials used for authentication
     * `:adapter` - a client adapter module, like `GRPC.Adapter.Gun`
+    * `:codec` - a default codec for this channel
     * `:adapter_payload` - payload the adapter uses
   """
 
@@ -22,6 +23,7 @@ defmodule GRPC.Channel do
           cred: GRPC.Credential.t(),
           adapter: atom,
           adapter_payload: any,
+          codec: module,
           interceptors: []
         }
   defstruct host: nil,
@@ -30,5 +32,6 @@ defmodule GRPC.Channel do
             cred: nil,
             adapter: nil,
             adapter_payload: nil,
+            codec: GRPC.Codec.Proto,
             interceptors: []
 end

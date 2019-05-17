@@ -40,8 +40,14 @@ defmodule GRPC.Server do
   @type rpc :: (GRPC.Server.rpc_req(), Stream.t() -> rpc_return)
 
   defmacro __using__(opts) do
-    quote bind_quoted: [service_mod: opts[:service]] do
+    quote bind_quoted: [opts: opts] do
+      service_mod = opts[:service]
       service_name = service_mod.__meta__(:name)
+      codec = opts[:codecs] || [GRPC.Codec.Proto]
+
+      def get_codecs() do
+        unquote(codec)
+      end
 
       Enum.each(service_mod.__rpc_calls__, fn {name, _, _} = rpc ->
         func_name = name |> to_string |> Macro.underscore() |> String.to_atom()
@@ -77,14 +83,12 @@ defmodule GRPC.Server do
   @doc false
   @spec call(atom, Stream.t(), tuple, atom) :: {:ok, Stream.t(), struct} | {:ok, struct}
   def call(
-        service_mod,
+        _service_mod,
         stream,
         {_, {req_mod, req_stream}, {res_mod, res_stream}} = rpc,
         func_name
       ) do
-    marshal_func = fn res -> service_mod.marshal(res_mod, res) end
-    unmarshal_func = fn req -> service_mod.unmarshal(req_mod, req) end
-    stream = %{stream | marshal: marshal_func, unmarshal: unmarshal_func, rpc: rpc}
+    stream = %{stream | request_mod: req_mod, response_mod: res_mod, rpc: rpc}
 
     handle_request(req_stream, res_stream, stream, func_name)
   end
@@ -100,12 +104,12 @@ defmodule GRPC.Server do
   defp do_handle_request(
          false,
          res_stream,
-         %{unmarshal: unmarshal, adapter: adapter, payload: payload} = stream,
+         %{request_mod: req_mod, codec: codec, adapter: adapter, payload: payload} = stream,
          func_name
        ) do
     {:ok, data} = adapter.read_body(payload)
     message = GRPC.Message.from_data(data)
-    request = unmarshal.(message)
+    request = codec.decode(message, req_mod)
 
     call_with_interceptors(res_stream, func_name, stream, request)
   end
@@ -113,12 +117,12 @@ defmodule GRPC.Server do
   defp do_handle_request(
          true,
          res_stream,
-         %{unmarshal: unmarshal, adapter: adapter, payload: payload} = stream,
+         %{request_mod: req_mod, codec: codec, adapter: adapter, payload: payload} = stream,
          func_name
        ) do
     reading_stream =
       adapter.reading_stream(payload)
-      |> Elixir.Stream.map(&unmarshal.(&1))
+      |> Elixir.Stream.map(fn message -> codec.decode(message, req_mod) end)
 
     call_with_interceptors(res_stream, func_name, stream, reading_stream)
   end
