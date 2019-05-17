@@ -77,11 +77,18 @@ defmodule GRPC.Transport.HTTP2Test do
   end
 
   test "client_headers/3 support custom content-type" do
-    # TODO mairbek figure otu
-    stream = %{channel: @channel, path: "/foo/bar", codec: %{content_subtype: "proto"}}
+    stream = %{channel: @channel, path: "/foo/bar", codec: @codec}
+    headers = HTTP2.client_headers(stream, %{content_type: "application/grpc"})
+
+    assert {_, "application/grpc"} =
+             Enum.find(headers, fn {key, _} -> key == "content-type" end)
+  end
+
+  test "client_headers/3 support custom codec" do
+    stream = %{channel: @channel, path: "/foo/bar", codec: %{name: "custom-codec"}}
     headers = HTTP2.client_headers(stream, %{})
 
-    assert {_, "application/grpc+proto"} =
+    assert {_, "application/grpc+custom-codec"} =
              Enum.find(headers, fn {key, _} -> key == "content-type" end)
   end
 end

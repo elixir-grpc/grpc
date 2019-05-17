@@ -107,8 +107,7 @@ defmodule GRPC.Server do
          %{request_mod: req_mod, codec: codec, adapter: adapter, payload: payload} = stream,
          func_name
        ) do
-    fuf = adapter.read_body(payload)
-    {:ok, data} = fuf
+    {:ok, data} = adapter.read_body(payload)
     message = GRPC.Message.from_data(data)
     request = codec.decode(message, req_mod)
 

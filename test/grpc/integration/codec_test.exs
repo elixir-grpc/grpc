@@ -4,7 +4,7 @@ defmodule GRPC.Integration.CoderTest do
   defmodule NotRegisteredCodec do
     @behaviour GRPC.Codec
 
-    def content_subtype() do
+    def name() do
       "not-registered"
     end
 

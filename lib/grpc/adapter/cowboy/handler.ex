@@ -21,7 +21,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
     codec =
       with {:ok, subtype} <- extract_subtype(req_content_type) do
-        Enum.find(server.get_codecs(), nil, fn c -> c.content_subtype() == subtype end)
+        Enum.find(server.get_codecs(), nil, fn c -> c.name() == subtype end)
       else
         _ -> nil
       end
@@ -329,5 +329,8 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
   defp extract_subtype(<<"application/grpc+", rest::binary>>), do: {:ok, rest}
   defp extract_subtype(<<"application/grpc;", rest::binary>>), do: {:ok, rest}
-  defp extract_subtype(_), do: :error
+  defp extract_subtype(type) do
+    Logger.warn("Got unknown content-type #{type}, please create an issue.")
+    {:ok, "proto"}
+  end
 end

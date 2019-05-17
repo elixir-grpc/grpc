@@ -32,6 +32,6 @@ defmodule GRPC.Channel do
             cred: nil,
             adapter: nil,
             adapter_payload: nil,
-            codec: nil,
+            codec: GRPC.Codec.Proto,
             interceptors: []
 end

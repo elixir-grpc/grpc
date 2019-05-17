@@ -1,7 +1,7 @@
 defmodule GRPC.Codec.Erlpack do
   @behaviour GRPC.Codec
 
-  def content_subtype() do
+  def name() do
     "erlpack"
   end
 

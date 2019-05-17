@@ -25,7 +25,7 @@ defmodule GRPC.Client.Stream do
           path: String.t(),
           request_mod: atom,
           response_mod: atom,
-          codec: map,
+          codec: atom,
           server_stream: boolean,
           canceled: boolean,
           __interface__: map
@@ -40,7 +40,7 @@ defmodule GRPC.Client.Stream do
             path: nil,
             request_mod: nil,
             response_mod: nil,
-            codec: nil,
+            codec: GRPC.Codec.Proto,
             server_stream: nil,
             # TODO: it's better to get canceled status from adapter
             canceled: false,
