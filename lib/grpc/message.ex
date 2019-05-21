@@ -2,6 +2,8 @@ defmodule GRPC.Message do
   use Bitwise, only_operators: true
   @max_message_length 1 <<< (32 - 1)
 
+  alias GRPC.RPCError
+
   @moduledoc false
 
   # Transform data between encoded protobuf and HTTP/2 body of gRPC.
@@ -22,26 +24,32 @@ defmodule GRPC.Message do
       iex> message = <<1, 2, 3, 4, 5, 6, 7, 8>>
       iex> GRPC.Message.to_data(message)
       {:ok, <<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>, 13}
-      iex> GRPC.Message.to_data(message, %{iolist: true})
-      {:ok, [<<0>>, <<0, 0, 0, 8>>, <<1, 2, 3, 4, 5, 6, 7, 8>>], 13}
-      iex> message = <<1, 2, 3, 4, 5, 6, 7, 8>>
-      iex> GRPC.Message.to_data(message, %{compressor: true})
-      {:ok, <<1, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>, 13}
+      iex> message = String.duplicate("foo", 100)
+      iex> GRPC.Message.to_data(message, %{compressor: GRPC.Compressor.Gzip})
+      {:ok, <<1, 0, 0, 0, 27, 31, 139, 8, 0, 0, 0, 0, 0, 0, 19, 75, 203, 207, 79, 27, 69,
+        196, 33, 0, 41, 249, 122, 62, 44, 1, 0, 0>>, 32}
       iex> message = <<1, 2, 3, 4, 5, 6, 7, 8, 9>>
       iex> GRPC.Message.to_data(message, %{max_message_length: 8})
       {:error, "Encoded message is too large (9 bytes)"}
   """
   @spec to_data(binary, map) :: {:ok, binary, non_neg_integer} | {:error, String.t()}
   def to_data(message, opts \\ %{}) do
-    compress_flag = if opts[:compressor], do: <<1>>, else: <<0>>
+    compressor = opts[:compressor]
+
+    {compress_flag, message} =
+      if compressor do
+        {1, compressor.compress(message)}
+      else
+        {0, message}
+      end
+
     length = byte_size(message)
     max_length = opts[:max_message_length] || @max_message_length
 
     if length > max_length do
       {:error, "Encoded message is too large (#{length} bytes)"}
     else
-      result = [compress_flag, <<length::size(4)-unit(8)>>, message]
-      result = if opts[:iolist], do: result, else: Enum.join(result)
+      result = <<compress_flag, length::size(4)-unit(8), message::binary>>
       {:ok, result, length + 5}
     end
   end
@@ -56,25 +64,74 @@ defmodule GRPC.Message do
   """
   @spec from_data(binary) :: binary
   def from_data(data) do
-    <<_flag::bytes-size(1), _length::bytes-size(4), message::binary>> = data
+    <<_flag::unsigned-integer-size(8), _length::bytes-size(4), message::binary>> = data
     message
+  end
+
+  @doc """
+  Transform gRPC body to protobuf data with compressing
+
+  ## Examples
+  """
+  # iex> GRPC.Message.from_data(%{compressor: GRPC}, <<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>)
+  # {:ok, <<1, 2, 3, 4, 5, 6, 7, 8>>}
+  @spec from_data(GRPC.Stream.t(), binary) :: binary
+  def from_data(%{compressor: nil}, data) do
+    case data do
+      <<0, _length::bytes-size(4), message::binary>> ->
+        {:ok, message}
+
+      <<1, _length::bytes-size(4), _::binary>> ->
+        {:error,
+         RPCError.exception(
+           status: :internal,
+           message: "Compressed flag is set, but not specified in headers."
+         )}
+
+      _ ->
+        {:error, RPCError.exception(status: :invalid_argument, message: "Message is malformed.")}
+    end
+  end
+
+  def from_data(%{compressor: compressor}, data) do
+    case data do
+      <<1, _length::bytes-size(4), message::binary>> ->
+        {:ok, compressor.decompress(message)}
+
+      <<0, _length::bytes-size(4), _::binary>> ->
+        {:error,
+         RPCError.exception(
+           status: :invalid_argument,
+           message: "grpc encoding is specified, but message is not compressed"
+         )}
+
+      _ ->
+        {:error, RPCError.exception(status: :invalid_argument, message: "Message is malformed.")}
+    end
   end
 
   def from_frame(bin), do: from_frame(bin, [])
   def from_frame(<<>>, acc), do: Enum.reverse(acc)
 
-  def from_frame(<<_flag::8, length::32, msg::bytes-size(length), rest::binary>>, acc) do
+  def from_frame(
+        <<_flag::unsigned-integer-size(8), length::32, msg::bytes-size(length), rest::binary>>,
+        acc
+      ) do
     from_frame(rest, [msg | acc])
   end
 
-  def complete?(<<_flag::bytes-size(1), length::unsigned-integer-size(32), message::binary>>) do
+  def complete?(
+        <<_flag::unsigned-integer-size(8), length::unsigned-integer-size(32), message::binary>>
+      ) do
     length == byte_size(message)
   end
 
   def complete?(_), do: false
 
   def message_length(data) do
-    <<_flag::bytes-size(1), length::unsigned-integer-size(32), _message::binary>> = data
+    <<_flag::unsigned-integer-size(8), length::unsigned-integer-size(32), _message::binary>> =
+      data
+
     length
   end
 
@@ -84,17 +141,17 @@ defmodule GRPC.Message do
   ## Examples
 
       iex> GRPC.Message.get_message(<<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0>>)
-      {<<1, 2, 3, 4, 5, 6, 7, 8>>, <<0, 0, 0>>}
-      iex> GRPC.Message.get_message(<<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>)
-      {<<1, 2, 3, 4, 5, 6, 7, 8>>, <<>>}
+      {{0, <<1, 2, 3, 4, 5, 6, 7, 8>>}, <<0, 0, 0>>}
+      iex> GRPC.Message.get_message(<<1, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>)
+      {{1, <<1, 2, 3, 4, 5, 6, 7, 8>>}, <<>>}
       iex> GRPC.Message.get_message(<<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7>>)
       false
   """
   def get_message(
-        <<_flag::bytes-size(1), length::unsigned-integer-size(32), message::bytes-size(length),
-          rest::binary>>
+        <<flag::unsigned-integer-size(8), length::unsigned-integer-size(32),
+          message::bytes-size(length), rest::binary>>
       ) do
-    {message, rest}
+    {{flag, message}, rest}
   end
 
   def get_message(_) do

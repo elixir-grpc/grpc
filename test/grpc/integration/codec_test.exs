@@ -48,8 +48,8 @@ defmodule GRPC.Integration.CoderTest do
       {:error, reply} = channel |> HelloErlpackStub.say_hello(req, codec: NotRegisteredCodec)
 
       assert %GRPC.RPCError{
-               status: GRPC.Status.internal(),
-               message: "No codec registered for content type application/grpc+not-registered"
+               status: GRPC.Status.unimplemented(),
+               message: "No codec registered for content-type application/grpc+not-registered"
              } == reply
     end)
   end

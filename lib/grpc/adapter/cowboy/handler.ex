@@ -10,67 +10,110 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
   @adapter GRPC.Adapter.Cowboy
   @default_trailers HTTP2.server_trailers()
-  @type state :: %{pid: pid, handling_timer: reference, resp_trailers: map}
+  @type state :: %{
+          pid: pid,
+          handling_timer: reference,
+          resp_trailers: map,
+          compressor: atom | nil
+        }
 
   @spec init(map, {atom, GRPC.Server.servers_map(), map}) :: {:cowboy_loop, map, map}
   def init(req, {endpoint, servers, opts} = state) do
     path = :cowboy_req.path(req)
-    server = Map.get(servers, GRPC.Server.service_name(path))
 
-    req_content_type = :cowboy_req.header("content-type", req)
+    with {:ok, server} <- find_server(servers, path),
+         {:ok, codec} <- find_codec(req, server),
+         # can be nil
+         {:ok, compressor} <- find_compressor(req, server) do
+      stream = %GRPC.Server.Stream{
+        server: server,
+        endpoint: endpoint,
+        adapter: @adapter,
+        payload: %{pid: self()},
+        local: opts[:local],
+        codec: codec,
+        compressor: compressor
+      }
 
-    codec =
-      with {:ok, subtype} <- extract_subtype(req_content_type) do
-        Enum.find(server.get_codecs(), nil, fn c -> c.name() == subtype end)
-      else
-        _ -> nil
-      end
+      pid = spawn_link(__MODULE__, :call_rpc, [server, path, stream])
+      Process.flag(:trap_exit, true)
 
-    if codec do
-      if server do
-        stream = %GRPC.Server.Stream{
-          server: server,
-          endpoint: endpoint,
-          adapter: @adapter,
-          payload: %{pid: self()},
-          local: opts[:local],
-          codec: codec
-        }
+      req = :cowboy_req.set_resp_headers(HTTP2.server_headers(stream), req)
 
-        pid = spawn_link(__MODULE__, :call_rpc, [server, path, stream])
-        Process.flag(:trap_exit, true)
+      timeout = :cowboy_req.header("grpc-timeout", req)
 
-        req = :cowboy_req.set_resp_headers(HTTP2.server_headers(stream), req)
+      timer_ref =
+        if timeout && timeout != :undefined do
+          Process.send_after(
+            self(),
+            {:handling_timeout, self()},
+            GRPC.Transport.Utils.decode_timeout(timeout)
+          )
+        end
 
-        timeout = :cowboy_req.header("grpc-timeout", req)
-
-        timer_ref =
-          if timeout && timeout != :undefined do
-            Process.send_after(
-              self(),
-              {:handling_timeout, self()},
-              GRPC.Transport.Utils.decode_timeout(timeout)
-            )
-          end
-
-        {:cowboy_loop, req, %{pid: pid, handling_timer: timer_ref}}
-      else
-        error = RPCError.new(:unimplemented)
+      {:cowboy_loop, req, %{pid: pid, handling_timer: timer_ref}}
+    else
+      {:error, error} ->
         trailers = HTTP2.server_trailers(error.status, error.message)
         req = send_error_trailers(req, trailers)
         {:ok, req, state}
+    end
+  end
+
+  defp find_server(servers, path) do
+    case Map.fetch(servers, GRPC.Server.service_name(path)) do
+      s = {:ok, _} ->
+        s
+
+      _ ->
+        {:error, RPCError.exception(status: :unimplemented)}
+    end
+  end
+
+  defp find_codec(req, server) do
+    req_content_type = :cowboy_req.header("content-type", req)
+
+    case extract_subtype(req_content_type) do
+      {:ok, subtype} ->
+        codec = Enum.find(server.__meta__(:codecs), nil, fn c -> c.name() == subtype end)
+
+        if codec do
+          {:ok, codec}
+        else
+          # TODO: Send grpc-accept-encoding header
+          {:error,
+           RPCError.exception(
+             status: :unimplemented,
+             message: "No codec registered for content-type #{req_content_type}"
+           )}
+        end
+
+      _ ->
+        {:error,
+         RPCError.exception(
+           status: :unimplemented,
+           message: "Can't recognize codec for content-type #{req_content_type}"
+         )}
+    end
+  end
+
+  defp find_compressor(req, server) do
+    encoding = :cowboy_req.header("grpc-encoding", req)
+
+    if encoding && encoding != :undefined do
+      compressor = Enum.find(server.__meta__(:compressors), nil, fn c -> c.name() == encoding end)
+
+      if compressor do
+        {:ok, compressor}
+      else
+        {:error,
+         RPCError.exception(
+           status: :unimplemented,
+           message: "No compressor registered for grpc-encoding #{encoding}"
+         )}
       end
     else
-      error = RPCError.new(:internal)
-
-      trailers =
-        HTTP2.server_trailers(
-          error.status,
-          "No codec registered for content type #{req_content_type}"
-        )
-
-      req = send_error_trailers(req, trailers)
-      {:ok, req, state}
+      {:ok, nil}
     end
   end
 
@@ -105,6 +148,10 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
   def get_headers(pid) do
     sync_call(pid, :get_headers)
+  end
+
+  def get_compressor(pid) do
+    sync_call(pid, :get_compressor)
   end
 
   defp sync_call(pid, key) do
@@ -147,7 +194,34 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     {:ok, req, state}
   end
 
+  def info({:stream_body, data, is_fin}, req, %{compressor: compressor, pid: pid} = state)
+      when not is_nil(compressor) do
+    accepted_encodings = :cowboy_req.header("grpc-accept-encoding", req) |> String.split(",")
+
+    if Enum.member?(accepted_encodings, compressor.name()) do
+      {:ok, data, _size} = data |> GRPC.Message.to_data(compressor: compressor)
+      req = check_sent_resp(req)
+      :cowboy_req.stream_body(data, is_fin, req)
+      {:ok, req, state}
+    else
+      error =
+        RPCError.exception(
+          status: :internal,
+          message:
+            "A unaccepted encoding #{compressor.name()} is set, valid are: #{
+              :cowboy_req.header("grpc-accept-encoding", req)
+            }"
+        )
+
+      trailers = HTTP2.server_trailers(error.status, error.message)
+      exit_handler(pid, :rpc_error)
+      req = send_error_trailers(req, trailers)
+      {:stop, req, state}
+    end
+  end
+
   def info({:stream_body, data, is_fin}, req, state) do
+    {:ok, data, _size} = data |> GRPC.Message.to_data()
     req = check_sent_resp(req)
     :cowboy_req.stream_body(data, is_fin, req)
     {:ok, req, state}
@@ -329,6 +403,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
   defp extract_subtype(<<"application/grpc+", rest::binary>>), do: {:ok, rest}
   defp extract_subtype(<<"application/grpc;", rest::binary>>), do: {:ok, rest}
+
   defp extract_subtype(type) do
     Logger.warn("Got unknown content-type #{type}, please create an issue.")
     {:ok, "proto"}

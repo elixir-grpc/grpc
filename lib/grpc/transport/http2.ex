@@ -6,8 +6,18 @@ defmodule GRPC.Transport.HTTP2 do
   alias GRPC.Transport.Utils
   alias GRPC.Status
 
-  def server_headers(%{codec: codec} = _stream) do
-    %{"content-type" => "application/grpc+#{codec.name}"}
+  require Logger
+
+  def server_headers(%{codec: codec} = stream) do
+    headers = %{"content-type" => "application/grpc+#{codec.name}"}
+
+    case stream do
+      %{compressor: compressor} when not is_nil(compressor) ->
+        Map.put(headers, "grpc-encoding", compressor.name())
+
+      _ ->
+        headers
+    end
   end
 
   @spec server_trailers(integer, String.t()) :: map
@@ -29,13 +39,14 @@ defmodule GRPC.Transport.HTTP2 do
   end
 
   @spec client_headers_without_reserved(GRPC.Client.Stream.t(), map) :: [{String.t(), String.t()}]
-  def client_headers_without_reserved(%{codec: codec} = _stream, opts \\ %{}) do
+  def client_headers_without_reserved(%{codec: codec} = stream, opts \\ %{}) do
     [
       # It seems only gRPC implemenations only support "application/grpc", so we support :content_type now.
       {"content-type", opts[:content_type] || "application/grpc+#{codec.name}"},
       {"user-agent", "grpc-elixir/#{opts[:grpc_version] || GRPC.version()}"},
       {"te", "trailers"}
     ]
+    |> append_compressor(stream.compressor)
     |> append_encoding(opts[:grpc_encoding])
     |> append_timeout(opts[:timeout])
     |> append_custom_metadata(opts[:metadata])
@@ -73,19 +84,26 @@ defmodule GRPC.Transport.HTTP2 do
   end
 
   defp append_encoding(headers, grpc_encoding) when is_binary(grpc_encoding) do
-    headers ++ [{"grpc-encoding", grpc_encoding}]
+    Logger.warn("grpc_encoding option is deprecated, please use compressor.")
+    [{"grpc-encoding", grpc_encoding} | headers]
   end
 
   defp append_encoding(headers, _), do: headers
 
+  defp append_compressor(headers, compressor) when not is_nil(compressor) do
+    [{"grpc-encoding", compressor.name()} | headers]
+  end
+
+  defp append_compressor(headers, _), do: headers
+
   defp append_timeout(headers, timeout) when is_integer(timeout) do
-    headers ++ [{"grpc-timeout", Utils.encode_timeout(timeout)}]
+    [{"grpc-timeout", Utils.encode_timeout(timeout)} | headers]
   end
 
   defp append_timeout(headers, _), do: headers
 
   defp append_custom_metadata(headers, metadata) when is_map(metadata) or is_list(metadata) do
-    headers ++ Enum.to_list(encode_metadata(metadata))
+    Enum.to_list(encode_metadata(metadata)) ++ headers
   end
 
   defp append_custom_metadata(headers, _), do: headers

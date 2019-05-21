@@ -121,7 +121,7 @@ Check [examples](examples) and [interop](interop)(Interoperability Test) for som
 - [x] Interceptors(See `GRPC.Endpoint`)
 - [x] [Connection Backoff](https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md)
 - [ ] Data compression
-- [ ] Support other encoding(other than protobuf)
+- [x] Support other encoding(other than protobuf)
 
 ## Sponsors
 

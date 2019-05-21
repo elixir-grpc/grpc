@@ -34,6 +34,7 @@ defmodule GRPC.Server do
   require Logger
 
   alias GRPC.Server.Stream
+  alias GRPC.RPCError
 
   @type rpc_req :: struct | Enumerable.t()
   @type rpc_return :: struct | any
@@ -43,11 +44,8 @@ defmodule GRPC.Server do
     quote bind_quoted: [opts: opts] do
       service_mod = opts[:service]
       service_name = service_mod.__meta__(:name)
-      codec = opts[:codecs] || [GRPC.Codec.Proto]
-
-      def get_codecs() do
-        unquote(codec)
-      end
+      codecs = opts[:codecs] || [GRPC.Codec.Proto]
+      compressors = opts[:compressors] || []
 
       Enum.each(service_mod.__rpc_calls__, fn {name, _, _} = rpc ->
         func_name = name |> to_string |> Macro.underscore() |> String.to_atom()
@@ -74,6 +72,8 @@ defmodule GRPC.Server do
       end
 
       def __meta__(:service), do: unquote(service_mod)
+      def __meta__(:codecs), do: unquote(codecs)
+      def __meta__(:compressors), do: unquote(compressors)
     end
   end
 
@@ -108,21 +108,53 @@ defmodule GRPC.Server do
          func_name
        ) do
     {:ok, data} = adapter.read_body(payload)
-    message = GRPC.Message.from_data(data)
-    request = codec.decode(message, req_mod)
 
-    call_with_interceptors(res_stream, func_name, stream, request)
+    case GRPC.Message.from_data(stream, data) do
+      {:ok, message} ->
+        request = codec.decode(message, req_mod)
+
+        call_with_interceptors(res_stream, func_name, stream, request)
+
+      resp = {:error, _} ->
+        resp
+    end
   end
 
   defp do_handle_request(
          true,
          res_stream,
-         %{request_mod: req_mod, codec: codec, adapter: adapter, payload: payload} = stream,
+         %{
+           request_mod: req_mod,
+           codec: codec,
+           adapter: adapter,
+           payload: payload,
+           compressor: compressor
+         } = stream,
          func_name
        ) do
     reading_stream =
       adapter.reading_stream(payload)
-      |> Elixir.Stream.map(fn message -> codec.decode(message, req_mod) end)
+      |> Elixir.Stream.map(fn {flag, message} ->
+        cond do
+          flag == 0 && compressor == nil ->
+            codec.decode(message, req_mod)
+
+          flag == 1 && compressor != nil ->
+            compressor.decompress(message)
+
+          flag == 0 && compressor != nil ->
+            raise RPCError.exception(
+                    status: :internal,
+                    message: "Compressed flag is set, but not specified in headers."
+                  )
+
+          flag == 1 && compressor == nil ->
+            raise RPCError.exception(
+                    status: :invalid_argument,
+                    message: "grpc encoding is specified, but message is not compressed"
+                  )
+        end
+      end)
 
     call_with_interceptors(res_stream, func_name, stream, reading_stream)
   end
@@ -279,6 +311,16 @@ defmodule GRPC.Server do
   @spec set_trailers(Stream.t(), map) :: Stream.t()
   def set_trailers(%{adapter: adapter} = stream, trailers) do
     adapter.set_resp_trailers(stream.payload, trailers)
+    stream
+  end
+
+  @doc """
+  Set compressor to compress responses. An accepted compressor will be set if clients use one,
+  even if `set_compressor` is not called. But this can be called to override the chosen.
+  """
+  @spec set_compressor(Stream.t(), module) :: Stream.t()
+  def set_compressor(%{adapter: adapter} = stream, compressor) do
+    adapter.set_headers(stream.payload, %{"grpc-encoding" => compressor.name()})
     stream
   end
 

@@ -107,6 +107,9 @@ defmodule GRPC.Stub do
       iex> GRPC.Stub.connect("localhost:50051")
       {:ok, channel}
 
+      iex> GRPC.Stub.connect("localhost:50051", accepted_compressors: [GRPC.Compressor.Gzip])
+      {:ok, channel}
+
       iex> GRPC.Stub.connect("/paht/to/unix.sock")
       {:ok, channel}
 
@@ -116,6 +119,10 @@ defmodule GRPC.Stub do
       An insecure connection will be created without this option.
     * `:adapter` - custom client adapter
     * `:interceptors` - client interceptors
+    * `:codec` - client will use this to encode and decode binary message
+    * `:compressor` - the client will use this to compress requests and decompress responses. If this is set, accepted_compressors
+        will be appended also, so this can be used safely without `:accesspted_compressors`.
+    * `:accepted_compressors` - tell servers accepted compressors, this can be used without `:compressor`
   """
   @spec connect(String.t(), Keyword.t()) :: {:ok, GRPC.Channel.t()} | {:error, any}
   def connect(addr, opts \\ []) when is_binary(addr) and is_list(opts) do
@@ -146,6 +153,15 @@ defmodule GRPC.Stub do
     scheme = if cred, do: @secure_scheme, else: @insecure_scheme
     interceptors = Keyword.get(opts, :interceptors, []) |> init_interceptors
     codec = Keyword.get(opts, :codec, GRPC.Codec.Proto)
+    compressor = Keyword.get(opts, :compressor)
+    accepted_compressors = Keyword.get(opts, :accepted_compressors) || []
+
+    accepted_compressors =
+      if compressor do
+        Enum.uniq([compressor | accepted_compressors])
+      else
+        accepted_compressors
+      end
 
     %Channel{
       host: host,
@@ -154,7 +170,9 @@ defmodule GRPC.Stub do
       cred: cred,
       adapter: adapter,
       interceptors: interceptors,
-      codec: codec
+      codec: codec,
+      compressor: compressor,
+      accepted_compressors: accepted_compressors
     }
     |> adapter.connect(opts[:adapter_opts])
   end
@@ -218,13 +236,29 @@ defmodule GRPC.Stub do
 
     opts = parse_req_opts(opts)
 
-    stream = %{stream | codec: opts[:codec] || channel.codec}
+    stream = %{
+      stream
+      | codec: Map.get(opts, :codec, channel.codec),
+        compressor: Map.get(opts, :compressor, channel.compressor)
+    }
 
     do_call(req_stream, stream, request, opts)
   end
 
-  defp do_call(false, %{codec: codec, channel: channel} = stream, request, opts) do
+  defp do_call(
+         false,
+         %{codec: codec, channel: channel, compressor: compressor} = stream,
+         request,
+         opts
+       ) do
     message = codec.encode(request)
+
+    message =
+      if compressor do
+        compressor.compress(message)
+      else
+        message
+      end
 
     last = fn s, r ->
       s
@@ -509,7 +543,7 @@ defmodule GRPC.Stub do
 
   defp read_stream(%{buffer: buffer, need_more: false, response_mod: res_mod, codec: codec} = s) do
     case GRPC.Message.get_message(buffer) do
-      {message, rest} ->
+      {{_flag, message}, rest} ->
         reply = codec.decode(message, res_mod)
         new_s = Map.put(s, :buffer, rest)
         {{:ok, reply}, new_s}

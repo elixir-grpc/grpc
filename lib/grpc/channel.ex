@@ -24,7 +24,9 @@ defmodule GRPC.Channel do
           adapter: atom,
           adapter_payload: any,
           codec: module,
-          interceptors: []
+          interceptors: [],
+          compressor: module,
+          accepted_compressors: [module]
         }
   defstruct host: nil,
             port: nil,
@@ -33,5 +35,7 @@ defmodule GRPC.Channel do
             adapter: nil,
             adapter_payload: nil,
             codec: GRPC.Codec.Proto,
-            interceptors: []
+            interceptors: [],
+            compressor: nil,
+            accepted_compressors: []
 end

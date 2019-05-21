@@ -30,6 +30,9 @@ defmodule GRPC.Server.Stream do
           payload: any,
           adapter: atom,
           local: any,
+          # compressor mainly is used in client decompressing, responses compressing should be set by
+          # `GRPC.Server.set_compressor`
+          compressor: module,
           __interface__: map
         }
 
@@ -45,10 +48,12 @@ defmodule GRPC.Server.Stream do
             payload: nil,
             adapter: nil,
             local: nil,
+            compressor: nil,
             __interface__: %{send_reply: &__MODULE__.send_reply/2}
 
   def send_reply(%{adapter: adapter, codec: codec} = stream, reply) do
-    {:ok, data, _size} = reply |> codec.encode() |> GRPC.Message.to_data(%{iolist: true})
+    # {:ok, data, _size} = reply |> codec.encode() |> GRPC.Message.to_data()
+    data = codec.encode(reply)
     adapter.send_reply(stream.payload, data)
     stream
   end
