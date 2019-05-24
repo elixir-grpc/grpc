@@ -29,6 +29,7 @@ defmodule GRPC.Client.Stream do
           server_stream: boolean,
           canceled: boolean,
           compressor: module,
+          accepted_compressors: [module],
           __interface__: map
         }
 
@@ -46,6 +47,7 @@ defmodule GRPC.Client.Stream do
             # TODO: it's better to get canceled status from adapter
             canceled: false,
             compressor: nil,
+            accepted_compressors: [],
             __interface__: %{send_request: &__MODULE__.send_request/3, recv: &GRPC.Stub.do_recv/2}
 
   @doc false
@@ -61,16 +63,8 @@ defmodule GRPC.Client.Stream do
         request,
         opts
       ) do
-    message = codec.encode(request)
-
-    message =
-      if compressor do
-        compressor.compress(message)
-      else
-        message
-      end
-
+    encoded = codec.encode(request)
     send_end_stream = Keyword.get(opts, :end_stream, false)
-    channel.adapter.send_data(stream, message, send_end_stream: send_end_stream)
+    channel.adapter.send_data(stream, encoded, send_end_stream: send_end_stream, compressor: compressor)
   end
 end

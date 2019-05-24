@@ -132,8 +132,8 @@ defmodule GRPC.Adapter.Cowboy do
     Handler.get_headers(pid)
   end
 
-  def get_compressor(%{pid: pid}) do
-    Handler.get_compressor(pid)
+  def set_compressor(%{pid: pid}, compressor) do
+    Handler.set_compressor(pid, compressor)
   end
 
   defp cowboy_start_args(endpoint, servers, port, opts) do

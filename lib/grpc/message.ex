@@ -75,7 +75,7 @@ defmodule GRPC.Message do
   """
   # iex> GRPC.Message.from_data(%{compressor: GRPC}, <<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>)
   # {:ok, <<1, 2, 3, 4, 5, 6, 7, 8>>}
-  @spec from_data(GRPC.Stream.t(), binary) :: binary
+  @spec from_data(%{compressor: module | nil}, binary) :: binary
   def from_data(%{compressor: nil}, data) do
     case data do
       <<0, _length::bytes-size(4), message::binary>> ->

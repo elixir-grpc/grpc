@@ -109,7 +109,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
         {:error,
          RPCError.exception(
            status: :unimplemented,
-           message: "No compressor registered for grpc-encoding #{encoding}"
+           message: "Not found compressor registered for grpc-encoding #{encoding}"
          )}
       end
     else
@@ -142,16 +142,16 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     send(pid, {:set_resp_trailers, trailers})
   end
 
+  def set_compressor(pid, compressor) do
+    send(pid, {:set_compressor, compressor})
+  end
+
   def stream_trailers(pid, trailers) do
     send(pid, {:stream_trailers, trailers})
   end
 
   def get_headers(pid) do
     sync_call(pid, :get_headers)
-  end
-
-  def get_compressor(pid) do
-    sync_call(pid, :get_compressor)
   end
 
   defp sync_call(pid, key) do
@@ -194,7 +194,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     {:ok, req, state}
   end
 
-  def info({:stream_body, data, is_fin}, req, %{compressor: compressor, pid: pid} = state)
+  def info({:stream_body, data, is_fin}, req, %{compressor: compressor} = state)
       when not is_nil(compressor) do
     accepted_encodings = :cowboy_req.header("grpc-accept-encoding", req) |> String.split(",")
 
@@ -204,6 +204,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
       :cowboy_req.stream_body(data, is_fin, req)
       {:ok, req, state}
     else
+      %{pid: pid} = state
       error =
         RPCError.exception(
           status: :internal,
@@ -254,6 +255,16 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     exit_handler(pid, :timeout)
     req = send_error_trailers(req, trailers)
     {:stop, req, state}
+  end
+
+  def info({:set_compressor, compressor}, req, state) do
+    accept_encoding = :cowboy_req.header("grpc-accept-encoding", req)
+    if accept_encoding && accept_encoding != :undefined do
+      req = :cowboy_req.set_resp_headers(%{"grpc-encoding" => compressor.name()}, req)
+      {:ok, req, Map.put(state, :compressor, compressor)}
+    else
+      {:ok, req, state}
+    end
   end
 
   def info({:EXIT, pid, :normal}, req, state = %{pid: pid}) do

@@ -9,15 +9,7 @@ defmodule GRPC.Transport.HTTP2 do
   require Logger
 
   def server_headers(%{codec: codec} = stream) do
-    headers = %{"content-type" => "application/grpc+#{codec.name}"}
-
-    case stream do
-      %{compressor: compressor} when not is_nil(compressor) ->
-        Map.put(headers, "grpc-encoding", compressor.name())
-
-      _ ->
-        headers
-    end
+    %{"content-type" => "application/grpc+#{codec.name}"}
   end
 
   @spec server_trailers(integer, String.t()) :: map
@@ -47,6 +39,7 @@ defmodule GRPC.Transport.HTTP2 do
       {"te", "trailers"}
     ]
     |> append_compressor(stream.compressor)
+    |> append_accepted_compressors(stream.accepted_compressors)
     |> append_encoding(opts[:grpc_encoding])
     |> append_timeout(opts[:timeout])
     |> append_custom_metadata(opts[:metadata])
@@ -95,6 +88,13 @@ defmodule GRPC.Transport.HTTP2 do
   end
 
   defp append_compressor(headers, _), do: headers
+
+  defp append_accepted_compressors(headers, [_] = compressors)  do
+    encoding = Enum.map_join(compressors, ",", &(&1.name()))
+    [{"grpc-accept-encoding", encoding} | headers]
+  end
+
+  defp append_accepted_compressors(headers, _), do: headers
 
   defp append_timeout(headers, timeout) when is_integer(timeout) do
     [{"grpc-timeout", Utils.encode_timeout(timeout)} | headers]

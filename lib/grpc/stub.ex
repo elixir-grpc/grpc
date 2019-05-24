@@ -236,10 +236,21 @@ defmodule GRPC.Stub do
 
     opts = parse_req_opts(opts)
 
+    compressor = Map.get(opts, :compressor, channel.compressor)
+    accepted_compressors = Map.get(opts, :accepted_compressors, [])
+
+    accepted_compressors =
+      if compressor do
+        Enum.uniq([compressor | accepted_compressors])
+      else
+        accepted_compressors
+      end
+
     stream = %{
       stream
       | codec: Map.get(opts, :codec, channel.codec),
-        compressor: Map.get(opts, :compressor, channel.compressor)
+        compressor: Map.get(opts, :compressor, channel.compressor),
+        accepted_compressors: accepted_compressors
     }
 
     do_call(req_stream, stream, request, opts)
@@ -247,22 +258,16 @@ defmodule GRPC.Stub do
 
   defp do_call(
          false,
-         %{codec: codec, channel: channel, compressor: compressor} = stream,
+         %{channel: channel} = stream,
          request,
          opts
        ) do
-    message = codec.encode(request)
 
-    message =
-      if compressor do
-        compressor.compress(message)
-      else
-        message
-      end
-
-    last = fn s, r ->
+    last = fn %{codec: codec, compressor: compressor} = s, _ ->
+      message = codec.encode(request)
+      opts = Map.put(opts, :compressor, compressor)
       s
-      |> channel.adapter.send_request(r, opts)
+      |> channel.adapter.send_request(message, opts)
       |> recv(opts)
     end
 
@@ -271,7 +276,7 @@ defmodule GRPC.Stub do
         fn s, r -> interceptor.call(s, r, acc, opts) end
       end)
 
-    next.(stream, message)
+    next.(stream, request)
   end
 
   defp do_call(true, %{channel: channel} = stream, req, opts) do
@@ -407,12 +412,12 @@ defmodule GRPC.Stub do
     end
   end
 
-  def do_recv(%{payload: payload, response_mod: res_mod, codec: codec, channel: channel}, opts) do
+  def do_recv(%{payload: payload, response_mod: res_mod, codec: codec, channel: channel} = stream, opts) do
     with {:ok, headers, _is_fin} <-
            recv_headers(channel.adapter, channel.adapter_payload, payload, opts),
          {:ok, body, trailers} <-
            recv_body(channel.adapter, channel.adapter_payload, payload, opts) do
-      {status, msg} = parse_response(body, trailers, codec, res_mod)
+      {status, msg} = parse_response(stream, headers, body, trailers)
 
       if opts[:return_headers] do
         {status, msg, %{headers: headers, trailers: trailers}}
@@ -449,15 +454,23 @@ defmodule GRPC.Stub do
     end
   end
 
-  defp parse_response(data, trailers, codec, res_mod) do
+  defp parse_response(%{response_mod: res_mod, codec: codec, accepted_compressors: accepted_compressors}, headers, body, trailers) do
     case parse_trailers(trailers) do
       :ok ->
-        result =
-          data
-          |> GRPC.Message.from_data()
-          |> codec.decode(res_mod)
+        compressor = case headers do
+          %{"grpc-encoding" => encoding} ->
+            Enum.find(accepted_compressors, nil, fn c -> c.name() == encoding end)
+          _ ->
+            nil
+        end
 
-        {:ok, result}
+        case GRPC.Message.from_data(%{compressor: compressor}, body) do
+          {:ok, msg} ->
+            {:ok, codec.decode(msg, res_mod)}
+          err ->
+            err
+        end
+
 
       error ->
         error
@@ -543,7 +556,8 @@ defmodule GRPC.Stub do
 
   defp read_stream(%{buffer: buffer, need_more: false, response_mod: res_mod, codec: codec} = s) do
     case GRPC.Message.get_message(buffer) do
-      {{_flag, message}, rest} ->
+      # TODO
+      {{flag, message}, rest} ->
         reply = codec.decode(message, res_mod)
         new_s = Map.put(s, :buffer, rest)
         {{:ok, reply}, new_s}
@@ -567,6 +581,10 @@ defmodule GRPC.Stub do
 
   defp parse_req_opts([{:compressor, compressor} | t], acc) do
     parse_req_opts(t, Map.put(acc, :compressor, compressor))
+  end
+
+  defp parse_req_opts([{:accepted_compressors, compressors} | t], acc) do
+    parse_req_opts(t, Map.put(acc, :accepted_compressors, compressors))
   end
 
   defp parse_req_opts([{:grpc_encoding, grpc_encoding} | t], acc) do

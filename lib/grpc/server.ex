@@ -320,7 +320,7 @@ defmodule GRPC.Server do
   """
   @spec set_compressor(Stream.t(), module) :: Stream.t()
   def set_compressor(%{adapter: adapter} = stream, compressor) do
-    adapter.set_headers(stream.payload, %{"grpc-encoding" => compressor.name()})
+    adapter.set_compressor(stream.payload, compressor)
     stream
   end
 
