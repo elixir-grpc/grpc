@@ -8,7 +8,7 @@ defmodule GRPC.Transport.HTTP2 do
 
   require Logger
 
-  def server_headers(%{codec: codec} = stream) do
+  def server_headers(%{codec: codec}) do
     %{"content-type" => "application/grpc+#{codec.name}"}
   end
 
@@ -89,8 +89,8 @@ defmodule GRPC.Transport.HTTP2 do
 
   defp append_compressor(headers, _), do: headers
 
-  defp append_accepted_compressors(headers, [_] = compressors)  do
-    encoding = Enum.map_join(compressors, ",", &(&1.name()))
+  defp append_accepted_compressors(headers, [_] = compressors) do
+    encoding = Enum.map_join(compressors, ",", & &1.name())
     [{"grpc-accept-encoding", encoding} | headers]
   end
 

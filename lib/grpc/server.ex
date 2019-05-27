@@ -136,17 +136,12 @@ defmodule GRPC.Server do
       adapter.reading_stream(payload)
       |> Elixir.Stream.map(fn {flag, message} ->
         cond do
-          flag == 0 && compressor == nil ->
+          flag == 0 ->
             codec.decode(message, req_mod)
 
           flag == 1 && compressor != nil ->
             compressor.decompress(message)
-
-          flag == 0 && compressor != nil ->
-            raise RPCError.exception(
-                    status: :internal,
-                    message: "Compressed flag is set, but not specified in headers."
-                  )
+            |> codec.decode(req_mod)
 
           flag == 1 && compressor == nil ->
             raise RPCError.exception(
@@ -264,9 +259,9 @@ defmodule GRPC.Server do
   end
 
   @doc """
-  DEPRECATED. Use `send_reply/2` instead
+  DEPRECATED. Use `send_reply/3` instead
   """
-  @deprecated "Use send_reply/2 instead"
+  @deprecated "Use send_reply/3 instead"
   def stream_send(stream, reply) do
     send_reply(stream, reply)
   end
@@ -279,8 +274,8 @@ defmodule GRPC.Server do
       iex> GRPC.Server.send_reply(stream, reply)
   """
   @spec send_reply(Stream.t(), struct) :: Stream.t()
-  def send_reply(%{__interface__: interface} = stream, reply) do
-    interface[:send_reply].(stream, reply)
+  def send_reply(%{__interface__: interface} = stream, reply, opts \\ []) do
+    interface[:send_reply].(stream, reply, opts)
   end
 
   @doc """

@@ -1,4 +1,6 @@
 defmodule Interop.Client do
+  import ExUnit.Assertions, only: [refute: 1]
+
   def connect(host, port, opts \\ []) do
     {:ok, ch} = GRPC.Stub.connect(host, port, opts)
     ch
@@ -28,12 +30,30 @@ defmodule Interop.Client do
     {:ok, ^reply} = Grpc.Testing.TestService.Stub.unary_call(ch, req)
   end
 
-  def client_compressed_unary!(_ch) do
-    # TODO
+  def client_compressed_unary!(ch) do
+    IO.puts("Run client_compressed_unary!")
+    # "Client calls UnaryCall with the feature probe, an uncompressed message" is not supported
+
+    req = Grpc.Testing.SimpleRequest.new(expect_compressed: %{value: true}, response_size: 314_159, payload: payload(271_828))
+    reply = Grpc.Testing.SimpleResponse.new(payload: payload(314_159))
+    {:ok, ^reply} = Grpc.Testing.TestService.Stub.unary_call(ch, req, compressor: GRPC.Compressor.Gzip)
+
+    req = Grpc.Testing.SimpleRequest.new(expect_compressed: %{value: false}, response_size: 314_159, payload: payload(271_828))
+    reply = Grpc.Testing.SimpleResponse.new(payload: payload(314_159))
+    {:ok, ^reply} = Grpc.Testing.TestService.Stub.unary_call(ch, req)
   end
 
-  def server_compressed_unary!(_ch) do
-    # TODO
+  def server_compressed_unary!(ch) do
+    IO.puts("Run server_compressed_unary!")
+
+    req = Grpc.Testing.SimpleRequest.new(response_compressed: %{value: true}, response_size: 314_159, payload: payload(271_828))
+    reply = Grpc.Testing.SimpleResponse.new(payload: payload(314_159))
+    {:ok, ^reply, %{headers: %{"grpc-encoding" => "gzip"}}} = Grpc.Testing.TestService.Stub.unary_call(ch, req, compressor: GRPC.Compressor.Gzip, return_headers: true)
+
+    req = Grpc.Testing.SimpleRequest.new(response_compressed: %{value: false}, response_size: 314_159, payload: payload(271_828))
+    reply = Grpc.Testing.SimpleResponse.new(payload: payload(314_159))
+    {:ok, ^reply, headers} = Grpc.Testing.TestService.Stub.unary_call(ch, req, return_headers: true)
+    refute headers[:headers]["grpc-encoding"]
   end
 
   def client_streaming!(ch) do
@@ -58,8 +78,22 @@ defmodule Interop.Client do
     {:ok, ^reply} = GRPC.Stub.recv(stream)
   end
 
-  def client_compressed_streaming!(_ch) do
-    # TODO
+  def client_compressed_streaming!(ch) do
+    IO.puts("Run client_compressed_streaming!")
+
+    # INVALID_ARGUMENT testing is not supported
+
+    stream =
+      ch
+      |> Grpc.Testing.TestService.Stub.streaming_input_call(compressor: GRPC.Compressor.Gzip)
+      |> GRPC.Stub.send_request(Grpc.Testing.StreamingInputCallRequest.new(payload: payload(27182), expect_compressed: %{value: true}))
+      |> GRPC.Stub.send_request(
+        Grpc.Testing.StreamingInputCallRequest.new(payload: payload(45904), expect_compressed: %{value: false}),
+        end_stream: true, compress: false
+      )
+
+    reply = Grpc.Testing.StreamingInputCallResponse.new(aggregated_payload_size: 73086)
+    {:ok, ^reply} = GRPC.Stub.recv(stream)
   end
 
   def server_streaming!(ch) do
@@ -75,8 +109,21 @@ defmodule Interop.Client do
       end)
   end
 
-  def server_compressed_streaming!(_ch) do
-    # TODO
+  def server_compressed_streaming!(ch) do
+    IO.puts("Run server_compressed_streaming!")
+    req = Grpc.Testing.StreamingOutputCallRequest.new(response_parameters: [
+      %{compressed: %{value: true},
+        size: 31415},
+      %{compressed: %{value: false},
+        size: 92653}
+    ])
+    {:ok, res_enum} = ch |> Grpc.Testing.TestService.Stub.streaming_output_call(req)
+    result = Enum.map([31415, 92653], &String.duplicate(<<0>>, &1))
+
+    ^result =
+      Enum.map(res_enum, fn {:ok, res} ->
+        res.payload.body
+      end)
   end
 
   def ping_pong!(ch) do

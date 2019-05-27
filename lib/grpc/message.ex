@@ -98,12 +98,8 @@ defmodule GRPC.Message do
       <<1, _length::bytes-size(4), message::binary>> ->
         {:ok, compressor.decompress(message)}
 
-      <<0, _length::bytes-size(4), _::binary>> ->
-        {:error,
-         RPCError.exception(
-           status: :invalid_argument,
-           message: "grpc encoding is specified, but message is not compressed"
-         )}
+      <<0, _length::bytes-size(4), message::binary>> ->
+        {:ok, message}
 
       _ ->
         {:error, RPCError.exception(status: :invalid_argument, message: "Message is malformed.")}

@@ -15,6 +15,7 @@ defmodule GRPC.Integration.CompressorTest do
       if GRPC.Stream.get_headers(stream)["grpc-encoding"] do
         raise "grpc-encoding exists!"
       end
+
       GRPC.Server.set_compressor(stream, GRPC.Compressor.Gzip)
       Helloworld.HelloReply.new(message: "Hello, #{name}")
     end
@@ -30,7 +31,7 @@ defmodule GRPC.Integration.CompressorTest do
     use GRPC.Server,
       service: Helloworld.Greeter.Service
 
-    def say_hello(%{name: name}, stream) do
+    def say_hello(%{name: name}, _stream) do
       Helloworld.HelloReply.new(message: "Hello, #{name}")
     end
   end
@@ -45,7 +46,11 @@ defmodule GRPC.Integration.CompressorTest do
 
       name = "only client compress"
       req = Helloworld.HelloRequest.new(name: name)
-      {:ok, reply, headers} = channel |> HelloStub.say_hello(req, compressor: GRPC.Compressor.Gzip, return_headers: true)
+
+      {:ok, reply, headers} =
+        channel
+        |> HelloStub.say_hello(req, compressor: GRPC.Compressor.Gzip, return_headers: true)
+
       assert reply.message == "Hello, #{name}"
       refute headers[:headers]["grpc-encoding"]
     end)
@@ -63,7 +68,13 @@ defmodule GRPC.Integration.CompressorTest do
       assert reply.message == "Hello, #{name}"
       refute headers[:headers]["grpc-encoding"]
 
-      {:ok, reply, headers} = channel |> HelloStub.say_hello(req, return_headers: true, accepted_compressors: [GRPC.Compressor.Gzip])
+      {:ok, reply, headers} =
+        channel
+        |> HelloStub.say_hello(req,
+          return_headers: true,
+          accepted_compressors: [GRPC.Compressor.Gzip]
+        )
+
       assert reply.message == "Hello, #{name}"
       assert headers[:headers]["grpc-encoding"]
     end)
@@ -76,7 +87,10 @@ defmodule GRPC.Integration.CompressorTest do
       name = "both compress"
       req = Helloworld.HelloRequest.new(name: name)
 
-      {:ok, reply, headers} = channel |> HelloStub.say_hello(req, compressor: GRPC.Compressor.Gzip, return_headers: true)
+      {:ok, reply, headers} =
+        channel
+        |> HelloStub.say_hello(req, compressor: GRPC.Compressor.Gzip, return_headers: true)
+
       assert reply.message == "Hello, #{name}"
       assert headers[:headers]["grpc-encoding"]
     end)
@@ -89,7 +103,9 @@ defmodule GRPC.Integration.CompressorTest do
       name = "both compress"
       req = Helloworld.HelloRequest.new(name: name)
 
-      assert {:error, %GRPC.RPCError{message: _, status: 12}} = channel |> HelloStub.say_hello(req, compressor: GRPC.Compressor.Gzip, return_headers: true)
+      assert {:error, %GRPC.RPCError{message: _, status: 12}} =
+               channel
+               |> HelloStub.say_hello(req, compressor: GRPC.Compressor.Gzip, return_headers: true)
     end)
   end
 end

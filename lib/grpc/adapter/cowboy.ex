@@ -107,9 +107,9 @@ defmodule GRPC.Adapter.Cowboy do
     end
   end
 
-  @spec send_reply(GRPC.Adapter.Cowboy.Handler.state(), binary) :: any
-  def send_reply(%{pid: pid}, data) do
-    Handler.stream_body(pid, data, :nofin)
+  @spec send_reply(GRPC.Adapter.Cowboy.Handler.state(), binary, keyword) :: any
+  def send_reply(%{pid: pid}, data, opts) do
+    Handler.stream_body(pid, data, opts, :nofin)
   end
 
   def send_headers(%{pid: pid}, headers) do

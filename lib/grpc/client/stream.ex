@@ -59,12 +59,24 @@ defmodule GRPC.Client.Stream do
   @doc false
   @spec send_request(GRPC.Client.Stream.t(), struct, Keyword.t()) :: GRPC.Client.Stream.t()
   def send_request(
-        %{codec: codec, channel: channel, compressor: compressor} = stream,
+        %{codec: codec, channel: %{adapter: adapter}, compressor: compressor} = stream,
         request,
         opts
       ) do
     encoded = codec.encode(request)
     send_end_stream = Keyword.get(opts, :end_stream, false)
-    channel.adapter.send_data(stream, encoded, send_end_stream: send_end_stream, compressor: compressor)
+
+    # If compressor exists, compress is true by default
+    compressor =
+      if opts[:compress] == false do
+        nil
+      else
+        compressor
+      end
+
+    adapter.send_data(stream, encoded,
+      send_end_stream: send_end_stream,
+      compressor: compressor
+    )
   end
 end

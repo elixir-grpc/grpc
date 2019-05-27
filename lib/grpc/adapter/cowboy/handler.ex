@@ -126,8 +126,8 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     sync_call(pid, :read_body)
   end
 
-  def stream_body(pid, data, is_fin) do
-    send(pid, {:stream_body, data, is_fin})
+  def stream_body(pid, data, opts, is_fin) do
+    send(pid, {:stream_body, data, opts, is_fin})
   end
 
   def stream_reply(pid, status, headers) do
@@ -194,17 +194,30 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     {:ok, req, state}
   end
 
-  def info({:stream_body, data, is_fin}, req, %{compressor: compressor} = state)
-      when not is_nil(compressor) do
-    accepted_encodings = :cowboy_req.header("grpc-accept-encoding", req) |> String.split(",")
+  def info({:stream_body, data, opts, is_fin}, req, state) do
+    # If compressor exists, compress is true by default
+    compressor =
+      if opts[:compress] == false do
+        nil
+      else
+        state[:compressor]
+      end
 
-    if Enum.member?(accepted_encodings, compressor.name()) do
-      {:ok, data, _size} = data |> GRPC.Message.to_data(compressor: compressor)
-      req = check_sent_resp(req)
-      :cowboy_req.stream_body(data, is_fin, req)
-      {:ok, req, state}
-    else
+    accepted_encodings =
+      case :cowboy_req.header("grpc-accept-encoding", req) do
+        :undefined ->
+          []
+
+        nil ->
+          []
+
+        s ->
+          String.split(s, ",")
+      end
+
+    if compressor && !Enum.member?(accepted_encodings, compressor.name()) do
       %{pid: pid} = state
+
       error =
         RPCError.exception(
           status: :internal,
@@ -218,14 +231,12 @@ defmodule GRPC.Adapter.Cowboy.Handler do
       exit_handler(pid, :rpc_error)
       req = send_error_trailers(req, trailers)
       {:stop, req, state}
+    else
+      {:ok, data, _size} = data |> GRPC.Message.to_data(compressor: compressor)
+      req = check_sent_resp(req)
+      :cowboy_req.stream_body(data, is_fin, req)
+      {:ok, req, state}
     end
-  end
-
-  def info({:stream_body, data, is_fin}, req, state) do
-    {:ok, data, _size} = data |> GRPC.Message.to_data()
-    req = check_sent_resp(req)
-    :cowboy_req.stream_body(data, is_fin, req)
-    {:ok, req, state}
   end
 
   def info({:stream_reply, status, headers}, req, state) do
@@ -259,6 +270,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
   def info({:set_compressor, compressor}, req, state) do
     accept_encoding = :cowboy_req.header("grpc-accept-encoding", req)
+
     if accept_encoding && accept_encoding != :undefined do
       req = :cowboy_req.set_resp_headers(%{"grpc-encoding" => compressor.name()}, req)
       {:ok, req, Map.put(state, :compressor, compressor)}

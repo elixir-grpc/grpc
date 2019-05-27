@@ -262,10 +262,10 @@ defmodule GRPC.Stub do
          request,
          opts
        ) do
-
     last = fn %{codec: codec, compressor: compressor} = s, _ ->
       message = codec.encode(request)
       opts = Map.put(opts, :compressor, compressor)
+
       s
       |> channel.adapter.send_request(message, opts)
       |> recv(opts)
@@ -412,7 +412,10 @@ defmodule GRPC.Stub do
     end
   end
 
-  def do_recv(%{payload: payload, response_mod: res_mod, codec: codec, channel: channel} = stream, opts) do
+  def do_recv(
+        %{payload: payload, channel: channel} = stream,
+        opts
+      ) do
     with {:ok, headers, _is_fin} <-
            recv_headers(channel.adapter, channel.adapter_payload, payload, opts),
          {:ok, body, trailers} <-
@@ -454,23 +457,30 @@ defmodule GRPC.Stub do
     end
   end
 
-  defp parse_response(%{response_mod: res_mod, codec: codec, accepted_compressors: accepted_compressors}, headers, body, trailers) do
+  defp parse_response(
+         %{response_mod: res_mod, codec: codec, accepted_compressors: accepted_compressors},
+         headers,
+         body,
+         trailers
+       ) do
     case parse_trailers(trailers) do
       :ok ->
-        compressor = case headers do
-          %{"grpc-encoding" => encoding} ->
-            Enum.find(accepted_compressors, nil, fn c -> c.name() == encoding end)
-          _ ->
-            nil
-        end
+        compressor =
+          case headers do
+            %{"grpc-encoding" => encoding} ->
+              Enum.find(accepted_compressors, nil, fn c -> c.name() == encoding end)
+
+            _ ->
+              nil
+          end
 
         case GRPC.Message.from_data(%{compressor: compressor}, body) do
           {:ok, msg} ->
             {:ok, codec.decode(msg, res_mod)}
+
           err ->
             err
         end
-
 
       error ->
         error
@@ -557,7 +567,7 @@ defmodule GRPC.Stub do
   defp read_stream(%{buffer: buffer, need_more: false, response_mod: res_mod, codec: codec} = s) do
     case GRPC.Message.get_message(buffer) do
       # TODO
-      {{flag, message}, rest} ->
+      {{_, message}, rest} ->
         reply = codec.decode(message, res_mod)
         new_s = Map.put(s, :buffer, rest)
         {{:ok, reply}, new_s}

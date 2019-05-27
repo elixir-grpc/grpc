@@ -25,6 +25,7 @@ run = fn(i) ->
   Client.client_streaming!(ch)
   Client.client_compressed_streaming!(ch)
   Client.server_streaming!(ch)
+  Client.server_compressed_streaming!(ch)
   Client.ping_pong!(ch)
   Client.empty_stream!(ch)
   Client.custom_metadata!(ch)
