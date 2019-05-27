@@ -3,7 +3,7 @@
   "cowboy": {:git, "https://github.com/elixir-grpc/cowboy.git", "db1b09fb06038415e5c643282554c0b9f8e6a976", [tag: "grpc-2.6.3"]},
   "cowlib": {:git, "https://github.com/elixir-grpc/cowlib.git", "1cc32e27d917bfe615da6957006fd9f8d6e604bd", [tag: "grpc-2.7.3"]},
   "grpc": {:git, "https://github.com/elixir-grpc/grpc.git", "21422839798e49bf6d29327fab0a7add51becedd", []},
-  "grpc_prometheus": {:git, "https://github.com/tony612/elixir-grpc-prometheus.git", "f9b2fc0ef447ff9c8458fca55bd6e1c7629ebe51", []},
+  "grpc_prometheus": {:git, "https://github.com/tony612/elixir-grpc-prometheus.git", "e81ade870485ae3059fe8ac3ac54f245e05f39df", []},
   "gun": {:git, "https://github.com/elixir-grpc/gun.git", "8bf6e838c51ce792236db0a9d9cb2513f6cc6b12", [tag: "grpc-1.3.0"]},
   "prometheus": {:hex, :prometheus, "4.2.2", "a830e77b79dc6d28183f4db050a7cac926a6c58f1872f9ef94a35cd989aceef8", [:mix, :rebar3], [], "hexpm"},
   "prometheus_ex": {:hex, :prometheus_ex, "3.0.5", "fa58cfd983487fc5ead331e9a3e0aa622c67232b3ec71710ced122c4c453a02f", [:mix], [{:prometheus, "~> 4.0", [hex: :prometheus, repo: "hexpm", optional: false]}], "hexpm"},
