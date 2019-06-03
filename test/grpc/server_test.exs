@@ -9,6 +9,12 @@ defmodule GRPC.ServerTest do
     use GRPC.Server, service: Greeter.Service
   end
 
+  test "start/2 works" do
+    {:ok, pid, port} = GRPC.Server.start(Greeter.Server, 50053)
+
+    assert {:ok, ^pid, ^port} = GRPC.Server.start(Greeter.Server, 50053)
+  end
+
   test "stop/2 works" do
     assert {nil, %{"hello" => GRPC.ServerTest.Greeter.Server}} =
              GRPC.Server.stop(Greeter.Server, adapter: GRPC.Test.ServerAdapter)
