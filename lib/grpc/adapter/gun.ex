@@ -219,6 +219,10 @@ defmodule GRPC.Adapter.Gun do
            "timeout when waiting for server"
          )}
 
+      {:error, {:closed, msg}} ->
+        {:error,
+         GRPC.RPCError.exception(GRPC.Status.unavailable(), "closed: #{inspect(msg)}")}
+
       {:error, {reason, msg}} ->
         {:error,
          GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}: #{inspect(msg)}")}
