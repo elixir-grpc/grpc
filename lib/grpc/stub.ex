@@ -640,6 +640,10 @@ defmodule GRPC.Stub do
     parse_recv_opts(t, Map.put(acc, :return_headers, return_headers))
   end
 
+  defp parse_req_opts([{:authorization, authorization} | t], acc) do
+    parse_req_opts(t, Map.put(acc, :authorization, authorization))
+  end
+
   defp parse_recv_opts([{key, _} | _], _) do
     raise ArgumentError, "option #{inspect(key)} is not supported"
   end
