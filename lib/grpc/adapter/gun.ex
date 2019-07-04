@@ -220,8 +220,7 @@ defmodule GRPC.Adapter.Gun do
          )}
 
       {:error, {:closed, msg}} ->
-        {:error,
-         GRPC.RPCError.exception(GRPC.Status.unavailable(), "closed: #{inspect(msg)}")}
+        {:error, GRPC.RPCError.exception(GRPC.Status.unavailable(), "closed: #{inspect(msg)}")}
 
       {:error, {reason, msg}} ->
         {:error,

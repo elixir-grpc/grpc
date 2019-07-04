@@ -24,10 +24,6 @@ defmodule GRPC.Message do
       iex> message = <<1, 2, 3, 4, 5, 6, 7, 8>>
       iex> GRPC.Message.to_data(message)
       {:ok, <<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>, 13}
-      iex> message = String.duplicate("foo", 100)
-      iex> GRPC.Message.to_data(message, %{compressor: GRPC.Compressor.Gzip})
-      {:ok, <<1, 0, 0, 0, 27, 31, 139, 8, 0, 0, 0, 0, 0, 0, 19, 75, 203, 207, 79, 27, 69,
-        196, 33, 0, 41, 249, 122, 62, 44, 1, 0, 0>>, 32}
       iex> message = <<1, 2, 3, 4, 5, 6, 7, 8, 9>>
       iex> GRPC.Message.to_data(message, %{max_message_length: 8})
       {:error, "Encoded message is too large (9 bytes)"}
@@ -72,9 +68,10 @@ defmodule GRPC.Message do
   Transform gRPC body to protobuf data with compressing
 
   ## Examples
+
+      iex> GRPC.Message.from_data(%{compressor: nil}, <<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>)
+      {:ok, <<1, 2, 3, 4, 5, 6, 7, 8>>}
   """
-  # iex> GRPC.Message.from_data(%{compressor: GRPC}, <<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>)
-  # {:ok, <<1, 2, 3, 4, 5, 6, 7, 8>>}
   @spec from_data(%{compressor: module | nil}, binary) :: binary
   def from_data(%{compressor: nil}, data) do
     case data do
