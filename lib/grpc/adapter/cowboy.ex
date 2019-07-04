@@ -16,7 +16,14 @@ defmodule GRPC.Adapter.Cowboy do
     start_args = cowboy_start_args(endpoint, servers, port, opts)
     start_func = if opts[:cred], do: :start_tls, else: :start_clear
 
-    {:ok, pid} = apply(:cowboy, start_func, start_args)
+    {:ok, pid} =
+      case apply(:cowboy, start_func, start_args) do
+        {:ok, pid} ->
+          {:ok, pid}
+
+        {:error, {:already_started, pid}} ->
+          {:ok, pid}
+      end
 
     port = :ranch.get_port(servers_name(endpoint, servers))
     {:ok, pid, port}
