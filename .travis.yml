@@ -12,7 +12,7 @@ script:
   # https://github.com/rrrene/inch_ex/issues/60
   # - '[[ "$TRAVIS_ELIXIR_VERSION" = 1.7 ]] || mix inch.report'
   # mix format not available on Elixir 1.4/1.5
-  - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-5] ]] || mix format --check-formatted'
+  - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-7] ]] || mix format --check-formatted'
   # TODO: After deps are in hex
   # - mix hex.build
   - mix docs
@@ -25,3 +25,7 @@ jobs:
       otp_release: '21.3'
     - elixir: '1.8'
       otp_release: '21.3'
+    - elixir: '1.8'
+      otp_release: '22.0'
+    - elixir: '1.9'
+      otp_release: '22.0'
