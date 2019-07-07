@@ -46,7 +46,7 @@ Using [ghz](https://ghz.sh/)
 
 ```
 $ MIX_ENV=prod iex -S mix
-# Now cowboy doesn't work well with concurrency
+# Now cowboy doesn't work well with concurrency in a connection, like --concurrency 6 --connections 1
 $ ghz --insecure --proto priv/protos/helloworld.proto --call helloworld.Greeter.SayHello -d '{"name":"Joe"}' -z 10s  --concurrency 6 --connections 6 127.0.0.1:50051
 # The result is for branch improve-perf
 Summary:
