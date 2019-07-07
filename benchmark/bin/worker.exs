@@ -1,8 +1,7 @@
 require Logger
 
-args = System.argv()
-switches = [driver_port: :integer]
-{[], [], [{"--driver_port", port}]} = OptionParser.parse(args, switches: switches)
+[arg] = System.argv()
+[_, port] = String.split(arg, "=")
 port = String.to_integer(port)
 
 {:ok, pid, port} =

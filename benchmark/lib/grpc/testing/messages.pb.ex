@@ -15,8 +15,8 @@ defmodule Grpc.Testing.Payload do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          type: integer,
-          body: String.t()
+          type: atom | integer,
+          body: binary
         }
   defstruct [:type, :body]
 
@@ -43,7 +43,7 @@ defmodule Grpc.Testing.SimpleRequest do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          response_type: integer,
+          response_type: atom | integer,
           response_size: integer,
           payload: Grpc.Testing.Payload.t() | nil,
           fill_username: boolean,
@@ -136,7 +136,7 @@ defmodule Grpc.Testing.StreamingOutputCallRequest do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          response_type: integer,
+          response_type: atom | integer,
           response_parameters: [Grpc.Testing.ResponseParameters.t()],
           payload: Grpc.Testing.Payload.t() | nil,
           response_status: Grpc.Testing.EchoStatus.t() | nil

@@ -117,8 +117,6 @@ defmodule Benchmark.ClientManager do
           raise(GRPC.RPCError, status: :unimplemented)
       end
 
-    rpc_type = Grpc.Testing.RpcType.key(rpc_type)
-
     Map.put(payload, :rpc_type, rpc_type)
   end
 

@@ -1,4 +1,5 @@
 use Mix.Config
 
-config :logger, :console, metadata: [:module, :line]
 config :logger, level: :info
+
+import_config "#{Mix.env}.exs"

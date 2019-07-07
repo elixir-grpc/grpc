@@ -14,6 +14,7 @@ defmodule Grpc.Testing.ClosedLoopParams do
   @moduledoc false
   use Protobuf, syntax: :proto3
 
+  @type t :: %__MODULE__{}
   defstruct []
 end
 
@@ -69,12 +70,12 @@ defmodule Grpc.Testing.ClientConfig do
 
   @type t :: %__MODULE__{
           server_targets: [String.t()],
-          client_type: integer,
+          client_type: atom | integer,
           security_params: Grpc.Testing.SecurityParams.t() | nil,
           outstanding_rpcs_per_channel: integer,
           client_channels: integer,
           async_client_threads: integer,
-          rpc_type: integer,
+          rpc_type: atom | integer,
           load_params: Grpc.Testing.LoadParams.t() | nil,
           payload_config: Grpc.Testing.PayloadConfig.t() | nil,
           histogram_params: Grpc.Testing.HistogramParams.t() | nil,
@@ -168,7 +169,7 @@ defmodule Grpc.Testing.ServerConfig do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          server_type: integer,
+          server_type: atom | integer,
           security_params: Grpc.Testing.SecurityParams.t() | nil,
           port: integer,
           async_server_threads: integer,
@@ -241,6 +242,7 @@ defmodule Grpc.Testing.CoreRequest do
   @moduledoc false
   use Protobuf, syntax: :proto3
 
+  @type t :: %__MODULE__{}
   defstruct []
 end
 
@@ -260,6 +262,7 @@ defmodule Grpc.Testing.Void do
   @moduledoc false
   use Protobuf, syntax: :proto3
 
+  @type t :: %__MODULE__{}
   defstruct []
 end
 

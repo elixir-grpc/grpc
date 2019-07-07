@@ -28,6 +28,12 @@ defmodule Grpc.Testing.BenchmarkService.Server do
     Logger.debug("got streaming_both_ways #{inspect(req)}")
   end
 
+  def new_payload(type, 0) do
+    Grpc.Testing.Payload.new(
+      type: type
+    )
+  end
+
   def new_payload(type, size) do
     Grpc.Testing.Payload.new(
       type: type,

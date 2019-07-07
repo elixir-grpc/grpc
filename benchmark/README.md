@@ -1,21 +1,12 @@
 # Benchmark
 
-**TODO: Add description**
+Benchmark implementation followed by [official spec](https://grpc.io/docs/guides/benchmarking/)
 
-## Installation
+## Usage
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `benchmark` to your list of dependencies in `mix.exs`:
-
-```elixir
-def deps do
-  [
-    {:benchmark, "~> 0.1.0"}
-  ]
-end
 ```
-
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/benchmark](https://hexdocs.pm/benchmark).
-
+$ git clone https://github.com/tony612/grpc.git
+$ cd grpc && git checkout -t origin/elixir-bench
+$ export ELIXIR_GRPC_PATH=$(dirname $(pwd))
+$ python tools/run_tests/run_performance_tests.py -l elixir
+```

@@ -1,7 +1,7 @@
 %{
-  "cowboy": {:git, "https://github.com/ninenines/cowboy.git", "8d634d0ff4ea1ca744a8a789aa5edf6682e8cd87", []},
-  "cowlib": {:hex, :cowlib, "2.5.1", "1481324d35b2844767cf988d8e4ce42f0f3b11c29a9e5a430aaa608d4757e3c6", [:rebar3], [], "hexpm"},
-  "gun": {:hex, :gun, "1.1.0", "66be4ebb3a8018b2ca0216eb0c5fe89820f3ce3610e9ec0652f525690956f69f", [:rebar3], [{:cowlib, "~> 2.5.1", [hex: :cowlib, repo: "hexpm", optional: false]}], "hexpm"},
-  "protobuf": {:git, "https://github.com/tony612/protobuf-elixir.git", "5d4ed2bcebefad3c2b9b397c1a46b49b41eae7ab", []},
-  "ranch": {:git, "https://github.com/ninenines/ranch", "cbe24f6fb9833474b22a06fc22cb1a8f168f7fbc", [ref: "1.6.1"]},
+  "cowboy": {:git, "https://github.com/elixir-grpc/cowboy.git", "db1b09fb06038415e5c643282554c0b9f8e6a976", [tag: "grpc-2.6.3"]},
+  "cowlib": {:git, "https://github.com/elixir-grpc/cowlib.git", "1cc32e27d917bfe615da6957006fd9f8d6e604bd", [tag: "grpc-2.7.3"]},
+  "gun": {:git, "https://github.com/elixir-grpc/gun.git", "975177bd5c179c800c8685cf64376689642ac972", [tag: "grpc-1.3.2"]},
+  "protobuf": {:git, "https://github.com/tony612/protobuf-elixir.git", "384f97ca03aa4f874e527e9f28f5ebbae2f142f1", []},
+  "ranch": {:git, "https://github.com/ninenines/ranch", "3190aef88aea04d6dce8545fe9b4574288903f44", [ref: "1.7.1"]},
 }

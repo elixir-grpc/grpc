@@ -30,6 +30,7 @@ defmodule Grpc.Testing.ComplexProtoParams do
   @moduledoc false
   use Protobuf, syntax: :proto3
 
+  @type t :: %__MODULE__{}
   defstruct []
 end
 
