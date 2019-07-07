@@ -40,7 +40,7 @@ defmodule GRPC.Mixfile do
 
     [
       {:protobuf, "~> 0.5"},
-      {:cowboy, github: "elixir-grpc/cowboy", tag: "grpc-2.6.3"},
+      {:cowboy, github: "elixir-grpc/cowboy", branch: "improve-perf"},
       {:gun, github: "elixir-grpc/gun", tag: "grpc-1.3.2"},
       {:ex_doc, ex_doc_version, only: :dev},
       {:inch_ex, "~> 1.0", only: [:dev, :test]},

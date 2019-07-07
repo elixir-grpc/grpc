@@ -51,6 +51,13 @@ defmodule GRPC.Server.Stream do
             compressor: nil,
             __interface__: %{send_reply: &__MODULE__.send_reply/3}
 
+  def send_reply(%{adapter: adapter, codec: codec} = stream, {reply, trailers}, opts) do
+    # {:ok, data, _size} = reply |> codec.encode() |> GRPC.Message.to_data()
+    data = codec.encode(reply)
+    adapter.send_reply(stream.payload, data, trailers, opts)
+    stream
+  end
+
   def send_reply(%{adapter: adapter, codec: codec} = stream, reply, opts) do
     # {:ok, data, _size} = reply |> codec.encode() |> GRPC.Message.to_data()
     data = codec.encode(reply)

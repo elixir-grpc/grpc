@@ -134,6 +134,10 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     send(pid, {:stream_reply, status, headers})
   end
 
+  def stream_response(pid, data, trailers, opts) do
+    send(pid, {:stream_response, data, trailers, opts})
+  end
+
   def set_resp_headers(pid, headers) do
     send(pid, {:set_resp_headers, headers})
   end
@@ -195,6 +199,54 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   end
 
   def info({:stream_body, data, opts, is_fin}, req, state) do
+    case encode_message(req, state, data, opts) do
+      {:ok, data, size} ->
+        req = check_sent_resp(req)
+        :cowboy_req.stream_body(data, is_fin, req)
+        {:ok, req, state}
+      {:error, error} ->
+        %{pid: pid} = state
+        trailers = HTTP2.server_trailers(error.status, error.message)
+        exit_handler(pid, :rpc_error)
+        req = send_error_trailers(req, trailers)
+        {:stop, req, state}
+    end
+  end
+
+  def info({:stream_reply, status, headers}, req, state) do
+    req = :cowboy_req.stream_reply(status, headers, req)
+    {:ok, req, state}
+  end
+
+  def info({:stream_response, data, trailers, opts}, req, state) do
+    case encode_message(req, state, data, opts) do
+      {:ok, data, size} ->
+        case req do
+          %{has_sent_resp: _} ->
+            req
+            |> IO.inspect(label: "[#{__ENV__.file}:#{__ENV__.line}] debug print")
+            :cowboy_req.stream_body(data, :fin, req)
+            metadata = Map.get(state, :resp_trailers, %{})
+            metadata = GRPC.Transport.HTTP2.encode_metadata(metadata)
+            :cowboy_req.stream_trailers(trailers, req)
+            {:ok, req, state}
+          _ ->
+            metadata = Map.get(state, :resp_trailers, %{})
+            metadata = GRPC.Transport.HTTP2.encode_metadata(metadata)
+            req = :cowboy_req.stream_response(200, data, Map.merge(metadata, trailers), req)
+            {:ok, req, state}
+        end
+
+      {:error, error} ->
+        %{pid: pid} = state
+        trailers = HTTP2.server_trailers(error.status, error.message)
+        exit_handler(pid, :rpc_error)
+        req = send_error_trailers(req, trailers)
+        {:stop, req, state}
+    end
+  end
+
+  defp encode_message(req, state, data, opts) do
     # If compressor exists, compress is true by default
     compressor =
       if opts[:compress] == false do
@@ -216,8 +268,6 @@ defmodule GRPC.Adapter.Cowboy.Handler do
       end
 
     if compressor && !Enum.member?(accepted_encodings, compressor.name()) do
-      %{pid: pid} = state
-
       error =
         RPCError.exception(
           status: :internal,
@@ -227,21 +277,10 @@ defmodule GRPC.Adapter.Cowboy.Handler do
             }"
         )
 
-      trailers = HTTP2.server_trailers(error.status, error.message)
-      exit_handler(pid, :rpc_error)
-      req = send_error_trailers(req, trailers)
-      {:stop, req, state}
+      {:error, error}
     else
-      {:ok, data, _size} = data |> GRPC.Message.to_data(compressor: compressor)
-      req = check_sent_resp(req)
-      :cowboy_req.stream_body(data, is_fin, req)
-      {:ok, req, state}
+      GRPC.Message.to_data(data, compressor: compressor)
     end
-  end
-
-  def info({:stream_reply, status, headers}, req, state) do
-    req = :cowboy_req.stream_reply(status, headers, req)
-    {:ok, req, state}
   end
 
   def info({:set_resp_headers, headers}, req, state) do
@@ -353,9 +392,10 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
     case result do
       {:ok, stream, response} ->
-        stream
-        |> GRPC.Server.send_reply(response)
-        |> GRPC.Server.send_trailers(@default_trailers)
+        # stream
+        # |> GRPC.Server.send_reply(response)
+        # |> GRPC.Server.send_trailers(@default_trailers)
+        GRPC.Server.send_reply(stream, {response, @default_trailers})
 
         {:ok, stream}
 

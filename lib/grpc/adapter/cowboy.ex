@@ -119,6 +119,10 @@ defmodule GRPC.Adapter.Cowboy do
     Handler.stream_body(pid, data, opts, :nofin)
   end
 
+  def send_reply(%{pid: pid}, data, trailers, opts) do
+    Handler.stream_response(pid, data, trailers, opts)
+  end
+
   def send_headers(%{pid: pid}, headers) do
     Handler.stream_reply(pid, 200, headers)
   end
