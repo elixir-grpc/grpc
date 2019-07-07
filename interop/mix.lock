@@ -8,6 +8,6 @@
   "prometheus": {:hex, :prometheus, "4.2.2", "a830e77b79dc6d28183f4db050a7cac926a6c58f1872f9ef94a35cd989aceef8", [:mix, :rebar3], [], "hexpm"},
   "prometheus_ex": {:hex, :prometheus_ex, "3.0.5", "fa58cfd983487fc5ead331e9a3e0aa622c67232b3ec71710ced122c4c453a02f", [:mix], [{:prometheus, "~> 4.0", [hex: :prometheus, repo: "hexpm", optional: false]}], "hexpm"},
   "prometheus_httpd": {:hex, :prometheus_httpd, "2.1.11", "f616ed9b85b536b195d94104063025a91f904a4cfc20255363f49a197d96c896", [:rebar3], [{:accept, "~> 0.3", [hex: :accept, repo: "hexpm", optional: false]}, {:prometheus, "~> 4.2", [hex: :prometheus, repo: "hexpm", optional: false]}], "hexpm"},
-  "protobuf": {:hex, :protobuf, "0.6.1", "3ae3ca63d12d1a8c5b10c2e5fbc5145dccbff842ccd541109b74b20b631cea3b", [:mix], [], "hexpm"},
+  "protobuf": {:hex, :protobuf, "0.6.2", "154249f5ef7df8cfdd07aa8312a59ce294cbd136d7cc5cfb4505b5717fb58482", [:mix], [], "hexpm"},
   "ranch": {:git, "https://github.com/ninenines/ranch", "3190aef88aea04d6dce8545fe9b4574288903f44", [ref: "1.7.1"]},
 }
