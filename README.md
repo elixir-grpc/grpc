@@ -123,6 +123,12 @@ Check [examples](examples) and [interop](interop)(Interoperability Test) for som
 - [x] Data compression
 - [x] Support other encoding(other than protobuf)
 
+## Benchmark
+
+1. [Simple benchmark](examples/helloworld/README.md#Benchmark) by using [ghz](https://ghz.sh/)
+
+2. [Benchmark](benchmark) followed by official spec
+
 ## Sponsors
 
 This project is being sponsored by [Tubi](https://tubitv.com/). Thank you!
