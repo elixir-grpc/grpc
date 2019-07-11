@@ -20,7 +20,7 @@ matrix:
 script:
   - travis_retry mix test
   - cd interop && mix deps.get && mix run script/run.exs && cd -
-  - if [ "$TRAVIS_EVENT_TYPE" = "cron" ]; then cd interop && mix deps.get && mix run script/run.exs --rounds 10000 && cd -; fi
+  - if [ "$TRAVIS_EVENT_TYPE" = "cron" ]; then cd interop && mix deps.get && mix run script/run.exs --rounds 5000 && cd -; fi
   - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-7] ]] || mix inch.report'
   # Check formatting for latest versions because the result may be different for
   # different versions
