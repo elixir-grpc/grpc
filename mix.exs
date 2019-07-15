@@ -1,7 +1,7 @@
 defmodule GRPC.Mixfile do
   use Mix.Project
 
-  @version "0.4.0-alpha.2"
+  @version "0.4.0"
 
   def project do
     [

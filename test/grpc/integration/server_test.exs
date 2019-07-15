@@ -56,7 +56,7 @@ defmodule GRPC.Integration.ServerTest do
     use GRPC.Server, service: Routeguide.RouteGuide.Service
 
     def list_features(_rectangle, _stream) do
-      Process.sleep(500)
+      Process.sleep(600)
     end
   end
 
