@@ -26,7 +26,8 @@ defmodule GRPC.Channel do
           codec: module,
           interceptors: [],
           compressor: module,
-          accepted_compressors: [module]
+          accepted_compressors: [module],
+          headers: list
         }
   defstruct host: nil,
             port: nil,
@@ -37,5 +38,6 @@ defmodule GRPC.Channel do
             codec: GRPC.Codec.Proto,
             interceptors: [],
             compressor: nil,
-            accepted_compressors: []
+            accepted_compressors: [],
+            headers: []
 end
