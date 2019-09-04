@@ -188,12 +188,14 @@ defmodule GRPC.Stub do
         120_000
       end
 
-    jitter =
+    uniform_fn =
       if function_exported?(:rand, :uniform_real, 0) do
-        (:rand.uniform_real() - 0.5) / 2.5
+        :uniform_real
       else
-        (:rand.uniform() - 0.5) / 2.5
+        :uniform
       end
+
+    jitter = (apply(:rand, uniform_fn, []) - 0.5) / 2.5
 
     round(timeout + jitter * timeout)
   end
