@@ -12,8 +12,8 @@ defmodule GRPC.Adapter.Gun do
   def connect(channel, opts), do: connect_insecurely(channel, opts)
 
   defp connect_securely(%{cred: %{ssl: ssl}} = channel, opts) do
-    transport_opts = Map.get(opts, :transport_opts, @default_transport_opts ++ ssl)
-    open_opts = %{transport: :ssl, protocols: [:http2], transport_opts: transport_opts}
+    transport_opts = Map.get(opts, :transport_opts, @default_transport_opts)
+    open_opts = %{transport: :ssl, protocols: [:http2], tcp_opts: transport_opts, tls_opts: ssl}
     open_opts = Map.merge(opts, open_opts)
 
     do_connect(channel, open_opts)
@@ -21,7 +21,7 @@ defmodule GRPC.Adapter.Gun do
 
   defp connect_insecurely(channel, opts) do
     transport_opts = Map.get(opts, :transport_opts, @default_transport_opts)
-    open_opts = %{transport: :tcp, protocols: [:http2], transport_opts: transport_opts}
+    open_opts = %{transport: :tcp, protocols: [:http2], tcp_opts: transport_opts}
     open_opts = Map.merge(opts, open_opts)
 
     do_connect(channel, open_opts)
@@ -29,7 +29,9 @@ defmodule GRPC.Adapter.Gun do
 
   defp do_connect(%{host: host, port: port} = channel, open_opts) do
     open_opts =
-      Map.merge(%{retry: :infinity, retry_timeout: &GRPC.Stub.retry_timeout/1}, open_opts)
+      Map.merge(%{retry: 1, retry_fun: fn(retries, _) ->
+        %{retries: retries + 1, timeout: GRPC.Stub.retry_timeout(retries)}
+      end}, open_opts)
 
     {:ok, conn_pid} = open(host, port, open_opts)
 
