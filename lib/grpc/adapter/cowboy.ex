@@ -132,6 +132,10 @@ defmodule GRPC.Adapter.Cowboy do
     Handler.get_headers(pid)
   end
 
+  def get_peer(%{pid: pid}) do
+    Handler.get_peer(pid)
+  end
+
   def set_compressor(%{pid: pid}, compressor) do
     Handler.set_compressor(pid, compressor)
   end
