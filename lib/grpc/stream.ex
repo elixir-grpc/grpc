@@ -14,4 +14,8 @@ defmodule GRPC.Stream do
     headers = adapter.get_headers(stream.payload)
     GRPC.Transport.HTTP2.decode_headers(headers)
   end
+
+  def get_cert(%GRPC.Server.Stream{adapter: adapter} = stream) do
+    adapter.get_cert(stream.payload)
+  end
 end

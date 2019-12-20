@@ -3,7 +3,9 @@ defmodule Helloworld.Greeter.Server do
 
   @spec say_hello(Helloworld.HelloRequest.t(), GRPC.Server.Stream.t()) ::
           Helloworld.HelloReply.t()
-  def say_hello(request, _stream) do
+  def say_hello(request, stream) do
+    cert = GRPC.Stream.get_cert(stream)
+    IO.inspect cert
     Helloworld.HelloReply.new(message: "Hello #{request.name}")
   end
 end
