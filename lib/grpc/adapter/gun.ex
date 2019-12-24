@@ -268,7 +268,7 @@ defmodule GRPC.Adapter.Gun do
     end
   end
 
-  def retry_fun(retries, opts) do
+  def retry_fun(retries, _opts) do
     curr = @max_retries - retries + 1
     timeout =
       if curr < 11 do
