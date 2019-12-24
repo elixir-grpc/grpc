@@ -42,7 +42,8 @@ defmodule GRPC.Mixfile do
       {:protobuf, "~> 0.5"},
       {:cowboy, "~> 2.7.0"},
       {:gun, "~> 2.0.0", hex: :grpc_gun},
-      {:cowlib, "~> 2.8.0", hex: :grpc_cowlib, override: true},
+      # This is needed in your code
+      # {:cowlib, "~> 2.8.0", hex: :grpc_cowlib, override: true},
       {:ex_doc, ex_doc_version, only: :dev},
       {:inch_ex, "~> 1.0", only: [:dev, :test]},
       {:dialyxir, "~> 0.5", only: :dev, runtime: false}

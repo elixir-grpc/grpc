@@ -19,9 +19,8 @@ The package can be installed as:
     [
       {:grpc, github: "elixir-grpc/grpc"},
       # This may be needed when grpc_{cowlib/gun/cowboy} packages on hex are used, see mix.exs for
-      # the versions.
+      # details.
       # Also see below explain.
-      {:gun, "~> 2.0.0", hex: :grpc_gun, override: true},
       {:cowlib, "~> 2.8.0", hex: :grpc_cowlib, override: true},
     ]
   end
