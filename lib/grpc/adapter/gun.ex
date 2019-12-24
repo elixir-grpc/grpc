@@ -68,7 +68,7 @@ defmodule GRPC.Adapter.Gun do
 
   def disconnect(%{adapter_payload: %{conn_pid: gun_pid}} = channel)
       when is_pid(gun_pid) do
-    :ok = :gun.close(gun_pid)
+    :ok = :gun.shutdown(gun_pid)
     {:ok, %{channel | adapter_payload: %{conn_pid: nil}}}
   end
 
