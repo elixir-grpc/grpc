@@ -4,7 +4,7 @@ defmodule GRPC.Adapter.Cowboy do
   # A server(`GRPC.Server`) adapter using Cowboy.
   # Cowboy req will be stored in `:payload` of `GRPC.Server.Stream`.
 
-  # :ranch.get_addr should return inet:socket_address()
+  # Waiting for this is released on hex https://github.com/ninenines/ranch/pull/227
   @dialyzer {:nowarn_function, running_info: 4}
 
   require Logger
@@ -194,7 +194,14 @@ defmodule GRPC.Adapter.Cowboy do
   defp running_info(scheme, endpoint, servers, ref) do
     {addr, port} = :ranch.get_addr(ref)
 
-    addr_str = "#{:inet.ntoa(addr)}:#{port}"
+    addr_str =
+      case addr do
+        :local ->
+          port
+
+        addr ->
+          "#{:inet.ntoa(addr)}:#{port}"
+      end
 
     "Running #{servers_name(endpoint, servers)} with Cowboy using #{scheme}://#{addr_str}"
   end
