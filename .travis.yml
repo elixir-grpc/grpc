@@ -25,6 +25,6 @@ script:
   # Check formatting for latest versions because the result may be different for
   # different versions
   - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-8] ]] || mix format --check-formatted'
-  - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-8] ]] || travis_wait .ci/build-plt-cache.sh && mix dialyzer --halt-exit-status
   - mix hex.build
   - mix docs
+  - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-8] ]] || (travis_wait .ci/build-plt-cache.sh && mix dialyzer --halt-exit-status)'
