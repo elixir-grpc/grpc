@@ -123,6 +123,7 @@ defmodule GRPC.Stub do
     * `:compressor` - the client will use this to compress requests and decompress responses. If this is set, accepted_compressors
         will be appended also, so this can be used safely without `:accesspted_compressors`.
     * `:accepted_compressors` - tell servers accepted compressors, this can be used without `:compressor`
+    * `:headers` - headers to attach to each request
   """
   @spec connect(String.t(), Keyword.t()) :: {:ok, GRPC.Channel.t()} | {:error, any}
   def connect(addr, opts \\ []) when is_binary(addr) and is_list(opts) do
@@ -155,6 +156,7 @@ defmodule GRPC.Stub do
     codec = Keyword.get(opts, :codec, GRPC.Codec.Proto)
     compressor = Keyword.get(opts, :compressor)
     accepted_compressors = Keyword.get(opts, :accepted_compressors) || []
+    headers = Keyword.get(opts, :headers) || []
 
     accepted_compressors =
       if compressor do
@@ -172,7 +174,8 @@ defmodule GRPC.Stub do
       interceptors: interceptors,
       codec: codec,
       compressor: compressor,
-      accepted_compressors: accepted_compressors
+      accepted_compressors: accepted_compressors,
+      headers: headers
     }
     |> adapter.connect(opts[:adapter_opts])
   end
@@ -185,12 +188,14 @@ defmodule GRPC.Stub do
         120_000
       end
 
-    jitter =
+    uniform_fn =
       if function_exported?(:rand, :uniform_real, 0) do
-        (:rand.uniform_real() - 0.5) / 2.5
+        :uniform_real
       else
-        (:rand.uniform() - 0.5) / 2.5
+        :uniform
       end
+
+    jitter = (apply(:rand, uniform_fn, []) - 0.5) / 2.5
 
     round(timeout + jitter * timeout)
   end

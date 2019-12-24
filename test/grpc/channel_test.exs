@@ -13,4 +13,10 @@ defmodule GRPC.ChannelTest do
     {:ok, channel} = GRPC.Stub.connect("10.1.0.0:50051", adapter: ClientAdapter, cred: cred)
     assert %Channel{host: "10.1.0.0", port: 50051, scheme: "https", cred: ^cred} = channel
   end
+
+  test "connect/2 allows setting default headers" do
+    headers = [{"authorization", "Bearer TOKEN"}]
+    {:ok, channel} = GRPC.Stub.connect("10.1.0.0:50051", adapter: ClientAdapter, headers: headers)
+    assert %Channel{host: "10.1.0.0", port: 50051, headers: ^headers} = channel
+  end
 end

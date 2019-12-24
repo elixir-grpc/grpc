@@ -40,6 +40,7 @@ defmodule GRPC.Transport.HTTP2 do
     ]
     |> append_compressor(stream.compressor)
     |> append_accepted_compressors(stream.accepted_compressors)
+    |> append_custom_metadata(stream.channel.headers)
     |> append_encoding(opts[:grpc_encoding])
     |> append_timeout(opts[:timeout])
     |> append_custom_metadata(opts[:metadata])

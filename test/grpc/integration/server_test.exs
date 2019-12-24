@@ -20,6 +20,11 @@ defmodule GRPC.Integration.ServerTest do
     def say_hello(req, _stream) do
       Helloworld.HelloReply.new(message: "Hello, #{req.name}")
     end
+
+    def check_headers(_req, stream) do
+      token = GRPC.Stream.get_headers(stream)["authorization"]
+      Helloworld.HeaderReply.new(authorization: token)
+    end
   end
 
   defmodule HelloErrorServer do
@@ -155,6 +160,22 @@ defmodule GRPC.Integration.ServerTest do
       Enum.each(stream, fn {:ok, feature} ->
         assert feature
       end)
+    end)
+  end
+
+  test "headers set on channel are present in receiving server" do
+    run_server([HelloServer], fn port ->
+      token = "Bearer TOKEN"
+
+      {:ok, channel} =
+        GRPC.Stub.connect("localhost:#{port}",
+          headers: [{"authorization", token}]
+        )
+
+      {:ok, reply} =
+        channel |> Helloworld.Greeter.Stub.check_headers(Helloworld.HeaderRequest.new())
+
+      assert reply.authorization == token
     end)
   end
 end

@@ -6,6 +6,7 @@ package helloworld;
 service Greeter {
   // Sends a greeting
   rpc SayHello (HelloRequest) returns (HelloReply) {}
+  rpc CheckHeaders (HeaderRequest) returns (HeaderReply) {}
 }
 
 // The request message containing the user's name.
@@ -16,4 +17,11 @@ message HelloRequest {
 // The response message containing the greetings
 message HelloReply {
   string message = 1;
+}
+
+message HeaderRequest {
+}
+
+message HeaderReply {
+  string authorization = 1;
 }
