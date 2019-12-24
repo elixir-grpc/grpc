@@ -8,6 +8,7 @@ defmodule Mix.Tasks.Grpc.Server do
 
   The `--no-halt` flag is automatically added.
   """
+  @impl true
   def run(args) do
     Application.put_env(:grpc, :start_server, true, persistent: true)
     Mix.Task.run("run", run_args() ++ args)

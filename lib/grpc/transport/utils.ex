@@ -45,6 +45,7 @@ defmodule GRPC.Transport.Utils do
     to_string(div(timeout, 1000 * 3600)) <> "H"
   end
 
+  @spec decode_timeout(String.t()) :: non_neg_integer()
   def decode_timeout(timeout) do
     {timeout, unit} = String.split_at(timeout, -1)
     decode_timeout(unit, String.to_integer(timeout))
