@@ -14,21 +14,27 @@ An Elixir implementation of [gRPC](http://www.grpc.io/).
 
 The package can be installed as:
 
-  1. Add `grpc` to your list of dependencies in `mix.exs`:
+  ```elixir
+  def deps do
+    [
+      {:grpc, github: "elixir-grpc/grpc"},
+      # This may be needed when grpc_{cowlib/gun/cowboy} packages on hex are used, see mix.exs for
+      # the versions.
+      # Also see below explain.
+      {:gun, "~> 2.0.0", hex: :grpc_gun, override: true},
+      {:cowlib, "~> 2.8.0", hex: :grpc_cowlib, override: true},
+    ]
+  end
+  ```
 
-      ```elixir
-      def deps do
-        [{:grpc, github: "elixir-grpc/grpc"}]
-      end
-      ```
+**NOTICE: grpc_gun & grpc_cowlib may be used**
 
-  2. (Before Elixir 1.4)Ensure `grpc` is started before your application:
+grpc rely on them heavily but I can't control the release of gun and cowlib. I don't want to always
+wait for their releases epecially when their HTTP/2 support are not very stable. And hex doesn't allow
+dependencies are GitHub, so I published my own versions to hex so that grpc can be published.
 
-      ```elixir
-      def application do
-        [applications: [:grpc]]
-      end
-      ```
+My current releases don't have big differences with the upstream ones. And I think this hack will only be
+used in the near future because cowlib, gun and cowboy are becoming more and more stable.
 
 ## Usage
 
