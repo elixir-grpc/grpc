@@ -21,10 +21,11 @@ script:
   - travis_retry mix test
   - cd interop && mix deps.get && mix run script/run.exs && cd -
   - if [ "$TRAVIS_EVENT_TYPE" = "cron" ]; then cd interop && mix deps.get && mix run script/run.exs --rounds 5000 && cd -; fi
-  - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-7] ]] || mix inch.report'
+  # Disable now because of https://github.com/rrrene/inch_ex/issues/67
+  # Report only on latest Elixir version
+  # - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-8] ]] || mix inch.report'
   # Check formatting for latest versions because the result may be different for
   # different versions
-  - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-7] ]] || mix format --check-formatted'
-  # TODO: After deps are in hex
-  # - mix hex.build
+  - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-8] ]] || mix format --check-formatted'
+  - mix hex.build
   - mix docs

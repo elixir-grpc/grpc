@@ -23,3 +23,5 @@ erl_crash.dump
 /log
 
 .elixir_ls
+
+grpc-*.tar
