@@ -19,6 +19,9 @@ defmodule GRPC.Mixfile do
         main: "readme",
         source_ref: "v#{@version}",
         source_url: "https://github.com/elixir-grpc/grpc"
+      ],
+      dialyzer: [
+        plt_add_apps: [:mix, :iex]
       ]
     ]
   end

@@ -11,11 +11,15 @@ otp_release:
   - 20.3.8
   - 21.3
   - 22.2
-
+cache:
+  directories:
+    - $HOME/.mix
+    - $HOME/.pltcache
 script:
   - travis_retry mix test
   - cd interop && mix deps.get && mix run script/run.exs && cd -
-  - if [ "$TRAVIS_EVENT_TYPE" = "cron" ]; then cd interop && mix deps.get && mix run script/run.exs --rounds 5000 && cd -; fi
+  # A cron job runs weekly
+  - if [ "$TRAVIS_EVENT_TYPE" = "cron" ]; then make ci-cron; fi
   # Disabled now because of https://github.com/rrrene/inch_ex/issues/67
   # Report only on latest Elixir version
   # - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-8] ]] || mix inch.report'
