@@ -5,6 +5,7 @@ defmodule GRPC.Adapter.Gun do
   # conn_pid and stream_ref is stored in `GRPC.Server.Stream`.
 
   @default_transport_opts [nodelay: true]
+  @max_retries 100
 
   @spec connect(GRPC.Channel.t(), any) :: {:ok, GRPC.Channel.t()} | {:error, any}
   def connect(channel, nil), do: connect(channel, %{})
@@ -13,7 +14,13 @@ defmodule GRPC.Adapter.Gun do
 
   defp connect_securely(%{cred: %{ssl: ssl}} = channel, opts) do
     transport_opts = Map.get(opts, :transport_opts, @default_transport_opts ++ ssl)
-    open_opts = %{transport: :ssl, protocols: [:http2], transport_opts: transport_opts}
+    open_opts = %{transport: :ssl, protocols: [:http2]}
+    open_opts =
+      if gun_v2?() do
+        Map.put(open_opts, :tls_opts, transport_opts)
+      else
+        Map.put(open_opts, :transport_opts, transport_opts)
+      end
     open_opts = Map.merge(opts, open_opts)
 
     do_connect(channel, open_opts)
@@ -21,7 +28,13 @@ defmodule GRPC.Adapter.Gun do
 
   defp connect_insecurely(channel, opts) do
     transport_opts = Map.get(opts, :transport_opts, @default_transport_opts)
-    open_opts = %{transport: :tcp, protocols: [:http2], transport_opts: transport_opts}
+    open_opts = %{transport: :tcp, protocols: [:http2]}
+    open_opts =
+      if gun_v2?() do
+        Map.put(open_opts, :tcp_opts, transport_opts)
+      else
+        Map.put(open_opts, :transport_opts, transport_opts)
+      end
     open_opts = Map.merge(opts, open_opts)
 
     do_connect(channel, open_opts)
@@ -29,7 +42,11 @@ defmodule GRPC.Adapter.Gun do
 
   defp do_connect(%{host: host, port: port} = channel, open_opts) do
     open_opts =
-      Map.merge(%{retry: :infinity, retry_timeout: &GRPC.Stub.retry_timeout/1}, open_opts)
+      if gun_v2?() do
+        Map.merge(%{retry: @max_retries, retry_fun: &__MODULE__.retry_fun/2}, open_opts)
+      else
+        open_opts
+      end
 
     {:ok, conn_pid} = open(host, port, open_opts)
 
@@ -202,9 +219,8 @@ defmodule GRPC.Adapter.Gun do
            )}
         end
 
-      {:data, :fin, _} ->
-        {:error,
-         GRPC.RPCError.exception(GRPC.Status.internal(), "shouldn't finish when getting data")}
+      {:data, :fin, data} ->
+        {:data, data}
 
       {:data, :nofin, data} ->
         {:data, data}
@@ -240,5 +256,35 @@ defmodule GRPC.Adapter.Gun do
            "unexpected message when waiting for server: #{inspect(other)}"
          )}
     end
+  end
+
+  @char_2 List.first('2')
+  def gun_v2?() do
+    case :application.get_key(:gun, :vsn) do
+      {:ok, [@char_2 | _]} ->
+        true
+      _ ->
+        false
+    end
+  end
+
+  def retry_fun(retries, opts) do
+    curr = @max_retries - retries + 1
+    timeout =
+      if curr < 11 do
+        :math.pow(1.6, curr - 1) * 1000
+      else
+        120_000
+      end
+
+    jitter =
+      if function_exported?(:rand, :uniform_real, 0) do
+        (:rand.uniform_real() - 0.5) / 2.5
+      else
+        (:rand.uniform() - 0.5) / 2.5
+      end
+
+    timeout = round(timeout + jitter * timeout)
+    %{retries: retries - 1, timeout: timeout}
   end
 end

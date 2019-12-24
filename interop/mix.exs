@@ -24,6 +24,9 @@ defmodule Interop.MixProject do
     [
       {:grpc, path: "..", override: true},
       {:grpc_prometheus, github: "tony612/elixir-grpc-prometheus"},
+      {:grpc_statsd, "~> 0.1.0"},
+      {:statix, ">= 1.2.1"},
+      {:extrace, "~> 0.2"},
       {:prometheus, "~> 4.0", override: true},
       {:prometheus_httpd, "~> 2.0"}
     ]
