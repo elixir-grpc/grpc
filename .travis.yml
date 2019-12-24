@@ -18,6 +18,7 @@ cache:
 script:
   - travis_retry mix test
   - cd interop && mix deps.get && mix run script/run.exs && cd -
+  # A cron job runs weekly
   - if [ "$TRAVIS_EVENT_TYPE" = "cron" ]; then make ci-cron; fi
   # Disabled now because of https://github.com/rrrene/inch_ex/issues/67
   # Report only on latest Elixir version
