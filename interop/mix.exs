@@ -23,7 +23,11 @@ defmodule Interop.MixProject do
   defp deps do
     [
       {:grpc, path: "..", override: true},
+      {:cowlib, "~> 2.8.0", hex: :grpc_cowlib, override: true},
       {:grpc_prometheus, github: "tony612/elixir-grpc-prometheus"},
+      {:grpc_statsd, "~> 0.1.0"},
+      {:statix, ">= 1.2.1"},
+      {:extrace, "~> 0.2"},
       {:prometheus, "~> 4.0", override: true},
       {:prometheus_httpd, "~> 2.0"}
     ]
