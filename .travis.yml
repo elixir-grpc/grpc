@@ -11,7 +11,10 @@ otp_release:
   - 20.3.8
   - 21.3
   - 22.2
-
+cache:
+  directories:
+    - $HOME/.mix
+    - $HOME/.pltcache
 script:
   - travis_retry mix test
   - cd interop && mix deps.get && mix run script/run.exs && cd -
@@ -22,5 +25,6 @@ script:
   # Check formatting for latest versions because the result may be different for
   # different versions
   - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-8] ]] || mix format --check-formatted'
+  - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-8] ]] || travis_wait .ci/build-plt-cache.sh && mix dialyzer --halt-exit-status
   - mix hex.build
   - mix docs

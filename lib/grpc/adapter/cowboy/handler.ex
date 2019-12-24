@@ -40,7 +40,14 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
       req = :cowboy_req.set_resp_headers(HTTP2.server_headers(stream), req)
 
-      timeout = :cowboy_req.header("grpc-timeout", req)
+      timeout_header = :cowboy_req.header("grpc-timeout", req)
+
+      timeout =
+        case timeout_header do
+          :undefined -> nil
+          "" -> nil
+          _ -> GRPC.Transport.Utils.decode_timeout(timeout_header)
+        end
 
       timer_ref =
         if is_binary(timeout) do
