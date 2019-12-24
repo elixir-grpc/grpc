@@ -143,26 +143,29 @@ defmodule GRPC.Adapter.Cowboy do
       ])
 
     idle_timeout = Keyword.get(opts, :idle_timeout, :infinity)
-    # The default option is small
-    # https://github.com/ninenines/cowboy/issues/1398
-    max_received_frame_rate = Keyword.get(opts, :max_received_frame_rate, {1000_000, 10_000})
-    max_reset_stream_rate = Keyword.get(opts, :max_reset_stream_rate, {1000, 10_000})
+
+    # https://ninenines.eu/docs/en/cowboy/2.7/manual/cowboy_http2/
+    opts =
+      Map.merge(
+        %{
+          env: %{dispatch: dispatch},
+          idle_timeout: idle_timeout,
+          inactivity_timeout: idle_timeout,
+          settings_timeout: idle_timeout,
+          stream_handlers: [:grpc_stream_h],
+          # The default option is small
+          # https://github.com/ninenines/cowboy/issues/1398
+          # If there are 1000 streams in one connection, then 1000/s frames per stream.
+          max_received_frame_rate: {10_000_000, 10_000},
+          max_reset_stream_rate: {10_000, 10_000}
+        },
+        Enum.into(opts, %{})
+      )
 
     [
       servers_name(endpoint, servers),
-      %{
-        num_acceptors: @default_num_acceptors,
-        socket_opts: socket_opts(port, opts)
-      },
-      # https://ninenines.eu/docs/en/cowboy/2.7/manual/cowboy_http2/
-      %{
-        env: %{dispatch: dispatch},
-        inactivity_timeout: idle_timeout,
-        settings_timeout: idle_timeout,
-        stream_handlers: [:grpc_stream_h],
-        max_received_frame_rate: max_received_frame_rate,
-        max_reset_stream_rate: max_reset_stream_rate
-      }
+      %{num_acceptors: @default_num_acceptors, socket_opts: socket_opts(port, opts)},
+      opts
     ]
   end
 
