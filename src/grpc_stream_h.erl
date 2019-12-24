@@ -91,38 +91,38 @@ data(StreamID, IsFin, Data, State=#state{read_body_pid=Pid, read_body_ref=Ref,
 	do_data(StreamID, IsFin, Data, Commands, State#state{
 		read_body_ref=undefined,
 		body_length=BodyLen
-	});
-%%
-%% There is no buffering done in auto mode.
-data(StreamID, IsFin, Data, State=#state{read_body_pid=Pid, read_body_ref=Ref,
-		read_body_length=auto, body_length=BodyLen}) ->
-	send_request_body(Pid, Ref, IsFin, BodyLen, Data),
-	do_data(StreamID, IsFin, Data, [{flow, byte_size(Data)}], State#state{
-		read_body_ref=undefined,
-		body_length=BodyLen
-	});
-%% Stream is waiting for data but we didn't receive enough to send yet.
-data(StreamID, IsFin=nofin, Data, State=#state{
-		read_body_length=ReadLen, read_body_buffer=Buffer, body_length=BodyLen})
-		when byte_size(Data) + byte_size(Buffer) < ReadLen ->
-	do_data(StreamID, IsFin, Data, [], State#state{
-		expect=undefined,
-		read_body_buffer= << Buffer/binary, Data/binary >>,
-		body_length=BodyLen + byte_size(Data)
-	});
-%% Stream is waiting for data and we received enough to send.
-data(StreamID, IsFin, Data, State=#state{read_body_pid=Pid, read_body_ref=Ref,
-		read_body_timer_ref=TRef, read_body_buffer=Buffer, body_length=BodyLen0}) ->
-	BodyLen = BodyLen0 + byte_size(Data),
-	ok = erlang:cancel_timer(TRef, [{async, true}, {info, false}]),
-	send_request_body(Pid, Ref, IsFin, BodyLen, <<Buffer/binary, Data/binary>>),
-	do_data(StreamID, IsFin, Data, [], State#state{
-		expect=undefined,
-		read_body_ref=undefined,
-		read_body_timer_ref=undefined,
-		read_body_buffer= <<>>,
-		body_length=BodyLen
 	}).
+%%
+% %% There is no buffering done in auto mode.
+% data(StreamID, IsFin, Data, State=#state{read_body_pid=Pid, read_body_ref=Ref,
+% 		read_body_length=auto, body_length=BodyLen}) ->
+% 	send_request_body(Pid, Ref, IsFin, BodyLen, Data),
+% 	do_data(StreamID, IsFin, Data, [{flow, byte_size(Data)}], State#state{
+% 		read_body_ref=undefined,
+% 		body_length=BodyLen
+% 	});
+% %% Stream is waiting for data but we didn't receive enough to send yet.
+% data(StreamID, IsFin=nofin, Data, State=#state{
+% 		read_body_length=ReadLen, read_body_buffer=Buffer, body_length=BodyLen})
+% 		when byte_size(Data) + byte_size(Buffer) < ReadLen ->
+% 	do_data(StreamID, IsFin, Data, [], State#state{
+% 		expect=undefined,
+% 		read_body_buffer= << Buffer/binary, Data/binary >>,
+% 		body_length=BodyLen + byte_size(Data)
+% 	});
+% %% Stream is waiting for data and we received enough to send.
+% data(StreamID, IsFin, Data, State=#state{read_body_pid=Pid, read_body_ref=Ref,
+% 		read_body_timer_ref=TRef, read_body_buffer=Buffer, body_length=BodyLen0}) ->
+% 	BodyLen = BodyLen0 + byte_size(Data),
+% 	ok = erlang:cancel_timer(TRef, [{async, true}, {info, false}]),
+% 	send_request_body(Pid, Ref, IsFin, BodyLen, <<Buffer/binary, Data/binary>>),
+% 	do_data(StreamID, IsFin, Data, [], State#state{
+% 		expect=undefined,
+% 		read_body_ref=undefined,
+% 		read_body_timer_ref=undefined,
+% 		read_body_buffer= <<>>,
+% 		body_length=BodyLen
+% 	}).
 
 do_data(StreamID, IsFin, Data, Commands1, State=#state{next=Next0}) ->
 	{Commands2, Next} = cowboy_stream:data(StreamID, IsFin, Data, Next0),
