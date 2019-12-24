@@ -4,6 +4,9 @@ defmodule GRPC.Adapter.Cowboy do
   # A server(`GRPC.Server`) adapter using Cowboy.
   # Cowboy req will be stored in `:payload` of `GRPC.Server.Stream`.
 
+  # :ranch.get_addr should return inet:socket_address()
+  @dialyzer {:nowarn_function, running_info: 4}
+
   require Logger
   alias GRPC.Adapter.Cowboy.Handler, as: Handler
 

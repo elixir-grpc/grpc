@@ -28,7 +28,8 @@ defmodule GRPC.Message do
       iex> GRPC.Message.to_data(message, %{max_message_length: 8})
       {:error, "Encoded message is too large (9 bytes)"}
   """
-  @spec to_data(binary, map) :: {:ok, binary, non_neg_integer} | {:error, String.t()}
+  @spec to_data(iodata, map | Keyword.t()) ::
+          {:ok, binary, non_neg_integer} | {:error, String.t()}
   def to_data(message, opts \\ %{}) do
     compressor = opts[:compressor]
 
@@ -72,7 +73,7 @@ defmodule GRPC.Message do
       iex> GRPC.Message.from_data(%{compressor: nil}, <<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>)
       {:ok, <<1, 2, 3, 4, 5, 6, 7, 8>>}
   """
-  @spec from_data(%{compressor: module | nil}, binary) :: binary
+  @spec from_data(map, binary) :: {:ok, binary} | {:error, GRPC.RPCError.t()}
   def from_data(%{compressor: nil}, data) do
     case data do
       <<0, _length::bytes-size(4), message::binary>> ->
