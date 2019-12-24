@@ -18,7 +18,7 @@ cache:
 script:
   - travis_retry mix test
   - cd interop && mix deps.get && mix run script/run.exs && cd -
-  - if [ "$TRAVIS_EVENT_TYPE" = "cron" ]; then cd interop && mix deps.get && mix run script/run.exs --rounds 5000 && cd -; fi
+  - if [ "$TRAVIS_EVENT_TYPE" = "cron" ]; then make ci-cron; fi
   # Disabled now because of https://github.com/rrrene/inch_ex/issues/67
   # Report only on latest Elixir version
   # - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-8] ]] || mix inch.report'
@@ -27,4 +27,3 @@ script:
   - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-8] ]] || mix format --check-formatted'
   - mix hex.build
   - mix docs
-  - '[[ "$TRAVIS_ELIXIR_VERSION" =~ 1.[4-8] ]] || (travis_wait .ci/build-plt-cache.sh && mix dialyzer --halt-exit-status)'
