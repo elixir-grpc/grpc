@@ -1,0 +1,75 @@
+name: Elixir CI
+
+on:
+  pull_request:
+    branches:
+      - '**'
+  push:
+    branches:
+      - master
+
+jobs:
+  basic_check:
+    runs-on: ubuntu-latest
+    container:
+      image: elixir:1.9.1-slim
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install Dependencies
+        run: |
+          mix local.rebar --force
+          mix local.hex --force
+          mix deps.get
+      - name: Check format
+        run: mix format --check-formatted
+      - name: Build hex
+        run: mix hex.build
+      - name: Generate docs
+        run: mix docs
+        
+  tests:
+
+    runs-on: ubuntu-latest
+    name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
+    strategy:
+      matrix:
+        otp: [20.x, 21.x, 22.x]
+        elixir: [1.7.x, 1.8.x, 1.9.x]
+      
+    needs: basic_check
+
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions/setup-elixir@v1.1.0
+      with:
+        otp-version: ${{matrix.otp}}
+        elixir-version: ${{matrix.elixir}}
+    - name: Install Dependencies
+      run: |
+        mix local.rebar --force
+        mix local.hex --force
+        mix deps.get
+    - name: Run Tests
+      run: mix test
+      
+  interop-tests:
+    runs-on: ubuntu-latest
+
+    container:
+      image: elixir:1.9.1-slim
+    
+    needs: basic_check
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install Dependencies
+      run: |
+        cd interop
+        mix local.rebar --force
+        mix local.hex --force
+        mix deps.get
+      working-directory: interop
+    - name: Run interop tests
+      run: mix run script/run.exs
+      working-directory: interop
+    
