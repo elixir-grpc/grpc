@@ -165,10 +165,7 @@ info(StreamID, Exit={'EXIT', Pid, {Reason, Stacktrace}}, State=#state{ref=Ref, p
 info(StreamID, Info={read_body, Pid, Ref, _, _}, State=#state{
 		read_body_is_fin=fin, read_body_buffer= <<>>, body_length=BodyLen}) ->
 	send_request_body(Pid, Ref, fin, BodyLen, <<>>),
-	do_info(StreamID, Info, [], State#state{
-		read_body_pid=Pid,
-		read_body_ref=Ref
-	});
+	do_info(StreamID, Info, [], State);
 info(StreamID, Info={read_body, Pid, Ref, _, _}, State=#state{read_body_buffer= <<>>}) ->
 	do_info(StreamID, Info, [], State#state{
 		read_body_pid=Pid,
