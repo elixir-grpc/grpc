@@ -1,5 +1,5 @@
 defmodule GRPC.Integration.ErplackNotypesTest do
-  use GRPC.Integration.TestCase, async: true
+  use GRPC.Integration.TestCase
 
   defmodule Helloworld.Notypes.Service do
     use GRPC.Service, name: "helloworld.Notypes"
