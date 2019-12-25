@@ -16,6 +16,11 @@ jobs:
       image: elixir:1.9.1-slim
     steps:
       - uses: actions/checkout@v1
+      - name: Install Dependencies
+        run: |
+          mix local.rebar --force
+          mix local.hex --force
+          mix deps.get
       - name: Check format
         run: mix format --check-formatted
         
@@ -67,6 +72,7 @@ jobs:
   check_release:
     runs-on: ubuntu-latest
     name: Check release
+    needs: basic_check
     container:
       image: elixir:1.9.1-slim
     steps:
