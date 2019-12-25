@@ -40,7 +40,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
-    - uses: actions/setup-elixir@v1.1.0
+    - uses: actions/setup-elixir@v1.2.0
       with:
         otp-version: ${{matrix.otp}}
         elixir-version: ${{matrix.elixir}}
