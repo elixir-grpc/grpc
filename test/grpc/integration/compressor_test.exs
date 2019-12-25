@@ -1,5 +1,5 @@
 defmodule GRPC.Integration.CompressorTest do
-  use GRPC.Integration.TestCase, async: true
+  use GRPC.Integration.TestCase
 
   defmodule HelloServer do
     use GRPC.Server,

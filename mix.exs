@@ -1,7 +1,7 @@
 defmodule GRPC.Mixfile do
   use Mix.Project
 
-  @version "0.4.0"
+  @version "0.5.0-beta"
 
   def project do
     [
@@ -19,6 +19,9 @@ defmodule GRPC.Mixfile do
         main: "readme",
         source_ref: "v#{@version}",
         source_url: "https://github.com/elixir-grpc/grpc"
+      ],
+      dialyzer: [
+        plt_add_apps: [:mix, :iex]
       ]
     ]
   end
@@ -40,11 +43,13 @@ defmodule GRPC.Mixfile do
 
     [
       {:protobuf, "~> 0.5"},
-      {:cowboy, github: "elixir-grpc/cowboy", tag: "grpc-2.6.3"},
-      {:gun, github: "elixir-grpc/gun", tag: "grpc-1.3.2"},
+      {:cowboy, "~> 2.7.0"},
+      {:gun, "~> 2.0.0", hex: :grpc_gun},
+      # This is needed in your code
+      # {:cowlib, "~> 2.8.0", hex: :grpc_cowlib, override: true},
       {:ex_doc, ex_doc_version, only: :dev},
-      {:inch_ex, "~> 1.0", only: [:dev, :test]},
-      {:dialyxir, "~> 0.5", only: :dev, runtime: false}
+      {:inch_ex, "~> 2.0", only: [:dev, :test]},
+      {:dialyxir, "~> 1.0.0-rc.7", only: :dev, runtime: false}
     ]
   end
 

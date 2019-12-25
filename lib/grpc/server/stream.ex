@@ -32,7 +32,7 @@ defmodule GRPC.Server.Stream do
           local: any,
           # compressor mainly is used in client decompressing, responses compressing should be set by
           # `GRPC.Server.set_compressor`
-          compressor: module,
+          compressor: module | nil,
           __interface__: map
         }
 
