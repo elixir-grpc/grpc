@@ -9,9 +9,9 @@ on:
       - master
 
 jobs:
-  basic_check:
+  check_format:
     runs-on: ubuntu-latest
-    name: Basic check
+    name: Check format
     container:
       image: elixir:1.9.1-slim
     steps:
@@ -23,18 +23,15 @@ jobs:
           mix deps.get
       - name: Check format
         run: mix format --check-formatted
-        
-  tests:
 
+  tests:
     runs-on: ubuntu-latest
     name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
     strategy:
       matrix:
         otp: [20.x, 21.x, 22.x]
         elixir: [1.7.x, 1.8.x, 1.9.x]
-      
-    needs: basic_check
-
+    needs: check_format
     steps:
     - uses: actions/checkout@v1
     - uses: actions/setup-elixir@v1.2.0
@@ -48,15 +45,13 @@ jobs:
         mix deps.get
     - name: Run Tests
       run: mix test
-      
+
   interop-tests:
     runs-on: ubuntu-latest
     name: Interop tests
     container:
       image: elixir:1.9.1-slim
-    
-    needs: basic_check
-
+    needs: check_format
     steps:
     - uses: actions/checkout@v1
     - name: Install Dependencies
@@ -68,11 +63,11 @@ jobs:
     - name: Run interop tests
       run: mix run script/run.exs
       working-directory: ./interop
-      
+
   check_release:
     runs-on: ubuntu-latest
     name: Check release
-    needs: basic_check
+    needs: check_format
     container:
       image: elixir:1.9.1-slim
     steps:
@@ -86,4 +81,3 @@ jobs:
         run: mix hex.build
       - name: Generate docs
         run: mix docs
-    
