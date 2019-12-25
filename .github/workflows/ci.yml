@@ -16,17 +16,8 @@ jobs:
       image: elixir:1.9.1-slim
     steps:
       - uses: actions/checkout@v1
-      - name: Install Dependencies
-        run: |
-          mix local.rebar --force
-          mix local.hex --force
-          mix deps.get
       - name: Check format
         run: mix format --check-formatted
-      - name: Build hex
-        run: mix hex.build
-      - name: Generate docs
-        run: mix docs
         
   tests:
 
@@ -55,7 +46,7 @@ jobs:
       
   interop-tests:
     runs-on: ubuntu-latest
-
+    name: Interop tests
     container:
       image: elixir:1.9.1-slim
     
@@ -65,7 +56,6 @@ jobs:
     - uses: actions/checkout@v1
     - name: Install Dependencies
       run: |
-        cd interop
         mix local.rebar --force
         mix local.hex --force
         mix deps.get
@@ -73,4 +63,21 @@ jobs:
     - name: Run interop tests
       run: mix run script/run.exs
       working-directory: ./interop
+      
+  check_release:
+    runs-on: ubuntu-latest
+    name: Check release
+    container:
+      image: elixir:1.9.1-slim
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install Dependencies
+        run: |
+          mix local.rebar --force
+          mix local.hex --force
+          mix deps.get
+      - name: Build hex
+        run: mix hex.build
+      - name: Generate docs
+        run: mix docs
     
