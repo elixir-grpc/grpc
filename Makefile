@@ -21,7 +21,7 @@ test-all:
 # This is heavy
 ci-cron:
 	cd interop && mix deps.get && mix run script/run.exs --rounds 5000 && cd -
-	travis_wait .ci/build-plt-cache.sh && mix dialyzer --halt-exit-status
+	bash .ci/build-plt-cache.sh && mix dialyzer --halt-exit-status
 
 
 .PHONY: test release test-prepare test-all ci-cron

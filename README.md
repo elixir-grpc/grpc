@@ -1,7 +1,8 @@
 # gRPC Elixir
 
 [![Hex.pm](https://img.shields.io/hexpm/v/grpc.svg)](https://hex.pm/packages/grpc)
-[![Build Status](https://travis-ci.org/elixir-grpc/grpc.svg?branch=master)](https://travis-ci.org/elixir-grpc/grpc)
+[![Travis Status](https://travis-ci.org/elixir-grpc/grpc.svg?branch=master)](https://travis-ci.org/elixir-grpc/grpc)
+[![GitHub actions Status](https://github.com/elixir-grpc/grpc/workflows/CI/badge.svg)](https://github.com/elixir-grpc/grpc/actions)
 [![Inline docs](http://inch-ci.org/github/elixir-grpc/grpc.svg?branch=master)](http://inch-ci.org/github/elixir-grpc/grpc)
 
 An Elixir implementation of [gRPC](http://www.grpc.io/).
