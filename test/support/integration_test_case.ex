@@ -31,17 +31,21 @@ defmodule GRPC.Integration.TestCase do
 
   def reconnect_server(server, port, retry \\ 3) do
     result = GRPC.Server.start(server, port)
+
     case result do
       {:ok, _, ^port} ->
         result
+
       {:error, :eaddrinuse} ->
         Logger.warn("Got eaddrinuse when reconnecting to #{server}:#{port}. retry: #{retry}")
+
         if retry >= 1 do
           Process.sleep(500)
           reconnect_server(server, port, retry - 1)
         else
           result
         end
+
       _ ->
         result
     end

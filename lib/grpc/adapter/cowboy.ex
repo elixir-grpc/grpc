@@ -23,10 +23,10 @@ defmodule GRPC.Adapter.Cowboy do
       {:ok, pid} ->
         port = :ranch.get_port(servers_name(endpoint, servers))
         {:ok, pid, port}
+
       other ->
         other
     end
-
   end
 
   @spec child_spec(atom, GRPC.Server.servers_map(), non_neg_integer, Keyword.t()) ::
