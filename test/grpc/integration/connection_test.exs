@@ -20,7 +20,7 @@ defmodule GRPC.Integration.ConnectionTest do
     {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", adapter_opts: %{retry_timeout: 10})
     assert {:ok, _} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
     :ok = GRPC.Server.stop(server)
-    {:ok, _, _} = GRPC.Server.start(server, port)
+    {:ok, _, _} = reconnect_server(server, port)
     assert {:ok, _} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
     :ok = GRPC.Server.stop(server)
   end
