@@ -19,4 +19,4 @@ jobs:
         mix deps.get
       working-directory: ./interop
     - name: Run Cron CI
-      run: ci-cron
+      run: make ci-cron
