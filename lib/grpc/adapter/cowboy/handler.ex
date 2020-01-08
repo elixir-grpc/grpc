@@ -161,26 +161,24 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   # APIs end
 
   def info({:read_full_body, ref, pid}, req, state) do
-    try do
-      {s, body, req} = read_full_body(req, "", state[:handling_timer])
-      send(pid, {ref, {s, body}})
-      {:ok, req, state}
-    catch
-      :exit, :timeout ->
-        info({:handling_timeout, self()}, req, state)
-    end
+    {s, body, req} = read_full_body(req, "", state[:handling_timer])
+    send(pid, {ref, {s, body}})
+    {:ok, req, state}
+  catch
+    :exit, :timeout ->
+      Logger.warn("Timeout when reading full body")
+      info({:handling_timeout, self()}, req, state)
   end
 
   def info({:read_body, ref, pid}, req, state) do
-    try do
-      opts = timeout_left_opt(state[:handling_timer])
-      {s, body, req} = :cowboy_req.read_body(req, opts)
-      send(pid, {ref, {s, body}})
-      {:ok, req, state}
-    catch
-      :exit, :timeout ->
-        info({:handling_timeout, self()}, req, state)
-    end
+    opts = timeout_left_opt(state[:handling_timer])
+    {s, body, req} = :cowboy_req.read_body(req, opts)
+    send(pid, {ref, {s, body}})
+    {:ok, req, state}
+  catch
+    :exit, :timeout ->
+      Logger.warn("Timeout when reading body")
+      info({:handling_timeout, self()}, req, state)
   end
 
   def info({:get_headers, ref, pid}, req, state) do
