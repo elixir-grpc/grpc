@@ -71,7 +71,13 @@ expect(Req) ->
 %% Stream isn't waiting for data.
 data(StreamID, IsFin, Data, State=#state{
 		read_body_ref=undefined, read_body_buffer=Buffer, body_length=BodyLen}) ->
-	do_data(StreamID, IsFin, Data, [], State#state{
+	Commands = case byte_size(Data) of
+		0 ->
+			[];
+		Size ->
+			[{flow, Size}]
+	end,
+	do_data(StreamID, IsFin, Data, Commands, State#state{
 		expect=undefined,
 		read_body_is_fin=IsFin,
 		read_body_buffer= << Buffer/binary, Data/binary >>,
