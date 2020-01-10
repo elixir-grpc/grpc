@@ -1,11 +1,13 @@
-defmodule GRPC.Integration.EndpointTest do
+defmodule GRPC.Integration.ClientInterceptorTest do
   use GRPC.Integration.TestCase
 
   defmodule HelloServer do
     use GRPC.Server, service: Helloworld.Greeter.Service
 
-    def say_hello(req, _stream) do
-      Helloworld.HelloReply.new(message: "Hello, #{req.name}")
+    def say_hello(req, stream) do
+      headers = GRPC.Stream.get_headers(stream)
+      label = headers["x-test-label"]
+      Helloworld.HelloReply.new(message: "Hello, #{req.name} #{label}")
     end
   end
 
@@ -24,22 +26,10 @@ defmodule GRPC.Integration.EndpointTest do
     end
   end
 
-  defmodule HeadersServer do
-    def init(_), do: []
-
-    def call(req, stream, next, _) do
-      headers = GRPC.Stream.get_headers(stream)
-      %{name: original_name} = req
-      label = headers["x-test-label"]
-      updated = Helloworld.HelloRequest.new(name: "#{original_name} #{label}")
-      next.(updated, stream)
-    end
-  end
-
   defmodule HelloEndpoint do
     use GRPC.Endpoint
 
-    run HelloServer, interceptors: [HeadersServer]
+    run HelloServer
   end
 
   test "client sends headers" do
