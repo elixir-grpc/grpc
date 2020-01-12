@@ -43,6 +43,7 @@ defmodule GRPC.Transport.HTTP2 do
     |> append_custom_metadata(stream.channel.headers)
     |> append_encoding(opts[:grpc_encoding])
     |> append_timeout(opts[:timeout])
+    |> append_custom_metadata(stream.headers)
     |> append_custom_metadata(opts[:metadata])
 
     # TODO: grpc-accept-encoding, grpc-message-type
