@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Interop tests
     container:
-      image: elixir:1.9.1-slim
+      image: elixir:1.9
     steps:
     - uses: actions/checkout@v1
     - name: Install Dependencies
