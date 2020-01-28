@@ -62,6 +62,8 @@ defmodule GRPC.Server.Supervisor do
 
     * `:cred` - a credential created by functions of `GRPC.Credential`,
       an insecure server will be created without this option
+    * `:server_name` - an server name used by `:ranch` to uniquely identify the server started.
+      It defaults to the Endpoint module name.
   """
   @spec child_spec(atom | [atom], integer, Keyword.t()) :: Supervisor.Spec.spec()
   def child_spec(endpoint, port, opts \\ [])
