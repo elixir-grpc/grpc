@@ -52,7 +52,7 @@ defmodule GRPC.Server.Supervisor do
         []
       end
 
-    supervise(children, strategy: :one_for_one)
+    Supervisor.init(children, strategy: :one_for_one)
   end
 
   @doc """
