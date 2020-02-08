@@ -401,7 +401,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   defp timeout_left_opt(timer, opts \\ %{}) do
     case timer do
       nil ->
-        opts
+        Map.put(opts, :timeout, :infinity)
 
       timer ->
         case Process.read_timer(timer) do
