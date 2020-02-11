@@ -180,12 +180,7 @@ defmodule GRPC.Adapter.Cowboy do
         num_acceptors: @default_num_acceptors,
         socket_opts: socket_opts(port, opts)
       },
-      %{
-        env: %{dispatch: dispatch},
-        inactivity_timeout: idle_timeout,
-        settings_timeout: idle_timeout,
-        stream_handlers: [:grpc_stream_h]
-      }
+      opts
     ]
   end
 
