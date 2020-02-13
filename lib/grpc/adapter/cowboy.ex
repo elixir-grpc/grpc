@@ -11,6 +11,7 @@ defmodule GRPC.Adapter.Cowboy do
   alias GRPC.Adapter.Cowboy.Handler, as: Handler
 
   @default_num_acceptors 20
+  @default_max_connections 5000
 
   # Only used in starting a server manually using `GRPC.Server.start(servers)`
   @spec start(atom, GRPC.Server.servers_map(), non_neg_integer, keyword) ::
@@ -178,6 +179,7 @@ defmodule GRPC.Adapter.Cowboy do
       server_name,
       %{
         num_acceptors: @default_num_acceptors,
+        max_connections: @default_max_connections,
         socket_opts: socket_opts(port, opts)
       },
       opts
