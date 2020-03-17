@@ -226,7 +226,8 @@ defmodule GRPC.Stub do
 
   ## Options
 
-    * `:timeout` - request timeout
+    * `:timeout` - request timeout. Default is 10s for unary calls and `:infinity` for
+      client or server streaming calls
     * `:deadline` - when the request is timeout, will override timeout
     * `:metadata` - a map, your custom metadata
     * `:return_headers` - default is false. When it's true, a three elem tuple will be returned
@@ -235,11 +236,16 @@ defmodule GRPC.Stub do
   """
   @spec call(atom, tuple, GRPC.Client.Stream.t(), struct | nil, keyword) :: rpc_return
   def call(_service_mod, rpc, %{channel: channel} = stream, request, opts) do
-    {_, {req_mod, req_stream}, {res_mod, _}} = rpc
+    {_, {req_mod, req_stream}, {res_mod, response_stream}} = rpc
 
     stream = %{stream | request_mod: req_mod, response_mod: res_mod}
 
-    opts = parse_req_opts(opts)
+    opts =
+      if req_stream || response_stream do
+        parse_req_opts([{:timeout, :infinity} | opts])
+      else
+        parse_req_opts([{:timeout, @default_timeout} | opts])
+      end
 
     compressor = Map.get(opts, :compressor, channel.compressor)
     accepted_compressors = Map.get(opts, :accepted_compressors, [])
@@ -583,7 +589,7 @@ defmodule GRPC.Stub do
   end
 
   defp parse_req_opts(list) when is_list(list) do
-    parse_req_opts(list, %{timeout: @default_timeout})
+    parse_req_opts(list, %{})
   end
 
   defp parse_req_opts([{:timeout, timeout} | t], acc) do
