@@ -354,8 +354,8 @@ defmodule GRPC.Stub do
   * If the reply is not streaming, a normal reply struct will be returned
   * If the reply is streaming, a enumerable `Stream` will be returned.
     You can use `Enum` to fetch further replies or `Stream` to manipulate it.
-    Each item in the `Enumrable` is a tuple `{:ok, reply}` or `{:error, error}`.
-    When `:return_headers` is true, the last item in the `Enumrable` will be
+    Each item in the `Enumerable` is a tuple `{:ok, reply}` or `{:error, error}`.
+    When `:return_headers` is true, the last item in the `Enumerable` will be
     `{:trailers, map}`
 
   ## Examples
