@@ -5,6 +5,7 @@ defmodule GRPC.Adapter.Gun do
   # conn_pid and stream_ref is stored in `GRPC.Server.Stream`.
 
   @default_transport_opts [nodelay: true]
+  @default_http2_opts %{settings_timeout: :infinity}
   @max_retries 100
 
   @spec connect(GRPC.Channel.t(), any) :: {:ok, GRPC.Channel.t()} | {:error, any}
@@ -29,6 +30,8 @@ defmodule GRPC.Adapter.Gun do
   end
 
   defp connect_insecurely(channel, opts) do
+    opts = Map.update(opts, :http2_opts, @default_http2_opts, &Map.merge(&1, @default_http2_opts))
+
     transport_opts = Map.get(opts, :transport_opts, @default_transport_opts)
     open_opts = %{transport: :tcp, protocols: [:http2]}
 
