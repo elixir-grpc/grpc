@@ -60,7 +60,7 @@ defmodule GRPC.Message do
     else
       result = [compress_flag, <<length::size(4)-unit(8)>>, message]
       result = if iolist, do: result, else: IO.iodata_to_binary(result)
-      {:ok, result, length + 5}
+      {:ok, codec.pack_encoded(result), length + 5}
     end
   end
 

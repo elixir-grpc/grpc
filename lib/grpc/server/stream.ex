@@ -56,7 +56,7 @@ defmodule GRPC.Server.Stream do
   def send_reply(%{adapter: adapter, codec: codec} = stream, reply, opts) do
     # {:ok, data, _size} = reply |> codec.encode() |> GRPC.Message.to_data()
     data = codec.encode(reply)
-    adapter.send_reply(stream.payload, data, opts)
+    adapter.send_reply(stream.payload, data, Keyword.merge(opts, codec: codec))
     stream
   end
 end
