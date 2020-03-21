@@ -165,9 +165,7 @@ defmodule GRPC.Integration.ServiceTest do
           end)
 
         assert length(notes) == 6
-      end,
-      # TODO: Debug
-      50051
+      end
     )
   end
 end
