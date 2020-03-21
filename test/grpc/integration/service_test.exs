@@ -125,6 +125,8 @@ defmodule GRPC.Integration.ServiceTest do
     end)
   end
 
+  # There was a bug that blocks reading messages while sending the replies.
+  # This is for the case.
   test "async bidirectional streaming RPC works" do
     run_server(
       FeatureServer,
@@ -151,10 +153,7 @@ defmodule GRPC.Integration.ServiceTest do
         notes =
           Enum.map(result_enum, fn {:ok, note} ->
             assert "Reply: " <> msg = note.message
-            # Due to reading streaming request blocking writing streaming reply,
-            # the very last outgoing messeage will be blocked (Staying in message queue)
-            # until the server receives new client message
-            # message 5 will never be sent out to client.
+
             if note.message == "Reply: Message 5" do
               point = Routeguide.Point.new(latitude: 0, longitude: rem(6, 3) + 1)
               note = Routeguide.RouteNote.new(location: point, message: "Message #{6}")
