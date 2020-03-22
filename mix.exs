@@ -34,22 +34,15 @@ defmodule GRPC.Mixfile do
   end
 
   defp deps do
-    ex_doc_version =
-      if System.version() |> Version.compare("1.7.0") == :lt do
-        "~> 0.18.0"
-      else
-        "~> 0.19"
-      end
-
     [
       {:protobuf, "~> 0.5"},
       {:cowboy, "~> 2.7.0"},
       {:gun, "~> 2.0.0", hex: :grpc_gun},
       # This is needed in your code
       # {:cowlib, "~> 2.8.0", hex: :grpc_cowlib, override: true},
-      {:ex_doc, ex_doc_version, only: :dev},
+      {:ex_doc, "~> 0.21", only: :dev},
       {:inch_ex, "~> 2.0", only: [:dev, :test]},
-      {:dialyxir, "~> 1.0.0-rc.7", only: :dev, runtime: false}
+      {:dialyxir, "~> 1.0.0", only: [:dev, :test], runtime: false}
     ]
   end
 
