@@ -14,7 +14,8 @@ defmodule GRPC.Adapter.Cowboy.Handler do
           pid: pid,
           handling_timer: reference | nil,
           resp_trailers: map,
-          compressor: atom | nil
+          compressor: atom | nil,
+          pending_reader: nil
         }
 
   @spec init(map, {atom, GRPC.Server.servers_map(), map}) :: {:cowboy_loop, map, map}
@@ -51,7 +52,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
           )
         end
 
-      {:cowboy_loop, req, %{pid: pid, handling_timer: timer_ref}}
+      {:cowboy_loop, req, %{pid: pid, handling_timer: timer_ref, pending_reader: nil}}
     else
       {:error, error} ->
         trailers = HTTP2.server_trailers(error.status, error.message)
@@ -172,13 +173,38 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
   def info({:read_body, ref, pid}, req, state) do
     opts = timeout_left_opt(state[:handling_timer])
-    {s, body, req} = :cowboy_req.read_body(req, opts)
-    send(pid, {ref, {s, body}})
-    {:ok, req, state}
-  catch
-    :exit, :timeout ->
-      Logger.warn("Timeout when reading body")
-      info({:handling_timeout, self()}, req, state)
+
+    case async_read_body(req, opts) do
+      {:send, {s, body, req}} ->
+        send(pid, {ref, {s, body}})
+        {:ok, req, state}
+
+      {:wait, read_ref} ->
+        {:ok, req, %{state | pending_reader: {read_ref, pid, ref}}}
+    end
+  end
+
+  def info({:request_body, ref, :nofin, body}, req, %{pending_reader: {ref, pid, reader_ref}} = s) do
+    send(pid, {reader_ref, {:more, body}})
+    {:ok, req, %{s | pending_reader: nil}}
+  end
+
+  def info(
+        {:request_body, ref, :fin, body_length, body},
+        %{headers: headers} = req,
+        %{pending_reader: {ref, pid, reader_ref}} = s
+      ) do
+    send(pid, {reader_ref, {:ok, body}})
+
+    # cowboy_req's set_body_length
+    req =
+      Map.merge(req, %{
+        headers: Map.put(headers, "content-length", Integer.to_string(body_length)),
+        body_length: body_length,
+        has_read_body: true
+      })
+
+    {:ok, req, s}
   end
 
   def info({:get_headers, ref, pid}, req, state) do
@@ -432,5 +458,25 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
     exit_handler(pid, :rpc_error)
     send_error_trailers(req, trailers)
+  end
+
+  # Similar with cowboy's read_body, but we need to receive the message
+  # in `info` callback.
+  defp async_read_body(%{has_body: false} = req, _opts) do
+    {:send, {:ok, <<>>, req}}
+  end
+
+  defp async_read_body(%{has_read_body: true} = req, _opts) do
+    {:send, {:ok, <<>>, req}}
+  end
+
+  defp async_read_body(%{pid: pid, streamid: stream_id} = req, opts) do
+    length = Map.get(opts, :length, 8_000_000)
+    period = Map.get(opts, :period, 15000)
+    ref = make_ref()
+
+    :cowboy_req.cast({:read_body, self(), ref, length, period}, req)
+
+    {:wait, ref}
   end
 end

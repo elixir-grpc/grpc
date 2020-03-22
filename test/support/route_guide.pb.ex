@@ -74,6 +74,7 @@ defmodule Routeguide.RouteGuide.Service do
   rpc :ListFeatures, Routeguide.Rectangle, stream(Routeguide.Feature)
   rpc :RecordRoute, stream(Routeguide.Point), Routeguide.RouteSummary
   rpc :RouteChat, stream(Routeguide.RouteNote), stream(Routeguide.RouteNote)
+  rpc :AsyncRouteChat, stream(Routeguide.RouteNote), stream(Routeguide.RouteNote)
 end
 
 defmodule Routeguide.RouteGuide.Stub do

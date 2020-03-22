@@ -39,12 +39,28 @@ defmodule GRPC.Integration.ServiceTest do
       end)
     end
 
+    def async_route_chat(req_enum, stream) do
+      tasks =
+        Enum.map(req_enum, fn note ->
+          note = %{note | message: "Reply: #{note.message}"}
+          # Send out reply asynchronosly.
+          # this makes it very likely to read client stream frist before sending out
+          Task.async(fn ->
+            Server.send_reply(stream, note)
+          end)
+        end)
+
+      Enum.each(tasks, fn task ->
+        Task.await(task)
+      end)
+    end
+
     defp simple_feature(point) do
       Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
     end
   end
 
-  test "Unary RPC works" do
+  test "unary RPC works" do
     run_server(FeatureServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
@@ -53,7 +69,7 @@ defmodule GRPC.Integration.ServiceTest do
     end)
   end
 
-  test "Server streaming RPC works" do
+  test "server streaming RPC works" do
     run_server(FeatureServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       low = Routeguide.Point.new(latitude: 400_000_000, longitude: -750_000_000)
@@ -68,7 +84,7 @@ defmodule GRPC.Integration.ServiceTest do
     end)
   end
 
-  test "Client streaming RPC works" do
+  test "client streaming RPC works" do
     run_server(FeatureServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       point1 = Routeguide.Point.new(latitude: 400_000_000, longitude: -750_000_000)
@@ -81,7 +97,7 @@ defmodule GRPC.Integration.ServiceTest do
     end)
   end
 
-  test "Bidirectional streaming RPC works" do
+  test "bidirectional streaming RPC works" do
     run_server(FeatureServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       stream = channel |> Routeguide.RouteGuide.Stub.route_chat()
@@ -107,5 +123,48 @@ defmodule GRPC.Integration.ServiceTest do
 
       assert length(notes) == 6
     end)
+  end
+
+  # There was a bug that blocks reading messages while sending the replies.
+  # This is for the case.
+  test "async bidirectional streaming RPC works" do
+    run_server(
+      FeatureServer,
+      fn port ->
+        {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+        stream = channel |> Routeguide.RouteGuide.Stub.async_route_chat()
+
+        task =
+          Task.async(fn ->
+            Enum.each(1..5, fn i ->
+              point = Routeguide.Point.new(latitude: 0, longitude: rem(i, 3) + 1)
+              note = Routeguide.RouteNote.new(location: point, message: "Message #{i}")
+              # note that we don't send end of stream yet here
+              GRPC.Stub.send_request(stream, note, [])
+            end)
+          end)
+
+        result = GRPC.Stub.recv(stream)
+
+        {:ok, result_enum} = result
+
+        Task.await(task)
+
+        notes =
+          Enum.map(result_enum, fn {:ok, note} ->
+            assert "Reply: " <> msg = note.message
+
+            if note.message == "Reply: Message 5" do
+              point = Routeguide.Point.new(latitude: 0, longitude: rem(6, 3) + 1)
+              note = Routeguide.RouteNote.new(location: point, message: "Message #{6}")
+              GRPC.Stub.send_request(stream, note, end_stream: true)
+            end
+
+            note
+          end)
+
+        assert length(notes) == 6
+      end
+    )
   end
 end
