@@ -470,7 +470,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     {:send, {:ok, <<>>, req}}
   end
 
-  defp async_read_body(%{pid: pid, streamid: stream_id} = req, opts) do
+  defp async_read_body(req, opts) do
     length = Map.get(opts, :length, 8_000_000)
     period = Map.get(opts, :period, 15000)
     ref = make_ref()

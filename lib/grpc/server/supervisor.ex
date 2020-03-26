@@ -45,6 +45,8 @@ defmodule GRPC.Server.Supervisor do
   @spec init({module | [module], integer, Keyword.t()}) ::
           {:ok, {:supervisor.sup_flags(), [:supervisor.child_spec()]}} | :ignore
   def init({endpoint, port, opts}) do
+    check_deps_version()
+
     children =
       if Application.get_env(:grpc, :start_server, false) do
         [child_spec(endpoint, port, opts)]
@@ -88,5 +90,23 @@ defmodule GRPC.Server.Supervisor do
     adapter = Keyword.get(opts, :adapter, @default_adapter)
     servers = GRPC.Server.servers_to_map(servers)
     adapter.child_spec(nil, servers, port, opts)
+  end
+
+  defp check_deps_version() do
+    # cowlib
+    case :application.get_key(:cowlib, :vsn) do
+      {:ok, vsn} ->
+        ver = to_string(vsn)
+
+        unless Version.match?(ver, ">= 2.9.0") do
+          Logger.warn("cowlib should be >= 2.9.0, it's #{ver} now. See grpc's README for details")
+        end
+
+      _ ->
+        :ok
+    end
+  rescue
+    _ ->
+      :ok
   end
 end
