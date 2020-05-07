@@ -62,9 +62,11 @@ defmodule GRPC.Adapter.Gun do
         {:ok, Map.put(channel, :adapter_payload, %{conn_pid: conn_pid})}
 
       {:ok, proto} ->
+        :gun.shutdown(conn_pid)
         {:error, "Error when opening connection: protocol #{proto} is not http2"}
 
       {:error, reason} ->
+        :gun.shutdown(conn_pid)
         {:error, "Error when opening connection: #{inspect(reason)}"}
     end
   end
