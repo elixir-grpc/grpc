@@ -40,6 +40,10 @@ defmodule GRPC.Integration.ServerTest do
       raise "unknown error(This is a test, please ignore it)"
     end
 
+    def say_hello(%{name: "bad protobuf"}, _stream) do
+      Helloworld.HelloReply.new(message: DateTime.utc_now())
+    end
+
     def say_hello(_req, _stream) do
       raise GRPC.RPCError, status: GRPC.Status.unauthenticated(), message: "Please authenticate"
     end
@@ -115,6 +119,8 @@ defmodule GRPC.Integration.ServerTest do
   end
 
   test "return errors for unknown errors" do
+    attach_error_handler()
+
     run_server([HelloErrorServer], fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       req = Helloworld.HelloRequest.new(name: "unknown error")
@@ -122,15 +128,36 @@ defmodule GRPC.Integration.ServerTest do
       assert {:error,
               %GRPC.RPCError{message: "Internal Server Error", status: GRPC.Status.unknown()}} ==
                channel |> Helloworld.Greeter.Stub.say_hello(req)
+
+      assert_receive {:error_report, _}
+    end)
+  end
+
+  test "return errors for unknown errors in library code" do
+    attach_error_handler()
+
+    run_server([HelloErrorServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      req = Helloworld.HelloRequest.new(name: "bad protobuf")
+
+      assert {:error,
+              %GRPC.RPCError{message: "Internal Server Error", status: GRPC.Status.unknown()}} ==
+               channel |> Helloworld.Greeter.Stub.say_hello(req)
+
+      assert_receive {:error_report, _}
     end)
   end
 
   test "returns appropriate error for stream requests" do
+    attach_error_handler()
+
     run_server([FeatureErrorServer], fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       rect = Routeguide.Rectangle.new()
       error = %GRPC.RPCError{message: "Please authenticate", status: 16}
       assert {:error, ^error} = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
+
+      assert_receive {:error_report, _}
     end)
   end
 
@@ -145,6 +172,8 @@ defmodule GRPC.Integration.ServerTest do
   end
 
   test "return deadline error for slow server" do
+    attach_error_handler()
+
     run_server([TimeoutServer], fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       rect = Routeguide.Rectangle.new()
@@ -152,6 +181,8 @@ defmodule GRPC.Integration.ServerTest do
 
       assert {:error, ^error} =
                channel |> Routeguide.RouteGuide.Stub.list_features(rect, timeout: 500)
+
+      assert_receive {:error_report, _}
     end)
   end
 
