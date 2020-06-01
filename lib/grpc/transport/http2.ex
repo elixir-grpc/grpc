@@ -53,20 +53,17 @@ defmodule GRPC.Transport.HTTP2 do
   def extract_metadata(headers) do
     headers
     |> Enum.filter(fn {k, _} -> is_metadata(k) end)
-    |> Enum.map(&decode_metadata/1)
-    |> Enum.into(%{})
+    |> Enum.into(%{}, &decode_metadata/1)
   end
 
   def decode_headers(headers) do
-    headers
-    |> Enum.map(fn {k, v} ->
+    Enum.into(headers, %{}, fn {k, v} ->
       if is_metadata(k) do
         decode_metadata({k, v})
       else
         {k, v}
       end
     end)
-    |> Enum.into(%{})
   end
 
   def encode_metadata(metadata) do
