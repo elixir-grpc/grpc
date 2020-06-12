@@ -178,7 +178,11 @@ defmodule GRPC.Adapter.Cowboy do
 
     [
       servers_name(endpoint, servers),
-      %{num_acceptors: num_acceptors, max_connections: max_connections, socket_opts: socket_opts(port, opts)},
+      %{
+        num_acceptors: num_acceptors,
+        max_connections: max_connections,
+        socket_opts: socket_opts(port, opts)
+      },
       opts
     ]
   end
