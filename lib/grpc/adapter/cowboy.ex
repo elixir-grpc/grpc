@@ -159,10 +159,13 @@ defmodule GRPC.Adapter.Cowboy do
 
     handlers =
       if status_handler do
-        [status_handler, {:_, GRPC.Adapter.Cowboy.Handler, {endpoint, servers, Enum.into(opts, %{})}}]
+        [
+          status_handler,
+          {:_, GRPC.Adapter.Cowboy.Handler, {endpoint, servers, Enum.into(opts, %{})}}
+        ]
       else
         [{:_, GRPC.Adapter.Cowboy.Handler, {endpoint, servers, Enum.into(opts, %{})}}]
-      end    
+      end
 
     dispatch = :cowboy_router.compile([{:_, handlers}])
     idle_timeout = Keyword.get(opts, :idle_timeout, :infinity)
