@@ -19,7 +19,7 @@ defmodule GRPC.Transport.HTTP2Test do
              {":scheme", "http"},
              {":path", "/foo/bar"},
              {":authority", "grpc.io"},
-             {"content-type", "application/grpc+proto"},
+             {"content-type", "application/grpc"},
              {"user-agent", "grpc-elixir/1.0.0"},
              {"te", "trailers"}
            ]
@@ -86,9 +86,10 @@ defmodule GRPC.Transport.HTTP2Test do
 
   test "client_headers/3 support custom content-type" do
     stream = %Stream{channel: @channel, path: "/foo/bar"}
-    headers = HTTP2.client_headers(stream, %{content_type: "application/grpc"})
+    headers = HTTP2.client_headers(stream, %{content_type: "application/grpc-custom"})
 
-    assert {_, "application/grpc"} = Enum.find(headers, fn {key, _} -> key == "content-type" end)
+    assert {_, "application/grpc-custom"} =
+             Enum.find(headers, fn {key, _} -> key == "content-type" end)
   end
 
   test "client_headers/3 support custom codec" do
