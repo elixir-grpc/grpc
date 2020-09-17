@@ -27,6 +27,8 @@ defmodule GRPC.Server.Supervisor do
       run `mix grpc.server` on local
 
   View `child_spec/3` for opts.
+
+  GRPC.Server.Drainer will be used to drain connections after getting TERM.
   """
 
   @default_adapter GRPC.Adapter.Cowboy
@@ -49,7 +51,10 @@ defmodule GRPC.Server.Supervisor do
 
     children =
       if Application.get_env(:grpc, :start_server, false) do
-        [child_spec(endpoint, port, opts)]
+        [
+          child_spec(endpoint, port, opts),
+          {GRPC.Server.Drainer, {endpoint, adapter: get_adapter(opts)}}
+        ]
       else
         []
       end
@@ -81,13 +86,13 @@ defmodule GRPC.Server.Supervisor do
           {nil, endpoint}
       end
 
-    adapter = Keyword.get(opts, :adapter, @default_adapter)
+    adapter = get_adapter(opts)
     servers = GRPC.Server.servers_to_map(servers)
     adapter.child_spec(endpoint, servers, port, opts)
   end
 
   def child_spec(servers, port, opts) when is_list(servers) do
-    adapter = Keyword.get(opts, :adapter, @default_adapter)
+    adapter = get_adapter(opts)
     servers = GRPC.Server.servers_to_map(servers)
     adapter.child_spec(nil, servers, port, opts)
   end
@@ -108,5 +113,9 @@ defmodule GRPC.Server.Supervisor do
   rescue
     _ ->
       :ok
+  end
+
+  defp get_adapter(opts) do
+    Keyword.get(opts, :adapter, @default_adapter)
   end
 end

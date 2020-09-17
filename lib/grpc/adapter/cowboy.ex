@@ -78,6 +78,18 @@ defmodule GRPC.Adapter.Cowboy do
     :cowboy.stop_listener(servers_name(endpoint, servers))
   end
 
+  @spec drain(atom, Keyword.t()) :: :ok
+  def drain(endpoint, opts) do
+    refs =
+      if is_atom(endpoint) do
+        [servers_name(endpoint, [])]
+      else
+        servers_name(nil, endpoint)
+      end
+
+    GRPC.Adapter.Cowboy.Drainter.drain(refs, opts)
+  end
+
   @spec read_body(GRPC.Adapter.Cowboy.Handler.state()) :: {:ok, binary}
   def read_body(%{pid: pid}) do
     Handler.read_full_body(pid)
