@@ -183,6 +183,7 @@ defmodule GRPC.Adapter.Cowboy do
   defp socket_opts(port, opts) do
     socket_opts = [port: port]
     socket_opts = if opts[:ip], do: [{:ip, opts[:ip]} | socket_opts], else: socket_opts
+    socket_opts = if opts[:reuseaddr], do [{:reuseaddr, true} | socket_opts], else: socket_opts
 
     if opts[:cred] do
       opts[:cred].ssl ++
