@@ -361,7 +361,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
         end
       catch
         kind, e ->
-          Logger.error(Exception.format(kind, e, System.stacktrace()))
+          Logger.error(Exception.format(kind, e, __STACKTRACE__))
 
           exit({:handle_error, kind})
       end
