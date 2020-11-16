@@ -22,7 +22,8 @@ defmodule GRPC.Mixfile do
       ],
       dialyzer: [
         plt_add_apps: [:mix, :iex]
-      ]
+      ],
+      xref: [exclude: [IEx]]
     ]
   end
 
@@ -40,9 +41,9 @@ defmodule GRPC.Mixfile do
       {:gun, "~> 2.0.0", hex: :grpc_gun},
       # 2.9.0 fixes some important bugs, so it's better to use ~> 2.9.0
       # {:cowlib, "~> 2.9.0", override: true},
-      {:ex_doc, "~> 0.21", only: :dev},
+      {:ex_doc, "~> 0.23", only: :dev},
       {:inch_ex, "~> 2.0", only: [:dev, :test]},
-      {:dialyxir, "~> 1.0.0", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false}
     ]
   end
 
