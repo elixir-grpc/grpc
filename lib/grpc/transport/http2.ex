@@ -20,6 +20,9 @@ defmodule GRPC.Transport.HTTP2 do
     }
   end
 
+  @doc """
+  Now we may not need this because gun already handles the pseudo headers.
+  """
   @spec client_headers(GRPC.Client.Stream.t(), map) :: [{String.t(), String.t()}]
   def client_headers(%{channel: channel, path: path} = s, opts \\ %{}) do
     [
@@ -34,37 +37,48 @@ defmodule GRPC.Transport.HTTP2 do
   def client_headers_without_reserved(%{codec: codec} = stream, opts \\ %{}) do
     [
       # It seems only gRPC implemenations only support "application/grpc", so we support :content_type now.
-      {"content-type", opts[:content_type] || "application/grpc+#{codec.name}"},
+      {"content-type", content_type(opts[:content_type], codec)},
       {"user-agent", "grpc-elixir/#{opts[:grpc_version] || GRPC.version()}"},
       {"te", "trailers"}
     ]
     |> append_compressor(stream.compressor)
     |> append_accepted_compressors(stream.accepted_compressors)
+    |> append_custom_metadata(stream.channel.headers)
     |> append_encoding(opts[:grpc_encoding])
     |> append_timeout(opts[:timeout])
+    |> append_custom_metadata(stream.headers)
     |> append_custom_metadata(opts[:metadata])
 
     # TODO: grpc-accept-encoding, grpc-message-type
     # TODO: Authorization
   end
 
+  defp content_type(custom, _codec) when is_binary(custom), do: custom
+
+  defp content_type(_, codec) do
+    # Some gRPC implementations don't support application/grpc+xyz,
+    # to avoid this kind of trouble, use application/grpc by default
+    if codec == GRPC.Codec.Proto do
+      "application/grpc"
+    else
+      "application/grpc+#{codec.name}"
+    end
+  end
+
   def extract_metadata(headers) do
     headers
     |> Enum.filter(fn {k, _} -> is_metadata(k) end)
-    |> Enum.map(&decode_metadata/1)
-    |> Enum.into(%{})
+    |> Enum.into(%{}, &decode_metadata/1)
   end
 
   def decode_headers(headers) do
-    headers
-    |> Enum.map(fn {k, v} ->
+    Enum.into(headers, %{}, fn {k, v} ->
       if is_metadata(k) do
         decode_metadata({k, v})
       else
         {k, v}
       end
     end)
-    |> Enum.into(%{})
   end
 
   def encode_metadata(metadata) do

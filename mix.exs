@@ -1,7 +1,7 @@
 defmodule GRPC.Mixfile do
   use Mix.Project
 
-  @version "0.4.0"
+  @version "0.5.0-beta.1"
 
   def project do
     [
@@ -19,7 +19,11 @@ defmodule GRPC.Mixfile do
         main: "readme",
         source_ref: "v#{@version}",
         source_url: "https://github.com/elixir-grpc/grpc"
-      ]
+      ],
+      dialyzer: [
+        plt_add_apps: [:mix, :iex]
+      ],
+      xref: [exclude: [IEx]]
     ]
   end
 
@@ -31,20 +35,15 @@ defmodule GRPC.Mixfile do
   end
 
   defp deps do
-    ex_doc_version =
-      if System.version() |> Version.compare("1.7.0") == :lt do
-        "~> 0.18.0"
-      else
-        "~> 0.19"
-      end
-
     [
       {:protobuf, "~> 0.5"},
-      {:cowboy, github: "elixir-grpc/cowboy", tag: "grpc-2.6.3"},
-      {:gun, github: "elixir-grpc/gun", tag: "grpc-1.3.2"},
-      {:ex_doc, ex_doc_version, only: :dev},
-      {:inch_ex, "~> 1.0", only: [:dev, :test]},
-      {:dialyxir, "~> 0.5", only: :dev, runtime: false}
+      {:cowboy, "~> 2.7"},
+      {:gun, "~> 2.0.0", hex: :grpc_gun},
+      # 2.9.0 fixes some important bugs, so it's better to use ~> 2.9.0
+      # {:cowlib, "~> 2.9.0", override: true},
+      {:ex_doc, "~> 0.23", only: :dev},
+      {:inch_ex, "~> 2.0", only: [:dev, :test]},
+      {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false}
     ]
   end
 

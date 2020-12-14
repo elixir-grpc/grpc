@@ -9,7 +9,7 @@ defmodule GRPC.Credential do
       iex> GRPC.Stub.connect("localhost:10000", cred: cred)
   """
 
-  @type t :: %__MODULE__{ssl: [:ssl.ssl_option()]}
+  @type t :: %__MODULE__{ssl: [:ssl.tls_option()]}
   defstruct [:ssl]
 
   @doc """

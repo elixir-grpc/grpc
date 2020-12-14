@@ -17,8 +17,29 @@ defmodule GRPC.Integration.ServerTest do
       Helloworld.HelloReply.new(message: "Hello, #{name}")
     end
 
+    def say_hello(%{name: "get peer"}, stream) do
+      {ip, _port} = stream.adapter.get_peer(stream.payload)
+      name = to_string(:inet_parse.ntoa(ip))
+      Helloworld.HelloReply.new(message: "Hello, #{name}")
+    end
+
+    def say_hello(%{name: "get cert"}, stream) do
+      case stream.adapter.get_cert(stream.payload) do
+        :undefined ->
+          Helloworld.HelloReply.new(message: "Hello, unauthenticated")
+
+        _ ->
+          Helloworld.HelloReply.new(message: "Hello, authenticated")
+      end
+    end
+
     def say_hello(req, _stream) do
       Helloworld.HelloReply.new(message: "Hello, #{req.name}")
+    end
+
+    def check_headers(_req, stream) do
+      token = GRPC.Stream.get_headers(stream)["authorization"]
+      Helloworld.HeaderReply.new(authorization: token)
     end
   end
 
@@ -155,6 +176,42 @@ defmodule GRPC.Integration.ServerTest do
       Enum.each(stream, fn {:ok, feature} ->
         assert feature
       end)
+    end)
+  end
+
+  test "headers set on channel are present in receiving server" do
+    run_server([HelloServer], fn port ->
+      token = "Bearer TOKEN"
+
+      {:ok, channel} =
+        GRPC.Stub.connect("localhost:#{port}",
+          headers: [{"authorization", token}]
+        )
+
+      {:ok, reply} =
+        channel |> Helloworld.Greeter.Stub.check_headers(Helloworld.HeaderRequest.new())
+
+      assert reply.authorization == token
+    end)
+  end
+
+  test "get peer returns correct IP address" do
+    run_server([HelloServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+
+      req = Helloworld.HelloRequest.new(name: "get peer")
+      {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
+      assert reply.message == "Hello, 127.0.0.1"
+    end)
+  end
+
+  test "get cert returns correct client certificate when not present" do
+    run_server([HelloServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+
+      req = Helloworld.HelloRequest.new(name: "get cert")
+      {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
+      assert reply.message == "Hello, unauthenticated"
     end)
   end
 end

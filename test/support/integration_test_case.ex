@@ -1,10 +1,11 @@
 defmodule GRPC.Integration.TestCase do
-  use ExUnit.CaseTemplate
+  use ExUnit.CaseTemplate, async: true
+
+  require Logger
 
   using do
     quote do
-      import GRPC.Integration.TestCase,
-        only: [run_server: 2, run_server: 3, run_endpoint: 2, run_endpoint: 3]
+      import GRPC.Integration.TestCase
     end
   end
 
@@ -25,6 +26,28 @@ defmodule GRPC.Integration.TestCase do
       func.(port)
     after
       :ok = GRPC.Server.stop_endpoint(endpoint, [])
+    end
+  end
+
+  def reconnect_server(server, port, retry \\ 3) do
+    result = GRPC.Server.start(server, port)
+
+    case result do
+      {:ok, _, ^port} ->
+        result
+
+      {:error, :eaddrinuse} ->
+        Logger.warn("Got eaddrinuse when reconnecting to #{server}:#{port}. retry: #{retry}")
+
+        if retry >= 1 do
+          Process.sleep(500)
+          reconnect_server(server, port, retry - 1)
+        else
+          result
+        end
+
+      _ ->
+        result
     end
   end
 end
