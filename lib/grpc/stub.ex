@@ -454,6 +454,9 @@ defmodule GRPC.Stub do
 
       {:trailers, trailers} ->
         {:ok, acc, GRPC.Transport.HTTP2.decode_headers(trailers)}
+
+      {:error, err} ->
+        {:error, err}
     end
   end
 
