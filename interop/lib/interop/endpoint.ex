@@ -3,6 +3,7 @@ defmodule Interop.Endpoint do
 
   intercept GRPC.Logger.Server
   intercept GRPCPrometheus.ServerInterceptor
+  intercept Interop.ServerInterceptor
 
   run Interop.Server
 end

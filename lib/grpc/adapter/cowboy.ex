@@ -4,10 +4,14 @@ defmodule GRPC.Adapter.Cowboy do
   # A server(`GRPC.Server`) adapter using Cowboy.
   # Cowboy req will be stored in `:payload` of `GRPC.Server.Stream`.
 
+  # Waiting for this is released on hex https://github.com/ninenines/ranch/pull/227
+  @dialyzer {:nowarn_function, running_info: 4}
+
   require Logger
   alias GRPC.Adapter.Cowboy.Handler, as: Handler
 
   @default_num_acceptors 20
+  @default_max_connections 16384
 
   # Only used in starting a server manually using `GRPC.Server.start(servers)`
   @spec start(atom, GRPC.Server.servers_map(), non_neg_integer, keyword) ::
@@ -16,10 +20,14 @@ defmodule GRPC.Adapter.Cowboy do
     start_args = cowboy_start_args(endpoint, servers, port, opts)
     start_func = if opts[:cred], do: :start_tls, else: :start_clear
 
-    {:ok, pid} = apply(:cowboy, start_func, start_args)
+    case apply(:cowboy, start_func, start_args) do
+      {:ok, pid} ->
+        port = :ranch.get_port(servers_name(endpoint, servers))
+        {:ok, pid, port}
 
-    port = :ranch.get_port(servers_name(endpoint, servers))
-    {:ok, pid, port}
+      other ->
+        other
+    end
   end
 
   @spec child_spec(atom, GRPC.Server.servers_map(), non_neg_integer, Keyword.t()) ::
@@ -132,6 +140,14 @@ defmodule GRPC.Adapter.Cowboy do
     Handler.get_headers(pid)
   end
 
+  def get_peer(%{pid: pid}) do
+    Handler.get_peer(pid)
+  end
+
+  def get_cert(%{pid: pid}) do
+    Handler.get_cert(pid)
+  end
+
   def set_compressor(%{pid: pid}, compressor) do
     Handler.set_compressor(pid, compressor)
   end
@@ -143,19 +159,35 @@ defmodule GRPC.Adapter.Cowboy do
       ])
 
     idle_timeout = Keyword.get(opts, :idle_timeout, :infinity)
+    num_acceptors = Keyword.get(opts, :num_acceptors, @default_num_acceptors)
+    max_connections = Keyword.get(opts, :max_connections, @default_max_connections)
+
+    # https://ninenines.eu/docs/en/cowboy/2.7/manual/cowboy_http2/
+    opts =
+      Map.merge(
+        %{
+          env: %{dispatch: dispatch},
+          idle_timeout: idle_timeout,
+          inactivity_timeout: idle_timeout,
+          settings_timeout: idle_timeout,
+          stream_handlers: [:grpc_stream_h],
+          # The default option is small
+          # https://github.com/ninenines/cowboy/issues/1398
+          # If there are 1000 streams in one connection, then 1000/s frames per stream.
+          max_received_frame_rate: {10_000_000, 10_000},
+          max_reset_stream_rate: {10_000, 10_000}
+        },
+        Enum.into(opts, %{})
+      )
 
     [
       servers_name(endpoint, servers),
       %{
-        num_acceptors: @default_num_acceptors,
+        num_acceptors: num_acceptors,
+        max_connections: max_connections,
         socket_opts: socket_opts(port, opts)
       },
-      %{
-        env: %{dispatch: dispatch},
-        inactivity_timeout: idle_timeout,
-        settings_timeout: idle_timeout,
-        stream_handlers: [:grpc_stream_h]
-      }
+      opts
     ]
   end
 

@@ -1,3 +1,12 @@
+defmodule Grpc.Testing.PayloadType do
+  @moduledoc false
+  use Protobuf, enum: true, syntax: :proto3
+
+  @type t :: integer | :COMPRESSABLE
+
+  field :COMPRESSABLE, 0
+end
+
 defmodule Grpc.Testing.BoolValue do
   @moduledoc false
   use Protobuf, syntax: :proto3
@@ -15,8 +24,8 @@ defmodule Grpc.Testing.Payload do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          type: integer,
-          body: String.t()
+          type: Grpc.Testing.PayloadType.t(),
+          body: binary
         }
   defstruct [:type, :body]
 
@@ -43,14 +52,15 @@ defmodule Grpc.Testing.SimpleRequest do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          response_type: integer,
+          response_type: Grpc.Testing.PayloadType.t(),
           response_size: integer,
-          payload: Grpc.Testing.Payload.t(),
+          payload: Grpc.Testing.Payload.t() | nil,
           fill_username: boolean,
           fill_oauth_scope: boolean,
-          response_compressed: Grpc.Testing.BoolValue.t(),
-          response_status: Grpc.Testing.EchoStatus.t(),
-          expect_compressed: Grpc.Testing.BoolValue.t()
+          response_compressed: Grpc.Testing.BoolValue.t() | nil,
+          response_status: Grpc.Testing.EchoStatus.t() | nil,
+          expect_compressed: Grpc.Testing.BoolValue.t() | nil,
+          fill_server_id: boolean
         }
   defstruct [
     :response_type,
@@ -60,7 +70,8 @@ defmodule Grpc.Testing.SimpleRequest do
     :fill_oauth_scope,
     :response_compressed,
     :response_status,
-    :expect_compressed
+    :expect_compressed,
+    :fill_server_id
   ]
 
   field :response_type, 1, type: Grpc.Testing.PayloadType, enum: true
@@ -71,6 +82,7 @@ defmodule Grpc.Testing.SimpleRequest do
   field :response_compressed, 6, type: Grpc.Testing.BoolValue
   field :response_status, 7, type: Grpc.Testing.EchoStatus
   field :expect_compressed, 8, type: Grpc.Testing.BoolValue
+  field :fill_server_id, 9, type: :bool
 end
 
 defmodule Grpc.Testing.SimpleResponse do
@@ -78,15 +90,17 @@ defmodule Grpc.Testing.SimpleResponse do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          payload: Grpc.Testing.Payload.t(),
+          payload: Grpc.Testing.Payload.t() | nil,
           username: String.t(),
-          oauth_scope: String.t()
+          oauth_scope: String.t(),
+          server_id: String.t()
         }
-  defstruct [:payload, :username, :oauth_scope]
+  defstruct [:payload, :username, :oauth_scope, :server_id]
 
   field :payload, 1, type: Grpc.Testing.Payload
   field :username, 2, type: :string
   field :oauth_scope, 3, type: :string
+  field :server_id, 4, type: :string
 end
 
 defmodule Grpc.Testing.StreamingInputCallRequest do
@@ -94,8 +108,8 @@ defmodule Grpc.Testing.StreamingInputCallRequest do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          payload: Grpc.Testing.Payload.t(),
-          expect_compressed: Grpc.Testing.BoolValue.t()
+          payload: Grpc.Testing.Payload.t() | nil,
+          expect_compressed: Grpc.Testing.BoolValue.t() | nil
         }
   defstruct [:payload, :expect_compressed]
 
@@ -122,7 +136,7 @@ defmodule Grpc.Testing.ResponseParameters do
   @type t :: %__MODULE__{
           size: integer,
           interval_us: integer,
-          compressed: Grpc.Testing.BoolValue.t()
+          compressed: Grpc.Testing.BoolValue.t() | nil
         }
   defstruct [:size, :interval_us, :compressed]
 
@@ -136,10 +150,10 @@ defmodule Grpc.Testing.StreamingOutputCallRequest do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          response_type: integer,
+          response_type: Grpc.Testing.PayloadType.t(),
           response_parameters: [Grpc.Testing.ResponseParameters.t()],
-          payload: Grpc.Testing.Payload.t(),
-          response_status: Grpc.Testing.EchoStatus.t()
+          payload: Grpc.Testing.Payload.t() | nil,
+          response_status: Grpc.Testing.EchoStatus.t() | nil
         }
   defstruct [:response_type, :response_parameters, :payload, :response_status]
 
@@ -154,7 +168,7 @@ defmodule Grpc.Testing.StreamingOutputCallResponse do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          payload: Grpc.Testing.Payload.t()
+          payload: Grpc.Testing.Payload.t() | nil
         }
   defstruct [:payload]
 
@@ -185,11 +199,4 @@ defmodule Grpc.Testing.ReconnectInfo do
 
   field :passed, 1, type: :bool
   field :backoff_ms, 2, repeated: true, type: :int32
-end
-
-defmodule Grpc.Testing.PayloadType do
-  @moduledoc false
-  use Protobuf, enum: true, syntax: :proto3
-
-  field :COMPRESSABLE, 0
 end

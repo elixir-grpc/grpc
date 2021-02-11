@@ -5,6 +5,8 @@ defmodule GRPC.Adapter.Gun do
   # conn_pid and stream_ref is stored in `GRPC.Server.Stream`.
 
   @default_transport_opts [nodelay: true]
+  @default_http2_opts %{settings_timeout: :infinity}
+  @max_retries 100
 
   @spec connect(GRPC.Channel.t(), any) :: {:ok, GRPC.Channel.t()} | {:error, any}
   def connect(channel, nil), do: connect(channel, %{})
@@ -13,15 +15,33 @@ defmodule GRPC.Adapter.Gun do
 
   defp connect_securely(%{cred: %{ssl: ssl}} = channel, opts) do
     transport_opts = Map.get(opts, :transport_opts, @default_transport_opts ++ ssl)
-    open_opts = %{transport: :ssl, protocols: [:http2], transport_opts: transport_opts}
+    open_opts = %{transport: :ssl, protocols: [:http2]}
+
+    open_opts =
+      if gun_v2?() do
+        Map.put(open_opts, :tls_opts, transport_opts)
+      else
+        Map.put(open_opts, :transport_opts, transport_opts)
+      end
+
     open_opts = Map.merge(opts, open_opts)
 
     do_connect(channel, open_opts)
   end
 
   defp connect_insecurely(channel, opts) do
+    opts = Map.update(opts, :http2_opts, @default_http2_opts, &Map.merge(&1, @default_http2_opts))
+
     transport_opts = Map.get(opts, :transport_opts, @default_transport_opts)
-    open_opts = %{transport: :tcp, protocols: [:http2], transport_opts: transport_opts}
+    open_opts = %{transport: :tcp, protocols: [:http2]}
+
+    open_opts =
+      if gun_v2?() do
+        Map.put(open_opts, :tcp_opts, transport_opts)
+      else
+        Map.put(open_opts, :transport_opts, transport_opts)
+      end
+
     open_opts = Map.merge(opts, open_opts)
 
     do_connect(channel, open_opts)
@@ -29,7 +49,11 @@ defmodule GRPC.Adapter.Gun do
 
   defp do_connect(%{host: host, port: port} = channel, open_opts) do
     open_opts =
-      Map.merge(%{retry: :infinity, retry_timeout: &GRPC.Stub.retry_timeout/1}, open_opts)
+      if gun_v2?() do
+        Map.merge(%{retry: @max_retries, retry_fun: &__MODULE__.retry_fun/2}, open_opts)
+      else
+        open_opts
+      end
 
     {:ok, conn_pid} = open(host, port, open_opts)
 
@@ -38,16 +62,18 @@ defmodule GRPC.Adapter.Gun do
         {:ok, Map.put(channel, :adapter_payload, %{conn_pid: conn_pid})}
 
       {:ok, proto} ->
+        :gun.shutdown(conn_pid)
         {:error, "Error when opening connection: protocol #{proto} is not http2"}
 
       {:error, reason} ->
+        :gun.shutdown(conn_pid)
         {:error, "Error when opening connection: #{inspect(reason)}"}
     end
   end
 
   def disconnect(%{adapter_payload: %{conn_pid: gun_pid}} = channel)
       when is_pid(gun_pid) do
-    :ok = :gun.close(gun_pid)
+    :ok = :gun.shutdown(gun_pid)
     {:ok, %{channel | adapter_payload: %{conn_pid: nil}}}
   end
 
@@ -202,9 +228,8 @@ defmodule GRPC.Adapter.Gun do
            )}
         end
 
-      {:data, :fin, _} ->
-        {:error,
-         GRPC.RPCError.exception(GRPC.Status.internal(), "shouldn't finish when getting data")}
+      {:data, :fin, data} ->
+        {:data, data}
 
       {:data, :nofin, data} ->
         {:data, data}
@@ -219,19 +244,13 @@ defmodule GRPC.Adapter.Gun do
            "timeout when waiting for server"
          )}
 
-      {:error, {:closed, msg}} ->
-        {:error, GRPC.RPCError.exception(GRPC.Status.unavailable(), "closed: #{inspect(msg)}")}
+      {:error, {reason, msg}} when reason in [:stream_error, :connection_error] ->
+        {:error,
+         GRPC.RPCError.exception(GRPC.Status.internal(), "#{inspect(reason)}: #{inspect(msg)}")}
 
       {:error, {reason, msg}} ->
         {:error,
          GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}: #{inspect(msg)}")}
-
-      {:error, reason} ->
-        {:error,
-         GRPC.RPCError.exception(
-           GRPC.Status.unknown(),
-           "error when waiting for server: #{inspect(reason)}"
-         )}
 
       other ->
         {:error,
@@ -240,5 +259,37 @@ defmodule GRPC.Adapter.Gun do
            "unexpected message when waiting for server: #{inspect(other)}"
          )}
     end
+  end
+
+  @char_2 List.first('2')
+  def gun_v2?() do
+    case :application.get_key(:gun, :vsn) do
+      {:ok, [@char_2 | _]} ->
+        true
+
+      _ ->
+        false
+    end
+  end
+
+  def retry_fun(retries, _opts) do
+    curr = @max_retries - retries + 1
+
+    timeout =
+      if curr < 11 do
+        :math.pow(1.6, curr - 1) * 1000
+      else
+        120_000
+      end
+
+    jitter =
+      if function_exported?(:rand, :uniform_real, 0) do
+        (:rand.uniform_real() - 0.5) / 2.5
+      else
+        (:rand.uniform() - 0.5) / 2.5
+      end
+
+    timeout = round(timeout + jitter * timeout)
+    %{retries: retries - 1, timeout: timeout}
   end
 end

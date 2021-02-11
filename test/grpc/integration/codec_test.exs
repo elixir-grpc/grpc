@@ -1,5 +1,5 @@
-defmodule GRPC.Integration.CoderTest do
-  use GRPC.Integration.TestCase, async: true
+defmodule GRPC.Integration.CodecTest do
+  use GRPC.Integration.TestCase
 
   defmodule NotRegisteredCodec do
     @behaviour GRPC.Codec

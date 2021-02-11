@@ -41,7 +41,7 @@ defmodule GRPC.Server do
   @type rpc :: (GRPC.Server.rpc_req(), Stream.t() -> rpc_return)
 
   defmacro __using__(opts) do
-    quote bind_quoted: [opts: opts] do
+    quote bind_quoted: [opts: opts], location: :keep do
       service_mod = opts[:service]
       service_name = service_mod.__meta__(:name)
       codecs = opts[:codecs] || [GRPC.Codec.Proto]
@@ -184,7 +184,7 @@ defmodule GRPC.Server do
         {:error, e}
     catch
       kind, reason ->
-        stack = System.stacktrace()
+        stack = __STACKTRACE__
         Logger.error(Exception.format(kind, reason, stack))
         reason = Exception.normalize(kind, reason, stack)
         {:error, %{kind: kind, reason: reason, stack: stack}}
