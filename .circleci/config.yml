@@ -1,0 +1,31 @@
+version: 2.1
+
+orbs:
+  elixir-orb: fresha/elixir-orb@0.0
+
+workflows:
+  version: 2
+  ci:
+    jobs:
+      - elixir-orb/test:
+          executor: elixir-orb/elixir
+      - hold-for-dev-publish:
+          type: approval
+          requires:
+            - elixir-orb/test
+          filters:
+            branches:
+              ignore:
+                - master
+      - elixir-orb/dev-publish:
+          context: Hex
+          requires:
+            - hold-for-dev-publish
+      - elixir-orb/deploy:
+          context: Hex
+          requires:
+            - elixir-orb/test
+          filters:
+            branches:
+              only:
+                - master

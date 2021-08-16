@@ -1,12 +1,10 @@
 defmodule GRPC.Mixfile do
   use Mix.Project
 
-  @version "0.5.0-beta.1"
-
   def project do
     [
       app: :grpc,
-      version: @version,
+      version: "0.5.1",
       elixir: "~> 1.5",
       elixirc_paths: elixirc_paths(Mix.env()),
       build_embedded: Mix.env() == :prod,
@@ -17,8 +15,8 @@ defmodule GRPC.Mixfile do
       docs: [
         extras: ["README.md"],
         main: "readme",
-        source_ref: "v#{@version}",
-        source_url: "https://github.com/elixir-grpc/grpc"
+        source_ref: "v0.5.1",
+        source_url: "https://github.com/surgeventures/grpc"
       ],
       dialyzer: [
         plt_add_apps: [:mix, :iex]
@@ -43,15 +41,17 @@ defmodule GRPC.Mixfile do
       # {:cowlib, "~> 2.9.0", override: true},
       {:ex_doc, "~> 0.23", only: :dev},
       {:inch_ex, "~> 2.0", only: [:dev, :test]},
-      {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
+      {:junit_formatter, "~> 3.1", only: [:test]},
+      {:credo, "~> 1.5", only: [:dev, :test], runtime: false}
     ]
   end
 
   defp package do
     %{
-      maintainers: ["Bing Han"],
+      name: :grpc_fresha,
       licenses: ["Apache 2"],
-      links: %{"GitHub" => "https://github.com/elixir-grpc/grpc"},
+      links: %{"GitHub" => "https://github.com/surgeventures/grpc"},
       files: ~w(mix.exs README.md lib src config LICENSE .formatter.exs)
     }
   end
