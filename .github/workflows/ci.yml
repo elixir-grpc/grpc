@@ -15,7 +15,7 @@ jobs:
     container:
       image: elixir:1.9-slim
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - name: Install Dependencies
         run: |
           mix local.rebar --force
@@ -29,15 +29,22 @@ jobs:
     name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
     strategy:
       matrix:
-        otp: [20.x, 21.x, 22.x]
-        elixir: [1.7.x, 1.8.x, 1.9.x, 1.10.x]
-        exclude:
-          - otp: 20.x
-            elixir: 1.10.x
+        include:
+          - otp: 24.0
+            elixir: 1.12.2
+            integration: true
+          - otp: 23.3
+            elixir: 1.11.4
+            lint: true
+            integration: true
+          - otp: 23.3
+            elixir: 1.10.4
+          - otp: 22.3
+            elixir: 1.9.4
     needs: check_format
     steps:
-    - uses: actions/checkout@v1
-    - uses: actions/setup-elixir@v1.2.0
+    - uses: actions/checkout@v2
+    - uses: erlef/setup-elixir@v1
       with:
         otp-version: ${{matrix.otp}}
         elixir-version: ${{matrix.elixir}}
@@ -56,7 +63,7 @@ jobs:
       image: elixir:1.9-slim
     needs: check_format
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Install Dependencies
       run: |
         mix local.rebar --force
@@ -74,7 +81,7 @@ jobs:
     container:
       image: elixir:1.9-slim
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - name: Install Dependencies
         run: |
           mix local.rebar --force
