@@ -59,11 +59,27 @@ jobs:
   interop-tests:
     runs-on: ubuntu-latest
     name: Interop tests
-    container:
-      image: elixir:1.9-slim
+    strategy:
+      matrix:
+        include:
+          - otp: 24.0
+            elixir: 1.12.2
+            integration: true
+          - otp: 23.3
+            elixir: 1.11.4
+            lint: true
+            integration: true
+          - otp: 23.3
+            elixir: 1.10.4
+          - otp: 22.3
+            elixir: 1.9.4
     needs: check_format
     steps:
     - uses: actions/checkout@v2
+    - uses: erlef/setup-elixir@v1
+      with:
+        otp-version: ${{matrix.otp}}
+        elixir-version: ${{matrix.elixir}}
     - name: Install Dependencies
       run: |
         mix local.rebar --force
