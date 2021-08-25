@@ -8,6 +8,8 @@ defmodule GRPC.ClientAdapter do
 
   @type channel :: Channel.t()
   @callback connect(channel, opts) :: {:ok, channel} | {:error, any}
+  
+  @callback disconnect(channel) :: {:ok, channel} | {:error, any}
 
   @type stream :: Stream.t()
   @type message :: binary()
