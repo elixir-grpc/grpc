@@ -4,10 +4,6 @@
 -module(grpc_stream_h).
 -behavior(cowboy_stream).
 
--ifdef(OTP_RELEASE).
--compile({nowarn_deprecated_function, [{erlang, get_stacktrace, 0}]}).
--endif.
-
 -export([init/3]).
 -export([data/4]).
 -export([info/3]).
@@ -325,23 +321,13 @@ send_request_body(Pid, Ref, fin, BodyLen, Data) ->
 %% @todo Better spec.
 -spec request_process(cowboy_req:req(), cowboy_middleware:env(), [module()]) -> ok.
 request_process(Req, Env, Middlewares) ->
-	OTP = erlang:system_info(otp_release),
 	try
 		execute(Req, Env, Middlewares)
 	catch
 		exit:Reason:Stacktrace ->
 			erlang:raise(exit, {Reason, Stacktrace}, Stacktrace);
-		exit:Reason ->
-			Stacktrace = erlang:get_stacktrace(),
-			erlang:raise(exit, {Reason, Stacktrace}, Stacktrace);
-		%% OTP 19 does not propagate any exception stacktraces,
-		%% we therefore add it for every class of exception.
-		_:Reason when OTP =:= "19" ->
-			Stacktrace = erlang:get_stacktrace(),
-			erlang:raise(exit, {Reason, Stacktrace}, Stacktrace);
-		%% @todo I don't think this clause is necessary.
-		Class:Reason ->
-			erlang:raise(Class, Reason, erlang:get_stacktrace())
+		Class:Reason:Stacktrace ->
+			erlang:raise(Class, {Reason, Stacktrace}, Stacktrace)
 	end.
 
 execute(_, _, []) ->
