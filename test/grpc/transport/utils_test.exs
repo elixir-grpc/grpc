@@ -75,4 +75,48 @@ defmodule GRPC.Transport.UtilsTest do
   test "decode_timeout/1 returns hour" do
     assert decode_timeout("123H") == 123 * 3_600_000
   end
+
+  test "encode_status_details/2 returns empty string" do
+    assert encode_status_details(GRPC.Status.invalid_argument(), nil) == ""
+  end
+
+  test "encode_status_details/2 returns status with no details" do
+    status_details = encode_status_details(GRPC.Status.invalid_argument(), [])
+
+    assert Google.Rpc.Status.decode(status_details) == %Google.Rpc.Status{
+             code: 3,
+             details: [],
+             message: ""
+           }
+  end
+
+  test "encode_status_details/2 returns status with correct type_url" do
+    status_details =
+      encode_status_details(GRPC.Status.invalid_argument(), [
+        Google.Rpc.QuotaFailure.new(
+          violations: [%{subject: "test", description: "Limit one greeting per person"}]
+        )
+      ])
+
+    %Google.Rpc.Status{code: 3, details: [%Google.Protobuf.Any{type_url: type_url}]} =
+      Google.Rpc.Status.decode(status_details)
+
+    assert type_url == "type.googleapis.com/google.rpc.QuotaFailure"
+  end
+
+  test "decode_status_details/1 decodes status details succesfully" do
+    details = [
+      Google.Rpc.QuotaFailure.new(
+        violations: [%{subject: "test", description: "Limit one greeting per person"}]
+      ),
+      Google.Rpc.BadRequest.new(
+        violations: [%{description: "some description", field: "some field"}]
+      )
+    ]
+
+    encoded_status_details = encode_status_details(GRPC.Status.invalid_argument(), details)
+    decoded_status_details = decode_status_details(encoded_status_details)
+
+    assert details == decoded_status_details
+  end
 end

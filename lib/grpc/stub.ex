@@ -418,8 +418,12 @@ defmodule GRPC.Stub do
           {:ok, res_enum}
         end
 
-      {:error, reason} ->
-        {:error, reason}
+      {:error, reason, headers} ->
+        if opts[:return_headers] do
+          {:error, reason, %{headers: headers}}
+        else
+          {:error, reason}
+        end
     end
   end
 
@@ -439,8 +443,12 @@ defmodule GRPC.Stub do
         {status, msg}
       end
     else
-      error = {:error, _} ->
-        error
+      error = {:error, reason, _} ->
+        if opts[:return_headers] do
+          error
+        else
+          {:error, reason}
+        end
     end
   end
 
@@ -504,9 +512,21 @@ defmodule GRPC.Stub do
     if status == GRPC.Status.ok() do
       :ok
     else
-      {:error, %GRPC.RPCError{status: status, message: trailers["grpc-message"]}}
+      {:error,
+       %GRPC.RPCError{
+         status: status,
+         message: trailers["grpc-message"],
+         details: decode_status_details(trailers)
+       }}
     end
   end
+
+  defp decode_status_details(%{"grpc-status-details-bin" => details})
+       when is_binary(details) do
+    GRPC.Transport.Utils.decode_status_details(details)
+  end
+
+  defp decode_status_details(_headers), do: nil
 
   defp response_stream(
          %{
@@ -570,7 +590,7 @@ defmodule GRPC.Stub do
             {error, %{buffer: <<>>, fin: true, fin_resp: nil}}
         end
 
-      error = {:error, _} ->
+      error = {:error, _, _} ->
         {error, %{buffer: <<>>, fin: true, fin_resp: nil}}
     end
   end

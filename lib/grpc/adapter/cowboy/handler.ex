@@ -315,8 +315,13 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   end
 
   # expected error raised from user to return error immediately
-  def info({:EXIT, pid, {%RPCError{} = error, _stacktrace}}, req, state = %{pid: pid}) do
-    trailers = HTTP2.server_trailers(error.status, error.message)
+  def info(
+        {:EXIT, pid, {%RPCError{details: details} = error, _stacktrace}},
+        req,
+        state = %{pid: pid}
+      ) do
+    proto_status = GRPC.Transport.Utils.encode_status_details(error.status, details)
+    trailers = HTTP2.server_trailers(error.status, error.message, proto_status)
     exit_handler(pid, :rpc_error)
     req = send_error_trailers(req, trailers)
     {:stop, req, state}

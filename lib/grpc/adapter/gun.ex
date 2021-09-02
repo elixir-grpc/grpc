@@ -135,7 +135,7 @@ defmodule GRPC.Adapter.Gun do
       {:response, headers, fin} ->
         {:ok, headers, fin}
 
-      error = {:error, _} ->
+      error = {:error, _, _headers} ->
         error
 
       other ->
@@ -155,7 +155,7 @@ defmodule GRPC.Adapter.Gun do
       trailers = {:trailers, _} ->
         trailers
 
-      error = {:error, _} ->
+      error = {:error, _, _} ->
         error
 
       other ->
@@ -163,10 +163,15 @@ defmodule GRPC.Adapter.Gun do
          GRPC.RPCError.exception(
            GRPC.Status.unknown(),
            "unexpected when waiting for data: #{inspect(other)}"
-         )}
+         ), %{}}
     end
   end
 
+  @spec await(pid, reference, timeout) ::
+          {:response, map, :fin | :nofin}
+          | {:data, iodata}
+          | {:trailers, map}
+          | {:error, map, map}
   defp await(conn_pid, stream_ref, timeout) do
     # We should use server timeout for most time
     timeout =
@@ -176,10 +181,12 @@ defmodule GRPC.Adapter.Gun do
         timeout
       end
 
-    case :gun.await(conn_pid, stream_ref, timeout) do
+    result = :gun.await(conn_pid, stream_ref, timeout)
+
+    case result do
       {:response, :fin, status, headers} ->
         if status == 200 do
-          headers = Enum.into(headers, %{})
+          headers = GRPC.Transport.HTTP2.decode_headers(headers)
 
           case headers["grpc-status"] do
             nil ->
@@ -187,7 +194,7 @@ defmodule GRPC.Adapter.Gun do
                GRPC.RPCError.exception(
                  GRPC.Status.internal(),
                  "shouldn't finish when getting headers"
-               )}
+               ), headers}
 
             "0" ->
               {:response, headers, :fin}
@@ -196,36 +203,42 @@ defmodule GRPC.Adapter.Gun do
               {:error,
                GRPC.RPCError.exception(
                  String.to_integer(headers["grpc-status"]),
-                 headers["grpc-message"]
-               )}
+                 headers["grpc-message"],
+                 decode_status_details(headers)
+               ), headers}
           end
         else
+          headers = Enum.into(headers, %{})
+
           {:error,
            GRPC.RPCError.exception(
              GRPC.Status.internal(),
              "status got is #{status} instead of 200"
-           )}
+           ), headers}
         end
 
       {:response, :nofin, status, headers} ->
         if status == 200 do
-          headers = Enum.into(headers, %{})
+          headers = GRPC.Transport.HTTP2.decode_headers(headers)
 
           if headers["grpc-status"] && headers["grpc-status"] != "0" do
             {:error,
              GRPC.RPCError.exception(
                String.to_integer(headers["grpc-status"]),
-               headers["grpc-message"]
-             )}
+               headers["grpc-message"],
+               decode_status_details(headers)
+             ), headers}
           else
             {:response, headers, :nofin}
           end
         else
+          headers = Enum.into(headers, %{})
+
           {:error,
            GRPC.RPCError.exception(
              GRPC.Status.internal(),
              "status got is #{status} instead of 200"
-           )}
+           ), headers}
         end
 
       {:data, :fin, data} ->
@@ -242,22 +255,26 @@ defmodule GRPC.Adapter.Gun do
          GRPC.RPCError.exception(
            GRPC.Status.deadline_exceeded(),
            "timeout when waiting for server"
-         )}
+         ), %{}}
 
       {:error, {reason, msg}} when reason in [:stream_error, :connection_error] ->
-        {:error,
-         GRPC.RPCError.exception(GRPC.Status.internal(), "#{inspect(reason)}: #{inspect(msg)}")}
+        error =
+          GRPC.RPCError.exception(GRPC.Status.internal(), "#{inspect(reason)}: #{inspect(msg)}")
+
+        {:error, error, %{}}
 
       {:error, {reason, msg}} ->
-        {:error,
-         GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}: #{inspect(msg)}")}
+        error =
+          GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}: #{inspect(msg)}")
+
+        {:error, error, %{}}
 
       other ->
         {:error,
          GRPC.RPCError.exception(
            GRPC.Status.unknown(),
            "unexpected message when waiting for server: #{inspect(other)}"
-         )}
+         ), %{}}
     end
   end
 
@@ -292,4 +309,11 @@ defmodule GRPC.Adapter.Gun do
     timeout = round(timeout + jitter * timeout)
     %{retries: retries - 1, timeout: timeout}
   end
+
+  defp decode_status_details(%{"grpc-status-details-bin" => details})
+       when is_binary(details) do
+    GRPC.Transport.Utils.decode_status_details(details)
+  end
+
+  defp decode_status_details(_headers), do: nil
 end

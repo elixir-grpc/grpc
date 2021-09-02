@@ -10,8 +10,8 @@ defmodule GRPC.RPCError do
       {:error, error} = Your.Stub.unary_call(channel, request)
   """
 
-  defexception [:status, :message]
-  @type t :: %__MODULE__{status: GRPC.Status.t(), message: String.t()}
+  defexception [:status, :message, :details]
+  @type t :: %__MODULE__{status: GRPC.Status.t(), message: String.t(), details: list()}
 
   alias GRPC.Status
 
@@ -47,12 +47,25 @@ defmodule GRPC.RPCError do
     parse_args(t, acc)
   end
 
+  defp parse_args([{:details, details} | t], acc) when is_list(details) do
+    acc = %{acc | details: details}
+    parse_args(t, acc)
+  end
+
   def exception(status, message) when is_atom(status) do
     %GRPC.RPCError{status: apply(GRPC.Status, status, []), message: message}
   end
 
   def exception(status, message) when is_integer(status) do
     %GRPC.RPCError{status: status, message: message}
+  end
+
+  def exception(status, message, details) when is_atom(status) do
+    %GRPC.RPCError{status: apply(GRPC.Status, status, []), message: message, details: details}
+  end
+
+  def exception(status, message, details) when is_integer(status) do
+    %GRPC.RPCError{status: status, message: message, details: details}
   end
 
   defp status_message(1), do: "The operation was cancelled (typically by the caller)"
