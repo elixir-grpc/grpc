@@ -54,6 +54,38 @@ defmodule Google.Rpc.QuotaFailure do
   field :violations, 1, repeated: true, type: Google.Rpc.QuotaFailure.Violation
 end
 
+defmodule Google.Rpc.ErrorInfo.MetadataEntry do
+  @moduledoc false
+  use Protobuf, map: true, syntax: :proto3
+
+  @type t :: %__MODULE__{
+          key: String.t(),
+          value: String.t()
+        }
+
+  defstruct [:key, :value]
+
+  field :key, 1, type: :string
+  field :value, 2, type: :string
+end
+
+defmodule Google.Rpc.ErrorInfo do
+  @moduledoc false
+  use Protobuf, syntax: :proto3
+
+  @type t :: %__MODULE__{
+          reason: String.t(),
+          domain: String.t(),
+          metadata: %{String.t() => String.t()}
+        }
+
+  defstruct [:reason, :domain, :metadata]
+
+  field :reason, 1, type: :string
+  field :domain, 2, type: :string
+  field :metadata, 3, repeated: true, type: Google.Rpc.ErrorInfo.MetadataEntry, map: true
+end
+
 defmodule Google.Rpc.PreconditionFailure.Violation do
   @moduledoc false
   use Protobuf, syntax: :proto3
