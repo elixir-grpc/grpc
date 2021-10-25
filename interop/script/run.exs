@@ -1,6 +1,6 @@
 {options, _, _} = OptionParser.parse(System.argv(), strict: [rounds: :integer, concurrency: :integer, port: :integer])
 rounds = Keyword.get(options, :rounds, 100)
-concurrency = Keyword.get(options, :concurrency, 10)
+concurrency = Keyword.get(options, :concurrency, 1)
 port = Keyword.get(options, :port, 0)
 
 IO.puts "Rounds: #{rounds}; concurrency: #{concurrency}; port: #{port}"
