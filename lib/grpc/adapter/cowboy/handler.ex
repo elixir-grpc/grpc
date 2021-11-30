@@ -151,6 +151,10 @@ defmodule GRPC.Adapter.Cowboy.Handler do
     sync_call(pid, :get_peer)
   end
 
+  def get_cert(pid) do
+    sync_call(pid, :get_cert)
+  end
+
   defp sync_call(pid, key) do
     ref = make_ref()
     send(pid, {key, ref, self()})
@@ -216,6 +220,12 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
   def info({:get_peer, ref, pid}, req, state) do
     peer = :cowboy_req.peer(req)
+    send(pid, {ref, peer})
+    {:ok, req, state}
+  end
+
+  def info({:get_cert, ref, pid}, req, state) do
+    peer = :cowboy_req.cert(req)
     send(pid, {ref, peer})
     {:ok, req, state}
   end
@@ -354,7 +364,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
         end
       catch
         kind, reason ->
-          stack = System.stacktrace()
+          stack = __STACKTRACE__
           # Logger.error(Exception.format(kind, reason, stack))
           reason = Exception.normalize(kind, reason, stack)
           {:error, %{kind: kind, reason: reason, stack: stack}}

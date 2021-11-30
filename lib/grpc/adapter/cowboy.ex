@@ -11,6 +11,7 @@ defmodule GRPC.Adapter.Cowboy do
   alias GRPC.Adapter.Cowboy.Handler, as: Handler
 
   @default_num_acceptors 20
+  @default_max_connections 16384
 
   # Only used in starting a server manually using `GRPC.Server.start(servers)`
   @spec start(atom, GRPC.Server.servers_map(), non_neg_integer, keyword) ::
@@ -143,6 +144,10 @@ defmodule GRPC.Adapter.Cowboy do
     Handler.get_peer(pid)
   end
 
+  def get_cert(%{pid: pid}) do
+    Handler.get_cert(pid)
+  end
+
   def set_compressor(%{pid: pid}, compressor) do
     Handler.set_compressor(pid, compressor)
   end
@@ -154,6 +159,8 @@ defmodule GRPC.Adapter.Cowboy do
       ])
 
     idle_timeout = Keyword.get(opts, :idle_timeout, :infinity)
+    num_acceptors = Keyword.get(opts, :num_acceptors, @default_num_acceptors)
+    max_connections = Keyword.get(opts, :max_connections, @default_max_connections)
 
     # https://ninenines.eu/docs/en/cowboy/2.7/manual/cowboy_http2/
     opts =
@@ -175,7 +182,11 @@ defmodule GRPC.Adapter.Cowboy do
 
     [
       servers_name(endpoint, servers),
-      %{num_acceptors: @default_num_acceptors, socket_opts: socket_opts(port, opts)},
+      %{
+        num_acceptors: num_acceptors,
+        max_connections: max_connections,
+        socket_opts: socket_opts(port, opts)
+      },
       opts
     ]
   end
