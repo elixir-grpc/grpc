@@ -1,7 +1,7 @@
 defmodule GRPC.Mixfile do
   use Mix.Project
 
-  @version "0.5.0-beta.1"
+  @version "0.5.1"
 
   def project do
     [
@@ -23,7 +23,7 @@ defmodule GRPC.Mixfile do
       dialyzer: [
         plt_add_apps: [:mix, :iex]
       ],
-      xref: [exclude: [IEx]]
+      xref: [exclude: [IEx, Jason]]
     ]
   end
 
@@ -36,12 +36,12 @@ defmodule GRPC.Mixfile do
 
   defp deps do
     [
-      {:protobuf, "~> 0.7"},
+      {:protobuf, "~> 0.9"},
       {:cowboy, "~> 2.9"},
       {:gun, "~> 2.0.0-rc.2"},
-      {:ex_doc, "~> 0.23", only: :dev},
+      {:ex_doc, "~> 0.27", only: :dev},
       {:inch_ex, "~> 2.0", only: [:dev, :test]},
-      {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false}
     ]
   end
 
