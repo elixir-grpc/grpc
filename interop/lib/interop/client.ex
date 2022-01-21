@@ -7,12 +7,12 @@ defmodule Interop.Client do
   end
 
   defmacrop log_test do
-	{function_name, _} = __CALLER__.function
-	quote do: IO.puts("Run #{unquote(function_name)}")
+    {function_name, _} = __CALLER__.function
+    quote do: IO.puts("Run #{unquote(function_name)}")
   end
 
   def empty_unary!(ch) do
-	log_test()
+    log_test()
     empty = Grpc.Testing.Empty.new()
     {:ok, ^empty} = Grpc.Testing.TestService.Stub.empty_call(ch, empty)
   end
@@ -22,14 +22,14 @@ defmodule Interop.Client do
   end
 
   def large_unary!(ch) do
-	log_test()
+    log_test()
     req = Grpc.Testing.SimpleRequest.new(response_size: 314_159, payload: payload(271_828))
     reply = Grpc.Testing.SimpleResponse.new(payload: payload(314_159))
     {:ok, ^reply} = Grpc.Testing.TestService.Stub.unary_call(ch, req)
   end
 
   def large_unary2!(ch) do
-	log_test()
+    log_test()
     req = Grpc.Testing.SimpleRequest.new(response_size: 1024*1024*8, payload: payload(1024*1024*8))
     reply = Grpc.Testing.SimpleResponse.new(payload: payload(1024*1024*8))
     {:ok, ^reply} = Grpc.Testing.TestService.Stub.unary_call(ch, req)
@@ -38,7 +38,7 @@ defmodule Interop.Client do
   def client_compressed_unary!(ch) do
     # "Client calls UnaryCall with the feature probe, an uncompressed message" is not supported
 
-	log_test()
+    log_test()
     req = Grpc.Testing.SimpleRequest.new(expect_compressed: %{value: true}, response_size: 314_159, payload: payload(271_828))
     reply = Grpc.Testing.SimpleResponse.new(payload: payload(314_159))
     {:ok, ^reply} = Grpc.Testing.TestService.Stub.unary_call(ch, req, compressor: GRPC.Compressor.Gzip)
@@ -49,7 +49,7 @@ defmodule Interop.Client do
   end
 
   def server_compressed_unary!(ch) do
-	log_test()
+    log_test()
 
     req = Grpc.Testing.SimpleRequest.new(response_compressed: %{value: true}, response_size: 314_159, payload: payload(271_828))
     reply = Grpc.Testing.SimpleResponse.new(payload: payload(314_159))
@@ -62,7 +62,7 @@ defmodule Interop.Client do
   end
 
   def client_streaming!(ch) do
-	log_test()
+    log_test()
 
     stream =
       ch
@@ -84,7 +84,7 @@ defmodule Interop.Client do
   end
 
   def client_compressed_streaming!(ch) do
-	log_test()
+    log_test()
 
     # INVALID_ARGUMENT testing is not supported
 
@@ -102,7 +102,7 @@ defmodule Interop.Client do
   end
 
   def server_streaming!(ch) do
-	log_test()
+    log_test()
     params = Enum.map([31415, 9, 2653, 58979], &res_param(&1))
     req = Grpc.Testing.StreamingOutputCallRequest.new(response_parameters: params)
     {:ok, res_enum} = ch |> Grpc.Testing.TestService.Stub.streaming_output_call(req)
@@ -115,7 +115,7 @@ defmodule Interop.Client do
   end
 
   def server_compressed_streaming!(ch) do
-	log_test()
+    log_test()
     req = Grpc.Testing.StreamingOutputCallRequest.new(response_parameters: [
       %{compressed: %{value: true},
         size: 31415},
@@ -132,7 +132,7 @@ defmodule Interop.Client do
   end
 
   def ping_pong!(ch) do
-	log_test()
+    log_test()
     stream = Grpc.Testing.TestService.Stub.full_duplex_call(ch)
 
     req = fn size1, size2 ->
@@ -161,7 +161,7 @@ defmodule Interop.Client do
   end
 
   def empty_stream!(ch) do
-	log_test()
+    log_test()
 
     {:ok, res_enum} =
       ch
@@ -173,7 +173,7 @@ defmodule Interop.Client do
   end
 
   def custom_metadata!(ch) do
-	log_test()
+    log_test()
     # UnaryCall
     req = Grpc.Testing.SimpleRequest.new(response_size: 314_159, payload: payload(271_828))
     reply = Grpc.Testing.SimpleResponse.new(payload: payload(314_159))
@@ -210,7 +210,7 @@ defmodule Interop.Client do
   end
 
   def status_code_and_message!(ch) do
-	log_test()
+    log_test()
 
     code = 2
     msg = "test status message"
@@ -232,7 +232,7 @@ defmodule Interop.Client do
   end
 
   def unimplemented_service!(ch) do
-	log_test()
+    log_test()
     req = Grpc.Testing.Empty.new()
 
     {:error, %GRPC.RPCError{status: 12}} =
@@ -240,7 +240,7 @@ defmodule Interop.Client do
   end
 
   def cancel_after_begin!(ch) do
-	log_test()
+    log_test()
     stream = Grpc.Testing.TestService.Stub.streaming_input_call(ch)
     stream = GRPC.Stub.cancel(stream)
     error = GRPC.RPCError.exception(1, "The operation was cancelled")
@@ -248,7 +248,7 @@ defmodule Interop.Client do
   end
 
   def cancel_after_first_response!(ch) do
-	log_test()
+    log_test()
 
     req =
       Grpc.Testing.StreamingOutputCallRequest.new(
@@ -269,7 +269,7 @@ defmodule Interop.Client do
   end
 
   def timeout_on_sleeping_server!(ch) do
-	log_test()
+    log_test()
 
     req =
       Grpc.Testing.StreamingOutputCallRequest.new(
