@@ -41,18 +41,5 @@ Enum.map(stream, fn result ->
 end)
 |> IO.inspect
 
-# defmodule Helper do
-#   def flush() do
-#     receive do
-#      msg ->
-#        IO.inspect(msg)
-#        flush()
-#     after
-#      0 -> :ok
-#     end
-#   end
-# end
-# Helper.flush()
-
 IO.puts("Succeed!")
 :ok = GRPC.Server.stop_endpoint(Interop.Endpoint)
