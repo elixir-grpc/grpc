@@ -1,8 +1,7 @@
 # gRPC Elixir
 
 [![Hex.pm](https://img.shields.io/hexpm/v/grpc.svg)](https://hex.pm/packages/grpc)
-[![Travis Status](https://travis-ci.org/elixir-grpc/grpc.svg?branch=master)](https://travis-ci.org/elixir-grpc/grpc)
-[![GitHub actions Status](https://github.com/elixir-grpc/grpc/workflows/CI/badge.svg)](https://github.com/elixir-grpc/grpc/actions)
+[![CI](https://github.com/platogo/grpc/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/platogo/grpc/actions/workflows/ci.yml)
 [![Inline docs](http://inch-ci.org/github/elixir-grpc/grpc.svg?branch=master)](http://inch-ci.org/github/elixir-grpc/grpc)
 
 An Elixir implementation of [gRPC](http://www.grpc.io/).
@@ -26,7 +25,7 @@ The package can be installed as:
   ```elixir
   def deps do
     [
-      {:grpc, github: "elixir-grpc/grpc"},
+      {:grpc, github: "platogo/grpc"},
       # 2.9.0 fixes some important bugs, so it's better to use ~> 2.9.0
       {:cowlib, "~> 2.9.0", override: true}
     ]
@@ -35,7 +34,7 @@ The package can be installed as:
 
 ## Usage
 
-1. Generate Elixir code from proto file as [protobuf-elixir](https://github.com/tony612/protobuf-elixir#usage) shows(especially the `gRPC Support` section).
+1. Generate Elixir code from proto file as [protobuf-elixir](https://github.com/tony612/protobuf-elixir#usage) shows(especially the `gRPC Support` section). You can also use the convenience mix task [protobuf_compiler](https://github.com/OffgridElectric/protobuf_compiler).
 2. Implement the server side code like below and remember to return the expected message types.
 ```elixir
 defmodule Helloworld.Greeter.Server do
@@ -131,12 +130,6 @@ Check [examples](examples) and [interop](interop)(Interoperability Test) for som
 1. [Simple benchmark](examples/helloworld/README.md#Benchmark) by using [ghz](https://ghz.sh/)
 
 2. [Benchmark](benchmark) followed by official spec
-
-## Sponsors
-
-This project is being sponsored by [Tubi](https://tubitv.com/). Thank you!
-
-<img src="https://user-images.githubusercontent.com/1253659/37473536-4db44048-28a9-11e8-90d5-f8a2f5a8d53c.jpg" height="80">
 
 ## Contributing
 
