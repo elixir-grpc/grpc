@@ -52,11 +52,13 @@ jobs:
   interop-tests:
     runs-on: ubuntu-latest
     name: Interop tests
-    container:
-      image: elixir:1.9-slim
     needs: check_format
     steps:
     - uses: actions/checkout@v1
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: 24
+        elixir-version: 1.13.1
     - name: Install Dependencies
       run: |
         mix local.rebar --force
