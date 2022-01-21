@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Check format
     container:
-      image: elixir:1.9-slim
+      image: elixir:1.10-slim
     steps:
       - uses: actions/checkout@v1
       - name: Install Dependencies
@@ -29,15 +29,15 @@ jobs:
     name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
     strategy:
       matrix:
-        otp: [20.x, 21.x, 22.x]
-        elixir: [1.7.x, 1.8.x, 1.9.x, 1.10.x]
+        otp: [22.x, 23.x, 24.x]
+        elixir: [1.10.x, 1.11.x, 1.12.x]
         exclude:
           - otp: 20.x
             elixir: 1.10.x
     needs: check_format
     steps:
     - uses: actions/checkout@v1
-    - uses: actions/setup-elixir@v1.2.0
+    - uses: erlef/setup-beam@v1
       with:
         otp-version: ${{matrix.otp}}
         elixir-version: ${{matrix.elixir}}
@@ -52,11 +52,13 @@ jobs:
   interop-tests:
     runs-on: ubuntu-latest
     name: Interop tests
-    container:
-      image: elixir:1.9-slim
     needs: check_format
     steps:
     - uses: actions/checkout@v1
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: 24
+        elixir-version: 1.13.1
     - name: Install Dependencies
       run: |
         mix local.rebar --force
@@ -80,7 +82,5 @@ jobs:
           mix local.rebar --force
           mix local.hex --force
           mix deps.get
-      - name: Build hex
-        run: mix hex.build
       - name: Generate docs
         run: mix docs
