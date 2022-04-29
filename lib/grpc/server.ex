@@ -161,12 +161,16 @@ defmodule GRPC.Server do
          req
        ) do
     last = fn r, s ->
-      reply = apply(server, func_name, [r, s])
+      case apply(server, func_name, [r, s]) do
+        error = {:error, _} ->
+          error
 
-      if res_stream do
-        {:ok, stream}
-      else
-        {:ok, stream, reply}
+        reply ->
+          if res_stream do
+            {:ok, stream}
+          else
+            {:ok, stream, reply}
+          end
       end
     end
 
