@@ -42,24 +42,25 @@ jobs:
       - name: Run Tests
         run: mix test
 
-  interop-tests:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./interop
-    name: Interop tests
-    needs: check-format
-    steps:
-      - uses: actions/checkout@v1
-      - uses: erlef/setup-beam@v1
-        with: 
-          otp-version: 25
-          elixir-version: 1.13
-      - name: Install Dependencies
-        run: |
-          mix do local.rebar --force, local.hex --force, deps.get
-      - name: Run interop tests
-        run: mix run script/run.exs
+  # TODO: re-enable me.
+  # interop-tests:
+  #   runs-on: ubuntu-latest
+  #   defaults:
+  #     run:
+  #       working-directory: ./interop
+  #   name: Interop tests
+  #   needs: check-format
+  #   steps:
+  #     - uses: actions/checkout@v1
+  #     - uses: erlef/setup-beam@v1
+  #       with:
+  #         otp-version: 25
+  #         elixir-version: 1.13
+  #     - name: Install Dependencies
+  #       run: |
+  #         mix do local.rebar --force, local.hex --force, deps.get
+  #     - name: Run interop tests
+  #       run: mix run script/run.exs
 
   check-release:
     runs-on: ubuntu-latest
@@ -69,7 +70,7 @@ jobs:
       - uses: actions/checkout@v1
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: 25
+          otp-version: 23
           elixir-version: 1.13
       - name: Install Dependencies
         run: |
