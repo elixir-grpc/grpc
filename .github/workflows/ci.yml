@@ -27,7 +27,7 @@ jobs:
     name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
     strategy:
       matrix:
-        otp: [23]
+        otp: [23, 24]
         elixir: [1.11, 1.12, 1.13]
     needs: check-format
     steps:
