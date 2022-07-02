@@ -50,7 +50,7 @@ defmodule GRPC.Adapter.Gun do
   defp do_connect(%{host: host, port: port} = channel, open_opts) do
     open_opts =
       if gun_v2?() do
-        Map.merge(%{retry: @max_retries, retry_fun: &__MODULE__.retry_fun/2}, open_opts)
+        Map.merge(%{retry: @max_retries, retry_fun: &retry_fun/2}, open_opts)
       else
         open_opts
       end
@@ -261,10 +261,9 @@ defmodule GRPC.Adapter.Gun do
     end
   end
 
-  @char_2 List.first('2')
-  def gun_v2?() do
+  defp gun_v2?() do
     case :application.get_key(:gun, :vsn) do
-      {:ok, [@char_2 | _]} ->
+      {:ok, [?2 | _]} ->
         true
 
       _ ->
@@ -272,7 +271,7 @@ defmodule GRPC.Adapter.Gun do
     end
   end
 
-  def retry_fun(retries, _opts) do
+  defp retry_fun(retries, _opts) do
     curr = @max_retries - retries + 1
 
     timeout =
