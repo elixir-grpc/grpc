@@ -11,32 +11,23 @@ An Elixir implementation of [gRPC](http://www.grpc.io/).
 
 **NOTICE: Erlang/OTP needs >= 20.3.2**
 
-**NOTICE: grpc_gun**
-
-Now `{:gun, "~> 2.0.0", hex: :grpc_gun}` is used in mix.exs because grpc depnds on Gun 2.0,
-but its stable version is not released. So I published a [2.0 version on hex](https://hex.pm/packages/grpc_gun)
-with a different name. So if you have other dependencies who depends on Gun, you need to use
-override: `{:gun, "~> 2.0.0", hex: :grpc_gun, override: true}`. Let's wait for this issue
-https://github.com/ninenines/gun/issues/229.
-
 ## Installation
 
 The package can be installed as:
 
-  ```elixir
-  def deps do
-    [
-      {:grpc, github: "elixir-grpc/grpc"},
-      # 2.9.0 fixes some important bugs, so it's better to use ~> 2.9.0
-      {:cowlib, "~> 2.9.0", override: true}
-    ]
-  end
-  ```
+```elixir
+def deps do
+  [
+    {:grpc, "~> 0.6", hex: :grpc_fresha}
+  ]
+end
+```
 
 ## Usage
 
 1. Generate Elixir code from proto file as [protobuf-elixir](https://github.com/tony612/protobuf-elixir#usage) shows(especially the `gRPC Support` section).
 2. Implement the server side code like below and remember to return the expected message types.
+
 ```elixir
 defmodule Helloworld.Greeter.Server do
   use GRPC.Server, service: Helloworld.Greeter.Service
@@ -95,6 +86,7 @@ $ mix grpc.server
 ```
 
 4. Call rpc:
+
 ```elixir
 iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051")
 iex> request = Helloworld.HelloRequest.new(name: "grpc-elixir")
@@ -131,12 +123,6 @@ Check [examples](examples) and [interop](interop)(Interoperability Test) for som
 1. [Simple benchmark](examples/helloworld/README.md#Benchmark) by using [ghz](https://ghz.sh/)
 
 2. [Benchmark](benchmark) followed by official spec
-
-## Sponsors
-
-This project is being sponsored by [Tubi](https://tubitv.com/). Thank you!
-
-<img src="https://user-images.githubusercontent.com/1253659/37473536-4db44048-28a9-11e8-90d5-f8a2f5a8d53c.jpg" height="80">
 
 ## Contributing
 
