@@ -4,7 +4,7 @@ defmodule GRPC.Mixfile do
   def project do
     [
       app: :grpc,
-      version: "0.6.4",
+      version: "0.6.3",
       elixir: "~> 1.5",
       elixirc_paths: elixirc_paths(Mix.env()),
       build_embedded: Mix.env() == :prod,
@@ -36,7 +36,9 @@ defmodule GRPC.Mixfile do
     [
       {:protobuf, "~> 0.5"},
       {:cowboy, "~> 2.7"},
-      {:gun, "~> 2.0.0-pre"},
+      {:gun, "~> 2.0.0", hex: :grpc_gun},
+      # 2.9.0 fixes some important bugs, so it's better to use ~> 2.9.0
+      # {:cowlib, "~> 2.9.0", override: true},
       {:ex_doc, "~> 0.23", only: :dev},
       {:inch_ex, "~> 2.0", only: [:dev, :test]},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
