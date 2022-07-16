@@ -53,7 +53,7 @@ defmodule GRPC.Transport.HTTP2 do
     # TODO: Authorization
   end
 
-  defp content_type(custom, codec) when is_binary(custom), do: custom
+  defp content_type(custom, _codec) when is_binary(custom), do: custom
 
   defp content_type(_, codec) do
     # Some gRPC implementations don't support application/grpc+xyz,
