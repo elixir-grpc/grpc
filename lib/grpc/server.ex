@@ -88,8 +88,15 @@ defmodule GRPC.Server do
         {_, {req_mod, req_stream}, {res_mod, res_stream}} = rpc,
         func_name
       ) do
-        request_id = generate_request_id()
-    stream = %{stream | request_mod: req_mod, request_id: request_id, response_mod: res_mod, rpc: rpc}
+    request_id = generate_request_id()
+
+    stream = %{
+      stream
+      | request_mod: req_mod,
+        request_id: request_id,
+        response_mod: res_mod,
+        rpc: rpc
+    }
 
     handle_request(req_stream, res_stream, stream, func_name)
   end
