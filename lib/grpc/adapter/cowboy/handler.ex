@@ -249,7 +249,9 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
     if compressor && !Enum.member?(accepted_encodings, compressor.name()) do
       msg =
-        "A unaccepted encoding #{compressor.name()} is set, valid are: #{:cowboy_req.header("grpc-accept-encoding", req)}"
+        "A unaccepted encoding #{compressor.name()} is set, valid are: #{
+          :cowboy_req.header("grpc-accept-encoding", req)
+        }"
 
       req = send_error(req, state, msg)
       {:stop, req, state}
