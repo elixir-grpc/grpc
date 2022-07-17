@@ -22,6 +22,7 @@ defmodule GRPC.EndpointTest do
 
     intercept Interceptor1
     intercept Interceptor2, foo: 1
+    intercept GRPC.Logger.Server, level: :info
 
     run Server1, interceptors: [Interceptor3]
     run [Server2, Server3], interceptors: [{Interceptor4, []}]
