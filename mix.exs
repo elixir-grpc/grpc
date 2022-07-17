@@ -39,8 +39,8 @@ defmodule GRPC.Mixfile do
       # TO-DO: update protobuf to 0.10 (has breaking changes)
       {:protobuf, "~> 0.9.0"},
       {:cowboy, "~> 2.9"},
-      {:gun, "~> 2.0.0", hex: :grpc_gun},
-      {:cowlib, "~> 2.11", override: true},
+      {:gun, "~> 2.0.0-rc.2"},
+      {:cowlib, "~> 2.11"},
       {:ex_doc, "~> 0.28", only: :dev},
       {:inch_ex, "~> 2.0", only: [:dev, :test]},
       {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false}
