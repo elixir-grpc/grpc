@@ -22,7 +22,7 @@ defmodule GRPC.Logger.Server do
 
   def call(req, stream, next, level) do
     if Logger.compare_levels(level, Logger.level()) != :lt do
-      Logger.metadata(request_id: stream.request_id)
+      Logger.metadata(request_id: Logger.metadata()[:request_id] || stream.request_id)
       Logger.log(level, fn ->
         ["Handled by ", inspect(stream.server), ".", to_string(elem(stream.rpc, 0))]
       end)

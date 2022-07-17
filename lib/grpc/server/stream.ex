@@ -25,7 +25,7 @@ defmodule GRPC.Server.Stream do
           endpoint: atom,
           rpc: tuple,
           request_mod: atom,
-          request_id: String.t(),
+          request_id: String.t() | nil,
           response_mod: atom,
           codec: atom,
           payload: any,

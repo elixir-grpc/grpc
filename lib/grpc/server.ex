@@ -101,7 +101,7 @@ defmodule GRPC.Server do
       :erlang.unique_integer()::32
     >>
 
-    Base.url_encode64(binary)
+    Base.url_encode64(binary, padding: false)
   end
 
   defp handle_request(req_s, res_s, %{server: server} = stream, func_name) do
