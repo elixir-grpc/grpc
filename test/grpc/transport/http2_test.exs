@@ -4,7 +4,6 @@ defmodule GRPC.Transport.HTTP2Test do
   alias GRPC.Transport.HTTP2
 
   @channel %Channel{scheme: "http", host: "grpc.io"}
-  %Stream{channel: @channel, path: "/foo/bar"}
   alias GRPC.Client.Stream
 
   defp assert_header({key, _v} = pair, headers) do
