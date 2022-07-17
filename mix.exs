@@ -38,7 +38,7 @@ defmodule GRPC.Mixfile do
     [
       {:protobuf, "~> 0.5"},
       {:cowboy, "~> 2.8"},
-      {:gun, "~> 2.0.0-rc.1"},
+      {:gun, "~> 2.0.0-rc.2"},
       # gun and cowboy use conflicting versions of cowlib
       {:cowlib, "~> 2.10", override: true},
       {:ex_doc, "~> 0.23", only: :dev},
