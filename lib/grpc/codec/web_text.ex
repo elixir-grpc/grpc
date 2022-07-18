@@ -9,11 +9,11 @@ defmodule GRPC.Codec.WebText do
     Protobuf.Encoder.encode(struct)
   end
 
-  def pack_encoded(binary) do
+  def pack_for_channel(binary) do
     Base.encode64(binary)
   end
 
-  def prepare_decode(binary) do
+  def unpack_from_channel(binary) do
     Base.decode64!(binary)
   end
 

@@ -7,6 +7,8 @@ defmodule GRPC.Codec do
   @callback name() :: String.t()
   @callback encode(any) :: binary
   @callback decode(any, module :: atom) :: any
-  @callback prepare_decode(binary) :: binary
-  @callback pack_encoded(binary) :: binary
+
+  @callback unpack_from_channel(binary) :: binary
+  @callback pack_for_channel(binary) :: binary
+  @optional_callbacks unpack_from_channel: 1, pack_for_channel: 1
 end

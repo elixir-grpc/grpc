@@ -8,10 +8,6 @@ defmodule GRPC.Integration.CodecTest do
       "not-registered"
     end
 
-    def pack_encoded(binary), do: binary
-
-    def prepare_decode(binary), do: binary
-
     def encode(struct) do
       :erlang.term_to_binary(struct)
     end

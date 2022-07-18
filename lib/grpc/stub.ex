@@ -495,7 +495,14 @@ defmodule GRPC.Stub do
               nil
           end
 
-        case GRPC.Message.from_data(%{compressor: compressor}, codec.prepare_decode(body)) do
+        body =
+          if function_exported?(codec, :unpack_from_channel, 1) do
+            codec.unpack_from_channel(body)
+          else
+            body
+          end
+
+        case GRPC.Message.from_data(%{compressor: compressor}, body) do
           {:ok, msg} ->
             {:ok, codec.decode(msg, res_mod)}
 

@@ -124,7 +124,14 @@ defmodule GRPC.Server do
        ) do
     {:ok, data} = adapter.read_body(payload)
 
-    case GRPC.Message.from_data(stream, codec.prepare_decode(data)) do
+    body =
+      if function_exported?(codec, :unpack_from_channel, 1) do
+        codec.unpack_from_channel(data)
+      else
+        data
+      end
+
+    case GRPC.Message.from_data(stream, body) do
       {:ok, message} ->
         request = codec.decode(message, req_mod)
 
