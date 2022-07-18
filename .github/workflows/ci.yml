@@ -33,6 +33,11 @@ jobs:
       matrix:
         otp: [22.x, 23.x, 24.x, 25.x]
         elixir: [1.10.x, 1.11.x, 1.12.x, 1.13.x]
+        exclude:
+          - otp: 25.x
+            elixir: 1.10.x
+          - otp: 25.x
+            elixir: 1.11.x
     needs: check_format
     steps:
     - uses: actions/checkout@v2
