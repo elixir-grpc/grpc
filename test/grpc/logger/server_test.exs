@@ -7,13 +7,7 @@ defmodule GRPC.Logger.ServerTest do
 
   alias GRPC.Server.Stream
 
-  setup_all do
-    level = Logger.level()
-    on_exit(fn -> Logger.configure(level: level) end)
-  end
-
   test "request id is only set if not previously set" do
-    Logger.configure(level: :info)
     assert Logger.metadata() == []
 
     request_id = to_string(System.monotonic_time())
@@ -41,19 +35,19 @@ defmodule GRPC.Logger.ServerTest do
   end
 
   test "accepted_comparators filter logs correctly" do
-    for {logger_level, configured_level, accepted_comparators, should_log} <-
+    for {configured_level, accepted_comparators, should_log} <-
           [
-            {:debug, :info, [:lt], false},
-            {:debug, :info, [:eq], false},
-            {:debug, :info, [:gt], true},
-            {:error, :info, [:eq], false},
-            {:error, :info, [:eq, :gt], false},
-            {:info, :info, [:lt, :eq], true}
+            {:error, [:lt], false},
+            {:error, [:eq], false},
+            {:error, [:gt], true},
+            {:debug, [:eq], false},
+            {:debug, [:eq, :gt], false},
+            {:info, [:lt, :eq], true}
           ] do
       server_name = :"server_#{System.unique_integer()}"
 
-      Logger.configure(level: logger_level)
-      assert Logger.level() == logger_level
+      logger_level = Logger.level()
+      assert logger_level == :info
 
       logs =
         capture_log(fn ->

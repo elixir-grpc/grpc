@@ -49,7 +49,7 @@ defmodule GRPC.Logger.Server do
     if Logger.compare_levels(level, Logger.level()) in accepted_comparators do
       Logger.metadata(request_id: Logger.metadata()[:request_id] || stream.request_id)
 
-      Logger.log(level, "Handled by #{inspect(stream.server)}. #{elem(stream.rpc, 0)}")
+      Logger.log(level, "Handled by #{inspect(stream.server)}.#{elem(stream.rpc, 0)}")
 
       start = System.monotonic_time()
       result = next.(req, stream)
