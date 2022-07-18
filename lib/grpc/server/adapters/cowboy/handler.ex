@@ -454,8 +454,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   defp extract_subtype("application/grpc-web+"), do: {:ok, "proto"}
   defp extract_subtype("application/grpc-web;"), do: {:ok, "proto"}
   defp extract_subtype("application/grpc-web-text"), do: {:ok, "text"}
-  defp extract_subtype(<<"application/grpc-web+", rest::binary>>), do: {:ok, rest}
-  defp extract_subtype(<<"application/grpc-web-text+", rest::binary>>), do: {:ok, rest}
+  defp extract_subtype("application/grpc-web+" <> rest), do: {:ok, rest}
+  defp extract_subtype("application/grpc-web-text+" <> rest), do: {:ok, rest}
 
   defp extract_subtype(type) do
     Logger.warn("Got unknown content-type #{type}, please create an issue.")
