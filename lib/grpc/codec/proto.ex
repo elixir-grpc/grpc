@@ -5,11 +5,11 @@ defmodule GRPC.Codec.Proto do
     "proto"
   end
 
-  def encode(struct) do
-    Protobuf.Encoder.encode(struct)
+  def encode(%mod{} = struct) do
+    mod.encode(struct)
   end
 
   def decode(binary, module) do
-    Protobuf.Decoder.decode(binary, module)
+    module.decode(binary)
   end
 end

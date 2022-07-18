@@ -9,7 +9,7 @@ An Elixir implementation of [gRPC](http://www.grpc.io/).
 
 **WARNING: Be careful to use it in production! Test and benchmark in advance.**
 
-**NOTICE: Erlang/OTP needs >= 20.3.2**
+**NOTICE: Erlang/OTP needs >= 22 **
 
 **NOTICE: grpc_gun**
 
