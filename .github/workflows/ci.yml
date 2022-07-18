@@ -38,6 +38,8 @@ jobs:
             elixir: 1.10.x
           - otp: 25.x
             elixir: 1.11.x
+          - otp: 25.x
+            elixir: 1.12.x
     needs: check_format
     steps:
     - uses: actions/checkout@v2
