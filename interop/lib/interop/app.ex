@@ -10,7 +10,6 @@ defmodule Interop.App do
 
     GRPCPrometheus.ServerInterceptor.setup()
     GRPCPrometheus.ClientInterceptor.setup()
-    :prometheus_httpd.start()
     Interop.ServerInterceptor.Statix.connect()
 
     opts = [strategy: :one_for_one, name: __MODULE__]
