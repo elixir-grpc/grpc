@@ -153,11 +153,22 @@ defmodule GRPC.Adapter.Cowboy do
   end
 
   defp cowboy_start_args(endpoint, servers, port, opts) do
-    dispatch =
-      :cowboy_router.compile([
-        {:_, [{:_, GRPC.Adapter.Cowboy.Handler, {endpoint, servers, Enum.into(opts, %{})}}]}
-      ])
+    # Custom handler to be able to listen in the same port, more info:
+    # https://github.com/containous/traefik/issues/6211
+    {adapter_opts, opts} = Keyword.pop(opts, :adapter_opts, [])
+    status_handler = Keyword.get(adapter_opts, :status_handler)
 
+    handlers =
+      if status_handler do
+        [
+          status_handler,
+          {:_, GRPC.Adapter.Cowboy.Handler, {endpoint, servers, Enum.into(opts, %{})}}
+        ]
+      else
+        [{:_, GRPC.Adapter.Cowboy.Handler, {endpoint, servers, Enum.into(opts, %{})}}]
+      end
+
+    dispatch = :cowboy_router.compile([{:_, handlers}])
     idle_timeout = Keyword.get(opts, :idle_timeout, :infinity)
     num_acceptors = Keyword.get(opts, :num_acceptors, @default_num_acceptors)
     max_connections = Keyword.get(opts, :max_connections, @default_max_connections)

@@ -8,5 +8,4 @@ config :prometheus, GRPCPrometheus.ClientInterceptor,
 
 # config :grpc, start_server: true
 
-# config :logger, level: :debug
 config :logger, level: :warn
