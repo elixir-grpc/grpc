@@ -17,13 +17,13 @@ defmodule GRPC.Logger.Client do
 
   @impl true
   def init(opts) do
-    level = Keyword.get(opts, :level) || :info
+    level = opts[:level] || :info
     [level: level]
   end
 
   @impl true
   def call(%{grpc_type: grpc_type} = stream, req, next, opts) do
-    level = opts[:level]
+    level = Keyword.fetch!(opts, :level)
 
     if Logger.compare_levels(level, Logger.level()) != :lt do
       Logger.log(level, fn ->

@@ -20,7 +20,7 @@ defmodule GRPC.Logger.Server do
 
   @impl true
   def init(opts) do
-    level = Keyword.get(opts, :level) || :info
+    level = opts[:level] || :info
     [level: level]
   end
 
