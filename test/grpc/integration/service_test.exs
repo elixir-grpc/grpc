@@ -132,7 +132,7 @@ defmodule GRPC.Integration.ServiceTest do
       FeatureServer,
       fn port ->
         {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-        stream = channel |> Routeguide.RouteGuide.Stub.async_route_chat()
+        stream = channel |> Routeguide.RouteGuide.Stub.route_chat()
 
         task =
           Task.async(fn ->

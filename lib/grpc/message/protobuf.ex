@@ -3,12 +3,12 @@ defmodule GRPC.Message.Protobuf do
 
   # Module for encoding or decoding message using Protobuf.
 
-  @spec encode(atom, struct) :: binary
+  @spec encode(module, struct) :: binary
   def encode(mod, struct) do
     apply(mod, :encode, [struct])
   end
 
-  @spec decode(atom, binary) :: struct
+  @spec decode(module, binary) :: struct
   def decode(mod, message) do
     apply(mod, :decode, [message])
   end

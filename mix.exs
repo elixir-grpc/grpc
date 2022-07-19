@@ -36,8 +36,7 @@ defmodule GRPC.Mixfile do
 
   defp deps do
     [
-      # TO-DO: update protobuf to 0.10 (has breaking changes)
-      {:protobuf, "~> 0.9.0"},
+      {:protobuf, "~> 0.10"},
       {:cowboy, "~> 2.9"},
       {:gun, "~> 2.0.0-rc.2"},
       {:cowlib, "~> 2.11"},
