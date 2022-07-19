@@ -67,7 +67,7 @@ defmodule GRPC.Adapter.Gun do
 
       {:error, reason} ->
         :gun.shutdown(conn_pid)
-        {:error, "Error when opening connection: #{inspect(reason)}"}
+        {:error, reason}
     end
   end
 
@@ -135,7 +135,7 @@ defmodule GRPC.Adapter.Gun do
       {:response, headers, fin} ->
         {:ok, headers, fin}
 
-      error = {:error, _} ->
+      {:error, _} = error ->
         error
 
       other ->
@@ -155,7 +155,7 @@ defmodule GRPC.Adapter.Gun do
       trailers = {:trailers, _} ->
         trailers
 
-      error = {:error, _} ->
+      {:error, _} = error ->
         error
 
       other ->
