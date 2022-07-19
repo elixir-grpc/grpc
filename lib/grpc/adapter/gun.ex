@@ -14,15 +14,13 @@ defmodule GRPC.Adapter.Gun do
   def connect(channel, opts), do: connect_insecurely(channel, opts)
 
   defp connect_securely(%{cred: %{ssl: ssl}} = channel, opts) do
-    transport_opts = Map.get(opts, :transport_opts, @default_transport_opts ++ ssl)
+    transport_opts = Map.get(opts, :transport_opts) || @default_transport_opts ++ ssl
     open_opts = %{transport: :ssl, protocols: [:http2]}
 
     open_opts =
-      if gun_v2?() do
-        Map.put(open_opts, :tls_opts, transport_opts)
-      else
-        Map.put(open_opts, :transport_opts, transport_opts)
-      end
+      Map.update(open_opts, :tls_opts, transport_opts, fn current ->
+        Keyword.merge(current, transport_opts)
+      end)
 
     open_opts = Map.merge(opts, open_opts)
 
@@ -32,15 +30,13 @@ defmodule GRPC.Adapter.Gun do
   defp connect_insecurely(channel, opts) do
     opts = Map.update(opts, :http2_opts, @default_http2_opts, &Map.merge(&1, @default_http2_opts))
 
-    transport_opts = Map.get(opts, :transport_opts, @default_transport_opts)
+    transport_opts = Map.get(opts, :transport_opts) || @default_transport_opts
     open_opts = %{transport: :tcp, protocols: [:http2]}
 
     open_opts =
-      if gun_v2?() do
-        Map.put(open_opts, :tcp_opts, transport_opts)
-      else
-        Map.put(open_opts, :transport_opts, transport_opts)
-      end
+      Map.update(open_opts, :tls_opts, transport_opts, fn current ->
+        Keyword.merge(current, transport_opts)
+      end)
 
     open_opts = Map.merge(opts, open_opts)
 
