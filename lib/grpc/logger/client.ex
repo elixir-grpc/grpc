@@ -17,7 +17,7 @@ defmodule GRPC.Logger.Client do
 
   @impl true
   def init(opts) do
-    level = opts[:level] || :info
+    level = Keyword.get(opts, :level) || :info
     [level: level]
   end
 
