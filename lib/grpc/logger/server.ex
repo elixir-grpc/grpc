@@ -13,14 +13,18 @@ defmodule GRPC.Logger.Server do
         intercept GRPC.Logger.Server, level: :info
       end
   """
+
   require Logger
+
   @behaviour GRPC.ServerInterceptor
 
+  @impl true
   def init(opts) do
     level = Keyword.get(opts, :level) || :info
     [level: level]
   end
 
+  @impl true
   def call(req, stream, next, opts) do
     level = Keyword.fetch!(opts, :level)
 
