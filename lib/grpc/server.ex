@@ -215,6 +215,9 @@ defmodule GRPC.Server do
   #   * `:cred` - a credential created by functions of `GRPC.Credential`,
   #               an insecure server will be created without this option
   #   * `:adapter` - use a custom server adapter instead of default `GRPC.Adapter.Cowboy`
+  #   * `:adapter_opts` - configuration for the specified adapter.
+  #     * `:status_handler` - adds a status handler that could be listening on HTTP/1, if necessary.
+  #                           It should follow the format defined by cowboy_router:compile/3
   @doc false
   @spec start(servers_list, non_neg_integer, Keyword.t()) :: {atom, any, non_neg_integer}
   def start(servers, port, opts \\ []) do
