@@ -33,15 +33,19 @@ defmodule GRPC.Logger.Server do
         intercept GRPC.Logger.Server, level: :error, accepted_comparators: [:eq]
       end
   """
+
   require Logger
+
   @behaviour GRPC.ServerInterceptor
 
+  @impl true
   def init(opts) do
     level = Keyword.get(opts, :level) || :info
     accepted_comparators = Keyword.get(opts, :accepted_comparators) || [:lt, :eq]
     [level: level, accepted_comparators: accepted_comparators]
   end
 
+  @impl true
   def call(req, stream, next, opts) do
     level = Keyword.fetch!(opts, :level)
     accepted_comparators = opts[:accepted_comparators]
