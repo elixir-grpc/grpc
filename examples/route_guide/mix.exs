@@ -30,6 +30,7 @@ defmodule RouteGuide.Mixfile do
   defp deps do
     [
       {:grpc, path: "../../"},
+      {:protobuf, "~> 0.10"},
       {:poison, "~> 3.0"},
       {:cowlib, "~> 2.8.0", hex: :grpc_cowlib, override: true},
       {:dialyxir, "~> 0.5", only: [:dev, :test], runtime: false},
