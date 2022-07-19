@@ -147,7 +147,7 @@ defmodule GRPC.Status do
   @spec unauthenticated :: t
   def unauthenticated, do: 16
 
-  @spec code_name(non_neg_integer()) :: binary()
+  @spec code_name(t()) :: binary()
   def code_name(0), do: "OK"
   def code_name(1), do: "Canceled"
   def code_name(2), do: "Unknown"
