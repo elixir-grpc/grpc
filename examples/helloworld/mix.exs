@@ -18,7 +18,8 @@ defmodule Helloworld.Mixfile do
   defp deps do
     [
       {:grpc, path: "../../"},
-      {:dialyxir, "~> 0.5", only: [:dev, :test], runtime: false},
+      {:protobuf, "~> 0.10"},
+      {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false},
     ]
   end
 end

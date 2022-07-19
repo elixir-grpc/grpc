@@ -27,8 +27,10 @@ The package can be installed as:
   def deps do
     [
       {:grpc, github: "elixir-grpc/grpc"},
-      # 2.9.0 fixes some important bugs, so it's better to use ~> 2.9.0
-      {:cowlib, "~> 2.9.0", override: true}
+      # We don't force protobuf as a dependency for more
+      # flexibility on which protobuf library is used,
+      # but you probably want to use it as well
+      {:protobuf, "~> 0.10"}
     ]
   end
   ```
