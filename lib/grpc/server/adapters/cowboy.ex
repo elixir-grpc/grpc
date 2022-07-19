@@ -1,7 +1,7 @@
-defmodule GRPC.Adapter.Cowboy do
+defmodule GRPC.Server.Adapters.Cowboy do
   @moduledoc false
 
-  @behaviour GRPC.ServerAdapter
+  @behaviour GRPC.Server.Adapter
 
   # A server(`GRPC.Server`) adapter using Cowboy.
   # Cowboy req will be stored in `:payload` of `GRPC.Server.Stream`.
@@ -10,7 +10,7 @@ defmodule GRPC.Adapter.Cowboy do
   @dialyzer {:nowarn_function, running_info: 4}
 
   require Logger
-  alias GRPC.Adapter.Cowboy.Handler, as: Handler
+  alias GRPC.Server.Adapters.Cowboy.Handler
 
   @default_num_acceptors 20
   @default_max_connections 16384
@@ -80,12 +80,12 @@ defmodule GRPC.Adapter.Cowboy do
     :cowboy.stop_listener(servers_name(endpoint, servers))
   end
 
-  @spec read_body(GRPC.Adapter.Cowboy.Handler.state()) :: {:ok, binary}
+  @spec read_body(GRPC.Server.Adapters.Cowboy.Handler.state()) :: {:ok, binary}
   def read_body(%{pid: pid}) do
     Handler.read_full_body(pid)
   end
 
-  @spec reading_stream(GRPC.Adapter.Cowboy.Handler.state()) :: Enumerable.t()
+  @spec reading_stream(GRPC.Server.Adapters.Cowboy.Handler.state()) :: Enumerable.t()
   def reading_stream(%{pid: pid}) do
     Stream.unfold(%{pid: pid, need_more: true, buffer: <<>>}, fn acc -> read_stream(acc) end)
   end
@@ -117,7 +117,7 @@ defmodule GRPC.Adapter.Cowboy do
     end
   end
 
-  @spec send_reply(GRPC.Adapter.Cowboy.Handler.state(), binary, keyword) :: any
+  @spec send_reply(GRPC.Server.Adapters.Cowboy.Handler.state(), binary, keyword) :: any
   def send_reply(%{pid: pid}, data, opts) do
     Handler.stream_body(pid, data, opts, :nofin)
   end
@@ -157,7 +157,8 @@ defmodule GRPC.Adapter.Cowboy do
   defp cowboy_start_args(endpoint, servers, port, opts) do
     dispatch =
       :cowboy_router.compile([
-        {:_, [{:_, GRPC.Adapter.Cowboy.Handler, {endpoint, servers, Enum.into(opts, %{})}}]}
+        {:_,
+         [{:_, GRPC.Server.Adapters.Cowboy.Handler, {endpoint, servers, Enum.into(opts, %{})}}]}
       ])
 
     idle_timeout = Keyword.get(opts, :idle_timeout, :infinity)

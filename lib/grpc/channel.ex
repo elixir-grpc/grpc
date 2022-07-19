@@ -11,7 +11,7 @@ defmodule GRPC.Channel do
     * `:port` - server's port to connect
     * `:scheme` - scheme of connection, like `http`
     * `:cred` - credentials used for authentication
-    * `:adapter` - a client adapter module, like `GRPC.Adapter.Gun`
+    * `:adapter` - a client adapter module, like `GRPC.Client.Adapters.Gun`
     * `:codec` - a default codec for this channel
     * `:adapter_payload` - payload the adapter uses
   """

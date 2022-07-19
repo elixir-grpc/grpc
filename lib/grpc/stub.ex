@@ -149,7 +149,7 @@ defmodule GRPC.Stub do
       Keyword.get(
         opts,
         :adapter,
-        Application.get_env(:grpc, :http2_client_adapter, GRPC.Adapter.Gun)
+        Application.get_env(:grpc, :http2_client_adapter, GRPC.Client.Adapters.Gun)
       )
 
     cred = Keyword.get(opts, :cred)

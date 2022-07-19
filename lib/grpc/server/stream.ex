@@ -9,7 +9,7 @@ defmodule GRPC.Server.Stream do
   ## Fields
 
     * `:server`            - user defined gRPC server module
-    * `:adapter`           - a server adapter module, like `GRPC.Adapter.Cowboy`
+    * `:adapter`           - a server adapter module, like `GRPC.Server.Adapters.Cowboy`
     * `request_mod`        - the request module, or nil for untyped protocols
     * `response_mod`       - the response module, or nil for untyped protocols
     * `:codec`             - the codec

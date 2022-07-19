@@ -1,4 +1,4 @@
-defmodule GRPC.Adapter.Cowboy.Handler do
+defmodule GRPC.Server.Adapters.Cowboy.Handler do
   @moduledoc false
 
   # A cowboy handler accepting all requests and calls corresponding functions
@@ -8,7 +8,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   alias GRPC.RPCError
   require Logger
 
-  @adapter GRPC.Adapter.Cowboy
+  @adapter GRPC.Server.Adapters.Cowboy
   @default_trailers HTTP2.server_trailers()
   @type state :: %{
           pid: pid,
@@ -249,9 +249,7 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
     if compressor && !Enum.member?(accepted_encodings, compressor.name()) do
       msg =
-        "A unaccepted encoding #{compressor.name()} is set, valid are: #{
-          :cowboy_req.header("grpc-accept-encoding", req)
-        }"
+        "A unaccepted encoding #{compressor.name()} is set, valid are: #{:cowboy_req.header("grpc-accept-encoding", req)}"
 
       req = send_error(req, state, msg)
       {:stop, req, state}

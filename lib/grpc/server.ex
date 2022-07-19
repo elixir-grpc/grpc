@@ -34,7 +34,7 @@ defmodule GRPC.Server do
   require Logger
 
   alias GRPC.RPCError
-  alias GRPC.ServerAdapter
+  alias GRPC.Server.Adapter
 
   @type rpc_req :: struct | Enumerable.t()
   @type rpc_return :: struct | any
@@ -77,12 +77,12 @@ defmodule GRPC.Server do
     end
   end
 
-  @type endpoint :: ServerAdapter.endpoint()
-  @type server_port :: ServerAdapter.server_port()
+  @type endpoint :: Adapter.endpoint()
+  @type server_port :: Adapter.server_port()
   @type servers_list :: module | [module]
-  @type servers_map :: ServerAdapter.servers_map()
-  @type stream :: ServerAdapter.stream()
-  @type headers :: ServerAdapter.headers()
+  @type servers_map :: Adapter.servers_map()
+  @type stream :: Adapter.stream()
+  @type headers :: Adapter.headers()
 
   @doc false
   @spec call(atom, stream, tuple, atom) :: {:ok, stream, struct} | {:ok, struct}
@@ -218,11 +218,11 @@ defmodule GRPC.Server do
   #
   #   * `:cred` - a credential created by functions of `GRPC.Credential`,
   #               an insecure server will be created without this option
-  #   * `:adapter` - use a custom server adapter instead of default `GRPC.Adapter.Cowboy`
+  #   * `:adapter` - use a custom server adapter instead of default `GRPC.Server.Adapters.Cowboy`
   @doc false
   @spec start(servers_list, server_port, Keyword.t()) :: {atom, any, non_neg_integer}
   def start(servers, port, opts \\ []) do
-    adapter = Keyword.get(opts, :adapter, GRPC.Adapter.Cowboy)
+    adapter = Keyword.get(opts, :adapter, GRPC.Server.Adapters.Cowboy)
     servers = GRPC.Server.servers_to_map(servers)
     adapter.start(nil, servers, port, opts)
   end
@@ -232,7 +232,7 @@ defmodule GRPC.Server do
   def start_endpoint(endpoint, port, opts \\ []) do
     servers = endpoint.__meta__(:servers)
     servers = GRPC.Server.servers_to_map(servers)
-    adapter = Keyword.get(opts, :adapter, GRPC.Adapter.Cowboy)
+    adapter = Keyword.get(opts, :adapter, GRPC.Server.Adapters.Cowboy)
     adapter.start(endpoint, servers, port, opts)
   end
 
@@ -244,11 +244,11 @@ defmodule GRPC.Server do
   #
   # ## Options
   #
-  #   * `:adapter` - use a custom adapter instead of default `GRPC.Adapter.Cowboy`
+  #   * `:adapter` - use a custom adapter instead of default `GRPC.Server.Adapters.Cowboy`
   @doc false
   @spec stop(servers_list, Keyword.t()) :: any
   def stop(servers, opts \\ []) do
-    adapter = Keyword.get(opts, :adapter, GRPC.Adapter.Cowboy)
+    adapter = Keyword.get(opts, :adapter, GRPC.Server.Adapters.Cowboy)
     servers = GRPC.Server.servers_to_map(servers)
     adapter.stop(nil, servers)
   end
@@ -256,7 +256,7 @@ defmodule GRPC.Server do
   @doc false
   @spec stop_endpoint(endpoint, Keyword.t()) :: any
   def stop_endpoint(endpoint, opts \\ []) do
-    adapter = Keyword.get(opts, :adapter, GRPC.Adapter.Cowboy)
+    adapter = Keyword.get(opts, :adapter, GRPC.Server.Adapters.Cowboy)
     servers = endpoint.__meta__(:servers)
     servers = GRPC.Server.servers_to_map(servers)
     adapter.stop(endpoint, servers)

@@ -29,7 +29,7 @@ defmodule GRPC.Server.Supervisor do
   View `child_spec/3` for opts.
   """
 
-  @default_adapter GRPC.Adapter.Cowboy
+  @default_adapter GRPC.Server.Adapters.Cowboy
   require Logger
 
   def start_link(endpoint) do

@@ -1,4 +1,4 @@
-defmodule GRPC.ClientAdapter do
+defmodule GRPC.Client.Adapter do
   @moduledoc false
 
   alias GRPC.Client.Stream

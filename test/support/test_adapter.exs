@@ -1,11 +1,11 @@
 defmodule GRPC.Test.ClientAdapter do
-  @behaviour GRPC.ClientAdapter
+  @behaviour GRPC.Client.Adapter
 
   def connect(channel, _opts), do: {:ok, channel}
 end
 
 defmodule GRPC.Test.ServerAdapter do
-  @behaviour GRPC.ServerAdapter
+  @behaviour GRPC.Server.Adapter
 
   def start(s, h, p, opts) do
     {s, h, p, opts}

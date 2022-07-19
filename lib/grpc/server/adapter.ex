@@ -1,4 +1,4 @@
-defmodule GRPC.ServerAdapter do
+defmodule GRPC.Server.Adapter do
   @moduledoc false
 
   alias GRPC.Server.Stream
@@ -15,7 +15,7 @@ defmodule GRPC.ServerAdapter do
 
   @type stream :: Stream.t()
 
-  @type state :: GRPC.Adapter.Cowboy.Handler.state()
+  @type state :: GRPC.Server.Adapters.Cowboy.Handler.state()
   @type reply :: binary()
   @callback send_reply(state, reply, opts) :: any()
 
