@@ -2,16 +2,14 @@ defmodule GRPC.Message.ProtobufTest do
   use ExUnit.Case, async: true
 
   defmodule Helloworld.HelloRequest do
-    use Protobuf
+    use Protobuf, syntax: :proto3
 
-    defstruct [:name]
     field(:name, 1, optional: true, type: :string)
   end
 
   defmodule Helloworld.HelloReply do
-    use Protobuf
+    use Protobuf, syntax: :proto3
 
-    defstruct [:message]
     field(:message, 1, optional: true, type: :string)
   end
 
