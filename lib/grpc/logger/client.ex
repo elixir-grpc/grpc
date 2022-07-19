@@ -1,6 +1,4 @@
 defmodule GRPC.Logger.Client do
-  require Logger
-
   @moduledoc """
   Print log around client rpc calls, like
 
@@ -24,15 +22,21 @@ defmodule GRPC.Logger.Client do
       {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Logger.Client, level: :info, accepted_comparators: [:eq, :gt]}])
   """
 
+  require Logger
+
+  @behaviour GRPC.ClientInterceptor
+
+  @impl true
   def init(opts) do
     level = Keyword.get(opts, :level) || :info
     accepted_comparators = Keyword.get(opts, :accepted_comparators) || [:lt, :eq]
     [level: level, accepted_comparators: accepted_comparators]
   end
 
+  @impl true
   def call(%{grpc_type: grpc_type} = stream, req, next, opts) do
-    level = opts[:level]
-    accepted_comparators = opts[:accepted_comparators]
+    level = Keyword.fetch!(opts, :level)
+    accepted_comparators = Keyword.fetch!(opts, :accepted_comparators)
 
     if Logger.compare_levels(level, Logger.level()) in accepted_comparators do
       Logger.log(level, fn ->
