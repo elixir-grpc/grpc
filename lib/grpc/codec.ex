@@ -5,6 +5,6 @@ defmodule GRPC.Codec do
 
   @doc ~s(Name is identity of the codec, which will be suffix after content-type "application/grpc+" such as "proto".)
   @callback name() :: String.t()
-  @callback encode(any) :: binary
-  @callback decode(any, module :: atom) :: any
+  @callback encode(any()) :: binary()
+  @callback decode(any(), module()) :: any()
 end

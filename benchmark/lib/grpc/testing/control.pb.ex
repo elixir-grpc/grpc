@@ -3,7 +3,7 @@ defmodule Grpc.Testing.PoissonParams do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          offered_load: float
+          offered_load: float()
         }
   defstruct [:offered_load]
 
@@ -23,7 +23,7 @@ defmodule Grpc.Testing.LoadParams do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          load: {atom, any}
+          load: {atom(), any()}
         }
   defstruct [:load]
 
@@ -37,7 +37,7 @@ defmodule Grpc.Testing.SecurityParams do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          use_test_ca: boolean,
+          use_test_ca: boolean(),
           server_host_override: String.t(),
           cred_type: String.t()
         }
@@ -53,7 +53,7 @@ defmodule Grpc.Testing.ChannelArg do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          value: {atom, any},
+          value: {atom(), any()},
           name: String.t()
         }
   defstruct [:value, :name]
@@ -70,22 +70,22 @@ defmodule Grpc.Testing.ClientConfig do
 
   @type t :: %__MODULE__{
           server_targets: [String.t()],
-          client_type: atom | integer,
+          client_type: atom() | integer(),
           security_params: Grpc.Testing.SecurityParams.t() | nil,
-          outstanding_rpcs_per_channel: integer,
-          client_channels: integer,
-          async_client_threads: integer,
-          rpc_type: atom | integer,
+          outstanding_rpcs_per_channel: integer(),
+          client_channels: integer(),
+          async_client_threads: integer(),
+          rpc_type: atom() | integer(),
           load_params: Grpc.Testing.LoadParams.t() | nil,
           payload_config: Grpc.Testing.PayloadConfig.t() | nil,
           histogram_params: Grpc.Testing.HistogramParams.t() | nil,
-          core_list: [integer],
-          core_limit: integer,
+          core_list: [integer()],
+          core_limit: integer(),
           other_client_api: String.t(),
           channel_args: [Grpc.Testing.ChannelArg.t()],
-          threads_per_cq: integer,
-          messages_per_stream: integer,
-          use_coalesce_api: boolean
+          threads_per_cq: integer(),
+          messages_per_stream: integer(),
+          use_coalesce_api: boolean()
         }
   defstruct [
     :server_targets,
@@ -143,7 +143,7 @@ defmodule Grpc.Testing.Mark do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          reset: boolean
+          reset: boolean()
         }
   defstruct [:reset]
 
@@ -155,7 +155,7 @@ defmodule Grpc.Testing.ClientArgs do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          argtype: {atom, any}
+          argtype: {atom(), any()}
         }
   defstruct [:argtype]
 
@@ -169,16 +169,16 @@ defmodule Grpc.Testing.ServerConfig do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          server_type: atom | integer,
+          server_type: atom() | integer(),
           security_params: Grpc.Testing.SecurityParams.t() | nil,
-          port: integer,
-          async_server_threads: integer,
-          core_limit: integer,
+          port: integer(),
+          async_server_threads: integer(),
+          core_limit: integer(),
           payload_config: Grpc.Testing.PayloadConfig.t() | nil,
-          core_list: [integer],
+          core_list: [integer()],
           other_server_api: String.t(),
-          threads_per_cq: integer,
-          resource_quota_size: integer,
+          threads_per_cq: integer(),
+          resource_quota_size: integer(),
           channel_args: [Grpc.Testing.ChannelArg.t()]
         }
   defstruct [
@@ -213,7 +213,7 @@ defmodule Grpc.Testing.ServerArgs do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          argtype: {atom, any}
+          argtype: {atom(), any()}
         }
   defstruct [:argtype]
 
@@ -228,8 +228,8 @@ defmodule Grpc.Testing.ServerStatus do
 
   @type t :: %__MODULE__{
           stats: Grpc.Testing.ServerStats.t() | nil,
-          port: integer,
-          cores: integer
+          port: integer(),
+          cores: integer()
         }
   defstruct [:stats, :port, :cores]
 
@@ -251,7 +251,7 @@ defmodule Grpc.Testing.CoreResponse do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          cores: integer
+          cores: integer()
         }
   defstruct [:cores]
 
@@ -273,12 +273,12 @@ defmodule Grpc.Testing.Scenario do
   @type t :: %__MODULE__{
           name: String.t(),
           client_config: Grpc.Testing.ClientConfig.t() | nil,
-          num_clients: integer,
+          num_clients: integer(),
           server_config: Grpc.Testing.ServerConfig.t() | nil,
-          num_servers: integer,
-          warmup_seconds: integer,
-          benchmark_seconds: integer,
-          spawn_local_worker_count: integer
+          num_servers: integer(),
+          warmup_seconds: integer(),
+          benchmark_seconds: integer(),
+          spawn_local_worker_count: integer()
         }
   defstruct [
     :name,
@@ -318,11 +318,11 @@ defmodule Grpc.Testing.ScenarioResultSummary do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          qps: float,
-          qps_per_server_core: float,
-          server_system_time: float,
-          server_user_time: float,
-          client_system_time: float,
+          qps: float(),
+          qps_per_server_core: float(),
+          server_system_time: float(),
+          server_user_time: float(),
+          client_system_time: float(),
           client_user_time: float,
           latency_50: float,
           latency_90: float,
