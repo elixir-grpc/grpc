@@ -57,12 +57,43 @@ jobs:
     runs-on: ubuntu-latest
     name: Interop tests
     needs: check_format
+    if: ${{ github.ref != 'refs/heads/master' }}
     steps:
     - uses: actions/checkout@v2
     - uses: erlef/setup-beam@v1
       with:
-        otp-version: 24
-        elixir-version: 1.13.1
+        otp-version: 25.x
+        elixir-version: 1.13.x
+    - name: Install Dependencies
+      run: |
+        mix local.rebar --force
+        mix local.hex --force
+        mix deps.get
+      working-directory: ./interop
+    - name: Run interop tests
+      run: mix run script/run.exs
+      working-directory: ./interop
+
+  interop-tests-all:
+    runs-on: ubuntu-latest
+    name: Interop tests OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
+    needs: check_format
+    if: ${{ github.ref == 'refs/heads/master' }}
+    strategy:
+      matrix:
+        otp: [22.x, 23.x, 24.x, 25.x]
+        elixir: [1.11.x, 1.12.x, 1.13.x]
+        exclude:
+          - otp: 25.x
+            elixir: 1.11.x
+          - otp: 25.x
+            elixir: 1.12.x
+    steps:
+    - uses: actions/checkout@v2
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: 25.x
+        elixir-version: 1.13.x
     - name: Install Dependencies
       run: |
         mix local.rebar --force
