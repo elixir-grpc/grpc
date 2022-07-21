@@ -6,7 +6,7 @@ defmodule GRPC.Client.Adapter do
   alias GRPC.Client.Stream
   alias GRPC.Channel
 
-  @typedoc "Determines if the headers are finished reading."
+  @typedoc "Determines if the headers have finished being read."
   @type fin :: :fin | :nofin
 
   @callback connect(Channel.t(), map()) :: {:ok, Channel.t()} | {:error, any}
