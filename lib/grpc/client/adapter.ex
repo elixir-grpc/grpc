@@ -9,9 +9,9 @@ defmodule GRPC.Client.Adapter do
   @typedoc "Determines if the headers have finished being read."
   @type fin :: :fin | :nofin
 
-  @callback connect(Channel.t(), map()) :: {:ok, Channel.t()} | {:error, any}
+  @callback connect(Channel.t(), map()) :: {:ok, Channel.t()} | {:error, any()}
 
-  @callback disconnect(Channel.t()) :: {:ok, Channel.t()} | {:error, any}
+  @callback disconnect(Channel.t()) :: {:ok, Channel.t()} | {:error, any()}
 
   @callback send_request(Stream.t(), binary(), map()) :: Stream.t()
 
