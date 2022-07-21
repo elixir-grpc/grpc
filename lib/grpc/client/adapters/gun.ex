@@ -10,7 +10,7 @@ defmodule GRPC.Client.Adapters.Gun do
   @default_http2_opts %{settings_timeout: :infinity}
   @max_retries 100
 
-  @spec connect(GRPC.Channel.t(), any) :: {:ok, GRPC.Channel.t()} | {:error, any}
+  @impl true
   def connect(channel, nil), do: connect(channel, %{})
   def connect(%{scheme: "https"} = channel, opts), do: connect_securely(channel, opts)
   def connect(channel, opts), do: connect_insecurely(channel, opts)
@@ -73,6 +73,7 @@ defmodule GRPC.Client.Adapters.Gun do
     end
   end
 
+  @impl true
   def disconnect(%{adapter_payload: %{conn_pid: gun_pid}} = channel)
       when is_pid(gun_pid) do
     :ok = :gun.shutdown(gun_pid)
@@ -89,7 +90,7 @@ defmodule GRPC.Client.Adapters.Gun do
   defp open(host, port, open_opts),
     do: :gun.open(String.to_charlist(host), port, open_opts)
 
-  @spec send_request(GRPC.Client.Stream.t(), binary, map) :: GRPC.Client.Stream.t()
+  @impl true
   def send_request(stream, message, opts) do
     stream_ref = do_send_request(stream, message, opts)
     GRPC.Client.Stream.put_payload(stream, :stream_ref, stream_ref)
@@ -132,6 +133,7 @@ defmodule GRPC.Client.Adapters.Gun do
     :gun.cancel(conn_pid, stream_ref)
   end
 
+  @impl true
   def recv_headers(%{conn_pid: conn_pid}, %{stream_ref: stream_ref}, opts) do
     case await(conn_pid, stream_ref, opts[:timeout]) do
       {:response, headers, fin} ->
@@ -149,6 +151,7 @@ defmodule GRPC.Client.Adapters.Gun do
     end
   end
 
+  @impl true
   def recv_data_or_trailers(%{conn_pid: conn_pid}, %{stream_ref: stream_ref}, opts) do
     case await(conn_pid, stream_ref, opts[:timeout]) do
       data = {:data, _} ->

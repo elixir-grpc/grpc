@@ -16,8 +16,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
   @default_max_connections 16384
 
   # Only used in starting a server manually using `GRPC.Server.start(servers)`
-  @spec start(atom(), %{String.t() => [module()]}, non_neg_integer(), Keyword.t()) ::
-          {:ok, pid(), non_neg_integer()}
+  @impl true
   def start(endpoint, servers, port, opts) do
     start_args = cowboy_start_args(endpoint, servers, port, opts)
     start_func = if opts[:cred], do: :start_tls, else: :start_clear
@@ -76,7 +75,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
     end
   end
 
-  @spec stop(atom(), %{String.t() => [module()]}) :: :ok | {:error, :not_found}
+  @impl true
   def stop(endpoint, servers) do
     :cowboy.stop_listener(servers_name(endpoint, servers))
   end
@@ -118,11 +117,12 @@ defmodule GRPC.Server.Adapters.Cowboy do
     end
   end
 
-  @spec send_reply(GRPC.Server.Adapters.Cowboy.Handler.state(), binary(), Keyword.t()) :: any()
+  @impl true
   def send_reply(%{pid: pid}, data, opts) do
     Handler.stream_body(pid, data, opts, :nofin)
   end
 
+  @impl true
   def send_headers(%{pid: pid}, headers) do
     Handler.stream_reply(pid, 200, headers)
   end
