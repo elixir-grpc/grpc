@@ -16,7 +16,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
   @default_max_connections 16384
 
   # Only used in starting a server manually using `GRPC.Server.start(servers)`
-  @spec start(atom, GRPC.Server.servers_map(), non_neg_integer, keyword) ::
+  @spec start(atom, %{String.t() => [module]}, non_neg_integer, keyword) ::
           {:ok, pid, non_neg_integer}
   def start(endpoint, servers, port, opts) do
     start_args = cowboy_start_args(endpoint, servers, port, opts)
@@ -32,7 +32,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
     end
   end
 
-  @spec child_spec(atom, GRPC.Server.servers_map(), non_neg_integer, Keyword.t()) ::
+  @spec child_spec(atom, %{String.t() => [module]}, non_neg_integer, Keyword.t()) ::
           Supervisor.Spec.spec()
   def child_spec(endpoint, servers, port, opts) do
     [ref, trans_opts, proto_opts] = cowboy_start_args(endpoint, servers, port, opts)
@@ -55,7 +55,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
   end
 
   # spec: :supervisor.mfargs doesn't work
-  @spec start_link(atom, atom, GRPC.Server.servers_map(), any) :: {:ok, pid} | {:error, any}
+  @spec start_link(atom, atom, %{String.t() => [module]}, any) :: {:ok, pid} | {:error, any}
   def start_link(scheme, endpoint, servers, {m, f, [ref | _] = a}) do
     case apply(m, f, a) do
       {:ok, pid} ->
@@ -75,7 +75,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
     end
   end
 
-  @spec stop(atom, GRPC.Server.servers_map()) :: :ok | {:error, :not_found}
+  @spec stop(atom, %{String.t() => [module]}) :: :ok | {:error, :not_found}
   def stop(endpoint, servers) do
     :cowboy.stop_listener(servers_name(endpoint, servers))
   end

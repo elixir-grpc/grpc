@@ -1,24 +1,14 @@
 defmodule GRPC.Server.Adapter do
   @moduledoc false
 
-  alias GRPC.Server.Stream
+  alias GRPC.Server.Adapters.Cowboy.Handler
 
-  @type opts :: Keyword.t()
+  @callback start(atom, %{String.t() => [module]}, non_neg_integer(), Keyword.t()) ::
+              {atom, any, non_neg_integer}
 
-  @type endpoint :: atom
-  @type server_port :: non_neg_integer()
-  @type servers_map :: %{String.t() => [module]}
+  @callback stop(atom, %{String.t() => [module]}) :: :ok | {:error, :not_found}
 
-  @callback start(endpoint, servers_map, server_port, opts) :: {atom, any, non_neg_integer}
+  @callback send_reply(Handler.state(), binary(), Keyword.t()) :: any()
 
-  @callback stop(endpoint, servers_map) :: :ok | {:error, :not_found}
-
-  @type stream :: Stream.t()
-
-  @type state :: GRPC.Server.Adapters.Cowboy.Handler.state()
-  @type reply :: binary()
-  @callback send_reply(state, reply, opts) :: any()
-
-  @type headers :: map()
-  @callback send_headers(state, headers) :: any()
+  @callback send_headers(Handler.state(), map()) :: any()
 end

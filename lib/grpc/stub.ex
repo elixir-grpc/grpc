@@ -98,7 +98,7 @@ defmodule GRPC.Stub do
     end
   end
 
-  @type channel :: GRPC.ClientAdapter.channel()
+  @type channel :: GRPC.Channel.t()
 
   @doc """
   Establish a connection with gRPC server and return `GRPC.Channel` needed for

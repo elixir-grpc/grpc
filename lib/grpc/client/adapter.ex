@@ -4,24 +4,17 @@ defmodule GRPC.Client.Adapter do
   alias GRPC.Client.Stream
   alias GRPC.Channel
 
-  @type opts :: any
-
-  @type channel :: Channel.t()
-  @callback connect(channel, opts) :: {:ok, channel} | {:error, any}
-  
-  @callback disconnect(channel) :: {:ok, channel} | {:error, any}
-
-  @type stream :: Stream.t()
-  @type message :: binary()
-  @callback send_request(stream, message, opts) :: stream
-
-  @type headers :: [{String.t(), String.t()}]
   @type fin :: :fin | :nofin
-  @callback recv_headers(map(), map(), opts) ::
-              {:ok, headers, fin} | {:error, GRPC.RPCError.t()}
 
-  @type data :: binary()
-  @type trailers :: binary()
-  @callback recv_data_or_trailers(map(), map(), opts) ::
-              {:data, data} | {:trailers, trailers} | {:error, GRPC.RPCError.t()}
+  @callback connect(Channel.t(), map()) :: {:ok, Channel.t()} | {:error, any}
+
+  @callback disconnect(Channel.t()) :: {:ok, Channel.t()} | {:error, any}
+
+  @callback send_request(Stream.t(), binary(), map()) :: Stream.t()
+
+  @callback recv_headers(map(), map(), map()) ::
+              {:ok, %{String.t() => String.t()}, fin} | {:error, GRPC.RPCError.t()}
+
+  @callback recv_data_or_trailers(map(), map(), map()) ::
+              {:data, binary()} | {:trailers, binary()} | {:error, GRPC.RPCError.t()}
 end
