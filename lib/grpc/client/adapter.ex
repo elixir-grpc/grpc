@@ -16,7 +16,7 @@ defmodule GRPC.Client.Adapter do
   @callback send_request(Stream.t(), binary(), map()) :: Stream.t()
 
   @callback recv_headers(map(), map(), map()) ::
-              {:ok, %{String.t() => String.t()}, fin} | {:error, GRPC.RPCError.t()}
+              {:ok, %{String.t() => String.t()}, fin()} | {:error, GRPC.RPCError.t()}
 
   @callback recv_data_or_trailers(map(), map(), map()) ::
               {:data, binary()} | {:trailers, binary()} | {:error, GRPC.RPCError.t()}
