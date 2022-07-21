@@ -85,9 +85,27 @@ defmodule GRPC.Server do
         {_, {req_mod, req_stream}, {res_mod, res_stream}} = rpc,
         func_name
       ) do
-    stream = %{stream | request_mod: req_mod, response_mod: res_mod, rpc: rpc}
+    request_id = generate_request_id()
+
+    stream = %{
+      stream
+      | request_mod: req_mod,
+        request_id: request_id,
+        response_mod: res_mod,
+        rpc: rpc
+    }
 
     handle_request(req_stream, res_stream, stream, func_name)
+  end
+
+  defp generate_request_id do
+    binary = <<
+      System.system_time(:nanosecond)::64,
+      :erlang.phash2({node(), self()}, 16_777_216)::24,
+      :erlang.unique_integer()::32
+    >>
+
+    Base.url_encode64(binary, padding: false)
   end
 
   defp handle_request(req_s, res_s, %{server: server} = stream, func_name) do
@@ -212,6 +230,9 @@ defmodule GRPC.Server do
   #   * `:cred` - a credential created by functions of `GRPC.Credential`,
   #               an insecure server will be created without this option
   #   * `:adapter` - use a custom server adapter instead of default `GRPC.Server.Adapters.Cowboy`
+  #   * `:adapter_opts` - configuration for the specified adapter.
+  #     * `:status_handler` - adds a status handler that could be listening on HTTP/1, if necessary.
+  #                           It should follow the format defined by cowboy_router:compile/3
   @doc false
   @spec start(module | [module], non_neg_integer(), Keyword.t()) :: {atom, any, non_neg_integer}
   def start(servers, port, opts \\ []) do
