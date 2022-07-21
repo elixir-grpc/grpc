@@ -222,7 +222,7 @@ defmodule GRPC.Server do
   @doc false
   @spec start(servers_list, server_port, Keyword.t()) :: {atom, any, non_neg_integer}
   def start(servers, port, opts \\ []) do
-    adapter = Keyword.get(opts, :adapter, GRPC.Server.Adapters.Cowboy)
+    adapter = Keyword.get(opts, :adapter) || GRPC.Server.Adapters.Cowboy
     servers = GRPC.Server.servers_to_map(servers)
     adapter.start(nil, servers, port, opts)
   end
@@ -232,7 +232,7 @@ defmodule GRPC.Server do
   def start_endpoint(endpoint, port, opts \\ []) do
     servers = endpoint.__meta__(:servers)
     servers = GRPC.Server.servers_to_map(servers)
-    adapter = Keyword.get(opts, :adapter, GRPC.Server.Adapters.Cowboy)
+    adapter = Keyword.get(opts, :adapter) || GRPC.Server.Adapters.Cowboy
     adapter.start(endpoint, servers, port, opts)
   end
 
@@ -248,7 +248,7 @@ defmodule GRPC.Server do
   @doc false
   @spec stop(servers_list, Keyword.t()) :: any
   def stop(servers, opts \\ []) do
-    adapter = Keyword.get(opts, :adapter, GRPC.Server.Adapters.Cowboy)
+    adapter = Keyword.get(opts, :adapter) || GRPC.Server.Adapters.Cowboy
     servers = GRPC.Server.servers_to_map(servers)
     adapter.stop(nil, servers)
   end
@@ -256,7 +256,7 @@ defmodule GRPC.Server do
   @doc false
   @spec stop_endpoint(endpoint, Keyword.t()) :: any
   def stop_endpoint(endpoint, opts \\ []) do
-    adapter = Keyword.get(opts, :adapter, GRPC.Server.Adapters.Cowboy)
+    adapter = Keyword.get(opts, :adapter) || GRPC.Server.Adapters.Cowboy
     servers = endpoint.__meta__(:servers)
     servers = GRPC.Server.servers_to_map(servers)
     adapter.stop(endpoint, servers)

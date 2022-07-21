@@ -75,7 +75,7 @@ defmodule GRPC.Client.Stream do
         opts
       ) do
     encoded = codec.encode(request)
-    send_end_stream = Keyword.get(opts, :end_stream, false)
+    send_end_stream = Keyword.get(opts, :end_stream) || false
 
     # If compressor exists, compress is true by default
     compressor =

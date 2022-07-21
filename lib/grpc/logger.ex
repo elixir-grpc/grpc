@@ -17,7 +17,7 @@ defmodule GRPC.Logger.Server do
   @behaviour GRPC.ServerInterceptor
 
   def init(opts) do
-    Keyword.get(opts, :level, :info)
+    Keyword.get(opts, :level) || :info
   end
 
   def call(req, stream, next, level) do
@@ -64,7 +64,7 @@ defmodule GRPC.Logger.Client do
   """
 
   def init(opts) do
-    Keyword.get(opts, :level, :info)
+    Keyword.get(opts, :level) || :info
   end
 
   def call(%{grpc_type: grpc_type} = stream, req, next, level) do

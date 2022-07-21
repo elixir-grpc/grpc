@@ -146,16 +146,13 @@ defmodule GRPC.Stub do
 
   def connect(host, port, opts) when is_integer(port) do
     adapter =
-      Keyword.get(
-        opts,
-        :adapter,
+      Keyword.get(opts, :adapter) ||
         Application.get_env(:grpc, :http2_client_adapter, GRPC.Client.Adapters.Gun)
-      )
 
     cred = Keyword.get(opts, :cred)
     scheme = if cred, do: @secure_scheme, else: @insecure_scheme
-    interceptors = Keyword.get(opts, :interceptors, []) |> init_interceptors
-    codec = Keyword.get(opts, :codec, GRPC.Codec.Proto)
+    interceptors = (Keyword.get(opts, :interceptors) || []) |> init_interceptors
+    codec = Keyword.get(opts, :codec) || GRPC.Codec.Proto
     compressor = Keyword.get(opts, :compressor)
     accepted_compressors = Keyword.get(opts, :accepted_compressors) || []
     headers = Keyword.get(opts, :headers) || []

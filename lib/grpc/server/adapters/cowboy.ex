@@ -161,9 +161,9 @@ defmodule GRPC.Server.Adapters.Cowboy do
          [{:_, GRPC.Server.Adapters.Cowboy.Handler, {endpoint, servers, Enum.into(opts, %{})}}]}
       ])
 
-    idle_timeout = Keyword.get(opts, :idle_timeout, :infinity)
-    num_acceptors = Keyword.get(opts, :num_acceptors, @default_num_acceptors)
-    max_connections = Keyword.get(opts, :max_connections, @default_max_connections)
+    idle_timeout = Keyword.get(opts, :idle_timeout) || :infinity
+    num_acceptors = Keyword.get(opts, :num_acceptors) || @default_num_acceptors
+    max_connections = Keyword.get(opts, :max_connections) || @default_max_connections
 
     # https://ninenines.eu/docs/en/cowboy/2.7/manual/cowboy_http2/
     opts =

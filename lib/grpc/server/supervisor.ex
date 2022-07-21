@@ -81,13 +81,13 @@ defmodule GRPC.Server.Supervisor do
           {nil, endpoint}
       end
 
-    adapter = Keyword.get(opts, :adapter, @default_adapter)
+    adapter = Keyword.get(opts, :adapter) || @default_adapter
     servers = GRPC.Server.servers_to_map(servers)
     adapter.child_spec(endpoint, servers, port, opts)
   end
 
   def child_spec(servers, port, opts) when is_list(servers) do
-    adapter = Keyword.get(opts, :adapter, @default_adapter)
+    adapter = Keyword.get(opts, :adapter) || @default_adapter
     servers = GRPC.Server.servers_to_map(servers)
     adapter.child_spec(nil, servers, port, opts)
   end
