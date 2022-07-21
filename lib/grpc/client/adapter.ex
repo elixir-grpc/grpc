@@ -1,9 +1,12 @@
 defmodule GRPC.Client.Adapter do
-  @moduledoc false
+  @moduledoc """
+  HTTP client adapter for GRPC.
+  """
 
   alias GRPC.Client.Stream
   alias GRPC.Channel
 
+  @typedoc "Determines if the headers are finished reading."
   @type fin :: :fin | :nofin
 
   @callback connect(Channel.t(), map()) :: {:ok, Channel.t()} | {:error, any}

@@ -1,5 +1,7 @@
 defmodule GRPC.Server.Adapter do
-  @moduledoc false
+  @moduledoc """
+  HTTP server adapter for GRPC.
+  """
 
   alias GRPC.Server.Adapters.Cowboy.Handler
 
