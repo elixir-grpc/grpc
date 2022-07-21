@@ -29,20 +29,20 @@ defmodule GRPC.Server.Supervisor do
   View `child_spec/3` for opts.
   """
 
-  @default_adapter GRPC.Adapter.Cowboy
+  @default_adapter GRPC.Server.Adapters.Cowboy
   require Logger
 
   def start_link(endpoint) do
     Supervisor.start_link(__MODULE__, endpoint)
   end
 
-  @spec init({module | [module], integer}) ::
+  @spec init({module() | [module()], integer()}) ::
           {:ok, {:supervisor.sup_flags(), [:supervisor.child_spec()]}} | :ignore
   def init({endpoint, port}) do
     init({endpoint, port, []})
   end
 
-  @spec init({module | [module], integer, Keyword.t()}) ::
+  @spec init({module() | [module()], integer(), Keyword.t()}) ::
           {:ok, {:supervisor.sup_flags(), [:supervisor.child_spec()]}} | :ignore
   def init({endpoint, port, opts}) do
     check_deps_version()
@@ -65,7 +65,7 @@ defmodule GRPC.Server.Supervisor do
     * `:cred` - a credential created by functions of `GRPC.Credential`,
       an insecure server will be created without this option
   """
-  @spec child_spec(atom | [atom], integer, Keyword.t()) :: Supervisor.Spec.spec()
+  @spec child_spec(atom() | [atom()], integer(), Keyword.t()) :: Supervisor.Spec.spec()
   def child_spec(endpoint, port, opts \\ [])
 
   def child_spec(endpoint, port, opts) when is_atom(endpoint) do
@@ -81,13 +81,13 @@ defmodule GRPC.Server.Supervisor do
           {nil, endpoint}
       end
 
-    adapter = Keyword.get(opts, :adapter, @default_adapter)
+    adapter = Keyword.get(opts, :adapter) || @default_adapter
     servers = GRPC.Server.servers_to_map(servers)
     adapter.child_spec(endpoint, servers, port, opts)
   end
 
   def child_spec(servers, port, opts) when is_list(servers) do
-    adapter = Keyword.get(opts, :adapter, @default_adapter)
+    adapter = Keyword.get(opts, :adapter) || @default_adapter
     servers = GRPC.Server.servers_to_map(servers)
     adapter.child_spec(nil, servers, port, opts)
   end

@@ -3,12 +3,12 @@ defmodule Grpc.Testing.ServerStats do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          time_elapsed: float,
-          time_user: float,
-          time_system: float,
-          total_cpu_time: non_neg_integer,
-          idle_cpu_time: non_neg_integer,
-          cq_poll_count: non_neg_integer,
+          time_elapsed: float(),
+          time_user: float(),
+          time_system: float(),
+          total_cpu_time: non_neg_integer(),
+          idle_cpu_time: non_neg_integer(),
+          cq_poll_count: non_neg_integer(),
           core_stats: Grpc.Core.Stats.t() | nil
         }
   defstruct [
@@ -35,8 +35,8 @@ defmodule Grpc.Testing.HistogramParams do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          resolution: float,
-          max_possible: float
+          resolution: float(),
+          max_possible: float()
         }
   defstruct [:resolution, :max_possible]
 
@@ -49,12 +49,12 @@ defmodule Grpc.Testing.HistogramData do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          bucket: [non_neg_integer],
-          min_seen: float,
-          max_seen: float,
-          sum: float,
-          sum_of_squares: float,
-          count: float
+          bucket: [non_neg_integer()],
+          min_seen: float(),
+          max_seen: float(),
+          sum: float(),
+          sum_of_squares: float(),
+          count: float()
         }
   defstruct [:bucket, :min_seen, :max_seen, :sum, :sum_of_squares, :count]
 
@@ -71,8 +71,8 @@ defmodule Grpc.Testing.RequestResultCount do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          status_code: integer,
-          count: integer
+          status_code: integer(),
+          count: integer()
         }
   defstruct [:status_code, :count]
 
@@ -86,11 +86,11 @@ defmodule Grpc.Testing.ClientStats do
 
   @type t :: %__MODULE__{
           latencies: Grpc.Testing.HistogramData.t() | nil,
-          time_elapsed: float,
-          time_user: float,
-          time_system: float,
+          time_elapsed: float(),
+          time_user: float(),
+          time_system: float(),
           request_results: [Grpc.Testing.RequestResultCount.t()],
-          cq_poll_count: non_neg_integer,
+          cq_poll_count: non_neg_integer(),
           core_stats: Grpc.Core.Stats.t() | nil
         }
   defstruct [
