@@ -152,7 +152,7 @@ defmodule GRPC.Integration.ServiceTest do
 
         notes =
           Enum.map(result_enum, fn {:ok, note} ->
-            assert "Reply: " <> msg = note.message
+            assert "Reply: " <> _msg = note.message
 
             if note.message == "Reply: Message 5" do
               point = Routeguide.Point.new(latitude: 0, longitude: rem(6, 3) + 1)
