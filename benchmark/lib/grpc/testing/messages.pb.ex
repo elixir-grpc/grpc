@@ -3,7 +3,7 @@ defmodule Grpc.Testing.BoolValue do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          value: boolean
+          value: boolean()
         }
   defstruct [:value]
 
@@ -15,8 +15,8 @@ defmodule Grpc.Testing.Payload do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          type: atom | integer,
-          body: binary
+          type: atom() | integer(),
+          body: binary()
         }
   defstruct [:type, :body]
 
@@ -29,7 +29,7 @@ defmodule Grpc.Testing.EchoStatus do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          code: integer,
+          code: integer(),
           message: String.t()
         }
   defstruct [:code, :message]
@@ -43,11 +43,11 @@ defmodule Grpc.Testing.SimpleRequest do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          response_type: atom | integer,
-          response_size: integer,
+          response_type: atom() | integer(),
+          response_size: integer(),
           payload: Grpc.Testing.Payload.t() | nil,
-          fill_username: boolean,
-          fill_oauth_scope: boolean,
+          fill_username: boolean(),
+          fill_oauth_scope: boolean(),
           response_compressed: Grpc.Testing.BoolValue.t() | nil,
           response_status: Grpc.Testing.EchoStatus.t() | nil,
           expect_compressed: Grpc.Testing.BoolValue.t() | nil
@@ -108,7 +108,7 @@ defmodule Grpc.Testing.StreamingInputCallResponse do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          aggregated_payload_size: integer
+          aggregated_payload_size: integer()
         }
   defstruct [:aggregated_payload_size]
 
@@ -120,8 +120,8 @@ defmodule Grpc.Testing.ResponseParameters do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          size: integer,
-          interval_us: integer,
+          size: integer(),
+          interval_us: integer(),
           compressed: Grpc.Testing.BoolValue.t() | nil
         }
   defstruct [:size, :interval_us, :compressed]
@@ -136,7 +136,7 @@ defmodule Grpc.Testing.StreamingOutputCallRequest do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          response_type: atom | integer,
+          response_type: atom() | integer(),
           response_parameters: [Grpc.Testing.ResponseParameters.t()],
           payload: Grpc.Testing.Payload.t() | nil,
           response_status: Grpc.Testing.EchoStatus.t() | nil
@@ -166,7 +166,7 @@ defmodule Grpc.Testing.ReconnectParams do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          max_reconnect_backoff_ms: integer
+          max_reconnect_backoff_ms: integer()
         }
   defstruct [:max_reconnect_backoff_ms]
 
@@ -178,8 +178,8 @@ defmodule Grpc.Testing.ReconnectInfo do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          passed: boolean,
-          backoff_ms: [integer]
+          passed: boolean(),
+          backoff_ms: [integer()]
         }
   defstruct [:passed, :backoff_ms]
 

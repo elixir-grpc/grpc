@@ -2,8 +2,8 @@ defmodule Routeguide.Point do
   use Protobuf
 
   @type t :: %__MODULE__{
-          latitude: integer,
-          longitude: integer
+          latitude: integer(),
+          longitude: integer()
         }
   defstruct [:latitude, :longitude]
 
@@ -54,10 +54,10 @@ defmodule Routeguide.RouteSummary do
   use Protobuf
 
   @type t :: %__MODULE__{
-          point_count: integer,
-          feature_count: integer,
-          distance: integer,
-          elapsed_time: integer
+          point_count: integer(),
+          feature_count: integer(),
+          distance: integer(),
+          elapsed_time: integer()
         }
   defstruct [:point_count, :feature_count, :distance, :elapsed_time]
 

@@ -45,11 +45,11 @@ defmodule GRPC.Stub do
   @default_timeout 10000
 
   @type rpc_return ::
-          {:ok, struct}
-          | {:ok, struct, map}
+          {:ok, struct()}
+          | {:ok, struct(), map()}
           | GRPC.Client.Stream.t()
           | {:ok, Enumerable.t()}
-          | {:ok, Enumerable.t(), map}
+          | {:ok, Enumerable.t(), map()}
           | {:error, GRPC.RPCError.t()}
 
   require Logger
@@ -98,8 +98,6 @@ defmodule GRPC.Stub do
     end
   end
 
-  @type channel :: GRPC.Channel.t()
-
   @doc """
   Establish a connection with gRPC server and return `GRPC.Channel` needed for
   sending requests.
@@ -127,7 +125,7 @@ defmodule GRPC.Stub do
     * `:accepted_compressors` - tell servers accepted compressors, this can be used without `:compressor`
     * `:headers` - headers to attach to each request
   """
-  @spec connect(String.t(), Keyword.t()) :: {:ok, channel} | {:error, any}
+  @spec connect(String.t(), Keyword.t()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(addr, opts \\ []) when is_binary(addr) and is_list(opts) do
     {host, port} =
       case String.split(addr, ":") do
@@ -138,8 +136,8 @@ defmodule GRPC.Stub do
     connect(host, port, opts)
   end
 
-  @spec connect(String.t(), binary | non_neg_integer, keyword) ::
-          {:ok, channel} | {:error, any}
+  @spec connect(String.t(), binary() | non_neg_integer(), Keyword.t()) ::
+          {:ok, Channel.t()} | {:error, any()}
   def connect(host, port, opts) when is_binary(port) do
     connect(host, String.to_integer(port), opts)
   end
@@ -209,7 +207,7 @@ defmodule GRPC.Stub do
   @doc """
   Disconnects the adapter and frees any resources the adapter is consuming
   """
-  @spec disconnect(channel) :: {:ok, channel} | {:error, any}
+  @spec disconnect(Channel.t()) :: {:ok, Channel.t()} | {:error, any()}
   def disconnect(%Channel{adapter: adapter} = channel) do
     adapter.disconnect(channel)
   end
@@ -233,7 +231,7 @@ defmodule GRPC.Stub do
       with the last elem being a map of headers `%{headers: headers, trailers: trailers}`(unary) or
       `%{headers: headers}`(server streaming)
   """
-  @spec call(atom, tuple, GRPC.Client.Stream.t(), struct | nil, keyword) :: rpc_return
+  @spec call(atom(), tuple(), GRPC.Client.Stream.t(), struct() | nil, Keyword.t()) :: rpc_return
   def call(_service_mod, rpc, %{channel: channel} = stream, request, opts) do
     {_, {req_mod, req_stream}, {res_mod, response_stream}} = rpc
 
@@ -378,12 +376,12 @@ defmodule GRPC.Stub do
     * `:deadline` - when the request is timeout, will override timeout
     * `:return_headers` - when true, headers will be returned.
   """
-  @spec recv(GRPC.Client.Stream.t(), keyword | map) ::
-          {:ok, struct}
-          | {:ok, struct, map}
+  @spec recv(GRPC.Client.Stream.t(), Keyword.t() | map()) ::
+          {:ok, struct()}
+          | {:ok, struct(), map()}
           | {:ok, Enumerable.t()}
-          | {:ok, Enumerable.t(), map}
-          | {:error, any}
+          | {:ok, Enumerable.t(), map()}
+          | {:error, any()}
   def recv(stream, opts \\ [])
 
   def recv(%{canceled: true}, _) do

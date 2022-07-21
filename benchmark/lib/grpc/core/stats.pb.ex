@@ -3,8 +3,8 @@ defmodule Grpc.Core.Bucket do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          start: float,
-          count: non_neg_integer
+          start: float(),
+          count: non_neg_integer()
         }
   defstruct [:start, :count]
 
@@ -29,7 +29,7 @@ defmodule Grpc.Core.Metric do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          value: {atom, any},
+          value: {atom(), any()},
           name: String.t()
         }
   defstruct [:value, :name]

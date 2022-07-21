@@ -16,8 +16,8 @@ defmodule GRPC.Server.Adapters.Cowboy do
   @default_max_connections 16384
 
   # Only used in starting a server manually using `GRPC.Server.start(servers)`
-  @spec start(atom, %{String.t() => [module]}, non_neg_integer, keyword) ::
-          {:ok, pid, non_neg_integer}
+  @spec start(atom(), %{String.t() => [module()]}, non_neg_integer(), Keyword.t()) ::
+          {:ok, pid(), non_neg_integer()}
   def start(endpoint, servers, port, opts) do
     start_args = cowboy_start_args(endpoint, servers, port, opts)
     start_func = if opts[:cred], do: :start_tls, else: :start_clear
@@ -32,7 +32,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
     end
   end
 
-  @spec child_spec(atom, %{String.t() => [module]}, non_neg_integer, Keyword.t()) ::
+  @spec child_spec(atom(), %{String.t() => [module()]}, non_neg_integer(), Keyword.t()) ::
           Supervisor.Spec.spec()
   def child_spec(endpoint, servers, port, opts) do
     [ref, trans_opts, proto_opts] = cowboy_start_args(endpoint, servers, port, opts)
@@ -55,7 +55,8 @@ defmodule GRPC.Server.Adapters.Cowboy do
   end
 
   # spec: :supervisor.mfargs doesn't work
-  @spec start_link(atom, atom, %{String.t() => [module]}, any) :: {:ok, pid} | {:error, any}
+  @spec start_link(atom(), atom(), %{String.t() => [module()]}, any()) ::
+          {:ok, pid()} | {:error, any()}
   def start_link(scheme, endpoint, servers, {m, f, [ref | _] = a}) do
     case apply(m, f, a) do
       {:ok, pid} ->
@@ -75,12 +76,12 @@ defmodule GRPC.Server.Adapters.Cowboy do
     end
   end
 
-  @spec stop(atom, %{String.t() => [module]}) :: :ok | {:error, :not_found}
+  @spec stop(atom(), %{String.t() => [module()]}) :: :ok | {:error, :not_found}
   def stop(endpoint, servers) do
     :cowboy.stop_listener(servers_name(endpoint, servers))
   end
 
-  @spec read_body(GRPC.Server.Adapters.Cowboy.Handler.state()) :: {:ok, binary}
+  @spec read_body(GRPC.Server.Adapters.Cowboy.Handler.state()) :: {:ok, binary()}
   def read_body(%{pid: pid}) do
     Handler.read_full_body(pid)
   end
@@ -117,7 +118,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
     end
   end
 
-  @spec send_reply(GRPC.Server.Adapters.Cowboy.Handler.state(), binary, keyword) :: any
+  @spec send_reply(GRPC.Server.Adapters.Cowboy.Handler.state(), binary(), Keyword.t()) :: any()
   def send_reply(%{pid: pid}, data, opts) do
     Handler.stream_body(pid, data, opts, :nofin)
   end

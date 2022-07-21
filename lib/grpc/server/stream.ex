@@ -18,23 +18,23 @@ defmodule GRPC.Server.Stream do
   """
 
   @type t :: %__MODULE__{
-          server: atom,
+          server: atom(),
           service_name: String.t(),
           method_name: String.t(),
-          grpc_type: atom,
-          endpoint: atom,
-          rpc: tuple,
-          request_mod: atom,
+          grpc_type: atom(),
+          endpoint: atom(),
+          rpc: tuple(),
+          request_mod: atom(),
           request_id: String.t() | nil,
-          response_mod: atom,
-          codec: atom,
-          payload: any,
-          adapter: atom,
-          local: any,
+          response_mod: atom(),
+          codec: atom(),
+          payload: any(),
+          adapter: atom(),
+          local: any(),
           # compressor mainly is used in client decompressing, responses compressing should be set by
           # `GRPC.Server.set_compressor`
-          compressor: module | nil,
-          __interface__: map
+          compressor: module() | nil,
+          __interface__: map()
         }
 
   defstruct server: nil,
