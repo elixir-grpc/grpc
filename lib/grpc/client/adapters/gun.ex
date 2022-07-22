@@ -30,7 +30,9 @@ defmodule GRPC.Client.Adapters.Gun do
   end
 
   defp connect_insecurely(channel, opts) do
-    opts = Map.update(opts, :http2_opts, @default_http2_opts, &Map.merge(&1, @default_http2_opts))
+    opts = Map.get(opts, :http2_opts) || @default_http2_opts
+
+    opts = Map.merge(@default_http2_opts, opts)
 
     transport_opts = Map.get(opts, :transport_opts) || []
 
