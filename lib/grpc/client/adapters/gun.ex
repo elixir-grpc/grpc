@@ -8,7 +8,6 @@ defmodule GRPC.Client.Adapters.Gun do
   # conn_pid and stream_ref are stored in `GRPC.Server.Stream`
 
   @default_transport_opts [nodelay: true]
-  @default_http2_opts %{settings_timeout: :infinity}
   @max_retries 100
 
   @impl true
@@ -30,9 +29,13 @@ defmodule GRPC.Client.Adapters.Gun do
   end
 
   defp connect_insecurely(channel, opts) do
-    opts = Map.get(opts, :http2_opts) || @default_http2_opts
-
-    opts = Map.merge(@default_http2_opts, opts)
+    opts =
+      Map.update(
+        opts,
+        :http2_opts,
+        %{settings_timeout: :infinity},
+        &Map.put(&1, :settings_timeout, :infinity)
+      )
 
     transport_opts = Map.get(opts, :transport_opts) || []
 
