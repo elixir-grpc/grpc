@@ -1,30 +1,30 @@
 defmodule GRPC.Client.Adapters.Gun do
-  @moduledoc false
+  @moduledoc """
+  A client adapter using Gun
+  """
 
   @behaviour GRPC.Client.Adapter
 
-  # A client adapter using Gun.
-  # conn_pid and stream_ref is stored in `GRPC.Server.Stream`.
+  # conn_pid and stream_ref are stored in `GRPC.Server.Stream`
 
   @default_transport_opts [nodelay: true]
   @default_http2_opts %{settings_timeout: :infinity}
   @max_retries 100
 
   @impl true
-  def connect(channel, nil), do: connect(channel, %{})
+  def connect(channel, opts \\ %{})
   def connect(%{scheme: "https"} = channel, opts), do: connect_securely(channel, opts)
   def connect(channel, opts), do: connect_insecurely(channel, opts)
 
   defp connect_securely(%{cred: %{ssl: ssl}} = channel, opts) do
-    transport_opts = Map.get(opts, :transport_opts) || @default_transport_opts ++ ssl
-    open_opts = %{transport: :ssl, protocols: [:http2]}
+    transport_opts = Map.get(opts, :transport_opts) || []
+
+    tls_opts = Keyword.merge(@default_transport_opts ++ ssl, transport_opts)
 
     open_opts =
-      Map.update(open_opts, :tls_opts, transport_opts, fn current ->
-        Keyword.merge(current, transport_opts)
-      end)
-
-    open_opts = Map.merge(opts, open_opts)
+      opts
+      |> Map.delete(:transport_opts)
+      |> Map.merge(%{transport: :ssl, protocols: [:http2], tls_opts: tls_opts})
 
     do_connect(channel, open_opts)
   end
@@ -32,26 +32,20 @@ defmodule GRPC.Client.Adapters.Gun do
   defp connect_insecurely(channel, opts) do
     opts = Map.update(opts, :http2_opts, @default_http2_opts, &Map.merge(&1, @default_http2_opts))
 
-    transport_opts = Map.get(opts, :transport_opts) || @default_transport_opts
-    open_opts = %{transport: :tcp, protocols: [:http2]}
+    transport_opts = Map.get(opts, :transport_opts) || []
+
+    tcp_opts = Keyword.merge(@default_transport_opts, transport_opts)
 
     open_opts =
-      Map.update(open_opts, :tls_opts, transport_opts, fn current ->
-        Keyword.merge(current, transport_opts)
-      end)
-
-    open_opts = Map.merge(opts, open_opts)
+      opts
+      |> Map.delete(:transport_opts)
+      |> Map.merge(%{transport: :tcp, protocols: [:http2], tcp_opts: tcp_opts})
 
     do_connect(channel, open_opts)
   end
 
   defp do_connect(%{host: host, port: port} = channel, open_opts) do
-    open_opts =
-      if gun_v2?() do
-        Map.merge(%{retry: @max_retries, retry_fun: &__MODULE__.retry_fun/2}, open_opts)
-      else
-        open_opts
-      end
+    open_opts = Map.merge(%{retry: @max_retries, retry_fun: &__MODULE__.retry_fun/2}, open_opts)
 
     {:ok, conn_pid} = open(host, port, open_opts)
 
@@ -259,17 +253,6 @@ defmodule GRPC.Client.Adapters.Gun do
            GRPC.Status.unknown(),
            "unexpected message when waiting for server: #{inspect(other)}"
          )}
-    end
-  end
-
-  @char_2 List.first('2')
-  def gun_v2?() do
-    case :application.get_key(:gun, :vsn) do
-      {:ok, [@char_2 | _]} ->
-        true
-
-      _ ->
-        false
     end
   end
 
