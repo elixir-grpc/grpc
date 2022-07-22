@@ -1,8 +1,8 @@
 {options, _, _} = OptionParser.parse(System.argv(), strict: [rounds: :integer, concurrency: :integer, port: :integer])
-rounds = Keyword.get(options, :rounds, 100)
+rounds = Keyword.get(options, :rounds) || 100
 max_concurrency = System.schedulers_online() |> div(2) |> min(1)
-concurrency = Keyword.get(options, :concurrency, max_concurrency)
-port = Keyword.get(options, :port, 0)
+concurrency = Keyword.get(options, :concurrency) || max_concurrency
+port = Keyword.get(options, :port) || 0
 
 IO.puts "Rounds: #{rounds}; concurrency: #{concurrency}; port: #{port}"
 IO.puts ""

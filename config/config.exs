@@ -1,6 +1,6 @@
 import Config
 
-config :grpc, http2_client_adapter: GRPC.Adapter.Gun
+config :grpc, http2_client_adapter: GRPC.Client.Adapters.Gun
 
 config_file = Path.expand("#{config_env()}.exs", __DIR__)
 

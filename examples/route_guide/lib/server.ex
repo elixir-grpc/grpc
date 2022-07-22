@@ -13,7 +13,7 @@ defmodule Routeguide.RouteGuide.Server do
     end)
   end
 
-  @spec list_features(Routeguide.Rectangle.t(), GRPC.Server.Stream.t()) :: any
+  @spec list_features(Routeguide.Rectangle.t(), GRPC.Server.Stream.t()) :: any()
   def list_features(rect, stream) do
     features = Data.fetch_features()
 
@@ -45,7 +45,7 @@ defmodule Routeguide.RouteGuide.Server do
     )
   end
 
-  @spec record_route(Enumerable.t(), GRPC.Server.Stream.t()) :: any
+  @spec record_route(Enumerable.t(), GRPC.Server.Stream.t()) :: any()
   def route_chat(req_enum, stream) do
     notes =
       Enum.reduce(req_enum, Data.fetch_notes(), fn note, notes ->
