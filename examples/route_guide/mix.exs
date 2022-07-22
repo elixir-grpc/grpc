@@ -4,7 +4,7 @@ defmodule RouteGuide.Mixfile do
   def project do
     [app: :route_guide,
      version: "0.1.0",
-     elixir: "~> 1.3",
+     elixir: "~> 1.11",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
      deps: deps()]
@@ -15,7 +15,7 @@ defmodule RouteGuide.Mixfile do
   # Type "mix help compile.app" for more information
   def application do
     [mod: {Routeguide.App, []},
-     applications: [:logger, :grpc, :poison]]
+     applications: [:logger, :grpc, :protobuf, :jason]]
   end
 
   # Dependencies can be Hex packages:
@@ -31,9 +31,8 @@ defmodule RouteGuide.Mixfile do
     [
       {:grpc, path: "../../"},
       {:protobuf, "~> 0.10"},
-      {:poison, "~> 3.0"},
-      {:cowlib, "~> 2.8.0", hex: :grpc_cowlib, override: true},
-      {:dialyxir, "~> 0.5", only: [:dev, :test], runtime: false},
+      {:jason, "~> 1.2"},
+      {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false},
     ]
   end
 end

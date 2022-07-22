@@ -1,7 +1,9 @@
 defmodule RouteGuide.Data do
+  use Agent
+
   @json_path Path.expand("../priv/route_guide_db.json", __DIR__)
 
-  def start_link do
+  def start_link(_) do
     features = load_features()
     Agent.start_link(fn -> %{features: features, notes: %{}} end, name: __MODULE__)
   end
@@ -20,13 +22,13 @@ defmodule RouteGuide.Data do
 
   defp load_features(path \\ @json_path) do
     data = File.read!(path)
-    items = Poison.Parser.parse!(data)
+    items = Jason.decode!(data)
 
-    Enum.map(items, fn %{"location" => location, "name" => name} ->
+    for %{"location" => location, "name" => name} <- items do
       point =
         Routeguide.Point.new(latitude: location["latitude"], longitude: location["longitude"])
 
       Routeguide.Feature.new(name: name, location: point)
-    end)
+    end
   end
 end
