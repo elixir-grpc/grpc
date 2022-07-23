@@ -89,7 +89,7 @@ jobs:
           mix deps.get
         working-directory: ./interop
       - name: Run interop tests
-        run: mix run script/run.exs
+        run: mix run script/run.exs --rounds 64
         working-directory: ./interop
 
   interop-tests-all:
@@ -125,7 +125,7 @@ jobs:
           mix deps.get
         working-directory: ./interop
       - name: Run interop tests
-        run: mix run script/run.exs
+        run: mix run script/run.exs --rounds 64
         working-directory: ./interop
 
   dialyzer:
