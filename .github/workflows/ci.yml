@@ -25,10 +25,7 @@ jobs:
           path: deps
           key: v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
       - name: Install Dependencies
-        run: |
-          mix local.rebar --force 1>/dev/null
-          mix local.hex --force 1>/dev/null
-          mix deps.get 1>/dev/null 1>/dev/null 1>/dev/null
+        run: mix deps.get 1>/dev/null
       - name: Check format
         run: mix format --check-formatted
 
@@ -58,10 +55,7 @@ jobs:
           path: deps
           key: v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
       - name: Install Dependencies
-        run: |
-          mix local.rebar --force 1>/dev/null
-          mix local.hex --force 1>/dev/null
-          mix deps.get 1>/dev/null 1>/dev/null
+        run: mix deps.get 1>/dev/null
       - name: Run Tests
         run: mix test
 
@@ -83,10 +77,7 @@ jobs:
           path: deps
           key: v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
       - name: Install Dependencies
-        run: |
-          mix local.rebar --force 1>/dev/null
-          mix local.hex --force 1>/dev/null
-          mix deps.get 1>/dev/null
+        run: mix deps.get 1>/dev/null
         working-directory: ./interop
       - name: Run interop tests
         run: mix run script/run.exs --rounds 64
@@ -119,10 +110,7 @@ jobs:
           path: deps
           key: v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
       - name: Install Dependencies
-        run: |
-          mix local.rebar --force 1>/dev/null
-          mix local.hex --force 1>/dev/null
-          mix deps.get 1>/dev/null
+        run: mix deps.get 1>/dev/null
         working-directory: ./interop
       - name: Run interop tests
         run: mix run script/run.exs --rounds 64
@@ -156,7 +144,7 @@ jobs:
         with:
           otp-version: ${{matrix.otp}}
           elixir-version: ${{matrix.elixir}}
-      - run: mix deps.get
+      - run: mix deps.get 1>/dev/null
       - run: mix dialyzer --format short
 
   check_release:
@@ -176,10 +164,7 @@ jobs:
           path: deps
           key: v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
       - name: Install Dependencies
-        run: |
-          mix local.rebar --force 1>/dev/null
-          mix local.hex --force 1>/dev/null
-          mix deps.get 1>/dev/null
+        run: mix deps.get 1>/dev/null
       - name: Build hex
         run: mix hex.build
       - name: Generate docs
