@@ -235,7 +235,7 @@ defmodule GRPC.Server do
   #                           It should follow the format defined by cowboy_router:compile/3
   @doc false
   @spec start(module() | [module()], non_neg_integer(), Keyword.t()) ::
-          {atom(), any(), non_neg_integer()}
+          {atom(), any(), non_neg_integer()} | {:error, any()}
   def start(servers, port, opts \\ []) do
     adapter = Keyword.get(opts, :adapter) || GRPC.Server.Adapters.Cowboy
     servers = GRPC.Server.servers_to_map(servers)
