@@ -151,7 +151,7 @@ jobs:
             _build/test/plts/dialyzer.plt.hash
           key: plt-cache-${{ matrix.otp }}-${{ matrix.elixir }}-${{ steps.set_vars.outputs.mix_hash }}
           restore-keys: |
-            plt-cache-
+            plt-cache-${{ matrix.otp }}-${{ matrix.elixir }}-
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{matrix.otp}}
