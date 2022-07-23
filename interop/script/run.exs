@@ -10,7 +10,7 @@ require Logger
 
 Logger.configure(level: level)
 
-Logger.warn("Rounds: #{rounds}; concurrency: #{concurrency}; port: #{port}")
+Logger.info("Rounds: #{rounds}; concurrency: #{concurrency}; port: #{port}")
 
 alias Interop.Client
 
@@ -60,5 +60,5 @@ end)
 # end
 # Helper.flush()
 
-Logger.warn("Succeed!")
+Logger.info("Succeed!")
 :ok = GRPC.Server.stop_endpoint(Interop.Endpoint)
