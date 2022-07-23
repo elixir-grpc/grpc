@@ -157,7 +157,7 @@ jobs:
           otp-version: ${{matrix.otp}}
           elixir-version: ${{matrix.elixir}}
       - run: mix deps.get
-      - run: mix dialyzer --format-short
+      - run: mix dialyzer --format short
 
   check_release:
     runs-on: ubuntu-latest
