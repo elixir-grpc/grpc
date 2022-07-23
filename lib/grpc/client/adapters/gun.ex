@@ -1,10 +1,11 @@
 defmodule GRPC.Client.Adapters.Gun do
-  @moduledoc false
+  @moduledoc """
+  A client (`b:GRPC.Client.Adapter`) adapter using `:gun`.
+
+  `conn_pid` and `stream_ref` are stored in `GRPC.Server.Stream`.
+  """
 
   @behaviour GRPC.Client.Adapter
-
-  # A client adapter using Gun.
-  # conn_pid and stream_ref is stored in `GRPC.Server.Stream`.
 
   @default_transport_opts [nodelay: true]
   @default_http2_opts %{settings_timeout: :infinity}

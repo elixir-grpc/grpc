@@ -1,13 +1,11 @@
 defmodule GRPC.Server.Adapters.Cowboy do
-  @moduledoc false
+  @moduledoc """
+  A server (`b:GRPC.Server.Adapter`) adapter using `:cowboy`.
+
+  Cowboy requests will be stored in the `:payload` field of the `GRPC.Server.Stream`.
+  """
 
   @behaviour GRPC.Server.Adapter
-
-  # A server(`GRPC.Server`) adapter using Cowboy.
-  # Cowboy req will be stored in `:payload` of `GRPC.Server.Stream`.
-
-  # Waiting for this is released on hex https://github.com/ninenines/ranch/pull/227
-  @dialyzer {:nowarn_function, running_info: 4}
 
   require Logger
   alias GRPC.Server.Adapters.Cowboy.Handler
@@ -229,8 +227,8 @@ defmodule GRPC.Server.Adapters.Cowboy do
 
     addr_str =
       case addr do
-        :local ->
-          port
+        :undefined ->
+          raise "undefined address for ranch server"
 
         addr ->
           "#{:inet.ntoa(addr)}:#{port}"
