@@ -18,7 +18,7 @@ alias Interop.Client
 
 stream = Task.async_stream(1..concurrency, fn _cli ->
   ch = Client.connect("127.0.0.1", port, interceptors: [GRPCPrometheus.ClientInterceptor, GRPC.Logger.Client])
-  
+
   for _ <- 1..rounds do
     Client.empty_unary!(ch)
     Client.cacheable_unary!(ch)
