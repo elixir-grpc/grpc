@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Check format
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
       - uses: erlef/setup-beam@v1
         with:
           otp-version: 24
@@ -43,7 +43,7 @@ jobs:
             elixir: 1.12.x
     needs: check_format
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{matrix.otp}}
@@ -65,7 +65,7 @@ jobs:
     needs: check_format
     if: ${{ github.ref != 'refs/heads/master' }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: erlef/setup-beam@v1
         with:
           otp-version: 25.x
@@ -98,7 +98,7 @@ jobs:
           - otp: 25.x
             elixir: 1.12.x
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: erlef/setup-beam@v1
         with:
           otp-version: 25.x
@@ -126,7 +126,7 @@ jobs:
     env:
       MIX_ENV: test
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - id: set_vars
         run: |
           mix_hash="${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}"
@@ -152,7 +152,7 @@ jobs:
     name: Check release
     needs: check_format
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: erlef/setup-beam@v1
         with:
           otp-version: 24
