@@ -135,6 +135,8 @@ jobs:
       matrix:
         otp: [24.x, 25.x]
         elixir: [1.13.x]
+    env:
+      MIX_ENV: test
     steps:
       - uses: actions/checkout@v2
       - id: set_vars
