@@ -21,7 +21,10 @@ defmodule GRPC.Mixfile do
         source_url: "https://github.com/elixir-grpc/grpc"
       ],
       dialyzer: [
-        plt_add_apps: [:mix, :iex]
+        plt_add_deps: :apps_tree,
+        plt_add_apps: [:iex, :mix, :ex_unit],
+        list_unused_filters: true,
+        plt_file: {:no_warn, "_build/#{Mix.env()}/plts/dialyzer.plt"}
       ],
       xref: [exclude: [IEx]]
     ]
