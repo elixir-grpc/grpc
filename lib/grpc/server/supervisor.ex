@@ -47,15 +47,14 @@ defmodule GRPC.Server.Supervisor do
   def init({endpoint, port, opts}) do
     check_deps_version()
 
-    endpoint = [child_spec(endpoint, port, opts)]
-
+    # The code is repeated because it is concise and this way we can make it lazy
     children =
       cond do
         opts[:start_server] ->
-          endpoint
+          [child_spec(endpoint, port, opts)]
 
         not Keyword.has_key?(opts, :start_server) and Application.get_env(:grpc, :start_server) ->
-          endpoint
+          [child_spec(endpoint, port, opts)]
 
         :otherwise ->
           []
