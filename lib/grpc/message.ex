@@ -15,7 +15,6 @@ defmodule GRPC.Message do
 
   alias GRPC.RPCError
 
-
   @doc """
   Transforms Protobuf data into a gRPC body binary.
 
