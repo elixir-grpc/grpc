@@ -47,13 +47,18 @@ defmodule GRPC.Server.Supervisor do
   def init({endpoint, port, opts}) do
     check_deps_version()
 
+    endpoint = [child_spec(endpoint, port, opts)]
+
     children =
-      if opts[:start_server] or
-           (not Keyword.has_key?(opts, :start_server) and
-              Application.get_env(:grpc, :start_server)) do
-        [child_spec(endpoint, port, opts)]
-      else
-        []
+      cond do
+        opts[:start_server] ->
+          endpoint
+
+        not Keyword.has_key?(opts, :start_server) and Application.get_env(:grpc, :start_server) ->
+          endpoint
+
+        :otherwise ->
+          []
       end
 
     Supervisor.init(children, strategy: :one_for_one)
