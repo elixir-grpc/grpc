@@ -26,9 +26,9 @@ jobs:
           key: v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
       - name: Install Dependencies
         run: |
-          mix local.rebar --force
-          mix local.hex --force
-          mix deps.get
+          mix local.rebar --force 1>/dev/null
+          mix local.hex --force 1>/dev/null
+          mix deps.get 1>/dev/null 1>/dev/null 1>/dev/null
       - name: Check format
         run: mix format --check-formatted
 
@@ -59,9 +59,9 @@ jobs:
           key: v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
       - name: Install Dependencies
         run: |
-          mix local.rebar --force
-          mix local.hex --force
-          mix deps.get
+          mix local.rebar --force 1>/dev/null
+          mix local.hex --force 1>/dev/null
+          mix deps.get 1>/dev/null 1>/dev/null
       - name: Run Tests
         run: mix test
 
@@ -84,9 +84,9 @@ jobs:
           key: v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
       - name: Install Dependencies
         run: |
-          mix local.rebar --force
-          mix local.hex --force
-          mix deps.get
+          mix local.rebar --force 1>/dev/null
+          mix local.hex --force 1>/dev/null
+          mix deps.get 1>/dev/null
         working-directory: ./interop
       - name: Run interop tests
         run: mix run script/run.exs --rounds 64
@@ -120,9 +120,9 @@ jobs:
           key: v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
       - name: Install Dependencies
         run: |
-          mix local.rebar --force
-          mix local.hex --force
-          mix deps.get
+          mix local.rebar --force 1>/dev/null
+          mix local.hex --force 1>/dev/null
+          mix deps.get 1>/dev/null
         working-directory: ./interop
       - name: Run interop tests
         run: mix run script/run.exs --rounds 64
@@ -177,9 +177,9 @@ jobs:
           key: v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
       - name: Install Dependencies
         run: |
-          mix local.rebar --force
-          mix local.hex --force
-          mix deps.get
+          mix local.rebar --force 1>/dev/null
+          mix local.hex --force 1>/dev/null
+          mix deps.get 1>/dev/null
       - name: Build hex
         run: mix hex.build
       - name: Generate docs
