@@ -48,8 +48,7 @@ defmodule GRPC.Server.Supervisor do
     check_deps_version()
 
     children =
-      if (Keyword.has_key?(opts, :start_server) and opts[:start_server]) or
-           Application.get_env(:grpc, :start_server) do
+      if opts[:start_server] or (not Keyword.has_key?(opts, :start_server) and Application.get_env(:grpc, :start_server) do
         [child_spec(endpoint, port, opts)]
       else
         []
