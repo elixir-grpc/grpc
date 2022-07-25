@@ -261,7 +261,11 @@ defmodule GRPC.Stub do
         accepted_compressors: accepted_compressors
     }
 
-    do_call(req_stream, stream, request, opts)
+    metadata = GRPC.Telemetry.metadata_from_stream(stream)
+
+    :telemetry.span([:grpc, :client, :request], metadata, fn ->
+      {do_call(req_stream, stream, request, opts), metadata}
+    end)
   end
 
   defp do_call(
@@ -396,7 +400,11 @@ defmodule GRPC.Stub do
         opts
       end
 
-    interface[:recv].(stream, opts)
+    metadata = GRPC.Telemetry.metadata_from_stream(stream)
+
+    :telemetry.span([:grpc, :client, :request, :recv_headers], metadata, fn ->
+      {interface[:recv].(stream, opts), metadata}
+    end)
   end
 
   @doc false

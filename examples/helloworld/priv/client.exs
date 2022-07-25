@@ -16,12 +16,19 @@ prefix = [:grpc, :client, :request]
 
 :telemetry.attach_many(
   "ClientEvent",
-  [prefix ++ [:start], prefix ++ [:stop], prefix ++ [:exception]],
+  [
+    prefix ++ [:start],
+    prefix ++ [:stop],
+    prefix ++ [:exception],
+    prefix ++ [:recv_headers, :start],
+    prefix ++ [:recv_headers, :stop],
+    prefix ++ [:recv_headers, :exception],
+  ],
   &LoggerEvent.handle_event/4,
   %{}
 )
 
-{:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Telemetry.Client])
+{:ok, channel} = GRPC.Stub.connect("localhost:50051")
 
 {:ok, reply} =
   channel |> Helloworld.Greeter.Stub.say_hello(Helloworld.HelloRequest.new(name: "grpc-elixir"))
