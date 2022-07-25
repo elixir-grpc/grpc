@@ -400,11 +400,7 @@ defmodule GRPC.Stub do
         opts
       end
 
-    metadata = GRPC.Telemetry.metadata_from_stream(stream)
-
-    :telemetry.span([:grpc, :client, :request, :recv_headers], metadata, fn ->
-      {interface[:recv].(stream, opts), metadata}
-    end)
+    interface[:recv].(stream, opts)
   end
 
   @doc false
@@ -436,6 +432,12 @@ defmodule GRPC.Stub do
            recv_headers(channel.adapter, channel.adapter_payload, payload, opts),
          {:ok, body, trailers} <-
            recv_body(channel.adapter, channel.adapter_payload, payload, opts) do
+      :telemetry.execute(
+        [:grpc, :client, :request, :recv_headers],
+        %{at: DateTime.utc_now()},
+        GRPC.Telemetry.metadata_from_stream(stream)
+      )
+
       {status, msg} = parse_response(stream, headers, body, trailers)
 
       if opts[:return_headers] do

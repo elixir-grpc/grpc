@@ -20,9 +20,7 @@ prefix = [:grpc, :client, :request]
     prefix ++ [:start],
     prefix ++ [:stop],
     prefix ++ [:exception],
-    prefix ++ [:recv_headers, :start],
-    prefix ++ [:recv_headers, :stop],
-    prefix ++ [:recv_headers, :exception],
+    prefix ++ [:recv_headers],
   ],
   &LoggerEvent.handle_event/4,
   %{}
