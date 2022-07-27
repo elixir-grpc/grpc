@@ -41,7 +41,7 @@ defmodule GRPC.Endpoint do
     servers = Module.get_attribute(env.module, :servers)
     servers = Enum.map(servers, fn {ss, opts} -> {ss, parse_run_opts(opts, %{})} end)
     server_interceptors = server_interceptors(servers, %{})
-    servers = parse_servers(servers)
+    servers = parse_servers(servers, has_reflection_disabled?())
 
     quote do
       def __meta__(:interceptors), do: unquote(interceptors)
@@ -94,11 +94,28 @@ defmodule GRPC.Endpoint do
     server_interceptors(tail, acc)
   end
 
-  defp parse_servers(servers) do
+  defp parse_servers(servers, false) do
+    servers = [{GRPC.Reflection.Service, %{}}] ++ servers
+
     servers
     |> Enum.map(fn {server, _} -> server end)
     |> List.flatten()
   end
+
+  defp parse_servers(servers, true) do
+    servers
+    |> Enum.map(fn {server, _} -> server end)
+    |> List.flatten()
+  end
+
+  defp has_reflection_disabled?() do
+    Application.get_env(:grpc, :reflection_disabled, false) ||
+      convert!(System.get_env("GRPC_REFLECTION_DISABLED"))
+  end
+
+  defp convert!("true"), do: true
+  defp convert!("false"), do: false
+  defp convert!(op) when is_nil(op), do: false
 
   defp parse_run_opts([], acc), do: acc
 

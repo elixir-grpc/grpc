@@ -32,7 +32,7 @@ defmodule GRPC.EndpointTest do
   end
 
   test "run creates servers" do
-    assert [Server2, Server3, Server1] == FooEndpoint.__meta__(:servers)
+    assert [GRPC.Reflection.Service, Server2, Server3, Server1] == FooEndpoint.__meta__(:servers)
   end
 
   test "run creates server_interceptors" do
