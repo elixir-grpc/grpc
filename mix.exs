@@ -42,7 +42,7 @@ defmodule GRPC.Mixfile do
       {:cowboy, "~> 2.9"},
       # This is the same as :gun 2.0.0-rc.2,
       # but we can't depend on an RC for releases
-      {:grpc_gun, "~> 2.0.1"},
+      {:gun, "~> 2.0.1", hex: :grpc_gun},
       {:cowlib, "~> 2.11"},
       {:protobuf, "~> 0.10", only: [:dev, :test]},
       {:ex_doc, "~> 0.28", only: :dev},
