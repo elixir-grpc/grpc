@@ -11,9 +11,15 @@ defmodule GRPC.Client.Adapters.Gun do
   @max_retries 100
 
   @impl true
-  def connect(channel, nil), do: connect(channel, %{})
-  def connect(%{scheme: "https"} = channel, opts), do: connect_securely(channel, opts)
-  def connect(channel, opts), do: connect_insecurely(channel, opts)
+  def connect(channel, opts) do
+    # handle opts as a map due to :gun.open
+    opts = Map.new(opts || %{})
+
+    case channel do
+      %{scheme: "https"} -> connect_securely(channel, opts)
+      _ -> connect_insecurely(channel, opts)
+    end
+  end
 
   defp connect_securely(%{cred: %{ssl: ssl}} = channel, opts) do
     transport_opts = Map.get(opts, :transport_opts, @default_transport_opts ++ ssl)

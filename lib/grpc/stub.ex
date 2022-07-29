@@ -239,13 +239,17 @@ defmodule GRPC.Stub do
 
     opts =
       if req_stream || response_stream do
-        parse_req_opts([{:timeout, :infinity} | opts])
+        opts
+        |> parse_req_opts()
+        |> Keyword.put_new(:timeout, :infinity)
       else
-        parse_req_opts([{:timeout, @default_timeout} | opts])
+        opts
+        |> parse_req_opts()
+        |> Keyword.put_new(:timeout, @default_timeout)
       end
 
-    compressor = Map.get(opts, :compressor, channel.compressor)
-    accepted_compressors = Map.get(opts, :accepted_compressors, [])
+    compressor = Keyword.get(opts, :compressor, channel.compressor)
+    accepted_compressors = Keyword.get(opts, :accepted_compressors, [])
 
     accepted_compressors =
       if compressor do
@@ -256,8 +260,8 @@ defmodule GRPC.Stub do
 
     stream = %{
       stream
-      | codec: Map.get(opts, :codec, channel.codec),
-        compressor: Map.get(opts, :compressor, channel.compressor),
+      | codec: Keyword.get(opts, :codec, channel.codec),
+        compressor: Keyword.get(opts, :compressor, channel.compressor),
         accepted_compressors: accepted_compressors
     }
 
@@ -272,7 +276,7 @@ defmodule GRPC.Stub do
        ) do
     last = fn %{codec: codec, compressor: compressor} = s, _ ->
       message = codec.encode(request)
-      opts = Map.put(opts, :compressor, compressor)
+      opts = Keyword.put(opts, :compressor, compressor)
 
       s
       |> channel.adapter.send_request(message, opts)
@@ -391,7 +395,7 @@ defmodule GRPC.Stub do
   def recv(%{__interface__: interface} = stream, opts) do
     opts =
       if is_list(opts) do
-        parse_recv_opts(opts)
+        parse_recv_opts(Keyword.put_new(opts, :timeout, @default_timeout))
       else
         opts
       end
@@ -588,72 +592,39 @@ defmodule GRPC.Stub do
     end
   end
 
-  defp parse_req_opts(list) when is_list(list) do
-    parse_req_opts(list, %{})
-  end
+  @valid_req_opts [
+    :timeout,
+    :deadline,
+    :compressor,
+    :accepted_compressors,
+    :grpc_encoding,
+    :metadata,
+    :codec,
+    :return_headers
+  ]
+  defp parse_req_opts(opts) when is_list(opts) do
+    Enum.map(opts, fn
+      {:deadline, deadline} ->
+        {:timeout, GRPC.TimeUtils.to_relative(deadline)}
 
-  defp parse_req_opts([{:timeout, timeout} | t], acc) do
-    parse_req_opts(t, Map.put(acc, :timeout, timeout))
-  end
+      {key, value} when key in @valid_req_opts ->
+        {key, value}
 
-  defp parse_req_opts([{:deadline, deadline} | t], acc) do
-    parse_req_opts(t, Map.put(acc, :timeout, GRPC.TimeUtils.to_relative(deadline)))
+      {key, _} ->
+        raise ArgumentError, "option #{inspect(key)} is not supported"
+    end)
   end
-
-  defp parse_req_opts([{:compressor, compressor} | t], acc) do
-    parse_req_opts(t, Map.put(acc, :compressor, compressor))
-  end
-
-  defp parse_req_opts([{:accepted_compressors, compressors} | t], acc) do
-    parse_req_opts(t, Map.put(acc, :accepted_compressors, compressors))
-  end
-
-  defp parse_req_opts([{:grpc_encoding, grpc_encoding} | t], acc) do
-    parse_req_opts(t, Map.put(acc, :grpc_encoding, grpc_encoding))
-  end
-
-  defp parse_req_opts([{:metadata, metadata} | t], acc) do
-    parse_req_opts(t, Map.put(acc, :metadata, metadata))
-  end
-
-  defp parse_req_opts([{:content_type, content_type} | t], acc) do
-    Logger.warn(":content_type has been deprecated, please use :codec")
-    parse_req_opts(t, Map.put(acc, :content_type, content_type))
-  end
-
-  defp parse_req_opts([{:codec, codec} | t], acc) do
-    parse_req_opts(t, Map.put(acc, :codec, codec))
-  end
-
-  defp parse_req_opts([{:return_headers, return_headers} | t], acc) do
-    parse_req_opts(t, Map.put(acc, :return_headers, return_headers))
-  end
-
-  defp parse_req_opts([{key, _} | _], _) do
-    raise ArgumentError, "option #{inspect(key)} is not supported"
-  end
-
-  defp parse_req_opts(_, acc), do: acc
 
   defp parse_recv_opts(list) when is_list(list) do
-    parse_recv_opts(list, %{timeout: @default_timeout})
-  end
+    Enum.map(list, fn
+      {:deadline, deadline} ->
+        {:deadline, GRPC.TimeUtils.to_relative(deadline)}
 
-  defp parse_recv_opts([{:timeout, timeout} | t], acc) do
-    parse_recv_opts(t, Map.put(acc, :timeout, timeout))
-  end
+      {key, _} when key not in @valid_req_opts ->
+        raise ArgumentError, "option #{inspect(key)} is not supported"
 
-  defp parse_recv_opts([{:deadline, deadline} | t], acc) do
-    parse_recv_opts(t, Map.put(acc, :deadline, GRPC.TimeUtils.to_relative(deadline)))
+      kv ->
+        kv
+    end)
   end
-
-  defp parse_recv_opts([{:return_headers, return_headers} | t], acc) do
-    parse_recv_opts(t, Map.put(acc, :return_headers, return_headers))
-  end
-
-  defp parse_recv_opts([{key, _} | _], _) do
-    raise ArgumentError, "option #{inspect(key)} is not supported"
-  end
-
-  defp parse_recv_opts(_, acc), do: acc
 end

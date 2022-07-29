@@ -479,8 +479,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   defp async_read_body(req, opts) do
-    length = Map.get(opts, :length, 8_000_000)
-    period = Map.get(opts, :period, 15000)
+    length = opts[:length] || 8_000_000
+    period = opts[:period] || 15000
     ref = make_ref()
 
     :cowboy_req.cast({:read_body, self(), ref, length, period}, req)
