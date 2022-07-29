@@ -11,7 +11,10 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   @adapter GRPC.Server.Adapters.Cowboy
   @default_trailers HTTP2.server_trailers()
 
-  @spec init(map(), {atom(), %{String.t() => [module()]}, map()}) :: {:cowboy_loop, map(), map()}
+  @spec init(
+          map(),
+          state :: {endpoint :: atom(), servers :: %{String.t() => [module()]}, opts :: keyword()}
+        ) :: {:cowboy_loop, map(), map()}
   def init(req, {endpoint, servers, opts} = state) do
     path = :cowboy_req.path(req)
 
@@ -472,8 +475,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   defp async_read_body(req, opts) do
-    length = Map.get(opts, :length, 8_000_000)
-    period = Map.get(opts, :period, 15000)
+    length = opts[:length] || 8_000_000
+    period = opts[:period] || 15000
     ref = make_ref()
 
     :cowboy_req.cast({:read_body, self(), ref, length, period}, req)
