@@ -9,19 +9,19 @@ defmodule GRPC.Codec do
   @callback decode(any, module :: atom) :: any
 
   @doc """
-  This function is optionally invoked before the gRPC payload is transformed into a protobuf message.
+  This function is invoked before the gRPC payload is transformed into a protobuf message whenever it is defined.
 
   This can be used to apply a transform over the gRPC message before decoding it. For instance grpc-web using the `application/grpc-web-text`
-  content type requires the message to be base64 encoded, so a server receving messages using grpc-web-text will be required to
+  content type requires the message to be Base64-encoded, so a server receving messages using grpc-web-text will be required to
   do a Base64 decode on the payload before decoding the gRPC message.
   """
   @callback unpack_from_channel(binary) :: binary
 
   @doc """
-  This function is optionally invoked after the protobuf message has been transformed to a gRPC payload.
+  This function is invoked whenever it is defined after the protobuf message has been transformed into a gRPC payload.
 
   This can be used to apply a transform over the gRPC message before sending it.
-  For instance grpc-web using the `application/grpc-web-text` content type requires the message to be base64 encoded, so a server sending messages using grpc-web-text will be required to
+  For instance grpc-web using the `application/grpc-web-text` content type requires the message to be Base64-encoded, so a server sending messages using grpc-web-text will be required to
   do a Base64 encode on the payload before sending the gRPC message.
   """
   @callback pack_for_channel(binary) :: binary
