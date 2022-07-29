@@ -174,7 +174,7 @@ defmodule GRPC.Stub do
       accepted_compressors: accepted_compressors,
       headers: headers
     }
-    |> adapter.connect(opts[:adapter_opts])
+    |> adapter.connect(opts[:adapter_opts] || [])
   end
 
   def retry_timeout(curr) when curr < 11 do

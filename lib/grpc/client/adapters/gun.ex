@@ -13,7 +13,7 @@ defmodule GRPC.Client.Adapters.Gun do
   @impl true
   def connect(channel, opts) do
     # handle opts as a map due to :gun.open
-    opts = Map.new(opts || %{})
+    opts = Map.new(opts)
 
     case channel do
       %{scheme: "https"} -> connect_securely(channel, opts)
