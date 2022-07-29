@@ -27,17 +27,6 @@ defmodule GRPC.Integration.CodecTest do
     end
   end
 
-  defmodule ContentTypeServer do
-    use GRPC.Server,
-      service: Helloworld.Greeter.Service,
-      codecs: [GRPC.Codec.Proto, GRPC.Codec.Erlpack, GRPC.Codec.WebText]
-
-    def say_hello(_req, stream) do
-      %{"content-type" => content_type} = GRPC.Stream.get_headers(stream)
-      Helloworld.HelloReply.new(message: content_type)
-    end
-  end
-
   defmodule HelloStub do
     use GRPC.Stub, service: Helloworld.Greeter.Service
   end
@@ -64,7 +53,7 @@ defmodule GRPC.Integration.CodecTest do
   end
 
   test "sets the correct content-type based on codec name" do
-    run_server(ContentTypeServer, fn port ->
+    run_server(HelloServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       name = "Mairbek"
       req = Helloworld.HelloRequest.new(name: name)
@@ -72,10 +61,10 @@ defmodule GRPC.Integration.CodecTest do
       for {expected_content_type, codec} <- [
             {"grpc-web-text", GRPC.Codec.WebText},
             {"grpc+erlpack", GRPC.Codec.Erlpack},
-            {"grpc", GRPC.Codec.Proto}
+            {"grpc+proto", GRPC.Codec.Proto}
           ] do
-        {:ok, reply} = HelloStub.say_hello(channel, req, codec: codec)
-        assert reply.message == "application/#{expected_content_type}"
+        {:ok, _reply, headers} = HelloStub.say_hello(channel, req, codec: codec, return_headers: true)
+        assert headers[:headers]["content-type"] == "application/#{expected_content_type}"
       end
     end)
   end
