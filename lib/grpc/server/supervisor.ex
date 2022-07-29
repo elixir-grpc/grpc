@@ -1,6 +1,4 @@
 defmodule GRPC.Server.Supervisor do
-  use Supervisor
-
   @moduledoc """
   A simple supervisor to start your servers.
 
@@ -10,10 +8,8 @@ defmodule GRPC.Server.Supervisor do
         use Application
 
         def start(_type, _args) do
-          import Supervisor.Spec
-
           children = [
-            supervisor(GRPC.Server.Supervisor, [{Your.Endpoint, 50051(, opts)}])
+            {GRPC.Server.Supervisor, {Your.Endpoint, 50051, opts}}
           ]
 
           opts = [strategy: :one_for_one, name: __MODULE__]
@@ -23,11 +19,15 @@ defmodule GRPC.Server.Supervisor do
 
       # config.exs
       config :grpc, start_server: true
-      or
+
+  or
+
       run `mix grpc.server` on local
 
-  View `child_spec/3` for opts.
+  or you can pass `start_server: true` as an option for the supervisor (as started above)
   """
+
+  use Supervisor
 
   @default_adapter GRPC.Server.Adapters.Cowboy
   require Logger
@@ -47,11 +47,17 @@ defmodule GRPC.Server.Supervisor do
   def init({endpoint, port, opts}) do
     check_deps_version()
 
+    # The code is repeated because it is concise and this way we can make it lazy
     children =
-      if Application.get_env(:grpc, :start_server, false) do
-        [child_spec(endpoint, port, opts)]
-      else
-        []
+      cond do
+        opts[:start_server] ->
+          [child_spec(endpoint, port, opts)]
+
+        not Keyword.has_key?(opts, :start_server) and Application.get_env(:grpc, :start_server) ->
+          [child_spec(endpoint, port, opts)]
+
+        :otherwise ->
+          []
       end
 
     Supervisor.init(children, strategy: :one_for_one)
@@ -64,6 +70,9 @@ defmodule GRPC.Server.Supervisor do
 
     * `:cred` - a credential created by functions of `GRPC.Credential`,
       an insecure server will be created without this option
+    * `:start_server` - determines if the server will be started.
+      If present, has more precedence then the `config :gprc, :start_server`
+      config value (i.e. `start_server: false` will not start the server in any case).
   """
   @spec child_spec(atom() | [atom()], integer(), Keyword.t()) :: Supervisor.Spec.spec()
   def child_spec(endpoint, port, opts \\ [])
