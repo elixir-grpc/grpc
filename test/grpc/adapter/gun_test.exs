@@ -26,7 +26,7 @@ defmodule GRPC.Client.Adapters.GunTest do
     test "connects insecurely (default options)", %{port: port, credential: credential} do
       channel = build(:channel, port: port, host: "localhost", cred: credential)
 
-      assert {:ok, result} = Gun.connect(channel)
+      assert {:ok, result} = Gun.connect(channel, [])
 
       assert %{channel | adapter_payload: %{conn_pid: result.adapter_payload.conn_pid}} == result
     end
@@ -35,12 +35,12 @@ defmodule GRPC.Client.Adapters.GunTest do
       channel = build(:channel, port: port, host: "localhost", cred: credential)
 
       # Ensure that it works
-      assert {:ok, result} = Gun.connect(channel, %{transport_opts: [ip: :loopback]})
+      assert {:ok, result} = Gun.connect(channel, transport_opts: [ip: :loopback])
       assert %{channel | adapter_payload: %{conn_pid: result.adapter_payload.conn_pid}} == result
 
       # Ensure that changing one of the options breaks things
       assert {:error, {:down, :badarg}} ==
-               Gun.connect(channel, %{transport_opts: [ip: "256.0.0.0"]})
+               Gun.connect(channel, transport_opts: [ip: "256.0.0.0"])
     end
 
     test "connects securely (default options)", %{port: port, credential: credential} do
@@ -52,7 +52,7 @@ defmodule GRPC.Client.Adapters.GunTest do
           cred: credential
         )
 
-      assert {:ok, result} = Gun.connect(channel, %{tls_opts: channel.cred.ssl})
+      assert {:ok, result} = Gun.connect(channel, tls_opts: channel.cred.ssl)
 
       assert %{channel | adapter_payload: %{conn_pid: result.adapter_payload.conn_pid}} == result
     end
@@ -68,20 +68,20 @@ defmodule GRPC.Client.Adapters.GunTest do
 
       # Ensure that it works
       assert {:ok, result} =
-               Gun.connect(channel, %{
+               Gun.connect(channel,
                  transport_opts: [certfile: credential.ssl[:certfile], ip: :loopback]
-               })
+               )
 
       assert %{channel | adapter_payload: %{conn_pid: result.adapter_payload.conn_pid}} == result
 
       # Ensure that changing one of the options breaks things
       assert {:error, :timeout} ==
-               Gun.connect(channel, %{
+               Gun.connect(channel,
                  transport_opts: [
                    certfile: credential.ssl[:certfile] <> "invalidsuffix",
                    ip: :loopback
                  ]
-               })
+               )
     end
   end
 end

@@ -11,7 +11,7 @@ defmodule GRPC.Client.Adapters.Gun do
   @max_retries 100
 
   @impl true
-  def connect(channel, opts) do
+  def connect(channel, opts) when is_list(opts) do
     # handle opts as a map due to :gun.open
     opts = Map.new(opts)
 
