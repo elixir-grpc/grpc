@@ -3,7 +3,6 @@
 [![Hex.pm](https://img.shields.io/hexpm/v/grpc.svg)](https://hex.pm/packages/grpc)
 [![Travis Status](https://travis-ci.org/elixir-grpc/grpc.svg?branch=master)](https://travis-ci.org/elixir-grpc/grpc)
 [![GitHub actions Status](https://github.com/elixir-grpc/grpc/workflows/CI/badge.svg)](https://github.com/elixir-grpc/grpc/actions)
-[![Inline docs](http://inch-ci.org/github/elixir-grpc/grpc.svg?branch=master)](http://inch-ci.org/github/elixir-grpc/grpc)
 
 An Elixir implementation of [gRPC](http://www.grpc.io/).
 
@@ -13,7 +12,8 @@ An Elixir implementation of [gRPC](http://www.grpc.io/).
 
 **NOTICE: gun**
 
-The Gun library doesn't have a full 2.0 release yet, so we depend on `2.0.0-rc.2` for now.
+The Gun library doesn't have a full 2.0 release yet, so we depend on `:grcp_gun 2.0.1` for now.
+This is the same as `:gun 2.0.0-rc.2`, but Hex doesn't let us depend on RC versions for releases.
 
 ## Installation
 
@@ -22,7 +22,7 @@ The package can be installed as:
   ```elixir
   def deps do
     [
-      {:grpc, github: "elixir-grpc/grpc"},
+      {:grpc, "~> 0.5.0"},
       # We don't force protobuf as a dependency for more
       # flexibility on which protobuf library is used,
       # but you probably want to use it as well

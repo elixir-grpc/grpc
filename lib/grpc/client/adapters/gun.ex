@@ -1,11 +1,11 @@
 defmodule GRPC.Client.Adapters.Gun do
   @moduledoc """
   A client adapter using Gun
+
+  `conn_pid` and `stream_ref` are stored in `GRPC.Server.Stream`.
   """
 
   @behaviour GRPC.Client.Adapter
-
-  # conn_pid and stream_ref are stored in `GRPC.Server.Stream`
 
   @default_transport_opts [nodelay: true]
   @max_retries 100

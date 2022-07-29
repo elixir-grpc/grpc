@@ -1,7 +1,7 @@
 defmodule GRPC.Mixfile do
   use Mix.Project
 
-  @version "0.5.0-beta.1"
+  @version "0.5.0"
 
   def project do
     [
@@ -40,11 +40,12 @@ defmodule GRPC.Mixfile do
   defp deps do
     [
       {:cowboy, "~> 2.9"},
-      {:gun, "~> 2.0.0-rc.2"},
+      # This is the same as :gun 2.0.0-rc.2,
+      # but we can't depend on an RC for releases
+      {:gun, "~> 2.0.1", hex: :grpc_gun},
       {:cowlib, "~> 2.11"},
       {:protobuf, "~> 0.10", only: [:dev, :test]},
       {:ex_doc, "~> 0.28.0", only: :dev},
-      {:inch_ex, "~> 2.0.0", only: [:dev, :test]},
       {:dialyxir, "~> 1.1.0", only: [:dev, :test], runtime: false}
     ]
   end

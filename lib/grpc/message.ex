@@ -1,37 +1,50 @@
 defmodule GRPC.Message do
+  @moduledoc """
+  Transform data between encoded protobuf and HTTP/2 body of gRPC.
+
+  gRPC body format is:
+
+    http://www.grpc.io/docs/guides/wire.html
+    Delimited-Message -> Compressed-Flag Message-Length Message
+    Compressed-Flag -> 0 / 1 # encoded as 1 byte unsigned integer
+    Message-Length -> {length of Message} # encoded as 4 byte unsigned integer
+    Message -> *{binary octet}
+  """
   use Bitwise, only_operators: true
   @max_message_length 1 <<< (32 - 1)
 
   alias GRPC.RPCError
 
-  @moduledoc false
-
-  # Transform data between encoded protobuf and HTTP/2 body of gRPC.
-  #
-  # gRPC body format is:
-  #
-  #     # http://www.grpc.io/docs/guides/wire.html
-  #     Delimited-Message -> Compressed-Flag Message-Length Message
-  #     Compressed-Flag -> 0 / 1 # encoded as 1 byte unsigned integer
-  #     Message-Length -> {length of Message} # encoded as 4 byte unsigned integer
-  #     Message -> *{binary octet}
-
   @doc """
-  Transform protobuf data to gRPC body
+  Transforms Protobuf data into a gRPC body binary.
+
+  ## Options
+
+    * `:compressor` - the optional `GRPC.Compressor` to be used.
+    * `:iolist` - if `true`, encodes the data as an `t:iolist()` instead of a `t:binary()`
+    * `:max_message_length` - the maximum number of bytes for the encoded message.
 
   ## Examples
 
-      iex> message = <<1, 2, 3, 4, 5, 6, 7, 8>>
+      iex> message = ["m", [["es", "sa"], "ge"]]
       iex> GRPC.Message.to_data(message)
-      {:ok, <<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>, 13}
+      {:ok, <<0, 0, 0, 0, 7, "message">>, 12}
+      iex> GRPC.Message.to_data(message, iolist: true)
+      {:ok, [0, <<0, 0, 0, 7>>, ["m", [["es", "sa"], "ge"]]], 12}
+
+  Error cases:
+
       iex> message = <<1, 2, 3, 4, 5, 6, 7, 8, 9>>
       iex> GRPC.Message.to_data(message, %{max_message_length: 8})
       {:error, "Encoded message is too large (9 bytes)"}
+
   """
-  @spec to_data(iodata, map | Keyword.t()) ::
-          {:ok, binary, non_neg_integer} | {:error, String.t()}
-  def to_data(message, opts \\ %{}) do
+  @spec to_data(iodata, keyword() | map()) ::
+          {:ok, iodata, non_neg_integer} | {:error, String.t()}
+  def to_data(message, opts \\ []) do
     compressor = opts[:compressor]
+    iolist = opts[:iolist]
+    max_length = opts[:max_message_length] || @max_message_length
 
     {compress_flag, message} =
       if compressor do
@@ -40,19 +53,19 @@ defmodule GRPC.Message do
         {0, message}
       end
 
-    length = byte_size(message)
-    max_length = opts[:max_message_length] || @max_message_length
+    length = IO.iodata_length(message)
 
     if length > max_length do
       {:error, "Encoded message is too large (#{length} bytes)"}
     else
-      result = <<compress_flag, length::size(4)-unit(8), message::binary>>
+      result = [compress_flag, <<length::size(4)-unit(8)>>, message]
+      result = if iolist, do: result, else: IO.iodata_to_binary(result)
       {:ok, result, length + 5}
     end
   end
 
   @doc """
-  Transform gRPC body to protobuf data
+  Transforms gRPC body into Protobuf data.
 
   ## Examples
 
@@ -66,7 +79,7 @@ defmodule GRPC.Message do
   end
 
   @doc """
-  Transform gRPC body to protobuf data with compressing
+  Transform gRPC body into Protobuf data with compression.
 
   ## Examples
 
@@ -130,7 +143,7 @@ defmodule GRPC.Message do
   end
 
   @doc """
-  Get message data from data buffer
+  Get message data from data buffer.
 
   ## Examples
 
