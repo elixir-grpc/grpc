@@ -27,6 +27,17 @@ defmodule GRPC.Integration.CodecTest do
     end
   end
 
+  defmodule ContentTypeServer do
+    use GRPC.Server,
+      service: Helloworld.Greeter.Service,
+      codecs: [GRPC.Codec.Proto, GRPC.Codec.Erlpack, GRPC.Codec.WebText]
+
+    def say_hello(_req, stream) do
+      %{"content-type" => content_type} = GRPC.Stream.get_headers(stream)
+      Helloworld.HelloReply.new(message: content_type)
+    end
+  end
+
   defmodule HelloStub do
     use GRPC.Stub, service: Helloworld.Greeter.Service
   end
@@ -37,23 +48,35 @@ defmodule GRPC.Integration.CodecTest do
       name = "Mairbek"
       req = Helloworld.HelloRequest.new(name: name)
 
-      {:ok, reply} = channel |> HelloStub.say_hello(req, codec: GRPC.Codec.Erlpack)
-      assert reply.message == "Hello, #{name}"
-
-      {:ok, reply} = channel |> HelloStub.say_hello(req, codec: GRPC.Codec.WebText)
-      assert reply.message == "Hello, #{name}"
-
-      # verify that proto still works
-      {:ok, reply} = channel |> HelloStub.say_hello(req, codec: GRPC.Codec.Proto)
-      assert reply.message == "Hello, #{name}"
+      for codec <- [GRPC.Codec.Erlpack, GRPC.Codec.WebText, GRPC.Codec.Proto] do
+        {:ok, reply} = HelloStub.say_hello(channel, req, codec: codec)
+        assert reply.message == "Hello, #{name}"
+      end
 
       # codec not registered
-      {:error, reply} = channel |> HelloStub.say_hello(req, codec: NotRegisteredCodec)
+      {:error, reply} = HelloStub.say_hello(channel, req, codec: NotRegisteredCodec)
 
       assert %GRPC.RPCError{
                status: GRPC.Status.unimplemented(),
                message: "No codec registered for content-type application/grpc+not-registered"
              } == reply
+    end)
+  end
+
+  test "sets the correct content-type based on codec name" do
+    run_server(ContentTypeServer, fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      name = "Mairbek"
+      req = Helloworld.HelloRequest.new(name: name)
+
+      for {expected_content_type, codec} <- [
+            {"grpc-web-text", GRPC.Codec.WebText},
+            {"grpc+erlpack", GRPC.Codec.Erlpack},
+            {"grpc", GRPC.Codec.Proto}
+          ] do
+        {:ok, reply} = HelloStub.say_hello(channel, req, codec: codec)
+        assert reply.message == "application/#{expected_content_type}"
+      end
     end)
   end
 end
