@@ -5,12 +5,17 @@ defmodule GRPC.Server.Adapter do
 
   alias GRPC.Server.Adapters.Cowboy.Handler
 
-  @callback start(atom(), %{String.t() => [module()]}, non_neg_integer(), keyword()) ::
+  @callback start(
+              atom(),
+              %{String.t() => [module()]},
+              port :: non_neg_integer(),
+              opts :: keyword()
+            ) ::
               {atom(), any(), non_neg_integer()}
 
   @callback stop(atom(), %{String.t() => [module()]}) :: :ok | {:error, :not_found}
 
-  @callback send_reply(Handler.state(), binary(), keyword()) :: any()
+  @callback send_reply(Handler.state(), content :: binary(), opts :: keyword()) :: any()
 
-  @callback send_headers(Handler.state(), map()) :: any()
+  @callback send_headers(Handler.state(), headers :: map()) :: any()
 end

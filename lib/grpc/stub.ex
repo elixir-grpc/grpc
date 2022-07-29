@@ -380,7 +380,7 @@ defmodule GRPC.Stub do
     * `:deadline` - when the request is timeout, will override timeout
     * `:return_headers` - when true, headers will be returned.
   """
-  @spec recv(GRPC.Client.Stream.t(), Keyword.t() | map()) ::
+  @spec recv(GRPC.Client.Stream.t(), keyword()) ::
           {:ok, struct()}
           | {:ok, struct(), map()}
           | {:ok, Enumerable.t()}

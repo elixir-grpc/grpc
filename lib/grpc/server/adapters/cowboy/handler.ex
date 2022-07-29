@@ -18,7 +18,10 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           pending_reader: nil
         }
 
-  @spec init(map(), {atom(), %{String.t() => [module()]}, map()}) :: {:cowboy_loop, map(), map()}
+  @spec init(
+          map(),
+          state :: {endpoint :: atom(), servers :: %{String.t() => [module()]}, opts :: keyword()}
+        ) :: {:cowboy_loop, map(), map()}
   def init(req, {endpoint, servers, opts} = state) do
     path = :cowboy_req.path(req)
 
