@@ -9,15 +9,12 @@ An Elixir implementation of [gRPC](http://www.grpc.io/).
 
 **WARNING: Be careful to use it in production! Test and benchmark in advance.**
 
-**NOTICE: Erlang/OTP needs >= 20.3.2**
+**NOTICE: Erlang/OTP needs >= 22 **
 
-**NOTICE: grpc_gun**
+**NOTICE: gun**
 
-Now `{:gun, "~> 2.0.0", hex: :grpc_gun}` is used in mix.exs because grpc depnds on Gun 2.0,
-but its stable version is not released. So I published a [2.0 version on hex](https://hex.pm/packages/grpc_gun)
-with a different name. So if you have other dependencies who depends on Gun, you need to use
-override: `{:gun, "~> 2.0.0", hex: :grpc_gun, override: true}`. Let's wait for this issue
-https://github.com/ninenines/gun/issues/229.
+The Gun library doesn't have a full 2.0 release yet, so we depend on `:grcp_gun 2.0.1` for now.
+This is the same as `:gun 2.0.0-rc.2`, but Hex doesn't let us depend on RC versions for releases.
 
 ## Installation
 
@@ -26,9 +23,11 @@ The package can be installed as:
   ```elixir
   def deps do
     [
-      {:grpc, github: "elixir-grpc/grpc"},
-      # 2.9.0 fixes some important bugs, so it's better to use ~> 2.9.0
-      {:cowlib, "~> 2.9.0", override: true}
+      {:grpc, "~> 0.5.0"},
+      # We don't force protobuf as a dependency for more
+      # flexibility on which protobuf library is used,
+      # but you probably want to use it as well
+      {:protobuf, "~> 0.10"}
     ]
   end
   ```

@@ -1,3 +1,3 @@
-use Mix.Config
+import Config
 
-# config :grpc, start_server: true
+config :grpc, start_server: true

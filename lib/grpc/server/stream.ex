@@ -9,7 +9,7 @@ defmodule GRPC.Server.Stream do
   ## Fields
 
     * `:server`            - user defined gRPC server module
-    * `:adapter`           - a server adapter module, like `GRPC.Adapter.Cowboy`
+    * `:adapter`           - a server adapter module, like `GRPC.Server.Adapters.Cowboy`
     * `request_mod`        - the request module, or nil for untyped protocols
     * `response_mod`       - the response module, or nil for untyped protocols
     * `:codec`             - the codec
@@ -18,22 +18,23 @@ defmodule GRPC.Server.Stream do
   """
 
   @type t :: %__MODULE__{
-          server: atom,
+          server: atom(),
           service_name: String.t(),
           method_name: String.t(),
-          grpc_type: atom,
-          endpoint: atom,
-          rpc: tuple,
-          request_mod: atom,
-          response_mod: atom,
-          codec: atom,
-          payload: any,
-          adapter: atom,
-          local: any,
+          grpc_type: atom(),
+          endpoint: atom(),
+          rpc: tuple(),
+          request_mod: atom(),
+          request_id: String.t() | nil,
+          response_mod: atom(),
+          codec: atom(),
+          payload: any(),
+          adapter: atom(),
+          local: any(),
           # compressor mainly is used in client decompressing, responses compressing should be set by
           # `GRPC.Server.set_compressor`
-          compressor: module | nil,
-          __interface__: map
+          compressor: module() | nil,
+          __interface__: map()
         }
 
   defstruct server: nil,
@@ -43,6 +44,7 @@ defmodule GRPC.Server.Stream do
             endpoint: nil,
             rpc: nil,
             request_mod: nil,
+            request_id: nil,
             response_mod: nil,
             codec: GRPC.Codec.Proto,
             payload: nil,

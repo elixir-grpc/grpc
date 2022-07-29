@@ -5,11 +5,9 @@ defmodule Routeguide.App do
   @key_path Path.expand("./tls/server1.key", :code.priv_dir(:route_guide))
 
   def start(_type, _args) do
-    import Supervisor.Spec
-
     children = [
-      supervisor(RouteGuide.Data, []),
-      supervisor(GRPC.Server.Supervisor, [start_args()])
+      RouteGuide.Data,
+      {GRPC.Server.Supervisor, start_args()}
     ]
 
     opts = [strategy: :one_for_one, name: Routeguide]
