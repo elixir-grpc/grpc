@@ -125,7 +125,7 @@ defmodule GRPC.Stub do
     * `:accepted_compressors` - tell servers accepted compressors, this can be used without `:compressor`
     * `:headers` - headers to attach to each request
   """
-  @spec connect(String.t(), Keyword.t()) :: {:ok, Channel.t()} | {:error, any()}
+  @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(addr, opts \\ []) when is_binary(addr) and is_list(opts) do
     {host, port} =
       case String.split(addr, ":") do
@@ -136,7 +136,7 @@ defmodule GRPC.Stub do
     connect(host, port, opts)
   end
 
-  @spec connect(String.t(), binary() | non_neg_integer(), Keyword.t()) ::
+  @spec connect(String.t(), binary() | non_neg_integer(), keyword()) ::
           {:ok, Channel.t()} | {:error, any()}
   def connect(host, port, opts) when is_binary(port) do
     connect(host, String.to_integer(port), opts)
@@ -162,6 +162,12 @@ defmodule GRPC.Stub do
         accepted_compressors
       end
 
+    adapter_opts = opts[:adapter_opts] || []
+
+    unless is_list(adapter_opts) do
+      raise ArgumentError, ":adapter_opts must be a keyword list if present"
+    end
+
     %Channel{
       host: host,
       port: port,
@@ -174,7 +180,7 @@ defmodule GRPC.Stub do
       accepted_compressors: accepted_compressors,
       headers: headers
     }
-    |> adapter.connect(opts[:adapter_opts] || [])
+    |> adapter.connect(adapter_opts)
   end
 
   def retry_timeout(curr) when curr < 11 do
@@ -231,7 +237,7 @@ defmodule GRPC.Stub do
       with the last elem being a map of headers `%{headers: headers, trailers: trailers}`(unary) or
       `%{headers: headers}`(server streaming)
   """
-  @spec call(atom(), tuple(), GRPC.Client.Stream.t(), struct() | nil, Keyword.t()) :: rpc_return
+  @spec call(atom(), tuple(), GRPC.Client.Stream.t(), struct() | nil, keyword()) :: rpc_return
   def call(_service_mod, rpc, %{channel: channel} = stream, request, opts) do
     {_, {req_mod, req_stream}, {res_mod, response_stream}} = rpc
 
@@ -323,7 +329,7 @@ defmodule GRPC.Stub do
     * `:end_stream` - indicates it's the last one request, then the stream will be in
       half_closed state. Default is false.
   """
-  @spec send_request(GRPC.Client.Stream.t(), struct, Keyword.t()) :: GRPC.Client.Stream.t()
+  @spec send_request(GRPC.Client.Stream.t(), struct, keyword()) :: GRPC.Client.Stream.t()
   def send_request(%{__interface__: interface} = stream, request, opts \\ []) do
     interface[:send_request].(stream, request, opts)
   end
