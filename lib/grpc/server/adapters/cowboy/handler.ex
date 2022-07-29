@@ -10,13 +10,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
   @adapter GRPC.Server.Adapters.Cowboy
   @default_trailers HTTP2.server_trailers()
-  @type state :: %{
-          pid: pid,
-          handling_timer: reference | nil,
-          resp_trailers: map,
-          compressor: atom | nil,
-          pending_reader: nil
-        }
 
   @spec init(
           map(),

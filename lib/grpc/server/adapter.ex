@@ -3,8 +3,6 @@ defmodule GRPC.Server.Adapter do
   HTTP server adapter for GRPC.
   """
 
-  alias GRPC.Server.Adapters.Cowboy.Handler
-
   @callback start(
               atom(),
               %{String.t() => [module()]},

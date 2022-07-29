@@ -10,7 +10,7 @@ require Logger
 
 Logger.configure(level: level)
 
-Logger.warn("Rounds: #{rounds}; concurrency: #{concurrency}; port: #{port}")
+Logger.info("Rounds: #{rounds}; concurrency: #{concurrency}; port: #{port}")
 
 alias Interop.Client
 
@@ -18,7 +18,7 @@ alias Interop.Client
 
 stream = Task.async_stream(1..concurrency, fn _cli ->
   ch = Client.connect("127.0.0.1", port, interceptors: [GRPCPrometheus.ClientInterceptor, GRPC.Logger.Client])
-  
+
   for _ <- 1..rounds do
     Client.empty_unary!(ch)
     Client.cacheable_unary!(ch)
@@ -60,5 +60,5 @@ end)
 # end
 # Helper.flush()
 
-Logger.warn("Succeed!")
+Logger.info("Succeed!")
 :ok = GRPC.Server.stop_endpoint(Interop.Endpoint)

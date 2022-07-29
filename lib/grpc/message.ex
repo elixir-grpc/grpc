@@ -1,23 +1,22 @@
 defmodule GRPC.Message do
+  @moduledoc """
+  Transform data between encoded protobuf and HTTP/2 body of gRPC.
+
+  gRPC body format is:
+
+    http://www.grpc.io/docs/guides/wire.html
+    Delimited-Message -> Compressed-Flag Message-Length Message
+    Compressed-Flag -> 0 / 1 # encoded as 1 byte unsigned integer
+    Message-Length -> {length of Message} # encoded as 4 byte unsigned integer
+    Message -> *{binary octet}
+  """
   use Bitwise, only_operators: true
   @max_message_length 1 <<< (32 - 1)
 
   alias GRPC.RPCError
 
-  @moduledoc false
-
-  # Transform data between encoded protobuf and HTTP/2 body of gRPC.
-  #
-  # gRPC body format is:
-  #
-  #     # http://www.grpc.io/docs/guides/wire.html
-  #     Delimited-Message -> Compressed-Flag Message-Length Message
-  #     Compressed-Flag -> 0 / 1 # encoded as 1 byte unsigned integer
-  #     Message-Length -> {length of Message} # encoded as 4 byte unsigned integer
-  #     Message -> *{binary octet}
-
   @doc """
-  Transform protobuf data to gRPC body
+  Transforms Protobuf data into a gRPC body binary.
 
   ## Options
 
@@ -66,7 +65,7 @@ defmodule GRPC.Message do
   end
 
   @doc """
-  Transform gRPC body to protobuf data
+  Transforms gRPC body into Protobuf data.
 
   ## Examples
 
@@ -80,7 +79,7 @@ defmodule GRPC.Message do
   end
 
   @doc """
-  Transform gRPC body to protobuf data with compressing
+  Transform gRPC body into Protobuf data with compression.
 
   ## Examples
 
@@ -144,7 +143,7 @@ defmodule GRPC.Message do
   end
 
   @doc """
-  Get message data from data buffer
+  Get message data from data buffer.
 
   ## Examples
 
