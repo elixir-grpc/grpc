@@ -61,15 +61,11 @@ defmodule GRPC.Transport.HTTP2 do
 
   defp content_type(custom, _codec) when is_binary(custom), do: custom
 
-  defp content_type(_, codec) do
-    # Some gRPC implementations don't support application/grpc+xyz,
-    # to avoid this kind of trouble, use application/grpc by default
-    if codec == GRPC.Codec.Proto do
-      "application/grpc"
-    else
-      "application/grpc+#{codec.name}"
-    end
-  end
+  # Some gRPC implementations don't support application/grpc+xyz,
+  # to avoid this kind of trouble, use application/grpc by default
+  defp content_type(_, GRPC.Codec.Proto), do: "application/grpc"
+  defp content_type(_, codec = GRPC.Codec.WebText), do: "application/grpc-web-#{codec.name()}"
+  defp content_type(_, codec), do: "application/grpc+#{codec.name()}"
 
   def extract_metadata(headers) do
     headers
