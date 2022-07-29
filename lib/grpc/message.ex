@@ -40,7 +40,7 @@ defmodule GRPC.Message do
       {:error, "Encoded message is too large (9 bytes)"}
 
   """
-  @spec to_data(iodata, keyword()) ::
+  @spec to_data(iodata, keyword() | map()) ::
           {:ok, iodata, non_neg_integer} | {:error, String.t()}
   def to_data(message, opts \\ []) do
     compressor = opts[:compressor]
