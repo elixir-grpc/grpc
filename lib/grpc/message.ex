@@ -60,14 +60,15 @@ defmodule GRPC.Message do
       {:error, "Encoded message is too large (#{length} bytes)"}
     else
       result = [compress_flag, <<length::size(4)-unit(8)>>, message]
-      result = if iolist, do: result, else: IO.iodata_to_binary(result)
 
-      data =
+      result =
         if function_exported?(codec, :pack_for_channel, 1),
           do: codec.pack_for_channel(result),
           else: result
 
-      {:ok, data, length + 5}
+      result = if iolist, do: result, else: IO.iodata_to_binary(result)
+
+      {:ok, result, length + 5}
     end
   end
 

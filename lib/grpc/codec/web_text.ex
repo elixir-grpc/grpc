@@ -9,6 +9,13 @@ defmodule GRPC.Codec.WebText do
     Protobuf.Encoder.encode(struct)
   end
 
+  def pack_for_channel(data) when is_list(data) do
+    data
+    |> IO.iodata_to_binary()
+    |> pack_for_channel()
+    |> List.wrap()
+  end
+
   def pack_for_channel(binary) do
     Base.encode64(binary)
   end

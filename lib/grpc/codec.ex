@@ -24,6 +24,6 @@ defmodule GRPC.Codec do
   For instance grpc-web using the `application/grpc-web-text` content type requires the message to be Base64-encoded, so a server sending messages using grpc-web-text will be required to
   do a Base64 encode on the payload before sending the gRPC message.
   """
-  @callback pack_for_channel(binary) :: binary
+  @callback pack_for_channel(iodata()) :: binary
   @optional_callbacks unpack_from_channel: 1, pack_for_channel: 1
 end
