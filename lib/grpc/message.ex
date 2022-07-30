@@ -44,6 +44,7 @@ defmodule GRPC.Message do
   def to_data(message, opts \\ []) do
     compressor = opts[:compressor]
     iolist = opts[:iolist]
+    codec = opts[:codec]
     max_length = opts[:max_message_length] || @max_message_length
 
     {compress_flag, message} =
