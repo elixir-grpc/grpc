@@ -63,7 +63,9 @@ defmodule GRPC.Integration.CodecTest do
             {"grpc+erlpack", GRPC.Codec.Erlpack},
             {"grpc+proto", GRPC.Codec.Proto}
           ] do
-        {:ok, _reply, headers} = HelloStub.say_hello(channel, req, codec: codec, return_headers: true)
+        {:ok, _reply, headers} =
+          HelloStub.say_hello(channel, req, codec: codec, return_headers: true)
+
         assert headers[:headers]["content-type"] == "application/#{expected_content_type}"
       end
     end)
