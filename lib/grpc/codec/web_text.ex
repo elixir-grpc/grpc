@@ -13,7 +13,6 @@ defmodule GRPC.Codec.WebText do
     data
     |> IO.iodata_to_binary()
     |> pack_for_channel()
-    |> List.wrap()
   end
 
   def pack_for_channel(binary) do
