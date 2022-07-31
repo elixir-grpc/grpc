@@ -44,6 +44,7 @@ defmodule GRPC.Message do
   def to_data(message, opts \\ []) do
     compressor = opts[:compressor]
     iolist = opts[:iolist]
+    codec = opts[:codec]
     max_length = opts[:max_message_length] || @max_message_length
 
     {compress_flag, message} =
@@ -59,7 +60,14 @@ defmodule GRPC.Message do
       {:error, "Encoded message is too large (#{length} bytes)"}
     else
       result = [compress_flag, <<length::size(4)-unit(8)>>, message]
+
+      result =
+        if function_exported?(codec, :pack_for_channel, 1),
+          do: codec.pack_for_channel(result),
+          else: result
+
       result = if iolist, do: result, else: IO.iodata_to_binary(result)
+
       {:ok, result, length + 5}
     end
   end

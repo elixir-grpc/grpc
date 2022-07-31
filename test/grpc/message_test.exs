@@ -28,4 +28,10 @@ defmodule GRPC.MessageTest do
     assert {:ok, IO.iodata_to_binary(message)} ==
              GRPC.Message.from_data(%{compressor: GRPC.Compressor.Gzip}, binary)
   end
+
+  test "to_data/2 invokes codec.pack_for_channel on the gRPC body if codec implements it" do
+    message = "web-text"
+    assert {:ok, base64_payload, _} = GRPC.Message.to_data(message, %{codec: GRPC.Codec.WebText})
+    assert message == GRPC.Message.from_data(Base.decode64!(base64_payload))
+  end
 end
