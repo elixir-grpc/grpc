@@ -245,13 +245,9 @@ defmodule GRPC.Stub do
 
     opts =
       if req_stream || response_stream do
-        opts
-        |> parse_req_opts()
-        |> Keyword.put_new(:timeout, :infinity)
+        parse_req_opts([{:timeout, :infinity} | opts])
       else
-        opts
-        |> parse_req_opts()
-        |> Keyword.put_new(:timeout, @default_timeout)
+        parse_req_opts([{:timeout, @default_timeout} | opts])
       end
 
     compressor = Keyword.get(opts, :compressor, channel.compressor)
@@ -616,7 +612,10 @@ defmodule GRPC.Stub do
     :return_headers
   ]
   defp parse_req_opts(opts) when is_list(opts) do
-    Enum.map(opts, fn
+    # Map.new is used so we can keep the last value
+    # passed for a given key
+    opts
+    |> Map.new(fn
       {:deadline, deadline} ->
         {:timeout, GRPC.TimeUtils.to_relative(deadline)}
 
@@ -626,10 +625,15 @@ defmodule GRPC.Stub do
       {key, _} ->
         raise ArgumentError, "option #{inspect(key)} is not supported"
     end)
+    |> Map.to_list()
   end
 
   defp parse_recv_opts(list) when is_list(list) do
-    Enum.map(list, fn
+    # Map.new is used so we can keep the last value
+    # passed for a given key
+
+    list
+    |> Map.new(fn
       {:deadline, deadline} ->
         {:deadline, GRPC.TimeUtils.to_relative(deadline)}
 
@@ -639,5 +643,6 @@ defmodule GRPC.Stub do
       kv ->
         kv
     end)
+    |> Map.to_list()
   end
 end
