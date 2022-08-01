@@ -2,7 +2,7 @@ defmodule Interop.App do
   use Application
 
   def start(_type, _args) do
-    children = [{GRPC.Server.Supervisor, {Interop.Endpoint, 10000}}]
+    children = [{GRPC.Server.Supervisor, endpoint: Interop.Endpoint, port: 10000}]
 
     GRPCPrometheus.ServerInterceptor.setup()
     GRPCPrometheus.ClientInterceptor.setup()

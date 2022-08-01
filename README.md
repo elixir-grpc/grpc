@@ -65,31 +65,13 @@ defmodule HelloworldApp do
   def start(_type, _args) do
     children = [
       # ...
-      supervisor(GRPC.Server.Supervisor, [{Helloworld.Endpoint, 50051}])
+      {GRPC.Server.Supervisor, endpoint: Helloworld.Endpoint, port: 50051}
     ]
 
     opts = [strategy: :one_for_one, name: YourApp]
     Supervisor.start_link(children, opts)
   end
 end
-```
-
-Then start it when starting your application:
-
-```elixir
-# config.exs
-config :grpc, start_server: true
-
-# test.exs
-config :grpc, start_server: false
-
-$ iex -S mix
-```
-
-or run grpc.server using a mix task
-
-```
-$ mix grpc.server
 ```
 
 4. Call rpc:
