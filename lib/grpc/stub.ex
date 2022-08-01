@@ -143,9 +143,13 @@ defmodule GRPC.Stub do
   end
 
   def connect(host, port, opts) when is_integer(port) do
-    adapter =
-      Keyword.get(opts, :adapter) ||
-        Application.get_env(:grpc, :http2_client_adapter, GRPC.Client.Adapters.Gun)
+    if Application.get_env(:grpc, :http2_client_adapter) do
+      raise "the :http2_client_adapter config key has been deprecated.\
+      The currently supported way is to configure it\
+      through the :adapter option for GRPC.Stub.connect/3"
+    end
+
+    adapter = Keyword.get(opts, :adapter) || GRPC.Client.Adapters.Gun
 
     cred = Keyword.get(opts, :cred)
     scheme = if cred, do: @secure_scheme, else: @insecure_scheme

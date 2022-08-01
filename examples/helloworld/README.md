@@ -9,7 +9,7 @@ $ mix do deps.get, compile
 
 2. Run the server
 ```shell
-$ mix grpc.server
+$ mix run --no-halt
 ```
 
 3. Run the client script
@@ -34,11 +34,7 @@ Refer to [protobuf-elixir](https://github.com/tony612/protobuf-elixir#usage) for
 
 ## How to start server when starting your application?
 
-Change the config to:
-
-```elixir
-config :grpc, start_server: true
-```
+Pass `start_server: true` as an option for the `GRPC.Server.Supervisor` in your supervision tree.
 
 ## Benchmark
 

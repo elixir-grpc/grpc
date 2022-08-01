@@ -9,7 +9,7 @@ $ mix do deps.get, compile
 
 2. Run the server
 ```
-$ mix grpc.server
+$ mix run --no-halt
 ```
 
 2. Run the client
@@ -35,7 +35,7 @@ Refer to [protobuf-elixir](https://github.com/tony612/protobuf-elixir#usage) for
 ## Authentication
 
 ```
-$ TLS=true mix grpc.server
+$ TLS=true mix run --no-halt
 $ TLS=true mix run priv/client.exs
 ```
 
@@ -44,10 +44,3 @@ $ TLS=true mix run priv/client.exs
 * How to change log level? Check out `config/config.exs`, default to warn
 * Use local grpc-elixir? Uncomment `{:grpc, path: "../../"}` in `mix.exs`
 * Why is output format of `Feature` & `Point` different from normal map? Check out `lib/inspect.ex`
-* How to start server when starting your application?
-
-  Change the config to:
-
-  ```elixir
-  config :grpc, start_server: true
-  ```
