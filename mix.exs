@@ -1,13 +1,13 @@
 defmodule GRPC.Mixfile do
   use Mix.Project
 
-  @version "0.5.0-beta.1"
+  @version "0.5.0"
 
   def project do
     [
       app: :grpc,
       version: @version,
-      elixir: "~> 1.5",
+      elixir: "~> 1.11",
       elixirc_paths: elixirc_paths(Mix.env()),
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
@@ -21,7 +21,10 @@ defmodule GRPC.Mixfile do
         source_url: "https://github.com/elixir-grpc/grpc"
       ],
       dialyzer: [
-        plt_add_apps: [:mix, :iex]
+        plt_add_deps: :apps_tree,
+        plt_add_apps: [:iex, :mix, :ex_unit],
+        list_unused_filters: true,
+        plt_file: {:no_warn, "_build/#{Mix.env()}/plts/dialyzer.plt"}
       ],
       xref: [exclude: [IEx]]
     ]
@@ -36,14 +39,14 @@ defmodule GRPC.Mixfile do
 
   defp deps do
     [
-      {:protobuf, "~> 0.5"},
-      {:cowboy, "~> 2.7"},
-      {:gun, "~> 2.0.0", hex: :grpc_gun},
-      # 2.9.0 fixes some important bugs, so it's better to use ~> 2.9.0
-      {:cowlib, "~> 2.9.0", override: true},
-      {:ex_doc, "~> 0.23", only: :dev},
-      {:inch_ex, "~> 2.0", only: [:dev, :test]},
-      {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false}
+      {:cowboy, "~> 2.9"},
+      # This is the same as :gun 2.0.0-rc.2,
+      # but we can't depend on an RC for releases
+      {:gun, "~> 2.0.1", hex: :grpc_gun},
+      {:cowlib, "~> 2.11"},
+      {:protobuf, "~> 0.10", only: [:dev, :test]},
+      {:ex_doc, "~> 0.28.0", only: :dev},
+      {:dialyxir, "~> 1.1.0", only: [:dev, :test], runtime: false}
     ]
   end
 

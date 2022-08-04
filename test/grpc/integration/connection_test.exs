@@ -5,19 +5,11 @@ defmodule GRPC.Integration.ConnectionTest do
   @key_path Path.expand("./tls/server1.key", :code.priv_dir(:grpc))
   @ca_path Path.expand("./tls/ca.pem", :code.priv_dir(:grpc))
 
-  defmodule FeatureServer do
-    use GRPC.Server, service: Routeguide.RouteGuide.Service
-
-    def get_feature(point, _stream) do
-      Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
-    end
-  end
-
   test "reconnection works" do
     server = FeatureServer
     {:ok, _, port} = GRPC.Server.start(server, 0)
     point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
-    {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", adapter_opts: %{retry_timeout: 10})
+    {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", adapter_opts: [retry_timeout: 10])
     assert {:ok, _} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
     :ok = GRPC.Server.stop(server)
     {:ok, _, _} = reconnect_server(server, port)
@@ -31,7 +23,7 @@ defmodule GRPC.Integration.ConnectionTest do
     File.rm(socket_path)
 
     {:ok, _, _} = GRPC.Server.start(server, 0, ip: {:local, socket_path})
-    {:ok, channel} = GRPC.Stub.connect(socket_path, adapter_opts: %{retry_timeout: 10})
+    {:ok, channel} = GRPC.Stub.connect(socket_path, adapter_opts: [retry_timeout: 10])
 
     point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
     assert {:ok, _} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
@@ -41,6 +33,8 @@ defmodule GRPC.Integration.ConnectionTest do
   test "authentication works" do
     server = FeatureServer
 
+    tls_versions = [:"tlsv1.2"]
+
     cred =
       GRPC.Credential.new(
         ssl: [
@@ -48,7 +42,8 @@ defmodule GRPC.Integration.ConnectionTest do
           cacertfile: @ca_path,
           keyfile: @key_path,
           verify: :verify_peer,
-          fail_if_no_peer_cert: true
+          fail_if_no_peer_cert: true,
+          versions: tls_versions
         ]
       )
 
@@ -56,7 +51,12 @@ defmodule GRPC.Integration.ConnectionTest do
 
     try do
       point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
-      client_cred = GRPC.Credential.new(ssl: [certfile: @cert_path, keyfile: @key_path])
+
+      client_cred =
+        GRPC.Credential.new(
+          ssl: [certfile: @cert_path, keyfile: @key_path, versions: tls_versions]
+        )
+
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", cred: client_cred)
       assert {:ok, _} = Routeguide.RouteGuide.Stub.get_feature(channel, point)
     catch

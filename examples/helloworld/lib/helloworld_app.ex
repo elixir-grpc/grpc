@@ -2,10 +2,8 @@ defmodule HelloworldApp do
   use Application
 
   def start(_type, _args) do
-    import Supervisor.Spec
-
     children = [
-      supervisor(GRPC.Server.Supervisor, [{Helloworld.Endpoint, 50051}])
+      {GRPC.Server.Supervisor, endpoint: Helloworld.Endpoint, port: 50051, start_server: true}
     ]
 
     opts = [strategy: :one_for_one, name: HelloworldApp]
