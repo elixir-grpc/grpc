@@ -1,7 +1,14 @@
 defmodule GRPC.Credential do
   @moduledoc """
-  Stores credentials for authentication. It can be used to establish secure connections
+  Stores credentials for authentication.
+
+  It can be used to establish secure connections
   by passed to `GRPC.Stub.connect/2` as an argument.
+
+  Some client and server adapter implementations may
+  choose to let request options override some of the
+  configuration here, but this is left as a choice
+  for each adapter.
 
   ## Examples
 
@@ -16,6 +23,6 @@ defmodule GRPC.Credential do
   Creates credential.
   """
   def new(opts) do
-    %__MODULE__{ssl: Keyword.get(opts, :ssl, [])}
+    %__MODULE__{ssl: Keyword.get(opts, :ssl) || []}
   end
 end

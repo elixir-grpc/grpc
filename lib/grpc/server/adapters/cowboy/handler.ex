@@ -1,4 +1,4 @@
-defmodule GRPC.Adapter.Cowboy.Handler do
+defmodule GRPC.Server.Adapters.Cowboy.Handler do
   @moduledoc false
 
   # A cowboy handler accepting all requests and calls corresponding functions
@@ -9,17 +9,13 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   alias GRPC.RPCError
   require Logger
 
-  @adapter GRPC.Adapter.Cowboy
+  @adapter GRPC.Server.Adapters.Cowboy
   @default_trailers HTTP2.server_trailers()
-  @type state :: %{
-          pid: pid,
-          handling_timer: reference | nil,
-          resp_trailers: map,
-          compressor: atom | nil,
-          pending_reader: nil
-        }
 
-  @spec init(map, {atom, GRPC.Server.servers_map(), map}) :: {:cowboy_loop, map, map}
+  @spec init(
+          map(),
+          state :: {endpoint :: atom(), servers :: %{String.t() => [module()]}, opts :: keyword()}
+        ) :: {:cowboy_loop, map(), map()}
   def init(req, {endpoint, servers, opts} = state) do
     path = :cowboy_req.path(req)
 
@@ -250,14 +246,12 @@ defmodule GRPC.Adapter.Cowboy.Handler do
 
     if compressor && !Enum.member?(accepted_encodings, compressor.name()) do
       msg =
-        "A unaccepted encoding #{compressor.name()} is set, valid are: #{
-          :cowboy_req.header("grpc-accept-encoding", req)
-        }"
+        "A unaccepted encoding #{compressor.name()} is set, valid are: #{:cowboy_req.header("grpc-accept-encoding", req)}"
 
       req = send_error(req, state, msg)
       {:stop, req, state}
     else
-      case GRPC.Message.to_data(data, compressor: compressor) do
+      case GRPC.Message.to_data(data, compressor: compressor, codec: opts[:codec]) do
         {:ok, data, _size} ->
           req = check_sent_resp(req)
           :cowboy_req.stream_body(data, is_fin, req)
@@ -457,9 +451,15 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   defp extract_subtype("application/grpc"), do: {:ok, "proto"}
   defp extract_subtype("application/grpc+"), do: {:ok, "proto"}
   defp extract_subtype("application/grpc;"), do: {:ok, "proto"}
-
   defp extract_subtype(<<"application/grpc+", rest::binary>>), do: {:ok, rest}
   defp extract_subtype(<<"application/grpc;", rest::binary>>), do: {:ok, rest}
+
+  defp extract_subtype("application/grpc-web"), do: {:ok, "proto"}
+  defp extract_subtype("application/grpc-web+"), do: {:ok, "proto"}
+  defp extract_subtype("application/grpc-web;"), do: {:ok, "proto"}
+  defp extract_subtype("application/grpc-web-text"), do: {:ok, "text"}
+  defp extract_subtype("application/grpc-web+" <> rest), do: {:ok, rest}
+  defp extract_subtype("application/grpc-web-text+" <> rest), do: {:ok, rest}
 
   defp extract_subtype(type) do
     Logger.warn("Got unknown content-type #{type}, please create an issue.")
@@ -485,8 +485,8 @@ defmodule GRPC.Adapter.Cowboy.Handler do
   end
 
   defp async_read_body(req, opts) do
-    length = Map.get(opts, :length, 8_000_000)
-    period = Map.get(opts, :period, 15000)
+    length = opts[:length] || 8_000_000
+    period = opts[:period] || 15000
     ref = make_ref()
 
     :cowboy_req.cast({:read_body, self(), ref, length, period}, req)

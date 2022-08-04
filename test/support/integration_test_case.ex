@@ -9,8 +9,8 @@ defmodule GRPC.Integration.TestCase do
     end
   end
 
-  def run_server(servers, func, port \\ 0) do
-    {:ok, _pid, port} = GRPC.Server.start(servers, port)
+  def run_server(servers, func, port \\ 0, opts \\ []) do
+    {:ok, _pid, port} = GRPC.Server.start(servers, port, opts)
 
     try do
       func.(port)

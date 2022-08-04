@@ -3,8 +3,10 @@ defmodule GRPC.Transport.HTTP2Test do
   alias GRPC.Channel
   alias GRPC.Transport.HTTP2
 
-  @channel %Channel{scheme: "http", host: "grpc.io"}
   alias GRPC.Client.Stream
+  alias GRPC.Server.Stream, as: ServerStream
+
+  @channel %Channel{scheme: "http", host: "grpc.io"}
 
   defp assert_header({key, _v} = pair, headers) do
     assert pair == Enum.find(headers, nil, fn {k, _v} -> if k == key, do: true end)
@@ -98,5 +100,17 @@ defmodule GRPC.Transport.HTTP2Test do
 
     assert {_, "application/grpc+custom-codec"} =
              Enum.find(headers, fn {key, _} -> key == "content-type" end)
+  end
+
+  test "server_headers/3 sets content-type based on the codec name" do
+    for {expected_content_type, codec} <- [
+          {"grpc-web-text", GRPC.Codec.WebText},
+          {"grpc+erlpack", GRPC.Codec.Erlpack}
+        ] do
+      stream = %ServerStream{codec: codec}
+
+      assert %{"content-type" => "application/" <> ^expected_content_type} =
+               HTTP2.server_headers(stream)
+    end
   end
 end
