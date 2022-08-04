@@ -102,6 +102,12 @@ defmodule GRPC.Integration.ServerTest do
     end
   end
 
+  defmodule HTTP1Server do
+    def init(req, state) do
+      {:ok, :cowboy_req.reply(200, %{}, "OK", req), state}
+    end
+  end
+
   test "multiple servers works" do
     run_server([FeatureServer, HelloServer], fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
@@ -113,6 +119,27 @@ defmodule GRPC.Integration.ServerTest do
       {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
       assert reply.message == "Hello, Elixir"
     end)
+  end
+
+  test "HTTP/1 status handler can be started along a gRPC server" do
+    status_handler = {"/status", HTTP1Server, []}
+
+    run_server(
+      [HelloServer],
+      fn port ->
+        {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+        req = Helloworld.HelloRequest.new(name: "Elixir")
+        {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
+        assert reply.message == "Hello, Elixir"
+
+        {:ok, conn_pid} = :gun.open('localhost', port)
+        stream_ref = :gun.get(conn_pid, "/status")
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+      end,
+      0,
+      adapter_opts: [status_handler: status_handler]
+    )
   end
 
   test "returns appropriate error for unary requests" do
