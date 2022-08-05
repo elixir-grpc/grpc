@@ -20,7 +20,7 @@ defmodule Helloworld.Mixfile do
     [
       {:grpc, path: "../../"},
       {:protobuf, "~> 0.10"},
-      {:google_protos, "~> 0.1"},
+      {:google_protos, "~> 0.3.0"},
       {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false}
     ]
   end
