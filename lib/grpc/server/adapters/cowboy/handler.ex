@@ -9,6 +9,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   alias GRPC.RPCError
   require Logger
 
+  @dialyzer {:nowarn_function, info: 3}
+
   @adapter GRPC.Server.Adapters.Cowboy
   @default_trailers HTTP2.server_trailers()
 
