@@ -1,10 +1,10 @@
 # Changelog
 
-# 0.7.0
+# 0.7.0 (2022-08-10)
 
 - Updates to the recent upstream release of `elixir-grpc` [`v0.5.0`](https://github.com/elixir-grpc/grpc/releases/tag/v0.5.0)
 
-# Breaking Changes
+## Breaking Changes
 
 - Spawn supervisor now expects a Keyword list instead of a tuple. 
   - Before: 
