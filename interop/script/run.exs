@@ -1,18 +1,26 @@
 {options, _, _} = OptionParser.parse(System.argv(), strict: [rounds: :integer, concurrency: :integer, port: :integer])
-rounds = Keyword.get(options, :rounds, 100)
-concurrency = Keyword.get(options, :concurrency, 10)
-port = Keyword.get(options, :port, 0)
+rounds = Keyword.get(options, :rounds) || 20
+max_concurrency = System.schedulers_online()
+concurrency = Keyword.get(options, :concurrency) || max_concurrency
+port = Keyword.get(options, :port) || 0
+level = Keyword.get(options, :log_level) || "warn"
+level = String.to_existing_atom(level)
 
-IO.puts "Rounds: #{rounds}; concurrency: #{concurrency}; port: #{port}"
-IO.puts ""
+require Logger
+
+Logger.configure(level: level)
+
+Logger.info("Rounds: #{rounds}; concurrency: #{concurrency}; port: #{port}")
 
 alias Interop.Client
+
 {:ok, _pid, port} = GRPC.Server.start_endpoint(Interop.Endpoint, port)
 
-stream = Task.async_stream(1..concurrency, fn cli ->
+1..concurrency
+|> Task.async_stream(fn _cli ->
   ch = Client.connect("127.0.0.1", port, interceptors: [GRPCPrometheus.ClientInterceptor, GRPC.Logger.Client])
-  run = fn(i) ->
-    IO.puts("Client##{cli}, Round #{i}")
+
+  for _ <- 1..rounds do
     Client.empty_unary!(ch)
     Client.cacheable_unary!(ch)
     Client.large_unary!(ch)
@@ -32,14 +40,9 @@ stream = Task.async_stream(1..concurrency, fn cli ->
     Client.cancel_after_first_response!(ch)
     Client.timeout_on_sleeping_server!(ch)
   end
-  Enum.each(1..rounds, run)
   :ok
 end, max_concurrency: concurrency, ordered: false, timeout: :infinity)
-
-Enum.map(stream, fn result ->
-  result
-end)
-|> IO.inspect
+|> Enum.to_list()
 
 # defmodule Helper do
 #   def flush() do
@@ -54,5 +57,5 @@ end)
 # end
 # Helper.flush()
 
-IO.puts("Succeed!")
+Logger.info("Succeed!")
 :ok = GRPC.Server.stop_endpoint(Interop.Endpoint)

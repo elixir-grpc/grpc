@@ -1,4 +1,4 @@
-use Mix.Config
+import Config
 
 config :prometheus, GRPCPrometheus.ServerInterceptor,
   latency: :histogram
@@ -6,7 +6,4 @@ config :prometheus, GRPCPrometheus.ServerInterceptor,
 config :prometheus, GRPCPrometheus.ClientInterceptor,
   latency: :histogram
 
-# config :grpc, start_server: true
-
-# config :logger, level: :debug
 config :logger, level: :warn

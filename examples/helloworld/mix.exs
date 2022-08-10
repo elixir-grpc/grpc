@@ -18,9 +18,8 @@ defmodule Helloworld.Mixfile do
   defp deps do
     [
       {:grpc, path: "../../"},
-      {:protobuf, github: "tony612/protobuf-elixir", override: true},
-      {:cowlib, "~> 2.8.0", hex: :grpc_cowlib, override: true},
-      {:dialyxir, "~> 0.5", only: [:dev, :test], runtime: false},
+      {:protobuf, "~> 0.10"},
+      {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false},
     ]
   end
 end

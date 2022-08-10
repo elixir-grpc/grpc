@@ -3,8 +3,8 @@ defmodule Grpc.Testing.ByteBufferParams do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          req_size: integer,
-          resp_size: integer
+          req_size: integer(),
+          resp_size: integer()
         }
   defstruct [:req_size, :resp_size]
 
@@ -17,8 +17,8 @@ defmodule Grpc.Testing.SimpleProtoParams do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          req_size: integer,
-          resp_size: integer
+          req_size: integer(),
+          resp_size: integer()
         }
   defstruct [:req_size, :resp_size]
 
@@ -39,7 +39,7 @@ defmodule Grpc.Testing.PayloadConfig do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          payload: {atom, any}
+          payload: {atom(), any()}
         }
   defstruct [:payload]
 

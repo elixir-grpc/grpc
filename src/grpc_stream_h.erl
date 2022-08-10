@@ -325,7 +325,7 @@ request_process(Req, Env, Middlewares) ->
 		execute(Req, Env, Middlewares)
 	catch
 		exit:Reason:Stacktrace ->
-		  erlang:raise(exit, {Reason, Stacktrace}, Stacktrace);
+			erlang:raise(exit, {Reason, Stacktrace}, Stacktrace);
 		Class:Reason:Stacktrace ->
 			erlang:raise(Class, {Reason, Stacktrace}, Stacktrace)
 	end.

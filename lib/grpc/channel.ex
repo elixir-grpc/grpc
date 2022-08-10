@@ -11,23 +11,23 @@ defmodule GRPC.Channel do
     * `:port` - server's port to connect
     * `:scheme` - scheme of connection, like `http`
     * `:cred` - credentials used for authentication
-    * `:adapter` - a client adapter module, like `GRPC.Adapter.Gun`
+    * `:adapter` - a client adapter module, like `GRPC.Client.Adapters.Gun`
     * `:codec` - a default codec for this channel
     * `:adapter_payload` - payload the adapter uses
   """
 
   @type t :: %__MODULE__{
           host: String.t(),
-          port: non_neg_integer,
+          port: non_neg_integer(),
           scheme: String.t(),
           cred: GRPC.Credential.t(),
-          adapter: atom,
-          adapter_payload: any,
-          codec: module,
+          adapter: atom(),
+          adapter_payload: any(),
+          codec: module(),
           interceptors: [],
-          compressor: module,
-          accepted_compressors: [module],
-          headers: list
+          compressor: module(),
+          accepted_compressors: [module()],
+          headers: list()
         }
   defstruct host: nil,
             port: nil,

@@ -1,21 +1,20 @@
-defmodule GRPC.Adapter.Cowboy do
-  @moduledoc false
+defmodule GRPC.Server.Adapters.Cowboy do
+  @moduledoc """
+  A server (`b:GRPC.Server.Adapter`) adapter using `:cowboy`.
 
-  # A server(`GRPC.Server`) adapter using Cowboy.
-  # Cowboy req will be stored in `:payload` of `GRPC.Server.Stream`.
+  Cowboy requests will be stored in the `:payload` field of the `GRPC.Server.Stream`.
+  """
 
-  # Waiting for this is released on hex https://github.com/ninenines/ranch/pull/227
-  @dialyzer {:nowarn_function, running_info: 4}
+  @behaviour GRPC.Server.Adapter
 
   require Logger
-  alias GRPC.Adapter.Cowboy.Handler, as: Handler
+  alias GRPC.Server.Adapters.Cowboy.Handler
 
   @default_num_acceptors 20
   @default_max_connections 16384
 
   # Only used in starting a server manually using `GRPC.Server.start(servers)`
-  @spec start(atom, GRPC.Server.servers_map(), non_neg_integer, keyword) ::
-          {:ok, pid, non_neg_integer}
+  @impl true
   def start(endpoint, servers, port, opts) do
     start_args = cowboy_start_args(endpoint, servers, port, opts)
     start_func = if opts[:cred], do: :start_tls, else: :start_clear
@@ -30,7 +29,7 @@ defmodule GRPC.Adapter.Cowboy do
     end
   end
 
-  @spec child_spec(atom, GRPC.Server.servers_map(), non_neg_integer, Keyword.t()) ::
+  @spec child_spec(atom(), %{String.t() => [module()]}, non_neg_integer(), Keyword.t()) ::
           Supervisor.Spec.spec()
   def child_spec(endpoint, servers, port, opts) do
     [ref, trans_opts, proto_opts] = cowboy_start_args(endpoint, servers, port, opts)
@@ -53,7 +52,8 @@ defmodule GRPC.Adapter.Cowboy do
   end
 
   # spec: :supervisor.mfargs doesn't work
-  @spec start_link(atom, atom, GRPC.Server.servers_map(), any) :: {:ok, pid} | {:error, any}
+  @spec start_link(atom(), atom(), %{String.t() => [module()]}, any()) ::
+          {:ok, pid()} | {:error, any()}
   def start_link(scheme, endpoint, servers, {m, f, [ref | _] = a}) do
     case apply(m, f, a) do
       {:ok, pid} ->
@@ -73,17 +73,17 @@ defmodule GRPC.Adapter.Cowboy do
     end
   end
 
-  @spec stop(atom, GRPC.Server.servers_map()) :: :ok | {:error, :not_found}
+  @impl true
   def stop(endpoint, servers) do
     :cowboy.stop_listener(servers_name(endpoint, servers))
   end
 
-  @spec read_body(GRPC.Adapter.Cowboy.Handler.state()) :: {:ok, binary}
+  @spec read_body(GRPC.Server.Adapter.state()) :: {:ok, binary()}
   def read_body(%{pid: pid}) do
     Handler.read_full_body(pid)
   end
 
-  @spec reading_stream(GRPC.Adapter.Cowboy.Handler.state()) :: Enumerable.t()
+  @spec reading_stream(GRPC.Server.Adapter.state()) :: Enumerable.t()
   def reading_stream(%{pid: pid}) do
     Stream.unfold(%{pid: pid, need_more: true, buffer: <<>>}, fn acc -> read_stream(acc) end)
   end
@@ -115,11 +115,12 @@ defmodule GRPC.Adapter.Cowboy do
     end
   end
 
-  @spec send_reply(GRPC.Adapter.Cowboy.Handler.state(), binary, keyword) :: any
+  @impl true
   def send_reply(%{pid: pid}, data, opts) do
     Handler.stream_body(pid, data, opts, :nofin)
   end
 
+  @impl true
   def send_headers(%{pid: pid}, headers) do
     Handler.stream_reply(pid, 200, headers)
   end
@@ -153,14 +154,25 @@ defmodule GRPC.Adapter.Cowboy do
   end
 
   defp cowboy_start_args(endpoint, servers, port, opts) do
-    dispatch =
-      :cowboy_router.compile([
-        {:_, [{:_, GRPC.Adapter.Cowboy.Handler, {endpoint, servers, Enum.into(opts, %{})}}]}
-      ])
+    # Custom handler to be able to listen in the same port, more info:
+    # https://github.com/containous/traefik/issues/6211
+    {adapter_opts, opts} = Keyword.pop(opts, :adapter_opts, [])
+    status_handler = Keyword.get(adapter_opts, :status_handler)
 
-    idle_timeout = Keyword.get(opts, :idle_timeout, :infinity)
-    num_acceptors = Keyword.get(opts, :num_acceptors, @default_num_acceptors)
-    max_connections = Keyword.get(opts, :max_connections, @default_max_connections)
+    handlers =
+      if status_handler do
+        [
+          status_handler,
+          {:_, GRPC.Server.Adapters.Cowboy.Handler, {endpoint, servers, Enum.into(opts, %{})}}
+        ]
+      else
+        [{:_, GRPC.Server.Adapters.Cowboy.Handler, {endpoint, servers, Enum.into(opts, %{})}}]
+      end
+
+    dispatch = :cowboy_router.compile([{:_, handlers}])
+    idle_timeout = Keyword.get(opts, :idle_timeout) || :infinity
+    num_acceptors = Keyword.get(opts, :num_acceptors) || @default_num_acceptors
+    max_connections = Keyword.get(opts, :max_connections) || @default_max_connections
 
     # https://ninenines.eu/docs/en/cowboy/2.7/manual/cowboy_http2/
     opts =
@@ -215,8 +227,8 @@ defmodule GRPC.Adapter.Cowboy do
 
     addr_str =
       case addr do
-        :local ->
-          port
+        :undefined ->
+          raise "undefined address for ranch server"
 
         addr ->
           "#{:inet.ntoa(addr)}:#{port}"
