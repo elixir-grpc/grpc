@@ -17,13 +17,10 @@ defmodule GRPC.Client.Adapter do
   @callback send_request(stream :: Stream.t(), contents :: binary(), opts :: keyword()) ::
               Stream.t()
 
-  @callback recv_headers(stream :: map(), headers :: map(), opts :: keyword()) ::
-              {:ok, %{String.t() => String.t()}, fin()} | {:error, GRPC.RPCError.t()}
-
-  @callback recv_data_or_trailers(
-              stream :: map(),
-              trailers_or_metadata :: map(),
-              opts :: keyword()
-            ) ::
-              {:data, binary()} | {:trailers, binary()} | {:error, GRPC.RPCError.t()}
+  @callback receive_data(stream :: Stream.t(), opts :: keyword()) ::
+              {:ok, struct()}
+              | {:ok, struct(), map()}
+              | {:ok, Enumerable.t()}
+              | {:ok, Enumerable.t(), map()}
+              | {:error, any()}
 end
