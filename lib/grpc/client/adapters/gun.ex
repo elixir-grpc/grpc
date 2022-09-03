@@ -372,30 +372,17 @@ defmodule GRPC.Client.Adapters.Gun do
            buffer: buffer,
            need_more: true,
            opts: opts
-         } = s
+         } = stream
        ) do
     case recv_data_or_trailers(ap, payload, opts) do
       {:data, data} ->
-        buffer = buffer <> data
-        new_s = s |> Map.put(:need_more, false) |> Map.put(:buffer, buffer)
-        read_stream(new_s)
+        stream
+        |> Map.put(:need_more, false)
+        |> Map.put(:buffer, buffer <> data)
+        |> read_stream()
 
       {:trailers, trailers} ->
-        trailers = GRPC.Transport.HTTP2.decode_headers(trailers)
-
-        case parse_trailers(trailers) do
-          :ok ->
-            fin_resp =
-              if opts[:return_headers] do
-                {:trailers, trailers}
-              end
-
-            new_s = s |> Map.put(:fin, true) |> Map.put(:fin_resp, fin_resp)
-            read_stream(new_s)
-
-          error ->
-            {error, %{buffer: <<>>, fin: true, fin_resp: nil}}
-        end
+        update_stream_with_trailers(stream, trailers, opts[:return_headers])
 
       error = {:error, _} ->
         {error, %{buffer: <<>>, fin: true, fin_resp: nil}}
@@ -425,6 +412,23 @@ defmodule GRPC.Client.Adapters.Gun do
          body <- get_body(codec, body),
          {:ok, msg} <- GRPC.Message.from_data(%{compressor: compressor}, body) do
       {:ok, codec.decode(msg, res_mod)}
+    end
+  end
+
+  defp update_stream_with_trailers(stream, trailers, return_headers?) do
+    trailers = GRPC.Transport.HTTP2.decode_headers(trailers)
+
+    case parse_trailers(trailers) do
+      :ok ->
+        fin_resp = if return_headers?, do: {:trailers, trailers}
+
+        stream
+        |> Map.put(:fin, true)
+        |> Map.put(:fin_resp, fin_resp)
+        |> read_stream()
+
+      error ->
+        {error, %{buffer: <<>>, fin: true, fin_resp: nil}}
     end
   end
 
