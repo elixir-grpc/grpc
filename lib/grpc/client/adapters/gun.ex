@@ -140,13 +140,13 @@ defmodule GRPC.Client.Adapters.Gun do
           stream,
         opts
       ) do
-    with {:ok, headers, is_fin} <- recv_headers(adapter_payload, payload, opts) do
-      case is_fin do
-        :fin -> []
-        :nofin -> response_stream(stream, opts)
+    with {:ok, headers, is_fin} <- recv_headers(adapter_payload, payload, opts),
+         response <- response_stream(is_fin, stream, opts) do
+      if(opts[:return_headers]) do
+        {:ok, response, %{headers: headers}}
+      else
+        {:ok, response}
       end
-      |> then(&{:ok, &1})
-      |> maybe_return_headers(opts[:return_headers], %{headers: headers})
     end
   end
 
@@ -155,19 +155,14 @@ defmodule GRPC.Client.Adapters.Gun do
         opts
       ) do
     with {:ok, headers, _is_fin} <- recv_headers(adapter_payload, payload, opts),
-         {:ok, body, trailers} <- recv_body(adapter_payload, payload, opts) do
-      stream
-      |> parse_response(headers, body, trailers)
-      |> maybe_return_headers(opts[:return_headers], %{headers: headers, trailers: trailers})
+         {:ok, body, trailers} <- recv_body(adapter_payload, payload, opts),
+         {:ok, response} <- parse_response(stream, headers, body, trailers) do
+      if(opts[:return_headers]) do
+        {:ok, response, %{headers: headers, trailers: trailers}}
+      else
+        {:ok, response}
+      end
     end
-  end
-
-  defp maybe_return_headers({status, response}, true = _return_headers?, headers) do
-    {status, response, headers}
-  end
-
-  defp maybe_return_headers({status, response}, _return_headers?, _headers) do
-    {status, response}
   end
 
   defp recv_headers(%{conn_pid: conn_pid}, %{stream_ref: stream_ref}, opts) do
@@ -339,7 +334,10 @@ defmodule GRPC.Client.Adapters.Gun do
     end
   end
 
+  defp response_stream(:fin, _stream, _opts), do: []
+
   defp response_stream(
+         :nofin,
          %{
            channel: %{adapter_payload: ap},
            response_mod: res_mod,
@@ -406,7 +404,6 @@ defmodule GRPC.Client.Adapters.Gun do
 
   defp read_stream(%{buffer: buffer, need_more: false, response_mod: res_mod, codec: codec} = s) do
     case GRPC.Message.get_message(buffer) do
-      # TODO
       {{_, message}, rest} ->
         reply = codec.decode(message, res_mod)
         new_s = Map.put(s, :buffer, rest)

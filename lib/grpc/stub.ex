@@ -44,13 +44,16 @@ defmodule GRPC.Stub do
   # 10 seconds
   @default_timeout 10000
 
-  @type rpc_return ::
+  @type receive_data_return ::
           {:ok, struct()}
           | {:ok, struct(), map()}
-          | GRPC.Client.Stream.t()
           | {:ok, Enumerable.t()}
           | {:ok, Enumerable.t(), map()}
+
+  @type rpc_return ::
+          GRPC.Client.Stream.t()
           | {:error, GRPC.RPCError.t()}
+          | receive_data_return
 
   require Logger
 

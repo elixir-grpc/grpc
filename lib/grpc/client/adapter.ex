@@ -17,10 +17,9 @@ defmodule GRPC.Client.Adapter do
   @callback send_request(stream :: Stream.t(), contents :: binary(), opts :: keyword()) ::
               Stream.t()
 
+  @doc """
+  Check `GRPC.Stub.recv/2` for more context about the return types
+  """
   @callback receive_data(stream :: Stream.t(), opts :: keyword()) ::
-              {:ok, struct()}
-              | {:ok, struct(), map()}
-              | {:ok, Enumerable.t()}
-              | {:ok, Enumerable.t(), map()}
-              | {:error, any()}
+              GRPC.Stub.receive_data_return() | {:error, any()}
 end
