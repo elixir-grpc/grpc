@@ -420,34 +420,11 @@ defmodule GRPC.Client.Adapters.Gun do
          body,
          trailers
        ) do
-    case parse_trailers(trailers) do
-      :ok ->
-        compressor =
-          case headers do
-            %{"grpc-encoding" => encoding} ->
-              Enum.find(accepted_compressors, nil, fn c -> c.name() == encoding end)
-
-            _ ->
-              nil
-          end
-
-        body =
-          if function_exported?(codec, :unpack_from_channel, 1) do
-            codec.unpack_from_channel(body)
-          else
-            body
-          end
-
-        case GRPC.Message.from_data(%{compressor: compressor}, body) do
-          {:ok, msg} ->
-            {:ok, codec.decode(msg, res_mod)}
-
-          err ->
-            err
-        end
-
-      error ->
-        error
+    with :ok <- parse_trailers(trailers),
+         compressor <- get_compressor(headers, accepted_compressors),
+         body <- get_body(codec, body),
+         {:ok, msg} <- GRPC.Message.from_data(%{compressor: compressor}, body) do
+      {:ok, codec.decode(msg, res_mod)}
     end
   end
 
@@ -458,6 +435,20 @@ defmodule GRPC.Client.Adapters.Gun do
       :ok
     else
       {:error, %GRPC.RPCError{status: status, message: trailers["grpc-message"]}}
+    end
+  end
+
+  defp get_compressor(%{"grpc-encoding" => encoding} = _headers, accepted_compressors) do
+    Enum.find(accepted_compressors, nil, fn c -> c.name() == encoding end)
+  end
+
+  defp get_compressor(_headers, _accepted_compressors), do: nil
+
+  defp get_body(codec, body) do
+    if function_exported?(codec, :unpack_from_channel, 1) do
+      codec.unpack_from_channel(body)
+    else
+      body
     end
   end
 end
