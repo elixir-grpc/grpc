@@ -9,12 +9,16 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
     GenServer.start_link(__MODULE__, {scheme, host, port, opts})
   end
 
-  def request(pid, method, path, headers, body) do
-    GenServer.call(pid, {:request, method, path, headers, body})
+  def request(pid, method, path, headers, body, streamed_response?) do
+    GenServer.call(pid, {:request, method, path, headers, body, streamed_response?})
   end
 
   def disconnect(pid) do
     GenServer.call(pid, {:disconnect, :brutal})
+  end
+
+  def process_stream_data(pid, request_ref) do
+    GenServer.call(pid, {:process_stream_data, request_ref})
   end
 
   ## Callbacks
@@ -40,11 +44,35 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
     {:stop, :normal, :ok, state}
   end
 
-  def handle_call({:request, method, path, headers, body}, from, state) do
+  def handle_call({:process_stream_data, request_ref}, _from, state) do
+    case state.requests[request_ref] do
+      %{done: true} ->
+        {%{response: response, from: _from}, state} = pop_in(state.requests[request_ref])
+        {:reply, {response.data, true}, state}
+
+      %{request: %{data: data}} ->
+        state = put_in(state.requests[request_ref].response[:data], nil)
+        {:reply, {data, false}, state}
+    end
+  end
+
+  def handle_call(
+        {:request, method, path, headers, body, streamed_response?},
+        from,
+        state
+      ) do
     case Mint.HTTP.request(state.conn, method, path, headers, body) do
       {:ok, conn, request_ref} ->
         state = put_in(state.conn, conn)
-        state = put_in(state.requests[request_ref], %{from: from, response: %{}})
+
+        state =
+          put_in(state.requests[request_ref], %{
+            from: from,
+            streamed_response: streamed_response?,
+            done: false,
+            response: %{}
+          })
+
         {:noreply, state}
 
       {:error, conn, reason} ->
@@ -72,7 +100,15 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   end
 
   defp process_response({:headers, request_ref, headers}, state) do
-    put_in(state.requests[request_ref].response[:headers], headers)
+    # For server stream connections, we wait for the  headers and accumulate the data.
+    if state.requests[request_ref].streamed_response do
+      from = state.requests[request_ref].from
+      state = put_in(state.requests[request_ref].response[:headers], headers)
+      GenServer.reply(from, {:ok, {state.requests[request_ref].response, request_ref}})
+      state
+    else
+      put_in(state.requests[request_ref].response[:headers], headers)
+    end
   end
 
   defp process_response({:data, request_ref, new_data}, state) do
@@ -80,8 +116,12 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   end
 
   defp process_response({:done, request_ref}, state) do
-    {%{response: response, from: from}, state} = pop_in(state.requests[request_ref])
-    GenServer.reply(from, {:ok, response})
-    state
+    if state.requests[request_ref].streamed_response do
+      put_in(state.requests[request_ref][:done], true)
+    else
+      {%{response: response, from: from}, state} = pop_in(state.requests[request_ref])
+      GenServer.reply(from, {:ok, response})
+      state
+    end
   end
 end
