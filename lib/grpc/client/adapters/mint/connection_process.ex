@@ -13,6 +13,10 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
     GenServer.call(pid, {:request, method, path, headers, body})
   end
 
+  def disconnect(pid) do
+    GenServer.call(pid, {:disconnect, :brutal})
+  end
+
   ## Callbacks
 
   @impl true
@@ -20,14 +24,22 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
     case Mint.HTTP.connect(scheme, host, port, opts) do
       {:ok, conn} ->
         state = %__MODULE__{conn: conn}
-        {:ok, state} |> IO.inspect
+        {:ok, state}
 
       {:error, reason} ->
+        # TODO check what's better: add to state map if connection is alive?
+        # TODO Or simply stop the process and handle the error on caller?
         {:stop, reason}
     end
   end
 
   @impl true
+  def handle_call({:disconnect, :brutal}, _from, state) do
+    # TODO add a code to if disconnect is brutal we just stop if is friendly we wait for pending requests
+    Mint.HTTP.close(state.conn)
+    {:stop, :normal, :ok, state}
+  end
+
   def handle_call({:request, method, path, headers, body}, from, state) do
     case Mint.HTTP.request(state.conn, method, path, headers, body) do
       {:ok, conn, request_ref} ->
