@@ -15,7 +15,7 @@ defmodule GRPC.Service do
 
   defmacro __using__(opts) do
     quote do
-      import GRPC.Service, only: [rpc: 4, stream: 1]
+      import GRPC.Service, only: [rpc: 4, rpc: 3, stream: 1]
 
       Module.register_attribute(__MODULE__, :rpc_calls, accumulate: true)
       @before_compile GRPC.Service
@@ -32,7 +32,7 @@ defmodule GRPC.Service do
     end
   end
 
-  defmacro rpc(name, request, reply, options) do
+  defmacro rpc(name, request, reply, options \\ quote(do: %{})) do
     quote do
       @rpc_calls {unquote(name), unquote(wrap_stream(request)), unquote(wrap_stream(reply)),
                   unquote(options)}
