@@ -34,6 +34,9 @@ defmodule GRPC.Server.Stream do
           # compressor mainly is used in client decompressing, responses compressing should be set by
           # `GRPC.Server.set_compressor`
           compressor: module() | nil,
+          # For http transcoding
+          http_method: :get | :post | :put | :patch | :delete,
+          http_transcode: boolean(),
           __interface__: map()
         }
 
@@ -51,11 +54,15 @@ defmodule GRPC.Server.Stream do
             adapter: nil,
             local: nil,
             compressor: nil,
+            http_method: :post,
+            http_transcode: false,
             __interface__: %{send_reply: &__MODULE__.send_reply/3}
 
   def send_reply(%{adapter: adapter, codec: codec} = stream, reply, opts) do
     # {:ok, data, _size} = reply |> codec.encode() |> GRPC.Message.to_data()
     data = codec.encode(reply)
+    IO.inspect(data, label: "#{__MODULE__}.send_reply data")
+    IO.inspect(stream.payload, label: "#{__MODULE__}.send_reply payload")
     adapter.send_reply(stream.payload, data, Keyword.put(opts, :codec, codec))
     stream
   end
