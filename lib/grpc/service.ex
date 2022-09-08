@@ -15,7 +15,7 @@ defmodule GRPC.Service do
 
   defmacro __using__(opts) do
     quote do
-      import GRPC.Service, only: [rpc: 3, stream: 1]
+      import GRPC.Service, only: [rpc: 4, stream: 1]
 
       Module.register_attribute(__MODULE__, :rpc_calls, accumulate: true)
       @before_compile GRPC.Service
@@ -32,9 +32,10 @@ defmodule GRPC.Service do
     end
   end
 
-  defmacro rpc(name, request, reply) do
+  defmacro rpc(name, request, reply, options) do
     quote do
-      @rpc_calls {unquote(name), unquote(wrap_stream(request)), unquote(wrap_stream(reply))}
+      @rpc_calls {unquote(name), unquote(wrap_stream(request)), unquote(wrap_stream(reply)),
+                  unquote(options)}
     end
   end
 
@@ -54,8 +55,8 @@ defmodule GRPC.Service do
     quote do: {unquote(param), false}
   end
 
-  def grpc_type({_, {_, false}, {_, false}}), do: :unary
-  def grpc_type({_, {_, true}, {_, false}}), do: :client_stream
-  def grpc_type({_, {_, false}, {_, true}}), do: :server_stream
-  def grpc_type({_, {_, true}, {_, true}}), do: :bidi_stream
+  def grpc_type({_, {_, false}, {_, false}, _}), do: :unary
+  def grpc_type({_, {_, true}, {_, false}, _}), do: :client_stream
+  def grpc_type({_, {_, false}, {_, true}, _}), do: :server_stream
+  def grpc_type({_, {_, true}, {_, true}, _}), do: :bidi_stream
 end

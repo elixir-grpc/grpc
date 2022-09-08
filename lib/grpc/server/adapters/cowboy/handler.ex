@@ -18,6 +18,10 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   def init(req, {endpoint, servers, opts} = state) do
     path = :cowboy_req.path(req)
 
+    Logger.info(fn ->
+      "path: #{path}"
+    end)
+
     with {:ok, server} <- find_server(servers, path),
          {:ok, codec} <- find_codec(req, server),
          # can be nil
@@ -51,37 +55,38 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       {:cowboy_loop, req, %{pid: pid, handling_timer: timer_ref, pending_reader: nil}}
     else
       {:error, error} ->
+        Logger.error(fn -> inspect(error) end)
         trailers = HTTP2.server_trailers(error.status, error.message)
         req = send_error_trailers(req, trailers)
         {:ok, req, state}
     end
   end
 
+  # TODO compile routes instead of dynamic dispatch to find which server has
+  # which route
   defp find_server(servers, path) do
-    case Map.fetch(servers, GRPC.Server.service_name(path)) do
-      s = {:ok, _} ->
-        s
-
-      _ ->
-        {:error, RPCError.exception(status: :unimplemented)}
+    case Enum.find(servers, fn {_name, server} -> server.service_name(path) != "" end) do
+      nil -> {:error, RPCError.exception(status: :unimplemented)}
+      {_, server} -> {:ok, server}
     end
   end
 
   defp find_codec(req, server) do
     req_content_type = :cowboy_req.header("content-type", req)
 
-    {:ok, subtype} = extract_subtype(req_content_type)
-    codec = Enum.find(server.__meta__(:codecs), nil, fn c -> c.name() == subtype end)
-
-    if codec do
+    with {:ok, subtype} <- extract_subtype(req_content_type),
+         codec when not is_nil(codec) <-
+           Enum.find(server.__meta__(:codecs), nil, fn c -> c.name() == subtype end) do
       {:ok, codec}
     else
-      # TODO: Send grpc-accept-encoding header
-      {:error,
-       RPCError.exception(
-         status: :unimplemented,
-         message: "No codec registered for content-type #{req_content_type}"
-       )}
+      err ->
+        Logger.error(fn -> inspect(err) end)
+
+        {:error,
+         RPCError.exception(
+           status: :unimplemented,
+           message: "No codec registered for content-type #{req_content_type}"
+         )}
     end
   end
 
@@ -444,6 +449,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
+  defp extract_subtype("application/json"), do: {:ok, "json"}
   defp extract_subtype("application/grpc"), do: {:ok, "proto"}
   defp extract_subtype("application/grpc+"), do: {:ok, "proto"}
   defp extract_subtype("application/grpc;"), do: {:ok, "proto"}

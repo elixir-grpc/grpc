@@ -34,6 +34,7 @@ defmodule GRPC.Server do
   require Logger
 
   alias GRPC.RPCError
+  alias GRPC.Server.HTTPTranscode
 
   @type rpc_req :: struct | Enumerable.t()
   @type rpc_return :: struct | any
@@ -43,10 +44,12 @@ defmodule GRPC.Server do
     quote bind_quoted: [opts: opts], location: :keep do
       service_mod = opts[:service]
       service_name = service_mod.__meta__(:name)
-      codecs = opts[:codecs] || [GRPC.Codec.Proto, GRPC.Codec.WebText]
+      codecs = opts[:codecs] || [GRPC.Codec.Proto, GRPC.Codec.WebText, GRPC.Codec.JSON]
       compressors = opts[:compressors] || []
+      http_transcode = opts[:http_transcode] || false
 
-      Enum.each(service_mod.__rpc_calls__, fn {name, _, _} = rpc ->
+      Enum.each(service_mod.__rpc_calls__, fn {name, _, _, options} = rpc ->
+        IO.inspect(options, pretty: true)
         func_name = name |> to_string |> Macro.underscore() |> String.to_atom()
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
@@ -64,10 +67,45 @@ defmodule GRPC.Server do
             unquote(func_name)
           )
         end
+
+        if http_transcode and Map.has_key?(options, :http) do
+          %{value: http_opts} = Map.fetch!(options, :http)
+
+          http_path = HTTPTranscode.path(http_opts)
+          http_method = HTTPTranscode.method(http_opts)
+
+          def __call_rpc__(unquote(http_path), stream) do
+            GRPC.Server.call(
+              unquote(service_mod),
+              %{
+                stream
+                | service_name: unquote(service_name),
+                  method_name: unquote(to_string(name)),
+                  grpc_type: unquote(grpc_type),
+                  http_method: unquote(http_method),
+                  http_transcode: unquote(http_transcode)
+              },
+              unquote(Macro.escape(put_elem(rpc, 0, func_name))),
+              unquote(func_name)
+            )
+          end
+
+          def service_name(unquote(http_path)) do
+            unquote(service_name)
+          end
+        end
+
+        def service_name(unquote(path)) do
+          unquote(service_name)
+        end
       end)
 
       def __call_rpc__(_, stream) do
         raise GRPC.RPCError, status: :unimplemented
+      end
+
+      def service_name(_) do
+        ""
       end
 
       def __meta__(:service), do: unquote(service_mod)
@@ -82,7 +120,7 @@ defmodule GRPC.Server do
   def call(
         _service_mod,
         stream,
-        {_, {req_mod, req_stream}, {res_mod, res_stream}} = rpc,
+        {_, {req_mod, req_stream}, {res_mod, res_stream}, _options} = rpc,
         func_name
       ) do
     request_id = generate_request_id()
@@ -114,6 +152,27 @@ defmodule GRPC.Server do
     else
       {:error, GRPC.RPCError.new(:unimplemented)}
     end
+  end
+
+  defp do_handle_request(
+         false,
+         res_stream,
+         %{
+           request_mod: req_mod,
+           codec: codec,
+           adapter: adapter,
+           payload: payload,
+           http_transcode: true
+         } = stream,
+         func_name
+       ) do
+    {:ok, data} = adapter.read_body(payload)
+    request = codec.decode(data, req_mod)
+    Logger.debug(fn ->
+      "http transcode request #{inspect(request)}"
+    end)
+
+    call_with_interceptors(res_stream, func_name, stream, request)
   end
 
   defp do_handle_request(
@@ -353,11 +412,11 @@ defmodule GRPC.Server do
   end
 
   @doc false
-  @spec service_name(String.t()) :: String.t()
-  def service_name(path) do
-    ["", name | _] = String.split(path, "/")
-    name
-  end
+  # @spec service_name(String.t()) :: String.t()
+  # def service_name(path) do
+  #   ["", name | _] = String.split(path, "/")
+  #   name
+  # end
 
   @doc false
   @spec servers_to_map(module() | [module()]) :: %{String.t() => [module()]}
