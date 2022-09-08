@@ -61,8 +61,6 @@ defmodule GRPC.Server.Stream do
   def send_reply(%{adapter: adapter, codec: codec} = stream, reply, opts) do
     # {:ok, data, _size} = reply |> codec.encode() |> GRPC.Message.to_data()
     data = codec.encode(reply)
-    IO.inspect(data, label: "#{__MODULE__}.send_reply data")
-    IO.inspect(stream.payload, label: "#{__MODULE__}.send_reply payload")
     adapter.send_reply(stream.payload, data, Keyword.put(opts, :codec, codec))
     stream
   end

@@ -49,7 +49,6 @@ defmodule GRPC.Server do
       http_transcode = opts[:http_transcode] || false
 
       Enum.each(service_mod.__rpc_calls__, fn {name, _, _, options} = rpc ->
-        IO.inspect(options, pretty: true)
         func_name = name |> to_string |> Macro.underscore() |> String.to_atom()
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
@@ -166,11 +165,9 @@ defmodule GRPC.Server do
          } = stream,
          func_name
        ) do
+        IO.inspect(res_stream, label: "do_handle_request")
     {:ok, data} = adapter.read_body(payload)
     request = codec.decode(data, req_mod)
-    Logger.debug(fn ->
-      "http transcode request #{inspect(request)}"
-    end)
 
     call_with_interceptors(res_stream, func_name, stream, request)
   end
