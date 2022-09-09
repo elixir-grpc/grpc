@@ -117,7 +117,8 @@ defmodule GRPC.Server.Adapters.Cowboy do
 
   @impl true
   def send_reply(%{pid: pid}, data, opts) do
-    Handler.stream_body(pid, data, opts, :nofin)
+    http_transcode = Keyword.get(opts, :http_transcode)
+    Handler.stream_body(pid, data, opts, :nofin, http_transcode)
   end
 
   @impl true

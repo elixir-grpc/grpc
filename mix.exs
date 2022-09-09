@@ -51,7 +51,7 @@ defmodule GRPC.Mixfile do
       {:gun, "~> 2.0.1", hex: :grpc_gun},
       {:jason, "~> 1.0", optional: true},
       {:cowlib, "~> 2.11"},
-      {:protobuf, github: "elixir-protobuf/protobuf", branch: "main", only: [:dev, :test]},
+      {:protobuf, github: "elixir-protobuf/protobuf", branch: "main"},
       {:ex_doc, "~> 0.28.0", only: :dev},
       {:dialyxir, "~> 1.1.0", only: [:dev, :test], runtime: false},
       {:googleapis,
