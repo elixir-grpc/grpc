@@ -119,8 +119,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     sync_call(pid, :read_body)
   end
 
-  def stream_body(pid, data, opts, is_fin) do
-    send(pid, {:stream_body, data, opts, is_fin})
+  def stream_body(pid, data, opts, is_fin, http_transcode \\ false) do
+    send(pid, {:stream_body, data, opts, is_fin, http_transcode})
   end
 
   def stream_reply(pid, status, headers) do
@@ -230,7 +230,15 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     {:ok, req, state}
   end
 
-  def info({:stream_body, data, opts, is_fin}, req, state) do
+  # Handle http/json transcoded response
+  def info({:stream_body, data, _opts, is_fin, _http_transcode = true}, req, state) do
+    # TODO Compress
+    req = check_sent_resp(req)
+    :cowboy_req.stream_body(data, is_fin, req)
+    {:ok, req, state}
+  end
+
+  def info({:stream_body, data, opts, is_fin, _}, req, state) do
     # If compressor exists, compress is true by default
     compressor =
       if opts[:compress] == false do
