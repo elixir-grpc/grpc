@@ -67,6 +67,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
 
     case GRPC.Message.get_message(buffer <> data) do
       {{_, message}, rest} ->
+        # TODO add code here to handle compressor headers
         response = codec.decode(message, res_mod)
         new_responses = [{:ok, response} | responses]
         new_state = %{state | buffer: rest, responses: new_responses}
