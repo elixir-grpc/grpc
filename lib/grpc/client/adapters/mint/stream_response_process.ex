@@ -114,8 +114,6 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
         {:noreply, state}
 
       %{responses: [response | rest], from: from} ->
-        IO.inspect(from, label: "caller")
-        IO.inspect(self(), label: "self")
         GenServer.reply(from, response)
         {:noreply, %{state | responses: rest, from: nil}}
     end

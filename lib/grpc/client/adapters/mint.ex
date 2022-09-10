@@ -38,32 +38,19 @@ defmodule GRPC.Client.Adapters.Mint do
 
   @impl true
   def send_request(
-        %{channel: %{adapter_payload: %{conn_pid: pid}}, path: path, server_stream: false} =
-          stream,
+        %{channel: %{adapter_payload: %{conn_pid: pid}}, path: path} = stream,
         message,
         opts
       )
       when is_pid(pid) do
     headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
     {:ok, data, _} = GRPC.Message.to_data(message, opts)
-    response = ConnectionProcess.request(pid, "POST", path, headers, data)
-    GRPC.Client.Stream.put_payload(stream, :response, response)
-  end
 
-  def send_request(
-        %{channel: %{adapter_payload: %{conn_pid: pid}}, path: path, server_stream: true} =
-          stream,
-        message,
-        opts
-      )
-      when is_pid(pid) do
-    headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
-    {:ok, data, _} = GRPC.Message.to_data(message, opts)
-    {:ok, stream_response_pid} = StreamResponseProcess.start_link(stream, opts[:return_headers] || false)
+    {:ok, stream_response_pid} =
+      StreamResponseProcess.start_link(stream, opts[:return_headers] || false)
 
     response =
       ConnectionProcess.request(pid, "POST", path, headers, data,
-        streamed_response: true,
         stream_response_pid: stream_response_pid
       )
 
@@ -79,6 +66,7 @@ defmodule GRPC.Client.Adapters.Mint do
       ) do
     with {:ok, headers} <- response do
       stream = StreamResponseProcess.build_stream(pid)
+
       case opts[:return_headers] do
         true -> {:ok, stream, headers}
         _any -> {:ok, stream}
@@ -86,23 +74,16 @@ defmodule GRPC.Client.Adapters.Mint do
     end
   end
 
-  def receive_data(
-        %{
-          response_mod: res_mod,
-          codec: codec,
-          accepted_compressors: accepted_compressors,
-          payload: %{response: response}
-        } = _stream,
-        opts
-      ) do
-    with {:ok, %{data: body, headers: headers}} <- response,
-         compressor <- get_compressor(headers, accepted_compressors),
-         body <- get_body(codec, body),
-         {:ok, msg} <- GRPC.Message.from_data(%{compressor: compressor}, body) do
-      if opts[:return_headers] do
-        {:ok, codec.decode(msg, res_mod), %{headers: headers}}
-      else
-        {:ok, codec.decode(msg, res_mod)}
+  def receive_data(%{payload: %{response: response, stream_response_pid: pid}}, opts) do
+    with {:ok, %{headers: headers}} <- response,
+         stream <- StreamResponseProcess.build_stream(pid),
+         responses <- Enum.into(stream, []),
+         :ok <- check_for_error(responses) do
+      {:ok, data} = Enum.find(responses, fn {status, _data} -> status == :ok end)
+
+      case opts[:return_headers] do
+        true -> {:ok, data, append_trailers(headers, responses)}
+        _any -> {:ok, data}
       end
     end
   end
@@ -126,17 +107,17 @@ defmodule GRPC.Client.Adapters.Mint do
   defp mint_scheme(%Channel{scheme: "https"} = _channel), do: :https
   defp mint_scheme(_channel), do: :http
 
-  defp get_compressor(%{"grpc-encoding" => encoding} = _headers, accepted_compressors) do
-    Enum.find(accepted_compressors, nil, fn c -> c.name() == encoding end)
+  def check_for_error(responses) do
+    error = Enum.find(responses, fn {status, _data} -> status == :error end)
+    if error == nil, do: :ok, else: error
   end
 
-  defp get_compressor(_headers, _accepted_compressors), do: nil
-
-  defp get_body(codec, body) do
-    if function_exported?(codec, :unpack_from_channel, 1) do
-      codec.unpack_from_channel(body)
-    else
-      body
+  defp append_trailers(headers, responses) do
+    responses
+    |> Enum.find(fn {status, _data} -> status == :trailers end)
+    |> case do
+      nil -> %{headers: headers}
+      {:trailers, trailers} -> %{headers: headers, trailers: trailers}
     end
   end
 end

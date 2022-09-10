@@ -53,7 +53,6 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
           |> State.update_conn(conn)
           |> State.put_in_ref(request_ref, %{
             from: from,
-            streamed_response: opts[:streamed_response] || false,
             stream_response_pid: opts[:stream_response_pid],
             done: false,
             response: %{}
@@ -86,67 +85,47 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   end
 
   defp process_response({:headers, request_ref, headers}, state) do
-    streamed_response? = State.steamed_response?(state, request_ref)
     empty_headers? = State.empty_headers?(state, request_ref)
 
-    # For server streamed connections, we wait until the response headers to reply the caller process.
-    # If we have headers set in state, it means that the response headers already arrived,
-    # so incoming headers message it's referring to trailers headers
-    cond do
-      streamed_response? and empty_headers? ->
+    case empty_headers? do
+      true ->
         new_state = State.update_response_headers(state, request_ref, headers)
-        response = State.get_response(state, request_ref)
+        response = State.get_response(new_state, request_ref)
 
-        state
+        new_state
         |> State.caller_process(request_ref)
         |> GenServer.reply({:ok, response})
 
         new_state
 
-      empty_headers? ->
-        State.update_response_headers(state, request_ref, headers)
-
-      streamed_response? ->
+      false ->
         state
         |> State.stream_response_pid(request_ref)
         |> StreamResponseProcess.consume(:trailers, headers)
 
         state
-
-      true ->
-        State.update_response_trailers(state, request_ref, headers)
     end
   end
 
   defp process_response({:data, request_ref, new_data}, state) do
-    if(State.steamed_response?(state, request_ref)) do
-      state
-      |> State.stream_response_pid(request_ref)
-      |> StreamResponseProcess.consume(:data, new_data)
+    state
+    |> State.stream_response_pid(request_ref)
+    |> StreamResponseProcess.consume(:data, new_data)
 
-      state
-    else
-      State.append_response_data(state, request_ref, new_data)
-    end
+    state
   end
 
   defp process_response({:done, request_ref}, state) do
-    if State.steamed_response?(state, request_ref) do
-      state
-      |> State.stream_response_pid(request_ref)
-      |> StreamResponseProcess.done()
+    state
+    |> State.stream_response_pid(request_ref)
+    |> StreamResponseProcess.done()
 
-      {_ref, new_state} = State.pop_ref(state, request_ref)
-      new_state
-    else
-      {%{response: response, from: from}, state} = State.pop_ref(state, request_ref)
-      GenServer.reply(from, {:ok, response})
-      state
-    end
+    {_ref, new_state} = State.pop_ref(state, request_ref)
+    new_state
   end
 
   @impl true
   def terminate(_reason, _state) do
-   :normal
+    :normal
   end
 end

@@ -47,7 +47,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess.State do
   end
 
   def get_response(state, ref) do
-    pop_in(state.requests[ref][:response])
+    state.requests[ref][:response]
   end
 
   def pop_ref(state, ref) do
