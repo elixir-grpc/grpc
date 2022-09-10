@@ -4,7 +4,7 @@ defmodule GRPC.Client.Adapters.Mint do
   """
 
   alias GRPC.{Channel, Credential}
-  alias __MODULE__.ConnectionProcess
+  alias GRPC.Client.Adapters.Mint.{ConnectionProcess, StreamResponseProcess}
 
   @behaviour GRPC.Client.Adapter
 
@@ -38,7 +38,7 @@ defmodule GRPC.Client.Adapters.Mint do
 
   @impl true
   def send_request(
-        %{channel: %{adapter_payload: %{conn_pid: pid}}, path: path, server_stream: stream?} =
+        %{channel: %{adapter_payload: %{conn_pid: pid}}, path: path, server_stream: false} =
           stream,
         message,
         opts
@@ -46,18 +46,42 @@ defmodule GRPC.Client.Adapters.Mint do
       when is_pid(pid) do
     headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
     {:ok, data, _} = GRPC.Message.to_data(message, opts)
-    {:ok, response} = ConnectionProcess.request(pid, "POST", path, headers, data, stream?)
+    response = ConnectionProcess.request(pid, "POST", path, headers, data)
     GRPC.Client.Stream.put_payload(stream, :response, response)
   end
 
+  def send_request(
+        %{channel: %{adapter_payload: %{conn_pid: pid}}, path: path, server_stream: true} =
+          stream,
+        message,
+        opts
+      )
+      when is_pid(pid) do
+    headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
+    {:ok, data, _} = GRPC.Message.to_data(message, opts)
+    {:ok, stream_response_pid} = StreamResponseProcess.start_link(stream, opts[:return_headers] || false)
+
+    response =
+      ConnectionProcess.request(pid, "POST", path, headers, data,
+        streamed_response: true,
+        stream_response_pid: stream_response_pid
+      )
+
+    stream
+    |> GRPC.Client.Stream.put_payload(:response, response)
+    |> GRPC.Client.Stream.put_payload(:stream_response_pid, stream_response_pid)
+  end
+
   @impl true
-  def receive_data(%{server_stream: true, payload: %{response: response}} = stream, opts) do
-    with {%{headers: headers}, request_ref} <- response,
-         stream_response <- build_response_stream(stream, request_ref) do
-      if(opts[:return_headers]) do
-        {:ok, stream_response, %{headers: headers}}
-      else
-        {:ok, stream_response}
+  def receive_data(
+        %{server_stream: true, payload: %{response: response, stream_response_pid: pid}},
+        opts
+      ) do
+    with {:ok, headers} <- response do
+      stream = StreamResponseProcess.build_stream(pid)
+      case opts[:return_headers] do
+        true -> {:ok, stream, headers}
+        _any -> {:ok, stream}
       end
     end
   end
@@ -69,13 +93,17 @@ defmodule GRPC.Client.Adapters.Mint do
           accepted_compressors: accepted_compressors,
           payload: %{response: response}
         } = _stream,
-        _opts
+        opts
       ) do
-    with %{data: body, headers: headers} <- response,
+    with {:ok, %{data: body, headers: headers}} <- response,
          compressor <- get_compressor(headers, accepted_compressors),
          body <- get_body(codec, body),
          {:ok, msg} <- GRPC.Message.from_data(%{compressor: compressor}, body) do
-      {:ok, codec.decode(msg, res_mod)}
+      if opts[:return_headers] do
+        {:ok, codec.decode(msg, res_mod), %{headers: headers}}
+      else
+        {:ok, codec.decode(msg, res_mod)}
+      end
     end
   end
 
@@ -109,61 +137,6 @@ defmodule GRPC.Client.Adapters.Mint do
       codec.unpack_from_channel(body)
     else
       body
-    end
-  end
-
-  defp build_response_stream(grpc_stream, request_ref) do
-    state = %{
-      buffer: <<>>,
-      done: false,
-      request_ref: request_ref,
-      grpc_stream: grpc_stream
-    }
-
-    Stream.unfold(state, fn s -> process_stream(s) end)
-  end
-
-  defp process_stream(%{buffer: <<>>, done: true}) do
-    nil
-  end
-
-  defp process_stream(%{done: true} = state) do
-    parse_message(state, "", true)
-  end
-
-  defp process_stream(
-         %{request_ref: ref, grpc_stream: %{channel: %{adapter_payload: %{conn_pid: pid}}}} =
-           state
-       ) do
-    case ConnectionProcess.process_stream_data(pid, ref) do
-      {nil, false = _done?} ->
-        Process.sleep(500)
-        process_stream(state)
-
-      {nil = _data, true = _done?} ->
-        parse_message(state, "", true)
-
-      {data, done?} ->
-        parse_message(state, data, done?)
-    end
-  end
-
-  defp parse_message(
-         %{buffer: buffer, grpc_stream: %{response_mod: res_mod, codec: codec}} = state,
-         data,
-         done?
-       ) do
-    case GRPC.Message.get_message(buffer <> data) do
-      {{_, message}, rest} ->
-        reply = codec.decode(message, res_mod)
-        new_state = %{state | buffer: rest, done: done?}
-        {{:ok, reply}, new_state}
-
-      _ ->
-        state
-        |> Map.put(:buffer, buffer <> data)
-        |> Map.put(:done, done?)
-        |> process_stream()
     end
   end
 end
