@@ -38,8 +38,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   @impl true
   def handle_call({:disconnect, :brutal}, _from, state) do
     # TODO add a code to if disconnect is brutal we just stop if is friendly we wait for pending requests
-    Mint.HTTP.close(state.conn)
-    {:stop, :normal, :ok, state}
+    {:stop, :normal, Mint.HTTP.close(state.conn), state}
   end
 
   def handle_call(
@@ -144,5 +143,10 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
       GenServer.reply(from, {:ok, response})
       state
     end
+  end
+
+  @impl true
+  def terminate(_reason, _state) do
+   :normal
   end
 end
