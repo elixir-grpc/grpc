@@ -1,4 +1,4 @@
-{:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Logger.Client], adapter: GRPC.Client.Adapters.Mint)
+{:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Logger.Client])
 
 {:ok, reply} =
   channel
