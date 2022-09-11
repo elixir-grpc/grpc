@@ -1,8 +1,8 @@
 defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   use GenServer
 
-  def start_link(stream, send_trailers?) do
-    GenServer.start_link(__MODULE__, {stream, send_trailers?})
+  def start_link(stream, send_headers_or_trailers?) do
+    GenServer.start_link(__MODULE__, {stream, send_headers_or_trailers?})
   end
 
   @doc """
@@ -30,7 +30,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   @doc """
   Cast a message to process to consume an incoming data or trailers
   """
-  @spec consume(pid(), :data | :trailers, binary() | Mint.Types.headers()) :: :ok
+  @spec consume(pid(), :data | :trailers | :headers, binary() | Mint.Types.headers()) :: :ok
   def consume(pid, :data, data) do
     GenServer.cast(pid, {:consume_response, {:data, data}})
   end
@@ -39,12 +39,16 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
     GenServer.cast(pid, {:consume_response, {:trailers, trailers}})
   end
 
+  def consume(pid, :headers, headers) do
+    GenServer.cast(pid, {:consume_response, {:headers, headers}})
+  end
+
   # Callbacks
 
-  def init({stream, send_trailers?}) do
+  def init({stream, send_headers_or_trailers?}) do
     state = %{
       grpc_stream: stream,
-      send_trailers: send_trailers?,
+      send_headers_or_trailers: send_headers_or_trailers?,
       buffer: <<>>,
       responses: [],
       done: false,
@@ -81,7 +85,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
 
   def handle_cast(
         {:consume_response, {:trailers, trailers}},
-        %{send_trailers: true, responses: responses} = state
+        %{send_headers_or_trailers: true, responses: responses} = state
       ) do
     new_responses = [get_trailers_response(trailers) | responses]
     {:noreply, %{state | responses: new_responses}, {:continue, :produce_response}}
@@ -89,13 +93,25 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
 
   def handle_cast(
         {:consume_response, {:trailers, trailers}},
-        %{send_trailers: false, responses: responses} = state
+        %{send_headers_or_trailers: false, responses: responses} = state
       ) do
     with {:errors, _rpc_error} = error <- get_trailers_response(trailers) do
       {:noreply, %{state | responses: [error | responses]}, {:continue, :produce_response}}
     else
       _any -> {:noreply, state, {:continue, :produce_response}}
     end
+  end
+
+  def handle_cast(
+        {:consume_response, {:headers, headers}},
+        %{send_headers_or_trailers: true, responses: responses} = state
+      ) do
+    {:noreply, %{state | responses: [{:headers, headers} | responses]},
+     {:continue, :produce_response}}
+  end
+
+  def handle_cast({:consume_response, {:headers, _headers}}, state) do
+    {:noreply, state, {:continue, :produce_response}}
   end
 
   def handle_cast({:consume_response, :done}, state) do

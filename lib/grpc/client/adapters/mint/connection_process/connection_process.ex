@@ -18,6 +18,10 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
     GenServer.call(pid, {:disconnect, :brutal})
   end
 
+  def stream_request_body(pid, request_ref, body) do
+    GenServer.call(pid, {:stream_body, request_ref, body})
+  end
+
   ## Callbacks
 
   @impl true
@@ -42,6 +46,30 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   end
 
   def handle_call(
+        {:request, method, path, headers, :stream, opts},
+        _from,
+        state
+      ) do
+    case Mint.HTTP.request(state.conn, method, path, headers, :stream) do
+      {:ok, conn, request_ref} ->
+        new_state =
+          state
+          |> State.update_conn(conn)
+          |> State.put_in_ref(request_ref, %{
+            stream_response_pid: opts[:stream_response_pid],
+            done: false,
+            response: %{}
+          })
+
+        {:reply, {:ok, %{request_ref: request_ref}}, new_state}
+
+      {:error, conn, reason} ->
+        new_state = State.update_conn(state, conn)
+        {:reply, {:error, reason}, new_state}
+    end
+  end
+
+  def handle_call(
         {:request, method, path, headers, body, opts},
         from,
         state
@@ -63,6 +91,16 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
       {:error, conn, reason} ->
         new_state = State.update_conn(state, conn)
         {:reply, {:error, reason}, new_state}
+    end
+  end
+
+  def handle_call({:stream_body, request_ref, body}, _from, state) do
+    case Mint.HTTP.stream_request_body(state.conn, request_ref, body) do
+      {:ok, conn} ->
+        {:reply, :ok, State.update_conn(state, conn)}
+
+      {:error, conn, error} ->
+        {:reply, {:error, error}, State.update_conn(state, conn)}
     end
   end
 
@@ -94,7 +132,15 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
 
         new_state
         |> State.caller_process(request_ref)
-        |> GenServer.reply({:ok, response})
+        |> case do
+          nil ->
+            new_state
+            |> State.stream_response_pid(request_ref)
+            |> StreamResponseProcess.consume(:headers, headers)
+
+          ref ->
+            GenServer.reply(ref, {:ok, response})
+        end
 
         new_state
 

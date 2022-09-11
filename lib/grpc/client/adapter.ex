@@ -22,4 +22,8 @@ defmodule GRPC.Client.Adapter do
   """
   @callback receive_data(stream :: Stream.t(), opts :: keyword()) ::
               GRPC.Stub.receive_data_return() | {:error, any()}
+
+  @callback send_headers(stream :: Stream.t(), opts :: keyword()) :: Stream.t()
+
+  @callback send_data(stream :: Stream.t(), message :: binary(), opts :: keyword()) :: Stream.t()
 end

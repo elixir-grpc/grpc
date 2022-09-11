@@ -43,7 +43,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess.State do
   end
 
   def caller_process(state, ref) do
-    state.requests[ref].from
+    state.requests[ref][:from]
   end
 
   def get_response(state, ref) do

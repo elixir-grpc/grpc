@@ -74,6 +74,23 @@ defmodule GRPC.Client.Adapters.Mint do
     end
   end
 
+  # for streamed requests
+  def receive_data(
+        %{payload: %{response: {:ok, %{request_ref: _ref}}, stream_response_pid: pid}},
+        opts
+      ) do
+    with stream <- StreamResponseProcess.build_stream(pid),
+         responses <- Enum.into(stream, []),
+         :ok <- check_for_error(responses) do
+      {:ok, data} = Enum.find(responses, fn {status, _data} -> status == :ok end)
+
+      case opts[:return_headers] do
+        true -> {:ok, data, get_headers(responses) |> append_trailers(responses)}
+        _any -> {:ok, data}
+      end
+    end
+  end
+
   def receive_data(%{payload: %{response: response, stream_response_pid: pid}}, opts) do
     with {:ok, %{headers: headers}} <- response,
          stream <- StreamResponseProcess.build_stream(pid),
@@ -86,6 +103,39 @@ defmodule GRPC.Client.Adapters.Mint do
         _any -> {:ok, data}
       end
     end
+  end
+
+  @impl true
+  def send_headers(%{channel: %{adapter_payload: %{conn_pid: pid}}, path: path} = stream, opts) do
+    headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
+
+    {:ok, stream_response_pid} =
+      StreamResponseProcess.start_link(stream, opts[:return_headers] || false)
+
+    response =
+      ConnectionProcess.request(pid, "POST", path, headers, :stream,
+        stream_response_pid: stream_response_pid
+      )
+
+    stream
+    |> GRPC.Client.Stream.put_payload(:response, response)
+    |> GRPC.Client.Stream.put_payload(:stream_response_pid, stream_response_pid)
+  end
+
+  @impl true
+  def send_data(
+        %{
+          channel: %{adapter_payload: %{conn_pid: pid}},
+          payload: %{response: {:ok, %{request_ref: request_ref}}}
+        } = stream,
+        message,
+        opts
+      ) do
+    {:ok, data, _} = GRPC.Message.to_data(message, opts)
+    :ok = ConnectionProcess.stream_request_body(pid, request_ref, data)
+    # TODO: check for trailer headers to be sent here
+    if opts[:send_end_stream], do: ConnectionProcess.stream_request_body(pid, request_ref, :eof)
+    stream
   end
 
   defp connect_opts(%Channel{scheme: "https"} = channel, opts) do
@@ -118,6 +168,15 @@ defmodule GRPC.Client.Adapters.Mint do
     |> case do
       nil -> %{headers: headers}
       {:trailers, trailers} -> %{headers: headers, trailers: trailers}
+    end
+  end
+
+  defp get_headers(responses) do
+    responses
+    |> Enum.find(fn {status, _data} -> status == :headers end)
+    |> case do
+      nil -> nil
+      {:headers, headers} -> headers
     end
   end
 end

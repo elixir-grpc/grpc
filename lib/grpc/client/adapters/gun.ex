@@ -107,6 +107,7 @@ defmodule GRPC.Client.Adapters.Gun do
     :gun.post(conn_pid, path, headers, data)
   end
 
+  @impl true
   def send_headers(
         %{channel: %{adapter_payload: %{conn_pid: conn_pid}}, path: path} = stream,
         opts
@@ -116,6 +117,7 @@ defmodule GRPC.Client.Adapters.Gun do
     GRPC.Client.Stream.put_payload(stream, :stream_ref, stream_ref)
   end
 
+  @impl true
   def send_data(%{channel: channel, payload: %{stream_ref: stream_ref}} = stream, message, opts) do
     conn_pid = channel.adapter_payload[:conn_pid]
     fin = if opts[:send_end_stream], do: :fin, else: :nofin
