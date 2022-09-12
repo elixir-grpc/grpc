@@ -34,7 +34,7 @@ defmodule GRPC.Server do
   require Logger
 
   alias GRPC.RPCError
-  alias GRPC.Server.HTTPTranscode
+  alias GRPC.Server.Transcode
 
   @type rpc_req :: struct | Enumerable.t()
   @type rpc_return :: struct | any
@@ -70,8 +70,8 @@ defmodule GRPC.Server do
         if http_transcode and Map.has_key?(options, :http) do
           %{value: http_opts} = Map.fetch!(options, :http)
 
-          http_path = HTTPTranscode.path(http_opts)
-          http_method = HTTPTranscode.method(http_opts)
+          http_path = Transcode.path(http_opts)
+          http_method = Transcode.method(http_opts)
 
           def __call_rpc__(unquote(http_path), stream) do
             GRPC.Server.call(
