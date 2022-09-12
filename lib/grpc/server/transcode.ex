@@ -1,4 +1,4 @@
-defmodule GRPC.Server.HTTPTranscode do
+defmodule GRPC.Server.Transcode do
   @spec path(term()) :: String.t()
   def path(%{pattern: {_method, path}}) do
     path
