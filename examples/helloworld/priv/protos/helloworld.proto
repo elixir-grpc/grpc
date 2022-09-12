@@ -45,3 +45,18 @@ message HelloReply {
   string message = 1;
   google.protobuf.Timestamp today = 2;
 }
+
+service Messaging {
+  rpc GetMessage(GetMessageRequest) returns (Message) {
+    option (google.api.http) = {
+        get: "/v1/{name=messages/*}"
+    };
+  }
+}
+
+message GetMessageRequest {
+  string name = 1; // Mapped to URL path.
+}
+message Message {
+  string text = 1; // The resource content.
+}
