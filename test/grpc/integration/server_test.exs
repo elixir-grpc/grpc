@@ -9,6 +9,16 @@ defmodule GRPC.Integration.ServerTest do
     end
   end
 
+  defmodule FeatureTranscodeServer do
+    use GRPC.Server,
+      service: RouteguideTranscode.RouteGuide.Service,
+      http_transcode: true
+
+    def get_feature(point, _stream) do
+      Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
+    end
+  end
+
   defmodule HelloServer do
     use GRPC.Server, service: Helloworld.Greeter.Service
 
@@ -240,5 +250,17 @@ defmodule GRPC.Integration.ServerTest do
       {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
       assert reply.message == "Hello, unauthenticated"
     end)
+  end
+
+  describe "http/json transcode" do
+    test "can transcode path params" do
+      run_server([FeatureTranscodeServer], fn port ->
+        {:ok, conn_pid} = :gun.open('localhost', port)
+        {:ok, conn_pid} = :gun.open('localhost', port)
+        stream_ref = :gun.get(conn_pid, "/v1/feature/1/2")
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+      end)
+    end
   end
 end
