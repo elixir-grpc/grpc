@@ -13,11 +13,11 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
   @spec init(
           map(),
-          state :: {endpoint :: atom(), server :: {String.t(), module()}, route :: String.t(), opts :: keyword()}
+          state ::
+            {endpoint :: atom(), server :: {String.t(), module()}, route :: String.t(),
+             opts :: keyword()}
         ) :: {:cowboy_loop, map(), map()}
   def init(req, {endpoint, {_name, server}, route, opts} = state) do
-    path = :cowboy_req.path(req)
-
     with {:ok, codec} <- find_codec(req, server),
          {:ok, compressor} <- find_compressor(req, server) do
       stream = %GRPC.Server.Stream{

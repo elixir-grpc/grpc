@@ -437,13 +437,6 @@ defmodule GRPC.Server do
   end
 
   @doc false
-  # @spec service_name(String.t()) :: String.t()
-  # def service_name(path) do
-  #   ["", name | _] = String.split(path, "/")
-  #   name
-  # end
-
-  @doc false
   @spec servers_to_map(module() | [module()]) :: %{String.t() => [module()]}
   def servers_to_map(servers) do
     Enum.reduce(List.wrap(servers), %{}, fn s, acc ->

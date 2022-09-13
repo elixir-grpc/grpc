@@ -186,13 +186,15 @@ defmodule GRPC.Server.Adapters.Cowboy do
   end
 
   defp build_route({:grpc, path}, endpoint, server, opts) do
-    {String.to_charlist(path), GRPC.Server.Adapters.Cowboy.Handler, {endpoint, server, path, Enum.into(opts, %{})}}
+    {String.to_charlist(path), GRPC.Server.Adapters.Cowboy.Handler,
+     {endpoint, server, path, Enum.into(opts, %{})}}
   end
 
   defp build_route({:http_transcode, spec}, endpoint, server, opts) do
     path = GRPC.Server.Transcode.to_path(spec)
 
-    {String.to_charlist(path), GRPC.Server.Adapters.Cowboy.Handler, {endpoint, server, path, Enum.into(opts, %{})}}
+    {String.to_charlist(path), GRPC.Server.Adapters.Cowboy.Handler,
+     {endpoint, server, path, Enum.into(opts, %{})}}
   end
 
   defp cowboy_start_args(endpoint, servers, port, opts) do
@@ -202,6 +204,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
     status_handler = Keyword.get(adapter_opts, :status_handler)
 
     handlers = build_handlers(endpoint, servers, opts)
+
     handlers =
       if status_handler do
         [status_handler | handlers]
