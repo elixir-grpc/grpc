@@ -165,7 +165,6 @@ defmodule GRPC.Server do
          } = stream,
          func_name
        ) do
-        IO.inspect(res_stream, label: "do_handle_request")
     {:ok, data} = adapter.read_body(payload)
     request = codec.decode(data, req_mod)
 

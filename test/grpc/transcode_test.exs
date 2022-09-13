@@ -1,6 +1,6 @@
 defmodule GRPC.TranscodeTest do
   use ExUnit.Case, async: true
-  alias GRPC.Server.HTTPTranscode, as: Transcode
+  alias GRPC.Server.Transcode
 
   describe "build_route/1" do
     test "returns a route with {http_method, route} based on the http rule" do
@@ -143,6 +143,4 @@ defmodule GRPC.TranscodeTest do
   defp build_simple_rule(method, pattern) do
     Google.Api.HttpRule.new(pattern: {method, pattern})
   end
-
-  # rule = Google.Api.HttpRule.new(pattern: {:get, "/v1/{name=messages/*}"})
 end
