@@ -13,17 +13,12 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
   @spec init(
           map(),
-          state :: {endpoint :: atom(), servers :: %{String.t() => [module()]}, opts :: keyword()}
+          state :: {endpoint :: atom(), server :: {String.t(), module()}, route :: String.t(), opts :: keyword()}
         ) :: {:cowboy_loop, map(), map()}
-  def init(req, {endpoint, servers, opts} = state) do
+  def init(req, {endpoint, {_name, server}, route, opts} = state) do
     path = :cowboy_req.path(req)
 
-    Logger.info(fn ->
-      "path: #{path}"
-    end)
-
-    with {:ok, server} <- find_server(servers, path),
-         {:ok, codec} <- find_codec(req, server),
+    with {:ok, codec} <- find_codec(req, server),
          # can be nil
          {:ok, compressor} <- find_compressor(req, server) do
       stream = %GRPC.Server.Stream{
@@ -36,7 +31,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         compressor: compressor
       }
 
-      pid = spawn_link(__MODULE__, :call_rpc, [server, path, stream])
+      pid = spawn_link(__MODULE__, :call_rpc, [server, route, stream])
       Process.flag(:trap_exit, true)
 
       req = :cowboy_req.set_resp_headers(HTTP2.server_headers(stream), req)
@@ -59,15 +54,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         trailers = HTTP2.server_trailers(error.status, error.message)
         req = send_error_trailers(req, trailers)
         {:ok, req, state}
-    end
-  end
-
-  # TODO compile routes instead of dynamic dispatch to find which server has
-  # which route
-  defp find_server(servers, path) do
-    case Enum.find(servers, fn {_name, server} -> server.service_name(path) != "" end) do
-      nil -> {:error, RPCError.exception(status: :unimplemented)}
-      {_, server} -> {:ok, server}
     end
   end
 

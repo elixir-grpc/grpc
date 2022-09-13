@@ -48,6 +48,22 @@ defmodule GRPC.Server do
       compressors = opts[:compressors] || []
       http_transcode = opts[:http_transcode] || false
 
+      routes =
+        for {name, _, _, options} <- service_mod.__rpc_calls__, reduce: [] do
+          acc ->
+            path = "/#{service_name}/#{name}"
+
+            http_paths =
+              if http_transcode and Map.has_key?(options, :http) do
+                %{value: http_opts} = Map.fetch!(options, :http)
+                [{:http_transcode, Transcode.build_route(http_opts)}]
+              else
+                []
+              end
+
+            http_paths ++ [{:grpc, path} | acc]
+        end
+
       Enum.each(service_mod.__rpc_calls__, fn {name, _, _, options} = rpc ->
         func_name = name |> to_string |> Macro.underscore() |> String.to_atom()
         path = "/#{service_name}/#{name}"
@@ -68,10 +84,9 @@ defmodule GRPC.Server do
         end
 
         if http_transcode and Map.has_key?(options, :http) do
-          %{value: http_opts} = Map.fetch!(options, :http)
-
-          http_path = Transcode.path(http_opts)
-          http_method = Transcode.method(http_opts)
+          %{value: http_rule} = Map.fetch!(options, :http)
+          {http_method, _} = spec = Transcode.build_route(http_rule)
+          http_path = Transcode.to_path(spec)
 
           def __call_rpc__(unquote(http_path), stream) do
             GRPC.Server.call(
@@ -110,6 +125,7 @@ defmodule GRPC.Server do
       def __meta__(:service), do: unquote(service_mod)
       def __meta__(:codecs), do: unquote(codecs)
       def __meta__(:compressors), do: unquote(compressors)
+      def __meta__(:routes), do: unquote(routes)
     end
   end
 
@@ -356,7 +372,11 @@ defmodule GRPC.Server do
       iex> GRPC.Server.send_reply(stream, reply)
   """
   @spec send_reply(GRPC.Server.Stream.t(), struct()) :: GRPC.Server.Stream.t()
-  def send_reply(%{__interface__: interface, http_transcode: transcode} = stream, reply, opts \\ []) do
+  def send_reply(
+        %{__interface__: interface, http_transcode: transcode} = stream,
+        reply,
+        opts \\ []
+      ) do
     opts = Keyword.put(opts, :http_transcode, transcode)
     interface[:send_reply].(stream, reply, opts)
   end

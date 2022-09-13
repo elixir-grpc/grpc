@@ -154,20 +154,35 @@ defmodule GRPC.Server.Adapters.Cowboy do
     Handler.set_compressor(pid, compressor)
   end
 
+  defp build_handlers(endpoint, servers, opts) do
+    Enum.flat_map(servers, fn {_name, server_mod} = server ->
+      routes = server_mod.__meta__(:routes)
+      Enum.map(routes, &build_route(&1, endpoint, server, opts))
+    end)
+  end
+
+  defp build_route({:grpc, path}, endpoint, server, opts) do
+    {String.to_charlist(path), GRPC.Server.Adapters.Cowboy.Handler, {endpoint, server, path, Enum.into(opts, %{})}}
+  end
+
+  defp build_route({:http_transcode, spec}, endpoint, server, opts) do
+    path = GRPC.Server.Transcode.to_path(spec)
+
+    {String.to_charlist(path), GRPC.Server.Adapters.Cowboy.Handler, {endpoint, server, path, Enum.into(opts, %{})}}
+  end
+
   defp cowboy_start_args(endpoint, servers, port, opts) do
     # Custom handler to be able to listen in the same port, more info:
     # https://github.com/containous/traefik/issues/6211
     {adapter_opts, opts} = Keyword.pop(opts, :adapter_opts, [])
     status_handler = Keyword.get(adapter_opts, :status_handler)
 
+    handlers = build_handlers(endpoint, servers, opts)
     handlers =
       if status_handler do
-        [
-          status_handler,
-          {:_, GRPC.Server.Adapters.Cowboy.Handler, {endpoint, servers, Enum.into(opts, %{})}}
-        ]
+        [status_handler | handlers]
       else
-        [{:_, GRPC.Server.Adapters.Cowboy.Handler, {endpoint, servers, Enum.into(opts, %{})}}]
+        handlers
       end
 
     dispatch = :cowboy_router.compile([{:_, handlers}])
