@@ -108,7 +108,7 @@ defmodule GRPC.Endpoint do
     |> List.flatten()
   end
 
-  defp has_reflection_disabled?() do
+  defp reflection_enabled?() do
     Application.get_env(:grpc, :reflection_disabled, false) ||
       convert!(System.get_env("GRPC_REFLECTION_DISABLED"))
   end
