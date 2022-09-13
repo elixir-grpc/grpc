@@ -150,6 +150,14 @@ defmodule GRPC.Server.Adapters.Cowboy do
     Handler.get_cert(pid)
   end
 
+  def get_qs(%{pid: pid}) do
+    Handler.get_qs(pid)
+  end
+
+  def get_bindings(%{pid: pid}) do
+    Handler.get_bindings(pid)
+  end
+
   def set_compressor(%{pid: pid}, compressor) do
     Handler.set_compressor(pid, compressor)
   end
