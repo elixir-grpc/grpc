@@ -95,6 +95,7 @@ defmodule GRPC.Mixfile do
       end
     end)
   end
+
   # https://github.com/elixir-protobuf/protobuf/blob/cdf3acc53f619866b4921b8216d2531da52ceba7/mix.exs#L140
   defp gen_bootstrap_protos(_args) do
     proto_src = Mix.Project.deps_paths().googleapis
@@ -117,7 +118,7 @@ defmodule GRPC.Mixfile do
 
     case Mix.shell().cmd(Enum.join(args, " ")) do
       0 -> Mix.Task.rerun("format", [Path.join([elixir_out, "**", "*.pb.ex"])])
-      other ->  Mix.raise("'protoc' exited with non-zero status: #{other}")
+      other -> Mix.raise("'protoc' exited with non-zero status: #{other}")
     end
   end
 end
