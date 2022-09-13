@@ -94,16 +94,11 @@ defmodule GRPC.Endpoint do
     server_interceptors(tail, acc)
   end
 
-  defp parse_servers(servers, false) do
-    servers = [{GRPC.Reflection.Service, %{}}] ++ servers
-
-    servers
-    |> Enum.map(fn {server, _} -> server end)
-    |> List.flatten()
-  end
-
-  defp parse_servers(servers, true) do
-    servers
+  defp parse_servers(servers) do
+    case reflection_enabled?() do
+      true -> [{GRPC.Reflection.Service, %{}} | servers]
+      false -> servers
+    end
     |> Enum.map(fn {server, _} -> server end)
     |> List.flatten()
   end
