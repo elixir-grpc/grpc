@@ -9,6 +9,19 @@ defmodule GRPC.Server.Transcode do
     method
   end
 
+  @spec to_path(term()) :: String.t()
+  def to_path({method, {_bindings, segments}} = _spec) do
+    match =
+      segments
+      |> Enum.map(&segment_to_string/1)
+      |> Enum.join("/")
+
+    "/" <> match
+  end
+
+  defp segment_to_string({binding, _}) when is_atom(binding), do: ":#{Atom.to_string(binding)}"
+  defp segment_to_string(segment), do: segment
+
   @doc """
   https://cloud.google.com/endpoints/docs/grpc-service-config/reference/rpc/google.api#google.api.HttpRule
 
@@ -91,7 +104,6 @@ defmodule GRPC.Server.Transcode do
          params,
          segments
        ) do
-
     {variable, _} = param = field_path(lit)
     # assign = field_path(assign)
 
@@ -107,5 +119,4 @@ defmodule GRPC.Server.Transcode do
     [root | path] = String.split(identifier, ".")
     {String.to_atom(root), path}
   end
-
 end

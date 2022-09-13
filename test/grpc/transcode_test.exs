@@ -2,13 +2,23 @@ defmodule GRPC.TranscodeTest do
   use ExUnit.Case, async: true
   alias GRPC.Server.Transcode
 
-  describe "build_route/1" do
-    test "returns a route with {http_method, route} based on the http rule" do
-      rule = build_simple_rule(:get, "/v1/messages/{message_id}")
-      assert {:get, {params, segments}} = Transcode.build_route(rule)
-      assert [message_id: []] == params
-      assert ["v1", "messages", {:message_id, []}] = segments
-    end
+  test "build_route/1 returns a route with {http_method, route} based on the http rule" do
+    rule = build_simple_rule(:get, "/v1/messages/{message_id}")
+    assert {:get, {params, segments}} = Transcode.build_route(rule)
+    assert [message_id: []] == params
+    assert ["v1", "messages", {:message_id, []}] = segments
+  end
+
+  test "to_path/1 returns path segments as a string match" do
+    rule = build_simple_rule(:get, "/v1/messages/{message_id}")
+    assert spec = Transcode.build_route(rule)
+    assert "/v1/messages/:message_id" = Transcode.to_path(spec)
+  end
+
+  test "to_path/1 returns path segments as a string when there's multiple bindings" do
+    rule = build_simple_rule(:get, "/v1/users/{user_id}/messages/{message_id}")
+    assert spec = Transcode.build_route(rule)
+    assert "/v1/users/:user_id/messages/:message_id" = Transcode.to_path(spec)
   end
 
   describe "tokenize/2" do
