@@ -244,7 +244,7 @@ defmodule GRPC.Stub do
   """
   @spec call(atom(), tuple(), GRPC.Client.Stream.t(), struct() | nil, keyword()) :: rpc_return
   def call(_service_mod, rpc, %{channel: channel} = stream, request, opts) do
-    {_, {req_mod, req_stream}, {res_mod, response_stream}} = rpc
+    {_, {req_mod, req_stream}, {res_mod, response_stream}, _rpc_options} = rpc
 
     stream = %{stream | request_mod: req_mod, response_mod: res_mod}
 
