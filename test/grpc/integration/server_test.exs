@@ -255,11 +255,25 @@ defmodule GRPC.Integration.ServerTest do
   describe "http/json transcode" do
     test "can transcode path params" do
       run_server([FeatureTranscodeServer], fn port ->
+        latitude = 10
+        longitude = 20
+
         {:ok, conn_pid} = :gun.open('localhost', port)
-        {:ok, conn_pid} = :gun.open('localhost', port)
-        stream_ref = :gun.get(conn_pid, "/v1/feature/1/2")
+
+        stream_ref =
+          :gun.get(conn_pid, "/v1/feature/#{latitude}/#{longitude}", [
+            {"content-type", "application/json"}
+          ])
 
         assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+
+        assert %{
+                 "location" => %{"latitude" => ^latitude, "longitude" => ^longitude},
+                 "name" => name
+               } = Jason.decode!(body)
+
+        assert name == "#{latitude},#{longitude}"
       end)
     end
   end

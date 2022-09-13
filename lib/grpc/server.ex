@@ -182,9 +182,17 @@ defmodule GRPC.Server do
          func_name
        ) do
     {:ok, data} = adapter.read_body(payload)
+    bindings = adapter.get_bindings(payload)
+    qs = adapter.get_qs(payload)
     request = codec.decode(data, req_mod)
 
-    call_with_interceptors(res_stream, func_name, stream, request)
+    case Transcode.map_request(request, bindings, qs, req_mod) do
+      {:ok, request} ->
+        call_with_interceptors(res_stream, func_name, stream, request)
+
+      resp = {:error, _} ->
+        resp
+    end
   end
 
   defp do_handle_request(

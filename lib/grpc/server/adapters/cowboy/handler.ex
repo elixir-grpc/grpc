@@ -19,7 +19,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     path = :cowboy_req.path(req)
 
     with {:ok, codec} <- find_codec(req, server),
-         # can be nil
          {:ok, compressor} <- find_compressor(req, server) do
       stream = %GRPC.Server.Stream{
         server: server,
@@ -141,6 +140,14 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     sync_call(pid, :get_cert)
   end
 
+  def get_qs(pid) do
+    sync_call(pid, :get_qs)
+  end
+
+  def get_bindings(pid) do
+    sync_call(pid, :get_bindings)
+  end
+
   defp sync_call(pid, key) do
     ref = make_ref()
     send(pid, {key, ref, self()})
@@ -213,6 +220,18 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   def info({:get_cert, ref, pid}, req, state) do
     peer = :cowboy_req.cert(req)
     send(pid, {ref, peer})
+    {:ok, req, state}
+  end
+
+  def info({:get_qs, ref, pid}, req, state) do
+    qs = :cowboy_req.qs(req)
+    send(pid, {ref, qs})
+    {:ok, req, state}
+  end
+
+  def info({:get_bindings, ref, pid}, req, state) do
+    bindings = :cowboy_req.bindings(req)
+    send(pid, {ref, bindings})
     {:ok, req, state}
   end
 

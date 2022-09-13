@@ -9,6 +9,11 @@ defmodule GRPC.Codec.JSON do
     Protobuf.JSON.encode!(struct)
   end
 
+
+  def decode(<<>>, module) do
+    struct(module, [])
+  end
+
   def decode(binary, module) do
     Protobuf.JSON.decode!(binary, module)
   end

@@ -1,4 +1,14 @@
 defmodule GRPC.Server.Transcode do
+
+  @spec map_request(map(), map(), String.t(), module()) :: {:ok, struct()} | {:error, term()}
+  def map_request(body_request, path_bindings, _query_string, req_mod) do
+    path_bindings = Map.new(path_bindings, fn {k, v} -> {to_string(k), v} end)
+
+    with {:ok, path_request} <- Protobuf.JSON.from_decoded(path_bindings, req_mod) do
+      {:ok, Map.merge(body_request, path_request)}
+    end
+  end
+
   @spec path(term()) :: String.t()
   def path(%{pattern: {_method, path}}) do
     path
