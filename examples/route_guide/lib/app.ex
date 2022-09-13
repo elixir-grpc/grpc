@@ -15,12 +15,13 @@ defmodule Routeguide.App do
   end
 
   defp start_args do
+    opts = [endpoint: Routeguide.Endpoint, port: 10000, start_server: true]
+
     if System.get_env("TLS") do
       cred = GRPC.Credential.new(ssl: [certfile: @cert_path, keyfile: @key_path])
-      IO.inspect(cred)
-      {Routeguide.Endpoint, 10000, cred: cred}
+      Keyword.put(opts, :cred, cred)
     else
-      {Routeguide.Endpoint, 10000}
+      opts
     end
   end
 end

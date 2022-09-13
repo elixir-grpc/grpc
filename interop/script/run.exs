@@ -1,5 +1,5 @@
 {options, _, _} = OptionParser.parse(System.argv(), strict: [rounds: :integer, concurrency: :integer, port: :integer])
-rounds = Keyword.get(options, :rounds) || 100
+rounds = Keyword.get(options, :rounds) || 20
 max_concurrency = System.schedulers_online()
 concurrency = Keyword.get(options, :concurrency) || max_concurrency
 port = Keyword.get(options, :port) || 0
@@ -10,15 +10,16 @@ require Logger
 
 Logger.configure(level: level)
 
-Logger.warn("Rounds: #{rounds}; concurrency: #{concurrency}; port: #{port}")
+Logger.info("Rounds: #{rounds}; concurrency: #{concurrency}; port: #{port}")
 
 alias Interop.Client
 
 {:ok, _pid, port} = GRPC.Server.start_endpoint(Interop.Endpoint, port)
 
-stream = Task.async_stream(1..concurrency, fn _cli ->
+1..concurrency
+|> Task.async_stream(fn _cli ->
   ch = Client.connect("127.0.0.1", port, interceptors: [GRPCPrometheus.ClientInterceptor, GRPC.Logger.Client])
-  
+
   for _ <- 1..rounds do
     Client.empty_unary!(ch)
     Client.cacheable_unary!(ch)
@@ -41,11 +42,7 @@ stream = Task.async_stream(1..concurrency, fn _cli ->
   end
   :ok
 end, max_concurrency: concurrency, ordered: false, timeout: :infinity)
-
-Enum.map(stream, fn result ->
-  result
-end)
-|> IO.inspect
+|> Enum.to_list()
 
 # defmodule Helper do
 #   def flush() do
@@ -60,5 +57,5 @@ end)
 # end
 # Helper.flush()
 
-Logger.warn("Succeed!")
+Logger.info("Succeed!")
 :ok = GRPC.Server.stop_endpoint(Interop.Endpoint)

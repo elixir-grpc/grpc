@@ -8,8 +8,12 @@ defmodule GRPC.Transport.HTTP2 do
 
   require Logger
 
+  def server_headers(%{codec: GRPC.Codec.WebText = codec}) do
+    %{"content-type" => "application/grpc-web-#{codec.name()}"}
+  end
+
   def server_headers(%{codec: codec}) do
-    %{"content-type" => "application/grpc+#{codec.name}"}
+    %{"content-type" => "application/grpc+#{codec.name()}"}
   end
 
   @spec server_trailers(integer, String.t()) :: map
@@ -23,8 +27,8 @@ defmodule GRPC.Transport.HTTP2 do
   @doc """
   Now we may not need this because gun already handles the pseudo headers.
   """
-  @spec client_headers(GRPC.Client.Stream.t(), map) :: [{String.t(), String.t()}]
-  def client_headers(%{channel: channel, path: path} = s, opts \\ %{}) do
+  @spec client_headers(GRPC.Client.Stream.t(), keyword()) :: [{String.t(), String.t()}]
+  def client_headers(%{channel: channel, path: path} = s, opts \\ []) do
     [
       {":method", "POST"},
       {":scheme", channel.scheme},
@@ -33,8 +37,10 @@ defmodule GRPC.Transport.HTTP2 do
     ] ++ client_headers_without_reserved(s, opts)
   end
 
-  @spec client_headers_without_reserved(GRPC.Client.Stream.t(), map) :: [{String.t(), String.t()}]
-  def client_headers_without_reserved(%{codec: codec} = stream, opts \\ %{}) do
+  @spec client_headers_without_reserved(GRPC.Client.Stream.t(), keyword()) :: [
+          {String.t(), String.t()}
+        ]
+  def client_headers_without_reserved(%{codec: codec} = stream, opts \\ []) do
     [
       # It seems only gRPC implemenations only support "application/grpc", so we support :content_type now.
       {"content-type", content_type(opts[:content_type], codec)},
@@ -55,15 +61,11 @@ defmodule GRPC.Transport.HTTP2 do
 
   defp content_type(custom, _codec) when is_binary(custom), do: custom
 
-  defp content_type(_, codec) do
-    # Some gRPC implementations don't support application/grpc+xyz,
-    # to avoid this kind of trouble, use application/grpc by default
-    if codec == GRPC.Codec.Proto do
-      "application/grpc"
-    else
-      "application/grpc+#{codec.name}"
-    end
-  end
+  # Some gRPC implementations don't support application/grpc+xyz,
+  # to avoid this kind of trouble, use application/grpc by default
+  defp content_type(_, GRPC.Codec.Proto), do: "application/grpc"
+  defp content_type(_, codec = GRPC.Codec.WebText), do: "application/grpc-web-#{codec.name()}"
+  defp content_type(_, codec), do: "application/grpc+#{codec.name()}"
 
   def extract_metadata(headers) do
     headers

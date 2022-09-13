@@ -43,7 +43,7 @@ defmodule GRPC.Server do
     quote bind_quoted: [opts: opts], location: :keep do
       service_mod = opts[:service]
       service_name = service_mod.__meta__(:name)
-      codecs = opts[:codecs] || [GRPC.Codec.Proto]
+      codecs = opts[:codecs] || [GRPC.Codec.Proto, GRPC.Codec.WebText]
       compressors = opts[:compressors] || []
 
       Enum.each(service_mod.__rpc_calls__, fn {name, _, _} = rpc ->
@@ -124,7 +124,14 @@ defmodule GRPC.Server do
        ) do
     {:ok, data} = adapter.read_body(payload)
 
-    case GRPC.Message.from_data(stream, data) do
+    body =
+      if function_exported?(codec, :unpack_from_channel, 1) do
+        codec.unpack_from_channel(data)
+      else
+        data
+      end
+
+    case GRPC.Message.from_data(stream, body) do
       {:ok, message} ->
         request = codec.decode(message, req_mod)
 
