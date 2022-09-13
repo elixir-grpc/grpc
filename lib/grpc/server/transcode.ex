@@ -1,5 +1,4 @@
 defmodule GRPC.Server.Transcode do
-
   @spec map_request(map(), map(), String.t(), module()) :: {:ok, struct()} | {:error, term()}
   def map_request(body_request, path_bindings, _query_string, req_mod) do
     path_bindings = Map.new(path_bindings, fn {k, v} -> {to_string(k), v} end)
@@ -9,18 +8,8 @@ defmodule GRPC.Server.Transcode do
     end
   end
 
-  @spec path(term()) :: String.t()
-  def path(%{pattern: {_method, path}}) do
-    path
-  end
-
-  @spec method(term()) :: String.t()
-  def method(%{pattern: {method, _path}}) do
-    method
-  end
-
   @spec to_path(term()) :: String.t()
-  def to_path({method, {_bindings, segments}} = _spec) do
+  def to_path({_method, {_bindings, segments}} = _spec) do
     match =
       segments
       |> Enum.map(&segment_to_string/1)
@@ -32,16 +21,15 @@ defmodule GRPC.Server.Transcode do
   defp segment_to_string({binding, _}) when is_atom(binding), do: ":#{Atom.to_string(binding)}"
   defp segment_to_string(segment), do: segment
 
-  @doc """
-  https://cloud.google.com/endpoints/docs/grpc-service-config/reference/rpc/google.api#google.api.HttpRule
+  # https://cloud.google.com/endpoints/docs/grpc-service-config/reference/rpc/google.api#google.api.HttpRule
 
-  Template = "/" Segments [ Verb ] ;
-  Segments = Segment { "/" Segment } ;
-  Segment  = "*" | "**" | LITERAL | Variable ;
-  Variable = "{" FieldPath [ "=" Segments ] "}" ;
-  FieldPath = IDENT { "." IDENT } ;
-  Verb     = ":" LITERAL ;
-  """
+  # Template = "/" Segments [ Verb ] ;
+  # Segments = Segment { "/" Segment } ;
+  # Segment  = "*" | "**" | LITERAL | Variable ;
+  # Variable = "{" FieldPath [ "=" Segments ] "}" ;
+  # FieldPath = IDENT { "." IDENT } ;
+  # Verb     = ":" LITERAL ;
+  #
   @spec build_route(term()) :: tuple()
   def build_route(%Google.Api.HttpRule{pattern: {method, path}}) do
     route =
@@ -71,7 +59,7 @@ defmodule GRPC.Server.Transcode do
   end
 
   defp do_tokenize(<<h, _::binary>> = rest, acc) when h in @terminals do
-    {{:literal, acc, []}, rest}
+    {{:identifier, acc, []}, rest}
   end
 
   defp do_tokenize(<<h, t::binary>>, acc)
@@ -80,7 +68,7 @@ defmodule GRPC.Server.Transcode do
   end
 
   defp do_tokenize(<<>>, acc) do
-    {{:literal, acc, []}, <<>>}
+    {{:identifier, acc, []}, <<>>}
   end
 
   @spec parse(list(tuple()), list(), list()) :: list()
@@ -96,8 +84,8 @@ defmodule GRPC.Server.Transcode do
     parse(rest, params, [{:_, []} | segments])
   end
 
-  def parse([{:literal, literal, _} | rest], params, segments) do
-    parse(rest, params, [literal | segments])
+  def parse([{:identifier, identifier, _} | rest], params, segments) do
+    parse(rest, params, [identifier | segments])
   end
 
   def parse([{:"{", _} | rest], params, segments) do
@@ -110,18 +98,18 @@ defmodule GRPC.Server.Transcode do
   end
 
   defp parse_binding(
-         [{:literal, lit, _}, {:=, _}, {:literal, assign, _} = a | rest],
+         [{:identifier, id, _}, {:=, _}, {:identifier, assign, _} | rest],
          params,
          segments
        ) do
-    {variable, _} = param = field_path(lit)
+    {variable, _} = param = field_path(id)
     # assign = field_path(assign)
 
     parse_binding(rest, [param | params], [{variable, [assign]} | segments])
   end
 
-  defp parse_binding([{:literal, lit, []} | rest], params, segments) do
-    {variable, _} = param = field_path(lit)
+  defp parse_binding([{:identifier, id, []} | rest], params, segments) do
+    {variable, _} = param = field_path(id)
     parse_binding(rest, [param | params], [{variable, []} | segments])
   end
 

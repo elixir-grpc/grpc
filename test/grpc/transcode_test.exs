@@ -25,16 +25,16 @@ defmodule GRPC.TranscodeTest do
     test "can tokenize simple paths" do
       assert [{:/, []}] = Transcode.tokenize("/")
 
-      assert [{:/, []}, {:literal, "v1", []}, {:/, []}, {:literal, "messages", []}] =
+      assert [{:/, []}, {:identifier, "v1", []}, {:/, []}, {:identifier, "messages", []}] =
                Transcode.tokenize("/v1/messages")
     end
 
     test "can tokenize simple paths with wildcards" do
       assert [
                {:/, []},
-               {:literal, "v1", []},
+               {:identifier, "v1", []},
                {:/, []},
-               {:literal, "messages", []},
+               {:identifier, "messages", []},
                {:/, []},
                {:*, []}
              ] == Transcode.tokenize("/v1/messages/*")
@@ -43,12 +43,12 @@ defmodule GRPC.TranscodeTest do
     test "can tokenize simple variables" do
       assert [
                {:/, []},
-               {:literal, "v1", []},
+               {:identifier, "v1", []},
                {:/, []},
-               {:literal, "messages", []},
+               {:identifier, "messages", []},
                {:/, []},
                {:"{", []},
-               {:literal, "message_id", []},
+               {:identifier, "message_id", []},
                {:"}", []}
              ] == Transcode.tokenize("/v1/messages/{message_id}")
     end
@@ -56,12 +56,12 @@ defmodule GRPC.TranscodeTest do
     test "can tokenize variable assignments in bindings" do
       assert [
                {:/, []},
-               {:literal, "v1", []},
+               {:identifier, "v1", []},
                {:/, []},
                {:"{", []},
-               {:literal, "name", []},
+               {:identifier, "name", []},
                {:=, []},
-               {:literal, "messages", []},
+               {:identifier, "messages", []},
                {:"}", []}
              ] == Transcode.tokenize("/v1/{name=messages}")
     end
@@ -69,16 +69,16 @@ defmodule GRPC.TranscodeTest do
     test "can tokenize field paths in bindings" do
       assert [
                {:/, []},
-               {:literal, "v1", []},
+               {:identifier, "v1", []},
                {:/, []},
-               {:literal, "messages", []},
+               {:identifier, "messages", []},
                {:/, []},
                {:"{", []},
-               {:literal, "message_id", []},
+               {:identifier, "message_id", []},
                {:"}", []},
                {:/, []},
                {:"{", []},
-               {:literal, "sub.subfield", []},
+               {:identifier, "sub.subfield", []},
                {:"}", []}
              ] == Transcode.tokenize("/v1/messages/{message_id}/{sub.subfield}")
     end
@@ -92,7 +92,7 @@ defmodule GRPC.TranscodeTest do
                |> Transcode.parse([], [])
     end
 
-    test "can parse paths with literals" do
+    test "can parse paths with identifiers" do
       assert {[], ["v1", "messages"]} ==
                "/v1/messages"
                |> Transcode.tokenize()
