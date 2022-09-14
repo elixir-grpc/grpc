@@ -11,14 +11,22 @@ package routeguide_transcode;
 service RouteGuide {
   rpc GetFeature(Point) returns (Feature) {
     option (google.api.http) = {
-      get: "/v1/feature/{latitude}/{longitude}"
+      get: "/v1/features/{latitude}/{longitude}"
     };
   }
+
   rpc ListFeatures(Rectangle) returns (stream Feature) {
     option (google.api.http) = {
-      get: "/v1/feature"
+      get: "/v1/features"
     };
   }
+
+  rpc CreateFeature(Point) returns (Feature) {
+    option (google.api.http) = {
+      post: "/v1/features"
+    };
+  }
+
   rpc RecordRoute(stream Point) returns (RouteSummary) {}
   rpc RouteChat(stream RouteNote) returns (stream RouteNote) {}
 }

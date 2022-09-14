@@ -10,7 +10,7 @@ defmodule RouteguideTranscode.RouteGuide.Service do
         __unknown_fields__: [],
         additional_bindings: [],
         body: "",
-        pattern: {:get, "/v1/feature/{latitude}/{longitude}"},
+        pattern: {:get, "/v1/features/{latitude}/{longitude}"},
         response_body: "",
         selector: ""
       }
@@ -24,7 +24,21 @@ defmodule RouteguideTranscode.RouteGuide.Service do
         __unknown_fields__: [],
         additional_bindings: [],
         body: "",
-        pattern: {:get, "/v1/feature"},
+        pattern: {:get, "/v1/features"},
+        response_body: "",
+        selector: ""
+      }
+    }
+  })
+
+  rpc(:CreateFeature, RouteguideTranscode.Point, RouteguideTranscode.Feature, %{
+    http: %{
+      type: Google.Api.PbExtension,
+      value: %Google.Api.HttpRule{
+        __unknown_fields__: [],
+        additional_bindings: [],
+        body: "",
+        pattern: {:post, "/v1/features"},
         response_body: "",
         selector: ""
       }

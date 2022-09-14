@@ -20,6 +20,12 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   def init(req, {endpoint, {_name, server}, route, opts} = state) do
     with {:ok, codec} <- find_codec(req, server),
          {:ok, compressor} <- find_compressor(req, server) do
+      http_method =
+        req
+        |> :cowboy_req.method()
+        |> String.downcase()
+        |> String.to_existing_atom()
+
       stream = %GRPC.Server.Stream{
         server: server,
         endpoint: endpoint,
@@ -27,6 +33,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         payload: %{pid: self()},
         local: opts[:local],
         codec: codec,
+        http_method: http_method,
         compressor: compressor
       }
 
@@ -390,8 +397,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  defp do_call_rpc(server, path, stream) do
-    result = server.__call_rpc__(path, stream)
+  defp do_call_rpc(server, path, %{http_method: http_method} = stream) do
+    result = server.__call_rpc__(path, http_method, stream)
 
     case result do
       {:ok, stream, response} ->

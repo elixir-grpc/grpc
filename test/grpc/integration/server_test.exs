@@ -17,6 +17,10 @@ defmodule GRPC.Integration.ServerTest do
     def get_feature(point, _stream) do
       Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
     end
+
+    def create_feature(point, _stream) do
+      Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
+    end
   end
 
   defmodule HelloServer do
@@ -261,9 +265,40 @@ defmodule GRPC.Integration.ServerTest do
         {:ok, conn_pid} = :gun.open('localhost', port)
 
         stream_ref =
-          :gun.get(conn_pid, "/v1/feature/#{latitude}/#{longitude}", [
+          :gun.get(conn_pid, "/v1/features/#{latitude}/#{longitude}", [
             {"content-type", "application/json"}
           ])
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+
+        assert %{
+                 "location" => %{"latitude" => ^latitude, "longitude" => ^longitude},
+                 "name" => name
+               } = Jason.decode!(body)
+
+        assert name == "#{latitude},#{longitude}"
+      end)
+    end
+
+    test "service methods can have the same path but different methods in http rule option" do
+      run_server([FeatureTranscodeServer], fn port ->
+        latitude = 10
+        longitude = 20
+
+        {:ok, conn_pid} = :gun.open('localhost', port)
+
+        body = %{"latitude" => latitude, "longitude" => 20}
+
+        stream_ref =
+          :gun.post(
+            conn_pid,
+            "/v1/features",
+            [
+              {"content-type", "application/json"}
+            ],
+            Jason.encode!(body)
+          )
 
         assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
         assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)

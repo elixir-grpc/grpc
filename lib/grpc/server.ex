@@ -69,7 +69,7 @@ defmodule GRPC.Server do
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
 
-        def __call_rpc__(unquote(path), stream) do
+        def __call_rpc__(unquote(path), unquote(:post), stream) do
           GRPC.Server.call(
             unquote(service_mod),
             %{
@@ -88,7 +88,7 @@ defmodule GRPC.Server do
           {http_method, _} = spec = Transcode.build_route(http_rule)
           http_path = Transcode.to_path(spec)
 
-          def __call_rpc__(unquote(http_path), stream) do
+          def __call_rpc__(unquote(http_path), unquote(http_method), stream) do
             GRPC.Server.call(
               unquote(service_mod),
               %{
@@ -103,23 +103,11 @@ defmodule GRPC.Server do
               unquote(func_name)
             )
           end
-
-          def service_name(unquote(http_path)) do
-            unquote(service_name)
-          end
-        end
-
-        def service_name(unquote(path)) do
-          unquote(service_name)
         end
       end)
 
       def __call_rpc__(_, stream) do
         raise GRPC.RPCError, status: :unimplemented
-      end
-
-      def service_name(_) do
-        ""
       end
 
       def __meta__(:service), do: unquote(service_mod)

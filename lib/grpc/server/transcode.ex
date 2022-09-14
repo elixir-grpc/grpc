@@ -1,5 +1,4 @@
 defmodule GRPC.Server.Transcode do
-
   @spec map_request(map(), map(), String.t(), module()) :: {:ok, struct()} | {:error, term()}
   def map_request(body_request, path_bindings, _query_string, req_mod) do
     path_bindings = Map.new(path_bindings, fn {k, v} -> {to_string(k), v} end)
