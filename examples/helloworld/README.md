@@ -21,10 +21,10 @@ $ mix run priv/client.exs
 
 ``` shell
 # Say hello
-curl http://localhost:50051/v1/greeter/test
+curl -H 'Content-type: application/json' http://localhost:50051/v1/greeter/test
 
 # Say hello from
-curl -XPOST -H 'Content-type: application/json' -d '{"name": "test", "from": "anon"}' --output -  http://localhost:50051/v1/greeter
+curl -XPOST -H 'Content-type: application/json' -d '{"name": "test", "from": "anon"}' http://localhost:50051/v1/greeter
 ```
 
 ## Regenerate Elixir code from proto
