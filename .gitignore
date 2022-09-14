@@ -25,5 +25,3 @@ erl_crash.dump
 .elixir_ls
 
 grpc-*.tar
-
-.vscode

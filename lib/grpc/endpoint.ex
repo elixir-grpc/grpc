@@ -41,7 +41,7 @@ defmodule GRPC.Endpoint do
     servers = Module.get_attribute(env.module, :servers)
     servers = Enum.map(servers, fn {ss, opts} -> {ss, parse_run_opts(opts, %{})} end)
     server_interceptors = server_interceptors(servers, %{})
-    servers = parse_servers(servers, has_reflection_disabled?())
+    servers = parse_servers(servers)
 
     quote do
       def __meta__(:interceptors), do: unquote(interceptors)
