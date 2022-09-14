@@ -2,6 +2,19 @@ defmodule GRPC.TranscodeTest do
   use ExUnit.Case, async: true
   alias GRPC.Server.Transcode
 
+  test "map_requests/3 can map request body to protobuf struct" do
+    body_request = %{"latitude" => 1, "longitude" => 2}
+    {:ok, request} = Transcode.map_request(body_request, %{}, "", Routeguide.Point)
+    assert Routeguide.Point.new(latitude: 1, longitude: 2) == request
+  end
+
+  test "map_requests/3 can merge request body with path bindings to protobuf struct" do
+    body_request = %{"latitude" => 1}
+    bindings = %{"longitude" => 2}
+    {:ok, request} = Transcode.map_request(body_request, bindings, "", Routeguide.Point)
+    assert Routeguide.Point.new(latitude: 1, longitude: 2) == request
+  end
+
   test "build_route/1 returns a route with {http_method, route} based on the http rule" do
     rule = build_simple_rule(:get, "/v1/messages/{message_id}")
     assert {:get, {params, segments}} = Transcode.build_route(rule)

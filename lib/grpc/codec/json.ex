@@ -9,11 +9,17 @@ defmodule GRPC.Codec.JSON do
     Protobuf.JSON.encode!(struct)
   end
 
-  def decode(<<>>, module) do
-    struct(module, [])
+  def decode(<<>>, _module) do
+    %{}
   end
 
-  def decode(binary, module) do
-    Protobuf.JSON.decode!(binary, module)
+  def decode(binary, _module) do
+    if jason = load_jason() do
+      jason.decode!(binary)
+    else
+      raise "`:jason` library not loaded"
+    end
   end
+
+  defp load_jason, do: Code.ensure_loaded?(Jason) and Jason
 end
