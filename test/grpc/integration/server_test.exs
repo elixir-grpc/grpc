@@ -22,6 +22,13 @@ defmodule GRPC.Integration.ServerTest do
       msg
     end
 
+    def create_message_with_nested_body(msg_request, _stream) do
+      Transcode.Message.new(
+        name: msg_request.message.name,
+        text: "create_message_with_nested_body"
+      )
+    end
+
     def get_message_with_query(msg_request, _stream) do
       Transcode.Message.new(name: msg_request.name, text: "get_message_with_query")
     end
@@ -305,6 +312,25 @@ defmodule GRPC.Integration.ServerTest do
                  "name" => "some_name",
                  "text" => "get_message_with_query"
                } = Jason.decode!(body)
+      end)
+    end
+
+    test "can map request body using HttpRule.body" do
+      run_server([TranscodeServer], fn port ->
+        {:ok, conn_pid} = :gun.open('localhost', port)
+
+        body = %{"name" => "name"}
+
+        stream_ref =
+          :gun.post(conn_pid, "/v1/messages/nested", [
+            {"content-type", "application/json"}
+          ], Jason.encode!(body))
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+
+        assert %{"name" => "name", "text" => "create_message_with_nested_body"} =
+                 Jason.decode!(body)
       end)
     end
 

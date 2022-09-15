@@ -49,14 +49,14 @@ defmodule GRPC.Server do
       http_transcode = opts[:http_transcode] || false
 
       routes =
-        for {name, _, _, options} <- service_mod.__rpc_calls__, reduce: [] do
+        for {name, _, _, options} = rpc <- service_mod.__rpc_calls__, reduce: [] do
           acc ->
             path = "/#{service_name}/#{name}"
 
             http_paths =
               if http_transcode and Map.has_key?(options, :http) do
-                %{value: http_opts} = Map.fetch!(options, :http)
-                [{:http_transcode, Transcode.build_route(http_opts)}]
+                %{value: http_rule} = GRPC.Service.rpc_options(rpc, :http)
+                [{:http_transcode, Transcode.build_route(http_rule)}]
               else
                 []
               end
@@ -84,7 +84,7 @@ defmodule GRPC.Server do
         end
 
         if http_transcode and Map.has_key?(options, :http) do
-          %{value: http_rule} = Map.fetch!(options, :http)
+          %{value: http_rule} = GRPC.Service.rpc_options(rpc, :http)
           {http_method, _} = spec = Transcode.build_route(http_rule)
           http_path = Transcode.to_path(spec)
 
@@ -161,6 +161,7 @@ defmodule GRPC.Server do
          false,
          res_stream,
          %{
+           rpc: rpc,
            request_mod: req_mod,
            codec: codec,
            adapter: adapter,
@@ -170,11 +171,19 @@ defmodule GRPC.Server do
          func_name
        ) do
     {:ok, data} = adapter.read_body(payload)
+    request_body = codec.decode(data, req_mod)
+
+    request_body =
+      if rule = GRPC.Service.rpc_options(rpc, :http) do
+        Transcode.map_request_body(rule.value, request_body)
+      else
+        request_body
+      end
+
     bindings = adapter.get_bindings(payload)
     qs = adapter.get_qs(payload)
-    request = codec.decode(data, req_mod)
 
-    case Transcode.map_request(request, bindings, qs, req_mod) do
+    case Transcode.map_request(request_body, bindings, qs, req_mod) do
       {:ok, request} ->
         call_with_interceptors(res_stream, func_name, stream, request)
 

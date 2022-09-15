@@ -59,4 +59,8 @@ defmodule GRPC.Service do
   def grpc_type({_, {_, true}, {_, false}, _}), do: :client_stream
   def grpc_type({_, {_, false}, {_, true}, _}), do: :server_stream
   def grpc_type({_, {_, true}, {_, true}, _}), do: :bidi_stream
+
+  def rpc_options({_, _, _, options}), do: options
+
+  def rpc_options({_, _, _, options}, type), do: Map.get(options, type)
 end

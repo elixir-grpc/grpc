@@ -23,7 +23,14 @@ service Messaging {
     };
   }
 
-  rpc GetMessageWithSubpathQuery(NestedGetMessageRequest) returns (Message) {
+  rpc CreateMessageWithNestedBody(NestedMessageRequest) returns (Message) {
+    option (google.api.http) = {
+        post: "/v1/messages/nested",
+        body: "message"
+    };
+  }
+
+  rpc GetMessageWithSubpathQuery(NestedMessageRequest) returns (Message) {
     option (google.api.http) = {
         get: "/v1/messages/nested"
     };
@@ -39,6 +46,6 @@ message Message {
   string text = 2;
 }
 
-message NestedGetMessageRequest {
+message NestedMessageRequest {
   GetMessageRequest message = 1;
 }

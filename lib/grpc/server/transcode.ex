@@ -1,6 +1,15 @@
 defmodule GRPC.Server.Transcode do
   alias __MODULE__.Query
 
+  # Leaf request fields (recursive expansion nested messages in the request message) are classified into three categories:
+  #
+  # 1. Fields referred by the path template. They are passed via the URL path.
+  # 2. Fields referred by the HttpRule.body. They are passed via the HTTP request body.
+  # 3. All other fields are passed via the URL query parameters, and the parameter name is the field path in the request message. A repeated field can be represented as multiple query parameters under the same name.
+  #
+  # If HttpRule.body is "*", there is no URL query parameter, all fields are passed via URL path and HTTP request body.
+  #
+  # If HttpRule.body is omitted, there is no HTTP request body, all fields are passed via URL path and URL query parameters.
   @spec map_request(map(), map(), String.t(), module()) :: {:ok, struct()} | {:error, term()}
   def map_request(body_request, path_bindings, query_string, req_mod) do
     path_bindings = Map.new(path_bindings, fn {k, v} -> {to_string(k), v} end)
@@ -9,6 +18,21 @@ defmodule GRPC.Server.Transcode do
 
     Protobuf.JSON.from_decoded(request, req_mod)
   end
+
+  @spec map_request_body(term(), term()) :: term()
+  def map_request_body(%Google.Api.HttpRule{body: "*"}, request_body), do: request_body
+  def map_request_body(%Google.Api.HttpRule{body: ""}, request_body), do: request_body
+
+  # TODO The field is required to be present on the toplevel request message
+  def map_request_body(%Google.Api.HttpRule{body: field}, request_body),
+    do: %{field => request_body}
+
+  @spec map_response_body(Google.Api.HttpRule.t(), map()) :: map()
+  def map_response_body(%Google.Api.HttpRule{response_body: ""}, response_body), do: response_body
+
+  # TODO The field is required to be present on the toplevel response message
+  def map_response_body(%Google.Api.HttpRule{response_body: field}, response_body),
+    do: Map.get(response_body, field)
 
   @spec to_path(term()) :: String.t()
   def to_path({_method, {_bindings, segments}} = _spec) do
