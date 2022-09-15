@@ -2,38 +2,36 @@ defmodule GRPC.TranscodeTest do
   use ExUnit.Case, async: true
   alias GRPC.Server.Transcode
 
-  test "map_requests/3 can map request body to protobuf struct" do
-    body_request = %{"latitude" => 1, "longitude" => 2}
-    {:ok, request} = Transcode.map_request(body_request, %{}, "", Routeguide.Point)
-    assert Routeguide.Point.new(latitude: 1, longitude: 2) == request
-  end
-
-  test "map_requests/3 can merge request body with path bindings to protobuf struct" do
-    body_request = %{"latitude" => 1}
-    bindings = %{"longitude" => 2}
-    {:ok, request} = Transcode.map_request(body_request, bindings, "", Routeguide.Point)
-    assert Routeguide.Point.new(latitude: 1, longitude: 2) == request
-  end
-
-  test "map_request_body/2 with HttpRule.body: '*'" do
+  test "map_request/5 with HttpRule.body: '*'" do
     rule = Google.Api.HttpRule.new(body: "*")
-    request_body = %{"a" => "b"}
+    request_body = %{"latitude" => 1, "longitude" => 2}
+    bindings = %{}
+    qs = "latitude=10&longitude=20"
 
-    assert request_body == Transcode.map_request_body(rule, request_body)
+    assert {:ok, %Routeguide.Point{latitude: 1, longitude: 2}} =
+             Transcode.map_request(rule, request_body, bindings, qs, Routeguide.Point)
   end
 
-  test "map_request_body/2 with empty HttpRule.body" do
+  test "map_request/5 with empty HttpRule.body" do
     rule = Google.Api.HttpRule.new(body: "")
-    request_body = %{"a" => "b"}
+    request_body = %{"latitude" => 10, "longitude" => 20}
+    bindings = %{"latitude" => 5}
+    qs = "longitude=6"
 
-    assert request_body == Transcode.map_request_body(rule, request_body)
+    assert {:ok, %Routeguide.Point{latitude: 5, longitude: 6}} =
+             Transcode.map_request(rule, request_body, bindings, qs, Routeguide.Point)
   end
 
-  test "map_request_body/2 with HttpRule.body: <field>" do
-    rule = Google.Api.HttpRule.new(body: "message")
-    request_body = %{"a" => "b"}
+  test "map_request/2 with HttpRule.body: <field>" do
+    rule = Google.Api.HttpRule.new(body: "location")
+    request_body = %{"latitude" => 1, "longitude" => 2}
+    bindings = %{"name" => "test"}
 
-    assert %{"message" => %{"a" => "b"}} == Transcode.map_request_body(rule, request_body)
+    assert {:ok, %Routeguide.Feature{name: "test", location: point}} =
+             Transcode.map_request(rule, request_body, bindings, "name=Foo", Routeguide.Feature)
+
+    assert point.latitude == 1
+    assert point.longitude == 2
   end
 
   test "map_response_body/2 with empty HttpRule.response_body" do

@@ -172,18 +172,11 @@ defmodule GRPC.Server do
        ) do
     {:ok, data} = adapter.read_body(payload)
     request_body = codec.decode(data, req_mod)
-
-    request_body =
-      if rule = GRPC.Service.rpc_options(rpc, :http) do
-        Transcode.map_request_body(rule.value, request_body)
-      else
-        request_body
-      end
-
+    rule = GRPC.Service.rpc_options(rpc, :http) || %{value: %{}}
     bindings = adapter.get_bindings(payload)
     qs = adapter.get_qs(payload)
 
-    case Transcode.map_request(request_body, bindings, qs, req_mod) do
+    case Transcode.map_request(rule.value, request_body, bindings, qs, req_mod) do
       {:ok, request} ->
         call_with_interceptors(res_stream, func_name, stream, request)
 

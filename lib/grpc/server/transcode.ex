@@ -1,30 +1,50 @@
 defmodule GRPC.Server.Transcode do
   alias __MODULE__.Query
 
-  # Leaf request fields (recursive expansion nested messages in the request message) are classified into three categories:
-  #
-  # 1. Fields referred by the path template. They are passed via the URL path.
-  # 2. Fields referred by the HttpRule.body. They are passed via the HTTP request body.
-  # 3. All other fields are passed via the URL query parameters, and the parameter name is the field path in the request message. A repeated field can be represented as multiple query parameters under the same name.
-  #
-  # If HttpRule.body is "*", there is no URL query parameter, all fields are passed via URL path and HTTP request body.
-  #
-  # If HttpRule.body is omitted, there is no HTTP request body, all fields are passed via URL path and URL query parameters.
-  @spec map_request(map(), map(), String.t(), module()) :: {:ok, struct()} | {:error, term()}
-  def map_request(body_request, path_bindings, query_string, req_mod) do
+  @doc """
+  Leaf request fields (recursive expansion nested messages in the request message) are classified into three categories:
+
+  1. Fields referred by the path template. They are passed via the URL path.
+  2. Fields referred by the HttpRule.body. They are passed via the HTTP request body.
+  3. All other fields are passed via the URL query parameters, and the parameter name is the field path in the request message. A repeated field can be represented as multiple query parameters under the same name.
+
+  If HttpRule.body is "*", there is no URL query parameter, all fields are passed via URL path and HTTP request body.
+
+  If HttpRule.body is omitted, there is no HTTP request body, all fields are passed via URL path and URL query parameters.
+  """
+  @spec map_request(Google.Api.HttpRule.t(), map(), map(), String.t(), module()) ::
+          {:ok, struct()} | {:error, term()}
+  def map_request(
+        %Google.Api.HttpRule{body: ""},
+        _body_request,
+        path_bindings,
+        query_string,
+        req_mod
+      ) do
     path_bindings = Map.new(path_bindings, fn {k, v} -> {to_string(k), v} end)
     query = Query.decode(query_string)
-    request = Enum.reduce([query, body_request], path_bindings, &Map.merge(&2, &1))
+    request = Map.merge(path_bindings, query)
 
     Protobuf.JSON.from_decoded(request, req_mod)
   end
 
-  @spec map_request_body(term(), term()) :: term()
-  def map_request_body(%Google.Api.HttpRule{body: "*"}, request_body), do: request_body
-  def map_request_body(%Google.Api.HttpRule{body: ""}, request_body), do: request_body
+  def map_request(
+        %Google.Api.HttpRule{} = rule,
+        body_request,
+        path_bindings,
+        _query_string,
+        req_mod
+      ) do
+    path_bindings = Map.new(path_bindings, fn {k, v} -> {to_string(k), v} end)
+    request = Map.merge(path_bindings, map_request_body(rule, body_request))
 
-  # TODO The field is required to be present on the toplevel request message
-  def map_request_body(%Google.Api.HttpRule{body: field}, request_body),
+    Protobuf.JSON.from_decoded(request, req_mod)
+  end
+
+  defp map_request_body(%Google.Api.HttpRule{body: "*"}, request_body), do: request_body
+  defp map_request_body(%Google.Api.HttpRule{body: ""}, request_body), do: request_body
+
+  defp map_request_body(%Google.Api.HttpRule{body: field}, request_body),
     do: %{field => request_body}
 
   @spec map_response_body(Google.Api.HttpRule.t(), map()) :: map()

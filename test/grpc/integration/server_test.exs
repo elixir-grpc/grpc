@@ -322,9 +322,14 @@ defmodule GRPC.Integration.ServerTest do
         body = %{"name" => "name"}
 
         stream_ref =
-          :gun.post(conn_pid, "/v1/messages/nested", [
-            {"content-type", "application/json"}
-          ], Jason.encode!(body))
+          :gun.post(
+            conn_pid,
+            "/v1/messages/nested",
+            [
+              {"content-type", "application/json"}
+            ],
+            Jason.encode!(body)
+          )
 
         assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
         assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)

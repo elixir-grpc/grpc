@@ -37,7 +37,7 @@ defmodule Transcode.Messaging.Service do
       value: %Google.Api.HttpRule{
         __unknown_fields__: [],
         additional_bindings: [],
-        body: "",
+        body: "*",
         pattern: {:post, "/v1/messages"},
         response_body: "",
         selector: ""
