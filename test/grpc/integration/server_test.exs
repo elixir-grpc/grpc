@@ -9,17 +9,28 @@ defmodule GRPC.Integration.ServerTest do
     end
   end
 
-  defmodule FeatureTranscodeServer do
+  defmodule TranscodeServer do
     use GRPC.Server,
-      service: RouteguideTranscode.RouteGuide.Service,
+      service: Transcode.Messaging.Service,
       http_transcode: true
 
-    def get_feature(point, _stream) do
-      Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
+    def get_message(msg_request, _stream) do
+      Transcode.Message.new(name: msg_request.name, text: "get_message")
     end
 
-    def create_feature(point, _stream) do
-      Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
+    def create_message(msg, _stream) do
+      msg
+    end
+
+    def get_message_with_query(msg_request, _stream) do
+      Transcode.Message.new(name: msg_request.name, text: "get_message_with_query")
+    end
+
+    def get_message_with_subpath_query(msg_request, _stream) do
+      Transcode.Message.new(
+        name: msg_request.message.name,
+        text: "get_message_with_subpath_query"
+      )
     end
   end
 
@@ -258,14 +269,13 @@ defmodule GRPC.Integration.ServerTest do
 
   describe "http/json transcode" do
     test "can transcode path params" do
-      run_server([FeatureTranscodeServer], fn port ->
-        latitude = 10
-        longitude = 20
+      run_server([TranscodeServer], fn port ->
+        name = "foo"
 
         {:ok, conn_pid} = :gun.open('localhost', port)
 
         stream_ref =
-          :gun.get(conn_pid, "/v1/features/#{latitude}/#{longitude}", [
+          :gun.get(conn_pid, "/v1/messages/#{name}", [
             {"content-type", "application/json"}
           ])
 
@@ -273,42 +283,64 @@ defmodule GRPC.Integration.ServerTest do
         assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
 
         assert %{
-                 "location" => %{"latitude" => ^latitude, "longitude" => ^longitude},
-                 "name" => name
+                 "name" => ^name,
+                 "text" => _name
                } = Jason.decode!(body)
-
-        assert name == "#{latitude},#{longitude}"
       end)
     end
 
-    test "service methods can have the same path but different methods in http rule option" do
-      run_server([FeatureTranscodeServer], fn port ->
-        latitude = 10
-        longitude = 20
-
+    test "can transcode query params" do
+      run_server([TranscodeServer], fn port ->
         {:ok, conn_pid} = :gun.open('localhost', port)
 
-        body = %{"latitude" => latitude, "longitude" => 20}
-
         stream_ref =
-          :gun.post(
-            conn_pid,
-            "/v1/features",
-            [
-              {"content-type", "application/json"}
-            ],
-            Jason.encode!(body)
-          )
+          :gun.get(conn_pid, "/v1/messages?name=some_name", [
+            {"content-type", "application/json"}
+          ])
 
         assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
         assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
 
         assert %{
-                 "location" => %{"latitude" => ^latitude, "longitude" => ^longitude},
-                 "name" => name
+                 "name" => "some_name",
+                 "text" => "get_message_with_query"
                } = Jason.decode!(body)
+      end)
+    end
 
-        assert name == "#{latitude},#{longitude}"
+    test "service methods can have the same path but different methods in http rule option" do
+      run_server([TranscodeServer], fn port ->
+        {:ok, conn_pid} = :gun.open('localhost', port)
+
+        payload = %{"name" => "foo", "text" => "bar"}
+
+        stream_ref =
+          :gun.post(
+            conn_pid,
+            "/v1/messages",
+            [
+              {"content-type", "application/json"}
+            ],
+            Jason.encode!(payload)
+          )
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+
+        assert ^payload = Jason.decode!(body)
+
+        stream_ref =
+          :gun.get(conn_pid, "/v1/messages?name=another_name", [
+            {"content-type", "application/json"}
+          ])
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+
+        assert %{
+                 "name" => "another_name",
+                 "text" => "get_message_with_query"
+               } = Jason.decode!(body)
       end)
     end
   end

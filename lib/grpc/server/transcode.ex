@@ -1,8 +1,11 @@
 defmodule GRPC.Server.Transcode do
+  alias __MODULE__.Query
+
   @spec map_request(map(), map(), String.t(), module()) :: {:ok, struct()} | {:error, term()}
-  def map_request(body_request, path_bindings, _query_string, req_mod) do
+  def map_request(body_request, path_bindings, query_string, req_mod) do
     path_bindings = Map.new(path_bindings, fn {k, v} -> {to_string(k), v} end)
-    request = Map.merge(path_bindings, body_request)
+    query = Query.decode(query_string)
+    request = Enum.reduce([query, body_request], path_bindings, &Map.merge(&2, &1))
 
     Protobuf.JSON.from_decoded(request, req_mod)
   end

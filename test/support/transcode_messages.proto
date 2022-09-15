@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+import "google/api/annotations.proto";
+
+package transcode;
+
+service Messaging {
+  rpc GetMessage(GetMessageRequest) returns (Message) {
+    option (google.api.http) = {
+        get: "/v1/messages/{name}"
+    };
+  }
+
+  rpc GetMessageWithQuery(GetMessageRequest) returns (Message) {
+    option (google.api.http) = {
+        get: "/v1/messages"
+    };
+  }
+
+  rpc CreateMessage(Message) returns (Message) {
+    option (google.api.http) = {
+        post: "/v1/messages"
+    };
+  }
+
+  rpc GetMessageWithSubpathQuery(NestedGetMessageRequest) returns (Message) {
+    option (google.api.http) = {
+        get: "/v1/messages/nested"
+    };
+  }
+}
+
+message GetMessageRequest {
+  string name = 1; // Mapped to URL path.
+}
+
+message Message {
+  string name = 1;
+  string text = 2;
+}
+
+message NestedGetMessageRequest {
+  GetMessageRequest message = 1;
+}
