@@ -11,6 +11,12 @@ service Messaging {
     };
   }
 
+  rpc StreamMessages(GetMessageRequest) returns (stream Message) {
+    option (google.api.http) = {
+        get: "/v1/messages/stream/{name}"
+    };
+  }
+
   rpc GetMessageWithQuery(GetMessageRequest) returns (Message) {
     option (google.api.http) = {
         get: "/v1/messages"

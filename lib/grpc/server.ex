@@ -371,11 +371,10 @@ defmodule GRPC.Server do
   """
   @spec send_reply(GRPC.Server.Stream.t(), struct()) :: GRPC.Server.Stream.t()
   def send_reply(
-        %{__interface__: interface, http_transcode: transcode} = stream,
+        %{__interface__: interface} = stream,
         reply,
         opts \\ []
       ) do
-    opts = Keyword.put(opts, :http_transcode, transcode)
     interface[:send_reply].(stream, reply, opts)
   end
 

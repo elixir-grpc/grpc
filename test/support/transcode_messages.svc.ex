@@ -17,6 +17,20 @@ defmodule Transcode.Messaging.Service do
     }
   })
 
+  rpc(:StreamMessages, Transcode.GetMessageRequest, stream(Transcode.Message), %{
+    http: %{
+      type: Google.Api.PbExtension,
+      value: %Google.Api.HttpRule{
+        __unknown_fields__: [],
+        additional_bindings: [],
+        body: "",
+        pattern: {:get, "/v1/messages/stream/{name}"},
+        response_body: "",
+        selector: ""
+      }
+    }
+  })
+
   rpc(:GetMessageWithQuery, Transcode.GetMessageRequest, Transcode.Message, %{
     http: %{
       type: Google.Api.PbExtension,

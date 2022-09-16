@@ -18,6 +18,18 @@ defmodule GRPC.Integration.ServerTest do
       Transcode.Message.new(name: msg_request.name, text: "get_message")
     end
 
+    def stream_messages(msg_request, stream) do
+      Enum.each(1..5, fn i ->
+        msg =
+          Transcode.Message.new(
+            name: msg_request.name,
+            text: "#{i}"
+          )
+
+        GRPC.Server.send_reply(stream, msg)
+      end)
+    end
+
     def create_message(msg, _stream) do
       msg
     end
@@ -336,6 +348,26 @@ defmodule GRPC.Integration.ServerTest do
 
         assert %{"name" => "name", "text" => "create_message_with_nested_body"} =
                  Jason.decode!(body)
+      end)
+    end
+
+    test "can send streaming responses" do
+      run_server([TranscodeServer], fn port ->
+        {:ok, conn_pid} = :gun.open('localhost', port)
+
+        stream_ref =
+          :gun.get(
+            conn_pid,
+            "/v1/messages/stream/stream_test",
+            [
+              {"content-type", "application/json"}
+            ]
+          )
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+        msgs = String.split(body, "\n", trim: true)
+        assert length(msgs) == 5
       end)
     end
 
