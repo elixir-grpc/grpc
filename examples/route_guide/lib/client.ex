@@ -3,7 +3,7 @@ defmodule RouteGuide.Client do
     print_feature(channel, Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906))
     print_feature(channel, Routeguide.Point.new(latitude: 0, longitude: 0))
 
-    ##    # Looking for features between 40, -75 and 42, -73.
+    # Looking for features between 40, -75 and 42, -73.
     print_features(
       channel,
       Routeguide.Rectangle.new(

@@ -21,22 +21,25 @@ defmodule GRPC.Client.Adapters.Mint do
     |> case do
       {:ok, pid} -> {:ok, %{channel | adapter_payload: %{conn_pid: pid}}}
       # TODO add proper error handling
-      _error -> {:ok, %{channel | adapter_payload: %{conn_pid: nil}}}
+      error -> raise "An error happened while trying to opening the connection: #{inspect(error)}"
     end
   end
 
   @impl true
   def disconnect(%{adapter_payload: %{conn_pid: pid}} = channel)
       when is_pid(pid) do
-    ConnectionProcess.disconnect(pid)
-    {:ok, %{channel | adapter_payload: %{conn_pid: nil}}}
+    :ok = ConnectionProcess.disconnect(pid)
+    {:ok, %{channel | adapter_payload: nil}}
   end
 
-  def disconnect(%{adapter_payload: %{conn_pid: nil}} = channel) do
+  def disconnect(%{adapter_payload: nil} = channel) do
     {:ok, channel}
   end
 
   @impl true
+  def send_request(%{channel: %{adapter_payload: nil}}, _message, _opts),
+      do: raise "Can't perform a request without a connection process"
+
   def send_request(
         %{channel: %{adapter_payload: %{conn_pid: pid}}, path: path} = stream,
         message,
@@ -80,7 +83,7 @@ defmodule GRPC.Client.Adapters.Mint do
         opts
       ) do
     with stream <- StreamResponseProcess.build_stream(pid),
-         responses <- Enum.into(stream, []),
+         responses <- Enum.to_list(stream),
          :ok <- check_for_error(responses) do
       {:ok, data} = Enum.find(responses, fn {status, _data} -> status == :ok end)
 
@@ -106,6 +109,9 @@ defmodule GRPC.Client.Adapters.Mint do
   end
 
   @impl true
+  def send_headers(%{channel: %{adapter_payload: nil}}, _opts),
+      do: raise "Can't start a client stream without a connection process"
+
   def send_headers(%{channel: %{adapter_payload: %{conn_pid: pid}}, path: path} = stream, opts) do
     headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
 
