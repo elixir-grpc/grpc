@@ -30,6 +30,13 @@ service Messaging {
     };
   }
 
+  rpc GetMessageWithResponseBody(GetMessageRequest) returns (MessageOut) {
+    option (google.api.http) = {
+        get: "/v1/messages/response_body/{name}",
+        response_body: "response"
+    };
+  }
+
   rpc CreateMessageWithNestedBody(NestedMessageRequest) returns (Message) {
     option (google.api.http) = {
         post: "/v1/messages/nested",
@@ -42,6 +49,10 @@ service Messaging {
         get: "/v1/messages/nested"
     };
   }
+}
+
+message MessageOut {
+  Message response = 1;
 }
 
 message GetMessageRequest {

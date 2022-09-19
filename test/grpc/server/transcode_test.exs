@@ -36,16 +36,16 @@ defmodule GRPC.TranscodeTest do
 
   test "map_response_body/2 with empty HttpRule.response_body" do
     rule = Google.Api.HttpRule.new(response_body: "")
-    request_body = %{"a" => "b"}
+    request_body = %{message: %{a: "b"}}
 
     assert request_body == Transcode.map_response_body(rule, request_body)
   end
 
   test "map_response_body/2 with HttpRule.response_body: <field>" do
     rule = Google.Api.HttpRule.new(response_body: "message")
-    request_body = %{"message" => %{"a" => "b"}}
+    request_body = %{message: %{a: "b"}}
 
-    assert %{"a" => "b"} == Transcode.map_response_body(rule, request_body)
+    assert %{a: "b"} == Transcode.map_response_body(rule, request_body)
   end
 
   test "build_route/1 returns a route with {http_method, route} based on the http rule" do

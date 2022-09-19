@@ -47,12 +47,16 @@ defmodule GRPC.Server.Transcode do
   defp map_request_body(%Google.Api.HttpRule{body: field}, request_body),
     do: %{field => request_body}
 
-  @spec map_response_body(Google.Api.HttpRule.t(), map()) :: map()
+  @spec map_response_body(Google.Api.HttpRule.t() | map(), map()) :: map()
   def map_response_body(%Google.Api.HttpRule{response_body: ""}, response_body), do: response_body
 
   # TODO The field is required to be present on the toplevel response message
-  def map_response_body(%Google.Api.HttpRule{response_body: field}, response_body),
-    do: Map.get(response_body, field)
+  def map_response_body(%Google.Api.HttpRule{response_body: field}, response_body) do
+    key = String.to_existing_atom(field)
+    Map.get(response_body, key)
+  end
+
+  def map_response_body(%{}, response_body), do: response_body
 
   @spec to_path(term()) :: String.t()
   def to_path({_method, {_bindings, segments}} = _spec) do

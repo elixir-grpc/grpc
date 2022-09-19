@@ -59,13 +59,22 @@ defmodule GRPC.Server.Stream do
             __interface__: %{send_reply: &__MODULE__.send_reply/3}
 
   def send_reply(
-        %{grpc_type: :server_stream, codec: codec, http_transcode: true} = stream,
+        %{grpc_type: :server_stream, codec: codec, http_transcode: true, rpc: rpc} = stream,
         reply,
         opts
       ) do
-    data = codec.encode(reply)
 
-    do_send_reply(stream, [data, "\n"], opts)
+    rule = GRPC.Service.rpc_options(rpc, :http) || %{value: %{}}
+    response = GRPC.Server.Transcode.map_response_body(rule.value, reply)
+
+    do_send_reply(stream, [codec.encode(response), "\n"], opts)
+  end
+
+  def send_reply(%{codec: codec, http_transcode: true, rpc: rpc} = stream, reply, opts) do
+    rule = GRPC.Service.rpc_options(rpc, :http) || %{value: %{}}
+    response = GRPC.Server.Transcode.map_response_body(rule.value, reply)
+
+    do_send_reply(stream, codec.encode(response), opts)
   end
 
   def send_reply(%{codec: codec} = stream, reply, opts) do

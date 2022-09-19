@@ -59,6 +59,20 @@ defmodule Transcode.Messaging.Service do
     }
   })
 
+  rpc(:GetMessageWithResponseBody, Transcode.GetMessageRequest, Transcode.MessageOut, %{
+    http: %{
+      type: Google.Api.PbExtension,
+      value: %Google.Api.HttpRule{
+        __unknown_fields__: [],
+        additional_bindings: [],
+        body: "",
+        pattern: {:get, "/v1/messages/response_body/{name}"},
+        response_body: "response",
+        selector: ""
+      }
+    }
+  })
+
   rpc(:CreateMessageWithNestedBody, Transcode.NestedMessageRequest, Transcode.Message, %{
     http: %{
       type: Google.Api.PbExtension,
