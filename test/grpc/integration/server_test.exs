@@ -41,6 +41,10 @@ defmodule GRPC.Integration.ServerTest do
       )
     end
 
+    def get_message_with_field_path(msg_request, _) do
+      msg_request.message
+    end
+
     def get_message_with_response_body(msg_request, _) do
       Transcode.MessageOut.new(
         response:
@@ -365,6 +369,7 @@ defmodule GRPC.Integration.ServerTest do
       run_server([TranscodeServer], fn port ->
         {:ok, conn_pid} = :gun.open('localhost', port)
         name = "response_body_mapper"
+
         stream_ref =
           :gun.get(
             conn_pid,
@@ -399,6 +404,26 @@ defmodule GRPC.Integration.ServerTest do
         assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
         msgs = String.split(body, "\n", trim: true)
         assert length(msgs) == 5
+      end)
+    end
+
+    test "can use field paths in requests" do
+      run_server([TranscodeServer], fn port ->
+        {:ok, conn_pid} = :gun.open('localhost', port)
+        name = "fieldpath"
+
+        stream_ref =
+          :gun.get(
+            conn_pid,
+            "/v1/messages/fieldpath/#{name}",
+            [
+              {"content-type", "application/json"}
+            ]
+          )
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+        assert %{"name" => ^name} = Jason.decode!(body)
       end)
     end
 

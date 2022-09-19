@@ -63,7 +63,6 @@ defmodule GRPC.Server.Stream do
         reply,
         opts
       ) do
-
     rule = GRPC.Service.rpc_options(rpc, :http) || %{value: %{}}
     response = GRPC.Server.Transcode.map_response_body(rule.value, reply)
 

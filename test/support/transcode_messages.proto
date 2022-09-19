@@ -23,6 +23,12 @@ service Messaging {
     };
   }
 
+  rpc GetMessageWithFieldPath(NestedMessageRequest) returns (Message) {
+    option (google.api.http) = {
+        get: "/v1/messages/fieldpath/{message.name}"
+    };
+  }
+
   rpc CreateMessage(Message) returns (Message) {
     option (google.api.http) = {
         post: "/v1/messages"

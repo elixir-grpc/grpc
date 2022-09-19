@@ -67,133 +67,17 @@ defmodule GRPC.TranscodeTest do
     assert "/v1/users/:user_id/messages/:message_id" = Transcode.to_path(spec)
   end
 
-  describe "tokenize/2" do
-    test "can tokenize simple paths" do
-      assert [{:/, []}] = Transcode.tokenize("/")
+  test "map_route_bindings/2 should stringify the keys" do
+    path_binding_atom = %{foo: "bar"}
+    path_binding_string = %{foo: "bar"}
 
-      assert [{:/, []}, {:identifier, "v1", []}, {:/, []}, {:identifier, "messages", []}] =
-               Transcode.tokenize("/v1/messages")
-    end
-
-    test "can tokenize simple paths with wildcards" do
-      assert [
-               {:/, []},
-               {:identifier, "v1", []},
-               {:/, []},
-               {:identifier, "messages", []},
-               {:/, []},
-               {:*, []}
-             ] == Transcode.tokenize("/v1/messages/*")
-    end
-
-    test "can tokenize simple variables" do
-      assert [
-               {:/, []},
-               {:identifier, "v1", []},
-               {:/, []},
-               {:identifier, "messages", []},
-               {:/, []},
-               {:"{", []},
-               {:identifier, "message_id", []},
-               {:"}", []}
-             ] == Transcode.tokenize("/v1/messages/{message_id}")
-    end
-
-    test "can tokenize variable assignments in bindings" do
-      assert [
-               {:/, []},
-               {:identifier, "v1", []},
-               {:/, []},
-               {:"{", []},
-               {:identifier, "name", []},
-               {:=, []},
-               {:identifier, "messages", []},
-               {:"}", []}
-             ] == Transcode.tokenize("/v1/{name=messages}")
-    end
-
-    test "can tokenize field paths in bindings" do
-      assert [
-               {:/, []},
-               {:identifier, "v1", []},
-               {:/, []},
-               {:identifier, "messages", []},
-               {:/, []},
-               {:"{", []},
-               {:identifier, "message_id", []},
-               {:"}", []},
-               {:/, []},
-               {:"{", []},
-               {:identifier, "sub.subfield", []},
-               {:"}", []}
-             ] == Transcode.tokenize("/v1/messages/{message_id}/{sub.subfield}")
-    end
+    assert %{"foo" => "bar"} == Transcode.map_path_bindings(path_binding_atom)
+    assert %{"foo" => "bar"} == Transcode.map_path_bindings(path_binding_string)
   end
 
-  describe "parse/3" do
-    test "can parse simple paths" do
-      assert {[], []} ==
-               "/"
-               |> Transcode.tokenize()
-               |> Transcode.parse([], [])
-    end
-
-    test "can parse paths with identifiers" do
-      assert {[], ["v1", "messages"]} ==
-               "/v1/messages"
-               |> Transcode.tokenize()
-               |> Transcode.parse([], [])
-    end
-
-    test "can parse paths with wildcards" do
-      assert {[], ["v1", "messages", {:_, []}]} ==
-               "/v1/messages/*"
-               |> Transcode.tokenize()
-               |> Transcode.parse([], [])
-    end
-
-    test "can parse simple bindings with variables" do
-      assert {[{:message_id, []}], ["v1", "messages", {:message_id, []}]} ==
-               "/v1/messages/{message_id}"
-               |> Transcode.tokenize()
-               |> Transcode.parse([], [])
-    end
-
-    test "can parse bindings with variable assignment" do
-      assert {[{:name, []}], ["v1", {:name, ["messages"]}]} ==
-               "/v1/{name=messages}"
-               |> Transcode.tokenize()
-               |> Transcode.parse([], [])
-    end
-
-    test "can parse multiple bindings with variable assignment" do
-      assert {[{:name, []}, {:message_id, []}], ["v1", {:name, ["messages"]}, {:message_id, []}]} ==
-               "/v1/{name=messages}/{message_id}"
-               |> Transcode.tokenize()
-               |> Transcode.parse([], [])
-    end
-
-    test "can parse bindings with field paths " do
-      assert {[sub: ["subfield"]], ["v1", "messages", {:sub, []}]} ==
-               "/v1/messages/{sub.subfield}"
-               |> Transcode.tokenize()
-               |> Transcode.parse([], [])
-    end
-
-    test "supports deeper nested field path " do
-      assert {[sub: ["nested", "nested", "nested"]], ["v1", "messages", {:sub, []}]} ==
-               "/v1/messages/{sub.nested.nested.nested}"
-               |> Transcode.tokenize()
-               |> Transcode.parse([], [])
-    end
-
-    test "can parse multiple-bindings with field paths " do
-      assert {[first: ["subfield"], second: ["subfield"]],
-              ["v1", "messages", {:first, []}, {:second, []}]} ==
-               "/v1/messages/{first.subfield}/{second.subfield}"
-               |> Transcode.tokenize()
-               |> Transcode.parse([], [])
-    end
+  test "map_route_bindings/2 with '.' delimited identifiers should create a nested map" do
+    path_binding = %{"foo.bar.baz" => "biz"}
+    assert %{"foo" => %{"bar" => %{"baz" => "biz"}}} == Transcode.map_path_bindings(path_binding)
   end
 
   defp build_simple_rule(method, pattern) do
