@@ -35,8 +35,7 @@ defmodule GRPC.Protoc.Generator.Service do
          service_name: name,
          methods: methods,
          descriptor_fun_body: descriptor_fun_body,
-         version: Util.version(),
-         module_doc?: ctx.include_docs?
+         version: Util.version()
        )
      )}
   end
