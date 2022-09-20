@@ -19,7 +19,7 @@ defmodule Helloworld.Mixfile do
   defp deps do
     [
       {:grpc, path: "../../"},
-      {:protobuf, github: "elixir-protobuf/protobuf", branch: "main", override: true},
+      {:protobuf, "~> 0.11.0"},
       {:jason, "~> 1.3.0"},
       {:google_protos, "~> 0.3.0"},
       {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false}

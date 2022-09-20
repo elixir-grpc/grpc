@@ -15,8 +15,6 @@ defmodule <%= @module %>.Service do
 end
 
 defmodule <%= @module %>.Stub do
-  <%= unless @module_doc? do %>
   @moduledoc false
-  <% end %>
   use GRPC.Stub, service: <%= @module %>.Service
 end

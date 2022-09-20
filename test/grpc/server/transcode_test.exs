@@ -28,7 +28,7 @@ defmodule GRPC.TranscodeTest do
     bindings = %{"name" => "test"}
 
     assert {:ok, %Routeguide.Feature{name: "test", location: point}} =
-             Transcode.map_request(rule, request_body, bindings, "name=Foo", Routeguide.Feature)
+             Transcode.map_request(rule, request_body, bindings, "", Routeguide.Feature)
 
     assert point.latitude == 1
     assert point.longitude == 2

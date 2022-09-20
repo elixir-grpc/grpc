@@ -42,7 +42,7 @@ defmodule GRPC.Server.Transcode.Template do
     {{:identifier, acc, []}, <<>>}
   end
 
-  @spec parse(list(tuple()), list(), list()) :: route()
+  @spec parse(list(tuple()), list(), list()) :: route() | {list(), list(), list()}
   def parse([], params, segments) do
     {Enum.reverse(params), Enum.reverse(segments)}
   end
@@ -64,19 +64,27 @@ defmodule GRPC.Server.Transcode.Template do
     parse(rest, params, segments)
   end
 
+  def parse([{:"}", _} | _rest] = acc, params, segments) do
+    {params, segments, acc}
+  end
+
+  defp parse_binding([], params, segments) do
+    {params, segments, []}
+  end
+
   defp parse_binding([{:"}", []} | rest], params, segments) do
     {params, segments, rest}
   end
 
   defp parse_binding(
-         [{:identifier, id, _}, {:=, _}, {:identifier, assign, _} | rest],
+         [{:identifier, id, _}, {:=, _} | rest],
          params,
          segments
        ) do
     {variable, _} = param = field_path(id)
-    # assign = field_path(assign)
+    {_, assign, rest} = parse(rest, [], [])
 
-    parse_binding(rest, [param | params], [{variable, [assign]} | segments])
+    parse_binding(rest, [param | params], [{variable, Enum.reverse(assign)} | segments])
   end
 
   defp parse_binding([{:identifier, id, []} | rest], params, segments) do

@@ -29,7 +29,7 @@ defmodule GRPC.Server.Transcode do
   end
 
   def map_request(
-        %Google.Api.HttpRule{} = rule,
+        %Google.Api.HttpRule{body: "*"} = rule,
         body_request,
         path_bindings,
         _query_string,
@@ -38,6 +38,21 @@ defmodule GRPC.Server.Transcode do
     path_bindings = map_path_bindings(path_bindings)
     body_request = map_request_body(rule, body_request)
     request = Map.merge(path_bindings, body_request)
+
+    Protobuf.JSON.from_decoded(request, req_mod)
+  end
+
+  def map_request(
+        %Google.Api.HttpRule{} = rule,
+        body_request,
+        path_bindings,
+        query_string,
+        req_mod
+      ) do
+    path_bindings = map_path_bindings(path_bindings)
+    query = Query.decode(query_string)
+    body_request = map_request_body(rule, body_request)
+    request = Enum.reduce([query, body_request], path_bindings, &Map.merge(&2, &1))
 
     Protobuf.JSON.from_decoded(request, req_mod)
   end
@@ -69,7 +84,18 @@ defmodule GRPC.Server.Transcode do
     "/" <> match
   end
 
-  defp segment_to_string({binding, _}) when is_atom(binding), do: ":#{Atom.to_string(binding)}"
+  defp segment_to_string({:_, []}), do: "[...]"
+  defp segment_to_string({binding, []}) when is_atom(binding), do: ":#{Atom.to_string(binding)}"
+
+  defp segment_to_string({binding, [_ | rest]}) when is_atom(binding) do
+    sub_path =
+      rest
+      |> Enum.map(&segment_to_string/1)
+      |> Enum.join("/")
+
+    ":#{Atom.to_string(binding)}" <> "/" <> sub_path
+  end
+
   defp segment_to_string(segment), do: segment
 
   @spec build_route(Google.Api.HttpRule.t()) :: {atom(), Template.route()}

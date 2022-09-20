@@ -47,6 +47,21 @@ defmodule GRPC.Transcode.TemplateTest do
              ] == Template.tokenize("/v1/{name=messages}")
     end
 
+    test "can tokenize variable sub-paths in bindings" do
+      assert [
+               {:/, []},
+               {:identifier, "v1", []},
+               {:/, []},
+               {:"{", []},
+               {:identifier, "name", []},
+               {:=, []},
+               {:identifier, "messages", []},
+               {:/, []},
+               {:*, []},
+               {:"}", []}
+             ] == Template.tokenize("/v1/{name=messages/*}")
+    end
+
     test "can tokenize field paths in bindings" do
       assert [
                {:/, []},
@@ -95,8 +110,8 @@ defmodule GRPC.Transcode.TemplateTest do
     end
 
     test "can parse bindings with variable assignment" do
-      assert {[{:name, []}], ["v1", {:name, ["messages"]}]} ==
-               "/v1/{name=messages}"
+      assert {[{:name, []}], ["v1", {:name, ["messages", {:_, []}]}]} ==
+               "/v1/{name=messages/*}"
                |> Template.tokenize()
                |> Template.parse([], [])
     end
