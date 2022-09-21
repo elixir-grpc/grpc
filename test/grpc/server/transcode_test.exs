@@ -50,8 +50,7 @@ defmodule GRPC.TranscodeTest do
 
   test "build_route/1 returns a route with {http_method, route} based on the http rule" do
     rule = build_simple_rule(:get, "/v1/messages/{message_id}")
-    assert {:get, {params, segments}} = Transcode.build_route(rule)
-    assert [message_id: []] == params
+    assert {:get, segments} = Transcode.build_route(rule)
     assert ["v1", "messages", {:message_id, []}] = segments
   end
 

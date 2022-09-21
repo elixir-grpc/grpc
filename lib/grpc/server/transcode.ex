@@ -75,7 +75,7 @@ defmodule GRPC.Server.Transcode do
   def map_response_body(%{}, response_body), do: response_body
 
   @spec to_path({atom(), Template.route()}) :: String.t()
-  def to_path({_method, {_bindings, segments}} = _spec) do
+  def to_path({_method, segments} = _spec) do
     match =
       segments
       |> Enum.map(&segment_to_string/1)
@@ -103,7 +103,7 @@ defmodule GRPC.Server.Transcode do
     route =
       path
       |> Template.tokenize([])
-      |> Template.parse([], [])
+      |> Template.parse([])
 
     {method, route}
   end

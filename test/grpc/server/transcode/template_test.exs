@@ -82,71 +82,66 @@ defmodule GRPC.Transcode.TemplateTest do
 
   describe "parse/3" do
     test "can parse simple paths" do
-      assert {[], []} ==
+      assert [] ==
                "/"
                |> Template.tokenize()
-               |> Template.parse([], [])
+               |> Template.parse([])
     end
 
     test "can parse paths with identifiers" do
-      assert {[], ["v1", "messages"]} ==
+      assert ["v1", "messages"] ==
                "/v1/messages"
                |> Template.tokenize()
-               |> Template.parse([], [])
+               |> Template.parse([])
     end
 
     test "can parse paths with wildcards" do
-      assert {[], ["v1", "messages", {:_, []}]} ==
+      assert ["v1", "messages", {:_, []}] ==
                "/v1/messages/*"
                |> Template.tokenize()
-               |> Template.parse([], [])
+               |> Template.parse([])
     end
 
     test "can parse simple bindings with variables" do
-      assert {[{:message_id, []}], ["v1", "messages", {:message_id, []}]} ==
+      assert ["v1", "messages", {:message_id, []}] ==
                "/v1/messages/{message_id}"
                |> Template.tokenize()
-               |> Template.parse([], [])
+               |> Template.parse([])
     end
 
     test "can parse bindings with variable assignment" do
-      assert {[{:name, []}], ["v1", {:name, ["messages", {:_, []}]}]} ==
+      assert ["v1", {:name, ["messages", {:_, []}]}] ==
                "/v1/{name=messages/*}"
                |> Template.tokenize()
-               |> Template.parse([], [])
+               |> Template.parse([])
     end
 
     test "can parse multiple bindings with variable assignment" do
-      assert {[{:name, []}, {:message_id, []}], ["v1", {:name, ["messages"]}, {:message_id, []}]} ==
+      assert ["v1", {:name, ["messages"]}, {:message_id, []}] ==
                "/v1/{name=messages}/{message_id}"
                |> Template.tokenize()
-               |> Template.parse([], [])
+               |> Template.parse([])
     end
 
     test "can parse bindings with field paths" do
-      assert {["sub.subfield": ["sub", "subfield"]], ["v1", "messages", {:"sub.subfield", []}]} ==
+      assert ["v1", "messages", {:"sub.subfield", []}] ==
                "/v1/messages/{sub.subfield}"
                |> Template.tokenize()
-               |> Template.parse([], [])
+               |> Template.parse([])
     end
 
     test "supports deeper nested field path " do
-      assert {["sub.nested.nested.nested": ["sub", "nested", "nested", "nested"]],
-              ["v1", "messages", {:"sub.nested.nested.nested", []}]} ==
+      assert ["v1", "messages", {:"sub.nested.nested.nested", []}] ==
                "/v1/messages/{sub.nested.nested.nested}"
                |> Template.tokenize()
-               |> Template.parse([], [])
+               |> Template.parse([])
     end
 
     test "can parse multiple-bindings with field paths " do
-      assert {[
-                "first.subfield": ["first", "subfield"],
-                "second.subfield": ["second", "subfield"]
-              ],
-              ["v1", "messages", {:"first.subfield", []}, {:"second.subfield", []}]} ==
+      assert ["v1", "messages", {:"first.subfield", []}, {:"second.subfield", []}] ==
                "/v1/messages/{first.subfield}/{second.subfield}"
                |> Template.tokenize()
-               |> Template.parse([], [])
+               |> Template.parse([])
     end
   end
 end

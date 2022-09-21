@@ -8,8 +8,7 @@ defmodule GRPC.Server.Transcode.Template do
   # FieldPath = IDENT { "." IDENT } ;
   # Verb     = ":" LITERAL ;
   @type segments :: list(atom | String.t())
-  @type bindings :: list(atom)
-  @type route :: {bindings(), segments()}
+  @type route :: {atom(), segments()}
 
   @spec tokenize(binary(), list()) :: list()
   def tokenize(path, tokens \\ [])
@@ -42,62 +41,56 @@ defmodule GRPC.Server.Transcode.Template do
     {{:identifier, acc, []}, <<>>}
   end
 
-  @spec parse(list(tuple()), list(), list()) :: route() | {list(), list(), list()}
-  def parse([], params, segments) do
-    {Enum.reverse(params), Enum.reverse(segments)}
+  @spec parse(list(tuple()), list()) :: route() | {list(), list()}
+  def parse([], segments) do
+    Enum.reverse(segments)
   end
 
-  def parse([{:/, _} | rest], params, segments) do
-    parse(rest, params, segments)
+  def parse([{:/, _} | rest], segments) do
+    parse(rest, segments)
   end
 
-  def parse([{:*, _} | rest], params, segments) do
-    parse(rest, params, [{:_, []} | segments])
+  def parse([{:*, _} | rest], segments) do
+    parse(rest, [{:_, []} | segments])
   end
 
-  def parse([{:identifier, identifier, _} | rest], params, segments) do
-    parse(rest, params, [identifier | segments])
+  def parse([{:identifier, identifier, _} | rest], segments) do
+    parse(rest, [identifier | segments])
   end
 
-  def parse([{:"{", _} | rest], params, segments) do
-    {params, segments, rest} = parse_binding(rest, params, segments)
-    parse(rest, params, segments)
+  def parse([{:"{", _} | rest], segments) do
+    {segments, rest} = parse_binding(rest, segments)
+    parse(rest, segments)
   end
 
-  def parse([{:"}", _} | _rest] = acc, params, segments) do
-    {params, segments, acc}
+  def parse([{:"}", _} | _rest] = acc, segments) do
+    {segments, acc}
   end
 
-  defp parse_binding([], params, segments) do
-    {params, segments, []}
+  defp parse_binding([], segments) do
+    {segments, []}
   end
 
-  defp parse_binding([{:"}", []} | rest], params, segments) do
-    {params, segments, rest}
+  defp parse_binding([{:"}", []} | rest], segments) do
+    {segments, rest}
   end
 
   defp parse_binding(
          [{:identifier, id, _}, {:=, _} | rest],
-         params,
          segments
        ) do
-    {variable, _} = param = field_path(id)
-    {_, assign, rest} = parse(rest, [], [])
+    variable = field_path(id)
+    {assign, rest} = parse(rest, [])
 
-    parse_binding(rest, [param | params], [{variable, Enum.reverse(assign)} | segments])
+    parse_binding(rest, [{variable, Enum.reverse(assign)} | segments])
   end
 
-  defp parse_binding([{:identifier, id, []} | rest], params, segments) do
-    {variable, _} = param = field_path(id)
-    parse_binding(rest, [param | params], [{variable, []} | segments])
+  defp parse_binding([{:identifier, id, []} | rest], segments) do
+    variable = field_path(id)
+    parse_binding(rest, [{variable, []} | segments])
   end
 
   defp field_path(identifier) do
-    id_key = String.to_atom(identifier)
-
-    case String.split(identifier, ".") do
-      [_root] -> {id_key, []}
-      [_root | _] = path -> {id_key, path}
-    end
+    String.to_atom(identifier)
   end
 end
