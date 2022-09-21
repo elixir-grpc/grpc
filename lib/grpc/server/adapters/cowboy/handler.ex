@@ -18,7 +18,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
              opts :: keyword()}
         ) :: {:cowboy_loop, map(), map()}
   def init(req, {endpoint, {_name, server}, route, opts} = state) do
-    with {:ok, codec} <- find_codec(req, server),
+    with {:ok, sub_type, content_type} <- find_content_type_subtype(req),
+         {:ok, codec} <- find_codec(sub_type, content_type, server),
          {:ok, compressor} <- find_compressor(req, server) do
       http_method =
         req
@@ -34,7 +35,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         local: opts[:local],
         codec: codec,
         http_method: http_method,
-        compressor: compressor
+        compressor: compressor,
+        http_transcode: sub_type == "json"
       }
 
       pid = spawn_link(__MODULE__, :call_rpc, [server, route, stream])
@@ -63,23 +65,23 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  defp find_codec(req, server) do
-    req_content_type = :cowboy_req.header("content-type", req)
-
-    with {:ok, subtype} <- extract_subtype(req_content_type),
-         codec when not is_nil(codec) <-
-           Enum.find(server.__meta__(:codecs), nil, fn c -> c.name() == subtype end) do
+  defp find_codec(subtype, content_type, server) do
+    if codec = Enum.find(server.__meta__(:codecs), nil, fn c -> c.name() == subtype end) do
       {:ok, codec}
     else
-      err ->
-        Logger.error(fn -> inspect(err) end)
-
-        {:error,
-         RPCError.exception(
-           status: :unimplemented,
-           message: "No codec registered for content-type #{req_content_type}"
-         )}
+      {:error,
+       RPCError.exception(
+         status: :unimplemented,
+         message: "No codec registered for content-type #{content_type}"
+       )}
     end
+  end
+
+  defp find_content_type_subtype(req) do
+    req_content_type = :cowboy_req.header("content-type", req)
+
+    {:ok, subtype} = extract_subtype(req_content_type)
+    {:ok, subtype, req_content_type}
   end
 
   defp find_compressor(req, server) do

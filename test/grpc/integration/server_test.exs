@@ -301,6 +301,29 @@ defmodule GRPC.Integration.ServerTest do
   end
 
   describe "http/json transcode" do
+    test "grpc method can be called using json when http_transcode == true" do
+      run_server([TranscodeServer], fn port ->
+        name = "direct_call"
+
+        {:ok, conn_pid} = :gun.open('localhost', port)
+
+        stream_ref =
+          :gun.post(
+            conn_pid,
+            "/transcode.Messaging/GetMessage",
+            [
+              {"content-type", "application/json"}
+            ],
+            Jason.encode!(%{"name" => name})
+          )
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+
+        assert %{"text" => "get_message"} = Jason.decode!(body)
+      end)
+    end
+
     test "can transcode path params" do
       run_server([TranscodeServer], fn port ->
         name = "foo"

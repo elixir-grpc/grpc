@@ -48,6 +48,8 @@ defmodule GRPC.Server do
       compressors = opts[:compressors] || []
       http_transcode = opts[:http_transcode] || false
 
+      codecs = if http_transcode, do: [GRPC.Codec.JSON | codecs], else: codecs
+
       routes =
         for {name, _, _, options} = rpc <- service_mod.__rpc_calls__, reduce: [] do
           acc ->
