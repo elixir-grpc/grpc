@@ -1,17 +1,14 @@
 defmodule GRPC.Server.Transcode do
+  @moduledoc false
   alias __MODULE__.{Query, Template, FieldPath}
 
-  @doc """
-  Leaf request fields (recursive expansion nested messages in the request message) are classified into three categories:
-
-  1. Fields referred by the path template. They are passed via the URL path.
-  2. Fields referred by the HttpRule.body. They are passed via the HTTP request body.
-  3. All other fields are passed via the URL query parameters, and the parameter name is the field path in the request message. A repeated field can be represented as multiple query parameters under the same name.
-
-  If HttpRule.body is "*", there is no URL query parameter, all fields are passed via URL path and HTTP request body.
-
-  If HttpRule.body is omitted, there is no HTTP request body, all fields are passed via URL path and URL query parameters.
-  """
+  # The request mapping follow the following rules:
+  #
+  # 1. Fields referred by the path template. They are passed via the URL path.
+  # 2. Fields referred by the HttpRule.body. They are passed via the HTTP request body.
+  # 3. All other fields are passed via the URL query parameters, and the parameter name is the field path in the request message. A repeated field can be represented as multiple query parameters under the same name.
+  # If HttpRule.body is "*", there is no URL query parameter, all fields are passed via URL path and HTTP request body.
+  # If HttpRule.body is omitted, there is no HTTP request body, all fields are passed via URL path and URL query parameters.
   @spec map_request(Google.Api.HttpRule.t(), map(), map(), String.t(), module()) ::
           {:ok, struct()} | {:error, term()}
   def map_request(

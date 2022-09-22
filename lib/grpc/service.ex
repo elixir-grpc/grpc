@@ -3,13 +3,34 @@ defmodule GRPC.Service do
   Define gRPC service used by Stub and Server. You should use `Protobuf` to
   to generate code instead of using this module directly.
 
-  It imports DSL functions like `rpc/3` and `stream/1` for defining the RPC
+  It imports DSL functions like `rpc/4` and `stream/1` for defining the RPC
   functions easily:
 
       defmodule Greeter.Service do
         use GRPC.Service, name: "helloworld.Greeter"
 
         rpc :SayHello, HelloRequest, stream(HelloReply)
+      end
+
+  `option (google.api.http)` annotations are supported for gRPC http/json transcoding. Once generated the 4th argument to `rpc/4` contains
+  the `Google.Api.HttpRule` option.
+
+      defmodule Greeter.Service do
+        use GRPC.Service, name: "helloworld.Greeter"
+
+        rpc(:SayHello, Helloworld.HelloRequest, Helloworld.HelloReply, %{
+          http: %{
+            type: Google.Api.PbExtension,
+            value: %Google.Api.HttpRule{
+              __unknown_fields__: [],
+              additional_bindings: [],
+              body: "",
+              pattern: {:get, "/v1/greeter/{name}"},
+              response_body: "",
+              selector: ""
+            }
+          }
+        })
       end
   """
 

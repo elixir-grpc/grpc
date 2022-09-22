@@ -29,6 +29,85 @@ defmodule GRPC.Server do
   The request will be a `Enumerable.t`(created by Elixir's `Stream`) of requests
   if it's streaming. If a reply is streaming, you need to call `send_reply/2` to send
   replies one by one instead of returning reply in the end.
+
+  ## gRPC http/json transcoding
+
+  Transcoding can be enabled by using the option `http_transcode: true`:
+
+      defmodule Greeter.Service do
+        use GRPC.Service, name: "ping"
+
+        rpc :SayHello, Request, Reply
+        rpc :SayGoodbye, stream(Request), stream(Reply)
+      end
+
+      defmodule Greeter.Server do
+        use GRPC.Server, service: Greeter.Service, http_transcode: true
+
+        def say_hello(request, _stream) do
+          Reply.new(message: "Hello" <> request.name)
+        end
+
+        def say_goodbye(request_enum, stream) do
+          requests = Enum.map request_enum, &(&1)
+          GRPC.Server.send_reply(stream, reply1)
+          GRPC.Server.send_reply(stream, reply2)
+        end
+      end
+
+  With transcoding enabled gRPC methods can be used over HTTP/1 with JSON i.e
+
+      POST localhost/helloworld.Greeter/SayHello`
+      Content-Type: application/json
+      {
+        "message": "gRPC"
+      }
+
+      HTTP/1.1 200 OK
+      Content-Type: application/json
+      {
+        "message": "Hello gRPC"
+      }
+
+  By using  `option (google.api.http)` annotations in the `.proto` file the mapping between
+  HTTP/JSON to gRPC methods and parameters can be customized:
+
+      syntax = "proto3";
+
+      import "google/api/annotations.proto";
+      import "google/protobuf/timestamp.proto";
+
+      package helloworld;
+
+      service Greeter {
+        rpc SayHello (HelloRequest) returns (HelloReply) {
+          option (google.api.http) = {
+            get: "/v1/greeter/{name}"
+          };
+        }
+      }
+
+      message HelloRequest {
+        string name = 1;
+      }
+
+      message HelloReply {
+        string message = 1;
+      }
+
+  In addition to the `POST localhost/helloworld.Greeter/SayHello` route in the previous examples
+  this creates an additional route: `GET localhost/v1/greeter/:name`
+
+      GET localhost/v1/greeter/gRPC
+      Accept: application/json
+
+      HTTP/1.1 200 OK
+      Content-Type: application/json
+      {
+        "message": "Hello gRPC"
+      }
+
+  For more comprehensive documentation on annotation usage in `.proto` files [see](https://cloud.google.com/endpoints/docs/grpc/transcoding)
   """
 
   require Logger
