@@ -324,6 +324,24 @@ defmodule GRPC.Integration.ServerTest do
       end)
     end
 
+    test "accept: application/json can be used with get requests" do
+      run_server([TranscodeServer], fn port ->
+        name = "direct_call"
+
+        {:ok, conn_pid} = :gun.open('localhost', port)
+
+        stream_ref =
+          :gun.get(conn_pid, "/v1/messages/#{name}", [
+            {"accept", "application/json"}
+          ])
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+
+        assert %{"text" => "get_message"} = Jason.decode!(body)
+      end)
+    end
+
     test "can transcode path params" do
       run_server([TranscodeServer], fn port ->
         name = "foo"

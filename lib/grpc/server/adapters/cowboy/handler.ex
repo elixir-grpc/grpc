@@ -18,15 +18,15 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
              opts :: keyword()}
         ) :: {:cowboy_loop, map(), map()}
   def init(req, {endpoint, {_name, server}, route, opts} = state) do
-    with {:ok, sub_type, content_type} <- find_content_type_subtype(req),
+    http_method =
+      req
+      |> :cowboy_req.method()
+      |> String.downcase()
+      |> String.to_existing_atom()
+
+    with {:ok, sub_type, content_type} <- find_content_type_subtype(http_method, req),
          {:ok, codec} <- find_codec(sub_type, content_type, server),
          {:ok, compressor} <- find_compressor(req, server) do
-      http_method =
-        req
-        |> :cowboy_req.method()
-        |> String.downcase()
-        |> String.to_existing_atom()
-
       stream = %GRPC.Server.Stream{
         server: server,
         endpoint: endpoint,
@@ -77,11 +77,28 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  defp find_content_type_subtype(req) do
+  defp find_content_type_subtype(:get, req) do
+    content_type =
+      case :cowboy_req.header("accept", req) do
+        :undefined ->
+          :cowboy_req.header("content-type", req)
+
+        content_type ->
+          content_type
+      end
+
+    find_subtype(content_type)
+  end
+
+  defp find_content_type_subtype(_, req) do
     req_content_type = :cowboy_req.header("content-type", req)
 
-    {:ok, subtype} = extract_subtype(req_content_type)
-    {:ok, subtype, req_content_type}
+    find_subtype(req_content_type)
+  end
+
+  defp find_subtype(content_type) do
+    {:ok, subtype} = extract_subtype(content_type)
+    {:ok, subtype, content_type}
   end
 
   defp find_compressor(req, server) do
