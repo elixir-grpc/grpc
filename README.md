@@ -6,10 +6,6 @@
 
 An Elixir implementation of [gRPC](http://www.grpc.io/).
 
-**WARNING: Be careful to use it in production! Test and benchmark in advance.**
-
-**NOTICE: Erlang/OTP needs >= 22 **
-
 **NOTICE: gun**
 
 The Gun library doesn't have a full 2.0 release yet, so we depend on `:grcp_gun 2.0.1` for now.
