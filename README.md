@@ -19,8 +19,8 @@ An Elixir implementation of [gRPC](http://www.grpc.io/).
 - [Contributing](#contributing)
 
 ## Notice
-
-The [Gun](https://github.com/ninenines/gun) library doesn't have a full 2.0 release yet, so we depend on `:grcp_gun 2.0.1` for now.
+> __Note__
+> The [Gun](https://github.com/ninenines/gun) library doesn't have a full 2.0 release yet, so we depend on `:grcp_gun 2.0.1` for now.
 This is the same as `:gun 2.0.0-rc.2`, but [Hex](https://hex.pm/) doesn't let us depend on RC versions for releases.
 
 ## Installation
