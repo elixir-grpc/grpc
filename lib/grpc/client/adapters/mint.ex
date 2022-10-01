@@ -138,25 +138,15 @@ defmodule GRPC.Client.Adapters.Mint do
   defp mint_scheme(_channel), do: :http
 
   def check_for_error(responses) do
-    error = Enum.find(responses, fn {status, _data} -> status == :error end)
-    if error == nil, do: :ok, else: error
+    error = Keyword.get(responses, :error)
+
+    if error, do: error, else: :ok
   end
 
   defp append_trailers(headers, responses) do
-    responses
-    |> Enum.find(fn {status, _data} -> status == :trailers end)
-    |> case do
+    case Keyword.get(responses, :trailers) do
       nil -> %{headers: headers}
-      {:trailers, trailers} -> %{headers: headers, trailers: trailers}
-    end
-  end
-
-  defp get_headers(responses) do
-    responses
-    |> Enum.find(fn {status, _data} -> status == :headers end)
-    |> case do
-      nil -> nil
-      {:headers, headers} -> headers
+      trailers -> %{headers: headers, trailers: trailers}
     end
   end
 
@@ -190,7 +180,7 @@ defmodule GRPC.Client.Adapters.Mint do
       data = Keyword.fetch!(responses, :ok)
 
       if opts[:return_headers] do
-        {:ok, data, get_headers(responses) |> append_trailers(responses)}
+        {:ok, data, append_trailers(Keyword.get(responses, :headers), responses)}
       else
         {:ok, data}
       end
