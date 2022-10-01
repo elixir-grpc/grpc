@@ -38,7 +38,7 @@ defmodule GRPC.Client.Adapters.Mint do
 
   @impl true
   def send_request(%{channel: %{adapter_payload: nil}}, _message, _opts),
-      do: raise "Can't perform a request without a connection process"
+    do: raise("Can't perform a request without a connection process")
 
   def send_request(
         %{channel: %{adapter_payload: %{conn_pid: pid}}, path: path} = stream,
@@ -63,54 +63,28 @@ defmodule GRPC.Client.Adapters.Mint do
   end
 
   @impl true
-  def receive_data(
-        %{server_stream: true, payload: %{response: response, stream_response_pid: pid}},
-        opts
-      ) do
-    with {:ok, headers} <- response do
-      stream = StreamResponseProcess.build_stream(pid)
+  def receive_data(stream, opts) do
+    cond do
+      bidirectional_stream?(stream) ->
+        do_receive_data(stream, :bidirectional_stream, opts)
 
-      case opts[:return_headers] do
-        true -> {:ok, stream, headers}
-        _any -> {:ok, stream}
-      end
-    end
-  end
+      unary_request_stream_response?(stream) ->
+        do_receive_data(stream, :unary_request_stream_response, opts)
 
-  # for streamed requests
-  def receive_data(
-        %{payload: %{response: {:ok, %{request_ref: _ref}}, stream_response_pid: pid}},
-        opts
-      ) do
-    with stream <- StreamResponseProcess.build_stream(pid),
-         responses <- Enum.to_list(stream),
-         :ok <- check_for_error(responses) do
-      {:ok, data} = Enum.find(responses, fn {status, _data} -> status == :ok end)
+      stream_request_unary_response?(stream) ->
+        do_receive_data(stream, :stream_request_unary_response, opts)
 
-      case opts[:return_headers] do
-        true -> {:ok, data, get_headers(responses) |> append_trailers(responses)}
-        _any -> {:ok, data}
-      end
-    end
-  end
+      unary_request_response?(stream) ->
+        do_receive_data(stream, :unary_request_response, opts)
 
-  def receive_data(%{payload: %{response: response, stream_response_pid: pid}}, opts) do
-    with {:ok, %{headers: headers}} <- response,
-         stream <- StreamResponseProcess.build_stream(pid),
-         responses <- Enum.into(stream, []),
-         :ok <- check_for_error(responses) do
-      {:ok, data} = Enum.find(responses, fn {status, _data} -> status == :ok end)
-
-      case opts[:return_headers] do
-        true -> {:ok, data, append_trailers(headers, responses)}
-        _any -> {:ok, data}
-      end
+      true ->
+        handle_errors_receive_data(stream, opts)
     end
   end
 
   @impl true
   def send_headers(%{channel: %{adapter_payload: nil}}, _opts),
-      do: raise "Can't start a client stream without a connection process"
+    do: raise("Can't start a client stream without a connection process")
 
   def send_headers(%{channel: %{adapter_payload: %{conn_pid: pid}}, path: path} = stream, opts) do
     headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
@@ -185,4 +159,99 @@ defmodule GRPC.Client.Adapters.Mint do
       {:headers, headers} -> headers
     end
   end
+
+  defp do_receive_data(%{payload: %{stream_response_pid: pid}}, :bidirectional_stream, _opts) do
+    stream = StreamResponseProcess.build_stream(pid)
+    {:ok, stream}
+  end
+
+  defp do_receive_data(
+         %{payload: %{response: {:ok, headers}, stream_response_pid: pid}},
+         :unary_request_stream_response,
+         opts
+       ) do
+    stream = StreamResponseProcess.build_stream(pid)
+
+    if opts[:return_headers] do
+      {:ok, stream, headers}
+    else
+      {:ok, stream}
+    end
+  end
+
+  defp do_receive_data(
+         %{payload: %{response: {:ok, %{request_ref: _ref}}, stream_response_pid: pid}},
+         :stream_request_unary_response,
+         opts
+       ) do
+    with stream <- StreamResponseProcess.build_stream(pid),
+         responses <- Enum.to_list(stream),
+         :ok <- check_for_error(responses) do
+      data = Keyword.fetch!(responses, :ok)
+
+      if opts[:return_headers] do
+        {:ok, data, get_headers(responses) |> append_trailers(responses)}
+      else
+        {:ok, data}
+      end
+    end
+  end
+
+  defp do_receive_data(
+         %{payload: %{response: {:ok, %{headers: headers}}, stream_response_pid: pid}},
+         :unary_request_response,
+         opts
+       ) do
+    responses = Enum.to_list(StreamResponseProcess.build_stream(pid))
+
+    with :ok <- check_for_error(responses) do
+      data = Keyword.fetch!(responses, :ok)
+
+      if(opts[:return_headers]) do
+        {:ok, data, append_trailers(headers, responses)}
+      else
+        {:ok, data}
+      end
+    end
+  end
+
+  def handle_errors_receive_data(_stream, _opts) do
+    raise "TODO: Implement"
+  end
+
+  defp bidirectional_stream?(%GRPC.Client.Stream{
+         server_stream: true,
+         payload: %{response: {:ok, %{request_ref: ref}}, stream_response_pid: pid}
+       })
+       when is_reference(ref) and is_pid(pid),
+       do: true
+
+  defp bidirectional_stream?(_stream), do: false
+
+  defp unary_request_stream_response?(%GRPC.Client.Stream{
+         server_stream: true,
+         payload: %{response: {:ok, _headers}, stream_response_pid: pid}
+       })
+       when is_pid(pid),
+       do: true
+
+  defp unary_request_stream_response?(_stream), do: false
+
+  defp stream_request_unary_response?(%GRPC.Client.Stream{
+         server_stream: false,
+         payload: %{response: {:ok, %{request_ref: ref}}, stream_response_pid: pid}
+       })
+       when is_pid(pid) and is_reference(ref),
+       do: true
+
+  defp stream_request_unary_response?(_stream), do: false
+
+  defp unary_request_response?(%GRPC.Client.Stream{
+         server_stream: false,
+         payload: %{response: {:ok, _headers}, stream_response_pid: pid}
+       })
+       when is_pid(pid),
+       do: true
+
+  defp unary_request_response?(_stream), do: false
 end
