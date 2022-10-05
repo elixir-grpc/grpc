@@ -40,41 +40,24 @@ defmodule GRPC.Client.Adapters.Mint do
   def send_request(%{channel: %{adapter_payload: nil}}, _message, _opts),
     do: raise("Can't perform a request without a connection process")
 
-  def send_request(
-        %{channel: %{adapter_payload: %{conn_pid: pid}}, path: path} = stream,
-        message,
-        opts
-      )
-      when is_pid(pid) do
-    headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
+  def send_request(stream, message, opts) do
     {:ok, data, _} = GRPC.Message.to_data(message, opts)
-
-    {:ok, stream_response_pid} =
-      StreamResponseProcess.start_link(stream, opts[:return_headers] || false)
-
-    response =
-      ConnectionProcess.request(pid, "POST", path, headers, data,
-        stream_response_pid: stream_response_pid
-      )
-
-    stream
-    |> GRPC.Client.Stream.put_payload(:response, response)
-    |> GRPC.Client.Stream.put_payload(:stream_response_pid, stream_response_pid)
+    do_request(stream, opts, data)
   end
 
   @impl true
   def receive_data(stream, opts) do
     cond do
-      bidirectional_stream?(stream) ->
+      success_bidi_stream?(stream) ->
         do_receive_data(stream, :bidirectional_stream, opts)
 
-      unary_request_stream_response?(stream) ->
+      success_server_stream?(stream) ->
         do_receive_data(stream, :unary_request_stream_response, opts)
 
-      stream_request_unary_response?(stream) ->
+      success_client_stream?(stream) ->
         do_receive_data(stream, :stream_request_unary_response, opts)
 
-      unary_request_response?(stream) ->
+      success_unary_request?(stream) ->
         do_receive_data(stream, :unary_request_response, opts)
 
       true ->
@@ -86,20 +69,8 @@ defmodule GRPC.Client.Adapters.Mint do
   def send_headers(%{channel: %{adapter_payload: nil}}, _opts),
     do: raise("Can't start a client stream without a connection process")
 
-  def send_headers(%{channel: %{adapter_payload: %{conn_pid: pid}}, path: path} = stream, opts) do
-    headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
-
-    {:ok, stream_response_pid} =
-      StreamResponseProcess.start_link(stream, opts[:return_headers] || false)
-
-    response =
-      ConnectionProcess.request(pid, "POST", path, headers, :stream,
-        stream_response_pid: stream_response_pid
-      )
-
-    stream
-    |> GRPC.Client.Stream.put_payload(:response, response)
-    |> GRPC.Client.Stream.put_payload(:stream_response_pid, stream_response_pid)
+  def send_headers(stream, opts) do
+    do_request(stream, opts, :stream)
   end
 
   @impl true
@@ -188,7 +159,7 @@ defmodule GRPC.Client.Adapters.Mint do
   end
 
   defp do_receive_data(
-         %{payload: %{response: {:ok, %{headers: headers}}, stream_response_pid: pid}},
+         %{payload: %{stream_response_pid: pid}},
          :unary_request_response,
          opts
        ) do
@@ -198,7 +169,7 @@ defmodule GRPC.Client.Adapters.Mint do
       data = Keyword.fetch!(responses, :ok)
 
       if(opts[:return_headers]) do
-        {:ok, data, append_trailers(headers, responses)}
+        {:ok, data, append_trailers(Keyword.get(responses, :headers), responses)}
       else
         {:ok, data}
       end
@@ -209,39 +180,55 @@ defmodule GRPC.Client.Adapters.Mint do
     raise "TODO: Implement"
   end
 
-  defp bidirectional_stream?(%GRPC.Client.Stream{
-         server_stream: true,
-         payload: %{response: {:ok, %{request_ref: ref}}, stream_response_pid: pid}
-       })
-       when is_reference(ref) and is_pid(pid),
+  defp success_bidi_stream?(%GRPC.Client.Stream{
+         grpc_type: :bidi_stream,
+         payload: %{response: {:ok, _resp}}
+       }),
        do: true
 
-  defp bidirectional_stream?(_stream), do: false
+  defp success_bidi_stream?(_stream), do: false
 
-  defp unary_request_stream_response?(%GRPC.Client.Stream{
-         server_stream: true,
-         payload: %{response: {:ok, _headers}, stream_response_pid: pid}
-       })
-       when is_pid(pid),
+  defp success_server_stream?(%GRPC.Client.Stream{
+         grpc_type: :server_stream,
+         payload: %{response: {:ok, _resp}}
+       }),
        do: true
 
-  defp unary_request_stream_response?(_stream), do: false
+  defp success_server_stream?(_stream), do: false
 
-  defp stream_request_unary_response?(%GRPC.Client.Stream{
-         server_stream: false,
-         payload: %{response: {:ok, %{request_ref: ref}}, stream_response_pid: pid}
-       })
-       when is_pid(pid) and is_reference(ref),
+  defp success_client_stream?(%GRPC.Client.Stream{
+         grpc_type: :client_stream,
+         payload: %{response: {:ok, _resp}}
+       }),
        do: true
 
-  defp stream_request_unary_response?(_stream), do: false
+  defp success_client_stream?(_stream), do: false
 
-  defp unary_request_response?(%GRPC.Client.Stream{
-         server_stream: false,
-         payload: %{response: {:ok, _headers}, stream_response_pid: pid}
-       })
-       when is_pid(pid),
+  defp success_unary_request?(%GRPC.Client.Stream{
+         grpc_type: :unary,
+         payload: %{response: {:ok, _resp}}
+       }),
        do: true
 
-  defp unary_request_response?(_stream), do: false
+  defp success_unary_request?(_stream), do: false
+
+  defp do_request(
+         %{channel: %{adapter_payload: %{conn_pid: pid}}, path: path} = stream,
+         opts,
+         body
+       ) do
+    headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
+
+    {:ok, stream_response_pid} =
+      StreamResponseProcess.start_link(stream, opts[:return_headers] || false)
+
+    response =
+      ConnectionProcess.request(pid, "POST", path, headers, body,
+        stream_response_pid: stream_response_pid
+      )
+
+    stream
+    |> GRPC.Client.Stream.put_payload(:response, response)
+    |> GRPC.Client.Stream.put_payload(:stream_response_pid, stream_response_pid)
+  end
 end

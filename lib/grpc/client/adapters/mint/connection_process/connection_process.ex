@@ -55,11 +55,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
         new_state =
           state
           |> State.update_conn(conn)
-          |> State.put_in_ref(request_ref, %{
-            stream_response_pid: opts[:stream_response_pid],
-            done: false,
-            response: %{}
-          })
+          |> State.put_empty_ref_state(request_ref, opts[:stream_response_pid])
 
         {:reply, {:ok, %{request_ref: request_ref}}, new_state}
 
@@ -71,22 +67,21 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
 
   def handle_call(
         {:request, method, path, headers, body, opts},
-        from,
+        _from,
         state
       ) do
-    case Mint.HTTP.request(state.conn, method, path, headers, body) do
+    case Mint.HTTP.request(state.conn, method, path, headers, :stream) do
       {:ok, conn, request_ref} ->
+        queue = :queue.in({request_ref, body, nil}, state.request_stream_queue)
+
         new_state =
           state
           |> State.update_conn(conn)
-          |> State.put_in_ref(request_ref, %{
-            from: from,
-            stream_response_pid: opts[:stream_response_pid],
-            done: false,
-            response: %{}
-          })
+          |> State.update_request_stream_queue(queue)
+          |> State.put_empty_ref_state(request_ref, opts[:stream_response_pid])
 
-        {:noreply, new_state}
+        {:reply, {:ok, %{request_ref: request_ref}}, new_state,
+         {:continue, :process_request_stream_queue}}
 
       {:error, conn, reason} ->
         new_state = State.update_conn(state, conn)
@@ -94,14 +89,21 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
     end
   end
 
-  def handle_call({:stream_body, request_ref, body}, _from, state) do
-    case Mint.HTTP.stream_request_body(state.conn, request_ref, body) do
+  def handle_call({:stream_body, request_ref, :eof}, _from, state) do
+    case Mint.HTTP.stream_request_body(state.conn, request_ref, :eof) do
       {:ok, conn} ->
         {:reply, :ok, State.update_conn(state, conn)}
 
       {:error, conn, error} ->
         {:reply, {:error, error}, State.update_conn(state, conn)}
     end
+  end
+
+  def handle_call({:stream_body, request_ref, body}, from, state) do
+    queue = :queue.in({request_ref, body, from}, state.request_stream_queue)
+
+    {:noreply, State.update_request_stream_queue(state, queue),
+     {:continue, :process_request_stream_queue}}
   end
 
   @impl true
@@ -111,11 +113,35 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
         Logger.debug(fn -> "Received unknown message: " <> inspect(message) end)
         {:noreply, state}
 
+      {:ok, conn, [] = _responses} ->
+        check_request_stream_queue(State.update_conn(state, conn))
+
       {:ok, conn, responses} ->
         state = State.update_conn(state, conn)
         state = Enum.reduce(responses, state, &process_response/2)
-        {:noreply, state}
+
+        check_request_stream_queue(state)
     end
+  end
+
+  @impl true
+  def handle_continue(:process_request_stream_queue, state) do
+    {{:value, request}, queue} = :queue.out(state.request_stream_queue)
+    {ref, body, _from} = request
+    window_size = get_window_size(state.conn, ref)
+    body_size = IO.iodata_length(body)
+    dequeued_state = State.update_request_stream_queue(state, queue)
+
+    cond do
+      window_size == 0 -> {:noreply, state}
+      body_size > window_size -> chunk_body_and_enqueue_rest(request, dequeued_state)
+      true -> stream_body_and_reply(request, dequeued_state)
+    end
+  end
+
+  @impl true
+  def terminate(_reason, _state) do
+    :normal
   end
 
   defp process_response({:status, request_ref, status}, state) do
@@ -123,33 +149,20 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   end
 
   defp process_response({:headers, request_ref, headers}, state) do
-    empty_headers? = State.empty_headers?(state, request_ref)
+    if State.empty_headers?(state, request_ref) do
+      new_state = State.update_response_headers(state, request_ref, headers)
 
-    case empty_headers? do
-      true ->
-        new_state = State.update_response_headers(state, request_ref, headers)
-        response = State.get_response(new_state, request_ref)
+      new_state
+      |> State.stream_response_pid(request_ref)
+      |> StreamResponseProcess.consume(:headers, headers)
 
-        new_state
-        |> State.caller_process(request_ref)
-        |> case do
-          nil ->
-            new_state
-            |> State.stream_response_pid(request_ref)
-            |> StreamResponseProcess.consume(:headers, headers)
+      new_state
+    else
+      state
+      |> State.stream_response_pid(request_ref)
+      |> StreamResponseProcess.consume(:trailers, headers)
 
-          ref ->
-            GenServer.reply(ref, {:ok, response})
-        end
-
-        new_state
-
-      false ->
-        state
-        |> State.stream_response_pid(request_ref)
-        |> StreamResponseProcess.consume(:trailers, headers)
-
-        state
+      state
     end
   end
 
@@ -170,8 +183,87 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
     new_state
   end
 
-  @impl true
-  def terminate(_reason, _state) do
-    :normal
+  defp chunk_body_and_enqueue_rest({request_ref, body, from}, state) do
+    {head, tail} = chunk_body(body, get_window_size(state.conn, request_ref))
+
+    case Mint.HTTP.stream_request_body(state.conn, request_ref, head) do
+      {:ok, conn} ->
+        queue = :queue.in_r({request_ref, tail, from}, state.request_stream_queue)
+
+        new_state =
+          state
+          |> State.update_conn(conn)
+          |> State.update_request_stream_queue(queue)
+
+        {:noreply, new_state}
+
+      {:error, conn, error} ->
+        if is_reference(from) do
+          GenServer.reply(from, {:error, error})
+        else
+          state
+          |> State.stream_response_pid(request_ref)
+          |> StreamResponseProcess.consume(:error, error)
+        end
+
+        {:noreply, State.update_conn(state, conn)}
+    end
+  end
+
+  defp stream_body_and_reply({request_ref, body, from}, state) do
+    send_eof? = from == nil
+
+    case stream_body(state.conn, request_ref, body, send_eof?) do
+      {:ok, conn} ->
+        if is_reference(from) do
+          GenServer.reply(from, :ok)
+        end
+
+        check_request_stream_queue(State.update_conn(state, conn))
+
+      {:error, conn, error} ->
+        if is_reference(from) do
+          GenServer.reply(from, {:error, error})
+        else
+          state
+          |> State.stream_response_pid(request_ref)
+          |> StreamResponseProcess.consume(:error, error)
+        end
+
+        check_request_stream_queue(State.update_conn(state, conn))
+    end
+  end
+
+  defp stream_body(conn, request_ref, body, true = _stream_eof?) do
+    with {:ok, conn} <- Mint.HTTP.stream_request_body(conn, request_ref, body),
+         {:ok, conn} <- Mint.HTTP.stream_request_body(conn, request_ref, :eof) do
+      {:ok, conn}
+    end
+  end
+
+  defp stream_body(conn, request_ref, body, false = _stream_eof?) do
+    with {:ok, conn} <- Mint.HTTP.stream_request_body(conn, request_ref, body) do
+      {:ok, conn}
+    end
+  end
+
+  def check_request_stream_queue(state) do
+    if :queue.is_empty(state.request_stream_queue) do
+      {:noreply, state}
+    else
+      {:noreply, state, {:continue, :process_request_stream_queue}}
+    end
+  end
+
+  defp chunk_body(body, bytes_length) do
+    <<head::binary-size(bytes_length), tail::binary>> = body
+    {head, tail}
+  end
+
+  def get_window_size(conn, ref) do
+    min(
+      Mint.HTTP2.get_window_size(conn, {:request, ref}),
+      Mint.HTTP2.get_window_size(conn, :connection)
+    )
   end
 end

@@ -78,7 +78,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
         {:noreply, new_state, {:continue, :produce_response}}
 
       _ ->
-        new_state = %{state | bufferr: buffer <> data}
+        new_state = %{state | buffer: buffer <> data}
         {:noreply, new_state, {:continue, :produce_response}}
     end
   end
