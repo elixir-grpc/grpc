@@ -140,8 +140,8 @@ defmodule GRPC.Client.Adapters.Gun do
           stream,
         opts
       ) do
-    with {:ok, headers, is_fin} <- recv_headers(adapter_payload, payload, opts),
-         response <- response_stream(is_fin, stream, opts) do
+    with {:ok, headers, is_fin} <- recv_headers(adapter_payload, payload, opts) do
+      response = response_stream(is_fin, stream, opts)
       if(opts[:return_headers]) do
         {:ok, response, %{headers: headers}}
       else
