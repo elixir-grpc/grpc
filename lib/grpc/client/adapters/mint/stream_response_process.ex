@@ -152,13 +152,11 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
     decoded_trailers = GRPC.Transport.HTTP2.decode_headers(trailers)
     status = String.to_integer(decoded_trailers["grpc-status"])
 
-    case status == GRPC.Status.ok() do
-      true ->
-        {:trailers, decoded_trailers}
-
-      false ->
-        rpc_error = %GRPC.RPCError{status: status, message: decoded_trailers["grpc-message"]}
-        {:error, rpc_error}
+    if status == GRPC.Status.ok() do
+      {:trailers, decoded_trailers}
+    else
+      rpc_error = %GRPC.RPCError{status: status, message: decoded_trailers["grpc-message"]}
+      {:error, rpc_error}
     end
   end
 
