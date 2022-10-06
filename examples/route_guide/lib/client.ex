@@ -1,16 +1,16 @@
 defmodule RouteGuide.Client do
   def main(channel) do
-    #    print_feature(channel, Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906))
-    #    print_feature(channel, Routeguide.Point.new(latitude: 0, longitude: 0))
+    print_feature(channel, Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906))
+    print_feature(channel, Routeguide.Point.new(latitude: 0, longitude: 0))
 
     # Looking for features between 40, -75 and 42, -73.
-    #    print_features(
-    #      channel,
-    #      Routeguide.Rectangle.new(
-    #        lo: Routeguide.Point.new(latitude: 400_000_000, longitude: -750_000_000),
-    #        hi: Routeguide.Point.new(latitude: 420_000_000, longitude: -730_000_000)
-    #      )
-    #    )
+    print_features(
+      channel,
+      Routeguide.Rectangle.new(
+        lo: Routeguide.Point.new(latitude: 400_000_000, longitude: -750_000_000),
+        hi: Routeguide.Point.new(latitude: 420_000_000, longitude: -730_000_000)
+      )
+    )
 
     run_record_route(channel)
 
