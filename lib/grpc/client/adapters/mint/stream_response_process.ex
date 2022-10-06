@@ -30,7 +30,11 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   @doc """
   Cast a message to process to consume an incoming data or trailers
   """
-  @spec consume(pid(), :data | :trailers | :headers, binary() | Mint.Types.headers()) :: :ok
+  @spec consume(
+          pid(),
+          :data | :trailers | :headers | :error,
+          binary() | Mint.Types.headers() | Mint.Types.error()
+        ) :: :ok
   def consume(pid, :data, data) do
     GenServer.cast(pid, {:consume_response, {:data, data}})
   end
@@ -41,6 +45,10 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
 
   def consume(pid, :headers, headers) do
     GenServer.cast(pid, {:consume_response, {:headers, headers}})
+  end
+
+  def consume(pid, :error, error) do
+    GenServer.cast(pid, {:consume_response, {:error, error}})
   end
 
   # Callbacks
@@ -112,6 +120,10 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
 
   def handle_cast({:consume_response, {:headers, _headers}}, state) do
     {:noreply, state, {:continue, :produce_response}}
+  end
+
+  def handle_cast({:consume_response, {:error, _error} = error}, %{responses: responses} = state) do
+    {:noreply, %{state | responses: [error | responses]}, {:continue, :produce_response}}
   end
 
   def handle_cast({:consume_response, :done}, state) do

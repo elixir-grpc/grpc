@@ -133,6 +133,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
     dequeued_state = State.update_request_stream_queue(state, queue)
 
     cond do
+      # Do nothing, wait for server (on stream/2) to give us more window size
       window_size == 0 -> {:noreply, state}
       body_size > window_size -> chunk_body_and_enqueue_rest(request, dequeued_state)
       true -> stream_body_and_reply(request, dequeued_state)
@@ -198,7 +199,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
         {:noreply, new_state}
 
       {:error, conn, error} ->
-        if is_reference(from) do
+        if from != nil do
           GenServer.reply(from, {:error, error})
         else
           state
@@ -215,14 +216,14 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
 
     case stream_body(state.conn, request_ref, body, send_eof?) do
       {:ok, conn} ->
-        if is_reference(from) do
+        if from != nil do
           GenServer.reply(from, :ok)
         end
 
         check_request_stream_queue(State.update_conn(state, conn))
 
       {:error, conn, error} ->
-        if is_reference(from) do
+        if from != nil do
           GenServer.reply(from, {:error, error})
         else
           state
