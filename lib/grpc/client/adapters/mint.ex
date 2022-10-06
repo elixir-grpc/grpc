@@ -111,7 +111,7 @@ defmodule GRPC.Client.Adapters.Mint do
   def check_for_error(responses) do
     error = Keyword.get(responses, :error)
 
-    if error, do: error, else: :ok
+    if error, do: {:error, error}, else: :ok
   end
 
   defp append_trailers(headers, responses) do

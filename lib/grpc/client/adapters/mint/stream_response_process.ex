@@ -95,7 +95,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
         {:consume_response, {:trailers, trailers}},
         %{send_headers_or_trailers: true, responses: responses} = state
       ) do
-    new_responses = [get_trailers_response(trailers) | responses]
+    new_responses = [get_headers_response(trailers, :trailers) | responses]
     {:noreply, %{state | responses: new_responses}, {:continue, :produce_response}}
   end
 
@@ -103,7 +103,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
         {:consume_response, {:trailers, trailers}},
         %{send_headers_or_trailers: false, responses: responses} = state
       ) do
-    with {:errors, _rpc_error} = error <- get_trailers_response(trailers) do
+    with {:error, _rpc_error} = error <- get_headers_response(trailers, :trailers) do
       {:noreply, %{state | responses: [error | responses]}, {:continue, :produce_response}}
     else
       _any -> {:noreply, state, {:continue, :produce_response}}
@@ -114,12 +114,16 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
         {:consume_response, {:headers, headers}},
         %{send_headers_or_trailers: true, responses: responses} = state
       ) do
-    {:noreply, %{state | responses: [{:headers, headers} | responses]},
+    {:noreply, %{state | responses: [get_headers_response(headers, :headers) | responses]},
      {:continue, :produce_response}}
   end
 
-  def handle_cast({:consume_response, {:headers, _headers}}, state) do
-    {:noreply, state, {:continue, :produce_response}}
+  def handle_cast({:consume_response, {:headers, headers}}, %{responses: responses} = state) do
+    with {:error, _rpc_error} = error <- get_headers_response(headers, :headers) do
+      {:noreply, %{state | responses: [error | responses]}, {:continue, :produce_response}}
+    else
+      _any -> {:noreply, state, {:continue, :produce_response}}
+    end
   end
 
   def handle_cast({:consume_response, {:error, _error} = error}, %{responses: responses} = state) do
@@ -148,12 +152,12 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
     end
   end
 
-  defp get_trailers_response(trailers) do
-    decoded_trailers = GRPC.Transport.HTTP2.decode_headers(trailers)
-    status = String.to_integer(decoded_trailers["grpc-status"])
+  defp get_headers_response(headers, type) do
+    decoded_trailers = GRPC.Transport.HTTP2.decode_headers(headers)
+    status = String.to_integer(decoded_trailers["grpc-status"] || "0")
 
     if status == GRPC.Status.ok() do
-      {:trailers, decoded_trailers}
+      {type, decoded_trailers}
     else
       rpc_error = %GRPC.RPCError{status: status, message: decoded_trailers["grpc-message"]}
       {:error, rpc_error}
