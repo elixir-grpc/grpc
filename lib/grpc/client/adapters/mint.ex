@@ -108,68 +108,25 @@ defmodule GRPC.Client.Adapters.Mint do
   defp mint_scheme(%Channel{scheme: "https"} = _channel), do: :https
   defp mint_scheme(_channel), do: :http
 
-  def check_for_error(responses) do
-    error = Keyword.get(responses, :error)
-
-    if error, do: {:error, error}, else: :ok
-  end
-
-  defp append_trailers(headers, responses) do
-    case Keyword.get(responses, :trailers) do
-      nil -> %{headers: headers}
-      trailers -> %{headers: headers, trailers: trailers}
-    end
-  end
-
-  defp do_receive_data(%{payload: %{stream_response_pid: pid}}, :bidirectional_stream, _opts) do
+  defp do_receive_data(%{payload: %{stream_response_pid: pid}}, request_type, _opts)
+       when request_type in [:bidirectional_stream, :unary_request_stream_response] do
     stream = StreamResponseProcess.build_stream(pid)
     {:ok, stream}
   end
 
   defp do_receive_data(
-         %{payload: %{response: {:ok, headers}, stream_response_pid: pid}},
-         :unary_request_stream_response,
+         %{payload: %{stream_response_pid: pid}},
+         request_type,
          opts
-       ) do
-    stream = StreamResponseProcess.build_stream(pid)
-
-    if opts[:return_headers] do
-      {:ok, stream, headers}
-    else
-      {:ok, stream}
-    end
-  end
-
-  defp do_receive_data(
-         %{payload: %{response: {:ok, %{request_ref: _ref}}, stream_response_pid: pid}},
-         :stream_request_unary_response,
-         opts
-       ) do
+       )
+       when request_type in [:stream_request_unary_response, :unary_request_response] do
     with stream <- StreamResponseProcess.build_stream(pid),
          responses <- Enum.to_list(stream),
          :ok <- check_for_error(responses) do
       data = Keyword.fetch!(responses, :ok)
 
       if opts[:return_headers] do
-        {:ok, data, append_trailers(Keyword.get(responses, :headers), responses)}
-      else
-        {:ok, data}
-      end
-    end
-  end
-
-  defp do_receive_data(
-         %{payload: %{stream_response_pid: pid}},
-         :unary_request_response,
-         opts
-       ) do
-    responses = Enum.to_list(StreamResponseProcess.build_stream(pid))
-
-    with :ok <- check_for_error(responses) do
-      data = Keyword.fetch!(responses, :ok)
-
-      if(opts[:return_headers]) do
-        {:ok, data, append_trailers(Keyword.get(responses, :headers), responses)}
+        {:ok, data, get_headers_and_trailers(responses)}
       else
         {:ok, data}
       end
@@ -230,5 +187,15 @@ defmodule GRPC.Client.Adapters.Mint do
     stream
     |> GRPC.Client.Stream.put_payload(:response, response)
     |> GRPC.Client.Stream.put_payload(:stream_response_pid, stream_response_pid)
+  end
+
+  defp get_headers_and_trailers(responses) do
+    %{headers: Keyword.get(responses, :headers), trailers: Keyword.get(responses, :trailers)}
+  end
+
+  def check_for_error(responses) do
+    error = Keyword.get(responses, :error)
+
+    if error, do: {:error, error}, else: :ok
   end
 end
