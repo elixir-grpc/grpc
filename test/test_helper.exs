@@ -1,4 +1,5 @@
 Code.require_file("./support/test_adapter.exs", __DIR__)
+{:ok, _} = Application.ensure_all_started(:ex_machina)
 
 codecs = [
   GRPC.Codec.Erlpack,

@@ -5,6 +5,8 @@ defmodule GRPC.Test.ClientAdapter do
   def disconnect(channel), do: {:ok, channel}
   def send_request(stream, _message, _opts), do: stream
   def receive_data(_stream, _opts), do: {:ok, nil}
+  def send_data(stream, _message, _opts), do: stream
+  def send_headers(stream, _opts), do: stream
 end
 
 defmodule GRPC.Test.ServerAdapter do

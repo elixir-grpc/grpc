@@ -47,7 +47,9 @@ defmodule GRPC.Mixfile do
       {:cowlib, "~> 2.11"},
       {:protobuf, "~> 0.10", only: [:dev, :test]},
       {:ex_doc, "~> 0.28.0", only: :dev},
-      {:dialyxir, "~> 1.1.0", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.1.0", only: [:dev, :test], runtime: false},
+      {:ex_machina, "~> 2.7.0", only: :test},
+      {:ex_parameterized, "~> 1.3.7", only: :test}
     ]
   end
 

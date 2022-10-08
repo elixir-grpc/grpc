@@ -1,7 +1,5 @@
 defmodule GRPC.Client.Adapters.GunTest do
-  use ExUnit.Case, async: true
-
-  import GRPC.Factory
+  use GRPC.DataCase, async: true
 
   alias GRPC.Client.Adapters.Gun
 
