@@ -166,4 +166,38 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
       do: [{:headers}, {:trailers}]
     )
   end
+
+  describe "handle_cast/2 - errors" do
+    test "add error tuple to responses", %{state: state} do
+      error = {:error, "howdy"}
+
+      response =
+        StreamResponseProcess.handle_cast(
+          {:consume_response, error},
+          state
+        )
+
+      assert {:noreply, new_state, {:continue, :produce_response}} = response
+      assert [response_error] = new_state.responses
+      assert response_error == error
+    end
+  end
+
+  describe "handle_cast/2 - done" do
+    test "set state to done", %{state: state} do
+      response =
+        StreamResponseProcess.handle_cast(
+          {:consume_response, :done},
+          state
+        )
+
+      assert {:noreply, new_state, {:continue, :produce_response}} = response
+      assert true == new_state.done
+    end
+  end
+
+  describe "consume/3" do
+    test "mesage" do
+    end
+  end
 end
