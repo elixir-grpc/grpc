@@ -195,9 +195,4 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
       assert true == new_state.done
     end
   end
-
-  describe "consume/3" do
-    test "mesage" do
-    end
-  end
 end
