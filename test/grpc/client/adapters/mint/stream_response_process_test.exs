@@ -195,4 +195,98 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
       assert true == new_state.done
     end
   end
+
+  describe "handle_continue/2 - produce_response" do
+    test "noreply when process ref is empty", %{state: state} do
+      {:noreply, new_state} = StreamResponseProcess.handle_continue(:produce_response, state)
+      assert new_state == state
+    end
+
+    test "send nil message to caller process (ends Elixir.Stream) when all responses are sent and stream has ended (done: true)",
+         %{state: state} do
+      state = %{state | from: {self(), :tag}, done: true}
+
+      {:stop, :normal, _new_state} =
+        StreamResponseProcess.handle_continue(:produce_response, state)
+
+      assert_receive {:tag, nil}
+    end
+
+    test "continue when there are no response to be sent and stream is not done yet", %{
+      state: state
+    } do
+      state = %{state | from: {self(), :tag}, done: false}
+      {:noreply, new_state} = StreamResponseProcess.handle_continue(:produce_response, state)
+      assert state == new_state
+    end
+
+    test "send response to caller when there are responses in the queue", %{state: state} do
+      state = %{state | from: {self(), :tag}, done: false, responses: [1, 2]}
+      {:noreply, new_state} = StreamResponseProcess.handle_continue(:produce_response, state)
+      %{from: from, responses: responses} = new_state
+      assert nil == from
+      assert [2] == responses
+      assert_receive {:tag, 1}
+    end
+  end
+
+  describe "build_stream/1" do
+    setup do
+      {:ok, pid} = StreamResponseProcess.start_link(build(:client_stream), true)
+
+      %{pid: pid}
+    end
+
+    test "ends stream when done message is passed", %{pid: pid} do
+      stream = StreamResponseProcess.build_stream(pid)
+      StreamResponseProcess.done(pid)
+      assert Enum.to_list(stream) == []
+    end
+
+    test "emits error tuple on stream when error is given to consume", %{pid: pid} do
+      stream = StreamResponseProcess.build_stream(pid)
+      StreamResponseProcess.consume(pid, :error, "an error")
+      StreamResponseProcess.done(pid)
+      assert [error] = Enum.to_list(stream)
+      assert {:error, "an error"} == error
+    end
+
+    test "emits an ok tuple with data", %{pid: pid} do
+      data_to_consume = <<0, 0, 0, 0, 12, 10, 10, 72, 101, 108, 108, 111, 32, 76, 117, 105, 115>>
+      stream = StreamResponseProcess.build_stream(pid)
+      StreamResponseProcess.consume(pid, :data, data_to_consume)
+      StreamResponseProcess.done(pid)
+      assert [data] = Enum.to_list(stream)
+      assert {:ok, build(:hello_reply_rpc)} == data
+    end
+
+    test_with_params(
+      "emits headers to stream",
+      %{pid: pid},
+      fn type ->
+        headers = [
+          {"content-length", "0"},
+          {"content-type", "application/grpc+proto"},
+          {"grpc-message", ""},
+          {"grpc-status", "0"},
+          {"server", "Cowboy"}
+        ]
+
+        stream = StreamResponseProcess.build_stream(pid)
+        StreamResponseProcess.consume(pid, type, headers)
+        StreamResponseProcess.done(pid)
+        assert [{response_type, response_headers}] = Enum.to_list(stream)
+        assert type == response_type
+
+        assert %{
+                 "content-length" => "0",
+                 "content-type" => "application/grpc+proto",
+                 "grpc-message" => "",
+                 "grpc-status" => "0",
+                 "server" => "Cowboy"
+               } == response_headers
+      end,
+      do: [{:headers}, {:trailers}]
+    )
+  end
 end
