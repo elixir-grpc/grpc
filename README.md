@@ -100,19 +100,16 @@ Check [examples](examples) and [interop](interop)(Interoperability Test) for som
 
 ## Features
 
-- [x] [Unary RPC](https://grpc.io/docs/what-is-grpc/core-concepts/#unary-rpc)
-- [x] [Server streaming RPC](https://grpc.io/docs/what-is-grpc/core-concepts/#server-streaming-rpc)
-- [x] [Client streaming RPC](https://grpc.io/docs/what-is-grpc/core-concepts/#client-streaming-rpc)
-- [x] [Bidirectional streaming RPC](https://grpc.io/docs/what-is-grpc/core-concepts/#bidirectional-streaming-rpc)
-- [x] [Authentication with TLS](https://grpc.io/docs/guides/auth/#supported-auth-mechanisms)
-- [x] Timeout for unary calls
-- [x] [Errors handling](https://grpc.io/docs/guides/error/)
-- [x] Benchmarking
-- [x] Logging
-- [x] Interceptors(See [`GRPC.Endpoint`](https://github.com/elixir-grpc/grpc/blob/master/lib/grpc/endpoint.ex))
-- [x] [Connection Backoff](https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md)
-- [x] Data compression
-- [x] Support other encoding(other than protobuf)
+- Various kinds of RPC:
+  - [Unary](https://grpc.io/docs/what-is-grpc/core-concepts/#unary-rpc)
+  - [Server-streaming](https://grpc.io/docs/what-is-grpc/core-concepts/#server-streaming-rpc)
+  - [Client-streaming](https://grpc.io/docs/what-is-grpc/core-concepts/#client-streaming-rpc)
+  - [Bidirectional-streaming](https://grpc.io/docs/what-is-grpc/core-concepts/#bidirectional-streaming-rpc)
+- [TLS Authentication](https://grpc.io/docs/guides/auth/#supported-auth-mechanisms)
+- [Error handling](https://grpc.io/docs/guides/error/)
+- Interceptors(See [`GRPC.Endpoint`](https://github.com/elixir-grpc/grpc/blob/master/lib/grpc/endpoint.ex))
+- [Connection Backoff](https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md)
+- Data compression
 
 ## Benchmark
 
