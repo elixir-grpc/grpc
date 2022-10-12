@@ -19,7 +19,7 @@ jobs:
           otp-version: 24
           elixir-version: 1.13.1
       - name: Retrieve dependencies cache
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         id: mix-cache # id to use in retrieve action
         with:
           path: deps
@@ -49,7 +49,7 @@ jobs:
           otp-version: ${{matrix.otp}}
           elixir-version: ${{matrix.elixir}}
       - name: Retrieve dependencies cache
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         id: mix-cache # id to use in retrieve action
         with:
           path: deps
@@ -71,7 +71,7 @@ jobs:
           otp-version: 25.x
           elixir-version: 1.13.x
       - name: Retrieve dependencies cache
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         id: mix-cache # id to use in retrieve action
         with:
           path: deps
@@ -104,7 +104,7 @@ jobs:
           otp-version: 25.x
           elixir-version: 1.13.x
       - name: Retrieve dependencies cache
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         id: mix-cache # id to use in retrieve action
         with:
           path: deps
@@ -132,7 +132,7 @@ jobs:
           mix_hash="${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}"
           echo "::set-output name=mix_hash::$mix_hash"
       - id: cache-plt
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             _build/test/plts/dialyzer.plt
@@ -158,7 +158,7 @@ jobs:
           otp-version: 24
           elixir-version: 1.13.1
       - name: Retrieve dependencies cache
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         id: mix-cache # id to use in retrieve action
         with:
           path: deps
