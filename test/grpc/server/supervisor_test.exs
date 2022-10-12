@@ -33,8 +33,11 @@ defmodule GRPC.Server.SupervisorTest do
       assert {:ok,
               {%{strategy: :one_for_one},
                [
-                 {{:ranch_listener_sup, ^endpoint_str}, _, :permanent, :infinity, :supervisor,
-                  [:ranch_listener_sup]}
+                 %{
+                   id: {:ranch_listener_sup, ^endpoint_str},
+                   start: _,
+                   type: :supervisor
+                 }
                ]}} = Supervisor.init(endpoint: MockEndpoint, port: 1234, start_server: true)
     end
   end
