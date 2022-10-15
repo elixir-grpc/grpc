@@ -138,10 +138,11 @@ defmodule GRPC.Client.Adapters.Gun do
 
   @impl true
   def receive_data(
-        %{server_stream: true, channel: %{adapter_payload: adapter_payload}, payload: payload} =
-          stream,
+        %{server_stream: true} = stream,
         opts
       ) do
+    %{channel: %{adapter_payload: adapter_payload}, payload: payload} = stream
+
     with {:ok, headers, is_fin} <- recv_headers(adapter_payload, payload, opts) do
       response = response_stream(is_fin, stream, opts)
 
@@ -153,10 +154,9 @@ defmodule GRPC.Client.Adapters.Gun do
     end
   end
 
-  def receive_data(
-        %{payload: payload, channel: %{adapter_payload: adapter_payload}} = stream,
-        opts
-      ) do
+  def receive_data(stream, opts) do
+    %{payload: payload, channel: %{adapter_payload: adapter_payload}} = stream
+
     with {:ok, headers, _is_fin} <- recv_headers(adapter_payload, payload, opts),
          {:ok, body, trailers} <- recv_body(adapter_payload, payload, opts),
          {:ok, response} <- parse_response(stream, headers, body, trailers) do
@@ -217,7 +217,7 @@ defmodule GRPC.Client.Adapters.Gun do
     case :gun.await(conn_pid, stream_ref, timeout) do
       {:response, :fin, status, headers} ->
         if status == 200 do
-          headers = Enum.into(headers, %{})
+          headers = GRPC.Transport.HTTP2.decode_headers(headers)
 
           case headers["grpc-status"] do
             nil ->
@@ -247,7 +247,7 @@ defmodule GRPC.Client.Adapters.Gun do
 
       {:response, :nofin, status, headers} ->
         if status == 200 do
-          headers = Enum.into(headers, %{})
+          headers = GRPC.Transport.HTTP2.decode_headers(headers)
 
           if headers["grpc-status"] && headers["grpc-status"] != "0" do
             {:error,
