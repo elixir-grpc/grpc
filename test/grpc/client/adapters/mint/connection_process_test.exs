@@ -49,23 +49,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   end
 
   describe "handle_call/2 - request - :stream" do
-    setup(%{port: port}) do
-      {:ok, pid} = ConnectionProcess.start_link(:http, "localhost", port, protocols: [:http2])
-      state = :sys.get_state(pid)
-      version = Application.spec(:grpc) |> Keyword.get(:vsn)
-
-      headers = [
-        {"content-type", "application/grpc"},
-        {"user-agent", "grpc-elixir/#{version}"},
-        {"te", "trailers"}
-      ]
-
-      %{
-        process_pid: pid,
-        state: state,
-        request: {"POST", "/routeguide.RouteGuide/RecordRoute", headers}
-      }
-    end
+    setup :valid_connection
 
     test "start stream request and put empty state for ref", %{
       request: {method, path, headers},
@@ -101,23 +85,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   end
 
   describe "handle_call/2 - request - payload" do
-    setup(%{port: port}) do
-      {:ok, pid} = ConnectionProcess.start_link(:http, "localhost", port, protocols: [:http2])
-      state = :sys.get_state(pid)
-      version = Application.spec(:grpc) |> Keyword.get(:vsn)
-
-      headers = [
-        {"content-type", "application/grpc"},
-        {"user-agent", "grpc-elixir/#{version}"},
-        {"te", "trailers"}
-      ]
-
-      %{
-        process_pid: pid,
-        state: state,
-        request: {"POST", "/routeguide.RouteGuide/RecordRoute", headers}
-      }
-    end
+    setup :valid_connection
 
     test "start stream request, enqueue payload to be process and continue", %{
       request: {method, path, headers},
@@ -155,5 +123,55 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert state.conn != new_state.conn
       assert %Mint.HTTPError{__exception__: true, module: Mint.HTTP2, reason: :closed} == error
     end
+  end
+
+  describe "handle_call/2 - stream_body" do
+    setup :valid_connection
+    setup :valid_stream_request
+
+    test "reply with :ok when stream :eof is successful", %{request_ref: request_ref, state: state} do
+      response = ConnectionProcess.handle_call({:stream_body, request_ref, :eof}, nil, state)
+      assert {:reply, :ok, new_state} = response
+      assert new_state.conn != state.conn
+    end
+
+    test "reply with error when stream :eof is errors", %{request_ref: request_ref, state: state} do
+      {:ok, conn} = Mint.HTTP.close(state.conn)
+      response = ConnectionProcess.handle_call({:stream_body, request_ref, :eof}, nil, %{state| conn: conn})
+      assert {:reply, {:error, error}, new_state} = response
+      assert %Mint.HTTPError{__exception__: true, module: Mint.HTTP2, reason: :closed} == error
+      assert new_state.conn != state.conn
+    end
+
+    test "continue to process payload stream", %{request_ref: request_ref, state: state} do
+      response = ConnectionProcess.handle_call({:stream_body, request_ref, <<1,2,3>>}, self(), state)
+      assert {:noreply, new_state, {:continue, :process_request_stream_queue}} = response
+      assert {[{request_ref, <<1,2,3>>, self()}], []} == new_state.request_stream_queue
+      assert new_state.conn == state.conn
+    end
+  end
+
+  defp valid_connection(%{port: port}) do
+    {:ok, pid} = ConnectionProcess.start_link(:http, "localhost", port, protocols: [:http2])
+    state = :sys.get_state(pid)
+    version = Application.spec(:grpc) |> Keyword.get(:vsn)
+
+    headers = [
+      {"content-type", "application/grpc"},
+      {"user-agent", "grpc-elixir/#{version}"},
+      {"te", "trailers"}
+    ]
+
+    %{
+      process_pid: pid,
+      state: state,
+      request: {"POST", "/routeguide.RouteGuide/RecordRoute", headers}
+    }
+  end
+
+  defp valid_stream_request(%{request: {method, path, headers}, process_pid: pid}) do
+    {:ok, %{request_ref: request_ref}} = ConnectionProcess.request(pid, method, path, headers, :stream, stream_response_pid: self())
+    state = :sys.get_state(pid)
+    %{request_ref: request_ref, state: state}
   end
 end
