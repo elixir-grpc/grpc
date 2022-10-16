@@ -1,4 +1,11 @@
 defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
+  @moduledoc """
+  This module is responsible for manage a connection with a grpc server.
+  It's also responsible for manage requests, which also includes check for the
+  connection/request window size, split a given payload into appropriate sized chunks
+  and stream those to the server using an internal queue.
+  """
+
   use GenServer
 
   alias GRPC.Client.Adapters.Mint.ConnectionProcess.State
@@ -6,18 +13,48 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
 
   require Logger
 
+  @doc """
+  Starts and link connection process
+  """
+  @spec start_link(Mint.Types.scheme(), Mint.Types.address(), :inet.port_number(), keyword()) ::
+          GenServer.on_start()
   def start_link(scheme, host, port, opts \\ []) do
     GenServer.start_link(__MODULE__, {scheme, host, port, opts})
   end
 
+  @doc """
+  Sends a request to the connected server.
+  Opts:
+      - :stream_response_pid (required) - the process to where send the responses coming from the connection will be sent to be processed
+  """
+  @spec request(
+          pid :: pid(),
+          method :: String.t(),
+          path :: String.t(),
+          Mint.Types.headers(),
+          body :: iodata() | nil | :stream,
+          opts :: keyword()
+        ) :: {:ok, %{request_ref: Mint.Types.request_ref()}} | {:error, Mint.Types.error()}
   def request(pid, method, path, headers, body, opts \\ []) do
     GenServer.call(pid, {:request, method, path, headers, body, opts})
   end
 
+  @doc """
+  Closes the given connection.
+  """
+  @spec disconnect(pid :: pid()) :: :ok
   def disconnect(pid) do
     GenServer.call(pid, {:disconnect, :brutal})
   end
 
+  @doc """
+  Streams a chunk of the request body on the connection or signals the end of the body.
+  """
+  @spec stream_request_body(
+          pid(),
+          Mint.Types.request_ref(),
+          iodata() | :eof | {:eof, trailing_headers :: Mint.Types.headers()}
+        ) :: :ok | {:error, Mint.Types.error()}
   def stream_request_body(pid, request_ref, body) do
     GenServer.call(pid, {:stream_body, request_ref, body})
   end
@@ -33,9 +70,8 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
         {:ok, State.new(conn)}
 
       {:error, reason} ->
-        # TODO check what's better: add to state map if connection is alive?
-        # TODO Or simply stop the process and handle the error on caller?
-        {:stop, reason}
+        Logger.error("unable to establish a connection. reason: #{inspect(reason)}")
+        {:stop, :normal}
     end
   end
 
@@ -47,7 +83,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   end
 
   def handle_call(
-        {:request, method, path, headers, :stream, opts},
+        {:request, method, path, headers, :stream, opts} = request,
         _from,
         state
       ) do
