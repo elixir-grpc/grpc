@@ -17,6 +17,12 @@ service Messaging {
     };
   }
 
+  rpc GetMessageWithSubPath(GetMessageRequest) returns (Message) {
+    option (google.api.http) = {
+        get: "/v1/{name=}"
+    };
+  }
+
   rpc GetMessageWithQuery(GetMessageRequest) returns (Message) {
     option (google.api.http) = {
         get: "/v1/messages"

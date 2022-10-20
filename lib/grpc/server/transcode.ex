@@ -2,6 +2,7 @@ defmodule GRPC.Server.Transcode do
   @moduledoc false
   alias __MODULE__.{Query, Template, FieldPath}
 
+  @type t :: map()
   # The request mapping follow the following rules:
   #
   # 1. Fields referred by the path template. They are passed via the URL path.
@@ -9,10 +10,10 @@ defmodule GRPC.Server.Transcode do
   # 3. All other fields are passed via the URL query parameters, and the parameter name is the field path in the request message. A repeated field can be represented as multiple query parameters under the same name.
   # If HttpRule.body is "*", there is no URL query parameter, all fields are passed via URL path and HTTP request body.
   # If HttpRule.body is omitted, there is no HTTP request body, all fields are passed via URL path and URL query parameters.
-  @spec map_request(Google.Api.HttpRule.t(), map(), map(), String.t(), module()) ::
+  @spec map_request(t(), map(), map(), String.t(), module()) ::
           {:ok, struct()} | {:error, term()}
   def map_request(
-        %Google.Api.HttpRule{body: ""},
+        %{body: ""},
         _body_request,
         path_bindings,
         query_string,
@@ -26,7 +27,7 @@ defmodule GRPC.Server.Transcode do
   end
 
   def map_request(
-        %Google.Api.HttpRule{body: "*"} = rule,
+        %{body: "*"} = rule,
         body_request,
         path_bindings,
         _query_string,
@@ -40,7 +41,7 @@ defmodule GRPC.Server.Transcode do
   end
 
   def map_request(
-        %Google.Api.HttpRule{} = rule,
+        %{} = rule,
         body_request,
         path_bindings,
         query_string,
@@ -54,17 +55,17 @@ defmodule GRPC.Server.Transcode do
     Protobuf.JSON.from_decoded(request, req_mod)
   end
 
-  defp map_request_body(%Google.Api.HttpRule{body: "*"}, request_body), do: request_body
-  defp map_request_body(%Google.Api.HttpRule{body: ""}, request_body), do: request_body
+  defp map_request_body(%{body: "*"}, request_body), do: request_body
+  defp map_request_body(%{body: ""}, request_body), do: request_body
 
-  defp map_request_body(%Google.Api.HttpRule{body: field}, request_body),
+  defp map_request_body(%{body: field}, request_body),
     do: %{field => request_body}
 
-  @spec map_response_body(Google.Api.HttpRule.t() | map(), map()) :: map()
-  def map_response_body(%Google.Api.HttpRule{response_body: ""}, response_body), do: response_body
+  @spec map_response_body(t() | map(), map()) :: map()
+  def map_response_body(%{response_body: ""}, response_body), do: response_body
 
   # TODO The field is required to be present on the toplevel response message
-  def map_response_body(%Google.Api.HttpRule{response_body: field}, response_body) do
+  def map_response_body(%{response_body: field}, response_body) do
     key = String.to_existing_atom(field)
     Map.get(response_body, key)
   end
@@ -95,8 +96,8 @@ defmodule GRPC.Server.Transcode do
 
   defp segment_to_string(segment), do: segment
 
-  @spec build_route(Google.Api.HttpRule.t()) :: {atom(), Template.route()}
-  def build_route(%Google.Api.HttpRule{pattern: {method, path}}) do
+  @spec build_route(t()) :: {atom(), Template.route()}
+  def build_route(%{pattern: {method, path}}) do
     route =
       path
       |> Template.tokenize([])
