@@ -182,7 +182,6 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert new_state == state
     end
 
-    @tag dev: true
     test "(body_size > window_size) chunk payload stream what is possible and enqueue the rest at the begining of the queue to give priority to the current request",
          %{request_ref: request_ref, state: state} do
       # hacky to simulate a window size of 2 bytes since this is usually updated with the requests interaction
@@ -201,7 +200,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       # mint update window_size for us.
       # This is how we check if the body was streamed
       assert new_state.conn.window_size == 0
-      assert {{:value, head_of_queue}, queue} = :queue.out(state.request_stream_queue)
+      assert {{:value, head_of_queue}, queue} = :queue.out(new_state.request_stream_queue)
       assert {{:value, rest}, {[], []}} = :queue.out(queue)
 
       # <<1, 2, 3>> got enqueue first, we streamed 2 bytes, now we have only one left <<3>>
@@ -209,6 +208,97 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
       # Next to be processed is <<4, 5, 6>>
       assert {request_ref, <<4, 5, 6>>, self()} == rest
+    end
+
+    test "(window_size >= body_size) stream bod, send end_stream message and reply caller process (when process ref is present)",
+         %{request_ref: request_ref, state: state} do
+      {_, state, _} =
+        ConnectionProcess.handle_call(
+          {:stream_body, request_ref, <<1, 2, 3>>},
+          {self(), :tag},
+          state
+        )
+
+      assert {:noreply, _new_state} =
+               ConnectionProcess.handle_continue(:process_request_stream_queue, state)
+
+      assert_receive {:tag, :ok}, 500
+    end
+
+    test "(window_size >= body_size) stream body, send end_stream message and don't reply caller process (when precess ref is nil)",
+         %{request_ref: request_ref, state: state} do
+      {_, state, _} =
+        ConnectionProcess.handle_call({:stream_body, request_ref, <<1, 2, 3>>}, nil, state)
+
+      assert {:noreply, _new_state} =
+               ConnectionProcess.handle_continue(:process_request_stream_queue, state)
+
+      refute_receive {:tag, :ok}, 500
+    end
+
+    test "(window_size >= body_size) stream body, send end_stream message and check request_queue when queue is not empty",
+         %{request_ref: request_ref, state: state} do
+      {_, state, _} =
+        ConnectionProcess.handle_call(
+          {:stream_body, request_ref, <<1, 2, 3>>},
+          {self(), :tag},
+          state
+        )
+
+      {_, state, _} =
+        ConnectionProcess.handle_call(
+          {:stream_body, request_ref, <<4, 5, 6>>},
+          {self(), :tag},
+          state
+        )
+
+      assert {:noreply, _new_state, {:continue, :process_request_stream_queue}} =
+               ConnectionProcess.handle_continue(:process_request_stream_queue, state)
+
+      assert_receive {:tag, :ok}, 500
+    end
+
+    test "send error to the caller process when server return an error and there is a process ref",
+         %{request_ref: request_ref, state: state} do
+      {:ok, conn} = Mint.HTTP.close(state.conn)
+      state = %{state | conn: conn}
+
+      {_, state, _} =
+        ConnectionProcess.handle_call(
+          {:stream_body, request_ref, <<1, 2, 3>>},
+          {self(), :tag},
+          state
+        )
+
+      assert {:noreply, _new_state} =
+               ConnectionProcess.handle_continue(:process_request_stream_queue, state)
+
+      assert_receive {:tag, {:error, %Mint.HTTPError{module: Mint.HTTP2, reason: :closed}}}, 500
+    end
+
+    test "send error message to stream response process when caller process ref is empty",
+         %{request_ref: request_ref, state: state} do
+      # Close connection to simulate an error
+      {:ok, conn} = Mint.HTTP.close(state.conn)
+      request_ref_state = state.requests[request_ref]
+
+      # instead of a real process I put test process pid to test that the message is sent
+      state = %{
+        state
+        | conn: conn,
+          requests: %{request_ref => %{request_ref_state | stream_response_pid: self()}}
+      }
+
+      {_, state, _} =
+        ConnectionProcess.handle_call({:stream_body, request_ref, <<1, 2, 3>>}, nil, state)
+
+      assert {:noreply, _new_state} =
+               ConnectionProcess.handle_continue(:process_request_stream_queue, state)
+
+      assert_receive {:"$gen_cast",
+                      {:consume_response,
+                       {:error, %Mint.HTTPError{module: Mint.HTTP2, reason: :closed}}}},
+                     500
     end
   end
 
