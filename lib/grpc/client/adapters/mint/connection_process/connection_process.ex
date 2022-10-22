@@ -83,7 +83,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   end
 
   def handle_call(
-        {:request, method, path, headers, :stream, opts} = request,
+        {:request, method, path, headers, :stream, opts},
         _from,
         state
       ) do
