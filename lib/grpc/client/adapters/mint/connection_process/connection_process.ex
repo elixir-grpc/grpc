@@ -59,6 +59,10 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
     GenServer.call(pid, {:stream_body, request_ref, body})
   end
 
+  @doc """
+  cancels an open request request
+  """
+  @spec cancel(pid(), Mint.Types.request_ref()) :: :ok | {:error, Mint.Types.error()}
   def cancel(pid, request_ref) do
     GenServer.call(pid, {:cancel_request, request_ref})
   end
@@ -67,8 +71,6 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
 
   @impl true
   def init({scheme, host, port, opts}) do
-    # The current behavior in gun is return error if the connection wasn't successful
-    # Should we do the same here?
     case Mint.HTTP.connect(scheme, host, port, opts) do
       {:ok, conn} ->
         {:ok, State.new(conn)}

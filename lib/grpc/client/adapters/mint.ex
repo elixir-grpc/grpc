@@ -20,7 +20,6 @@ defmodule GRPC.Client.Adapters.Mint do
     |> ConnectionProcess.start_link(host, port, opts)
     |> case do
       {:ok, pid} -> {:ok, %{channel | adapter_payload: %{conn_pid: pid}}}
-      # TODO add proper error handling
       error -> raise "An error happened while trying to opening the connection: #{inspect(error)}"
     end
   end
@@ -84,7 +83,6 @@ defmodule GRPC.Client.Adapters.Mint do
       ) do
     {:ok, data, _} = GRPC.Message.to_data(message, opts)
     :ok = ConnectionProcess.stream_request_body(pid, request_ref, data)
-    # TODO: check for trailer headers to be sent here
     if opts[:send_end_stream], do: ConnectionProcess.stream_request_body(pid, request_ref, :eof)
     stream
   end
@@ -154,8 +152,8 @@ defmodule GRPC.Client.Adapters.Mint do
     end
   end
 
-  def handle_errors_receive_data(_stream, _opts) do
-    raise "TODO: Implement"
+  def handle_errors_receive_data(%GRPC.Client.Stream{payload: %{response: response}}, _opts) do
+    {:error, "an error occurred while when receiving data: error=#{inspect(response)}"}
   end
 
   defp success_bidi_stream?(%GRPC.Client.Stream{
