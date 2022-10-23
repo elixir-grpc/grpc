@@ -47,5 +47,5 @@ defmodule GRPC.Client.Adapter do
   @doc """
   Cancel a stream in a streaming client.
   """
-  @callback cancel(stream :: Stream.t()) :: Stream.t()
+  @callback cancel(stream :: Stream.t()) :: :ok | {:error, any()}
 end
