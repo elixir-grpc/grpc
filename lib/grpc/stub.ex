@@ -357,8 +357,8 @@ defmodule GRPC.Stub do
 
   After that, callings to `recv/2` will return a CANCEL error.
   """
-  def cancel(%{channel: channel, payload: payload} = stream) do
-    case channel.adapter.cancel(channel.adapter_payload, payload) do
+  def cancel(%{channel: channel} = stream) do
+    case channel.adapter.cancel(stream) do
       :ok -> %{stream | canceled: true}
       other -> other
     end

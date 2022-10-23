@@ -7,7 +7,6 @@ defmodule GRPC.Factories.Client.Stream do
             receive_data: &GRPC.Client.Stream.receive_data/2,
             send_request: &GRPC.Client.Stream.send_request/3
           },
-          accepted_compressors: [],
           canceled: false,
           channel: build(:channel, adapter: GRPC.Client.Adapters.Mint),
           codec: GRPC.Codec.Proto,
@@ -21,7 +20,8 @@ defmodule GRPC.Factories.Client.Stream do
           response_mod: Helloworld.HelloReply,
           rpc: {"say_hello", {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false}},
           server_stream: false,
-          service_name: "helloworld.Greeter"
+          service_name: "helloworld.Greeter",
+          accepted_compressors: [GRPC.Compressor.Gzip]
         }
       end
     end

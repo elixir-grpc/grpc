@@ -89,6 +89,7 @@ defmodule GRPC.Client.Adapters.Mint do
     stream
   end
 
+  @impl true
   def end_stream(
         %{
           channel: %{adapter_payload: %{conn_pid: pid}},
@@ -99,7 +100,13 @@ defmodule GRPC.Client.Adapters.Mint do
     stream
   end
 
-  def cancel(%{conn_pid: conn_pid}, %{response: {:ok, %{request_ref: request_ref}}}) do
+  @impl true
+  def cancel(stream) do
+    %{
+      channel: %{adapter_payload: %{conn_pid: conn_pid}},
+      payload: %{response: {:ok, %{request_ref: request_ref}}}
+    } = stream
+
     ConnectionProcess.cancel(conn_pid, request_ref)
   end
 

@@ -166,6 +166,50 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
       end,
       do: [{:headers}, {:trailers}]
     )
+
+    test "add compressor to state when incoming headers match available compressor", %{
+      state: state
+    } do
+      headers = [
+        {"content-length", "0"},
+        {"content-type", "application/grpc+proto"},
+        {"grpc-message", ""},
+        {"grpc-status", "0"},
+        {"server", "Cowboy"},
+        {"grpc-encoding", "gzip"}
+      ]
+
+      response =
+        StreamResponseProcess.handle_cast(
+          {:consume_response, {:headers, headers}},
+          state
+        )
+
+      assert {:noreply, new_state, {:continue, :produce_response}} = response
+      assert GRPC.Compressor.Gzip == new_state.compressor
+    end
+
+    test "don't update compressor when unsupported compressor is returned by the server", %{
+      state: state
+    } do
+      headers = [
+        {"content-length", "0"},
+        {"content-type", "application/grpc+proto"},
+        {"grpc-message", ""},
+        {"grpc-status", "0"},
+        {"server", "Cowboy"},
+        {"grpc-encoding", "suzana"}
+      ]
+
+      response =
+        StreamResponseProcess.handle_cast(
+          {:consume_response, {:headers, headers}},
+          state
+        )
+
+      assert {:noreply, new_state, {:continue, :produce_response}} = response
+      assert nil == new_state.compressor
+    end
   end
 
   describe "handle_cast/2 - errors" do

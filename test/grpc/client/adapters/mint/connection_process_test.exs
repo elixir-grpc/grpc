@@ -162,6 +162,23 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     end
   end
 
+  describe "handle_call/2 - cancel_request" do
+    setup :valid_connection
+    setup :valid_stream_request
+
+    test "reply with :ok when canceling the request is successful, also set stream response pid to done and remove request ref from state",
+         %{
+           request_ref: request_ref,
+           state: state
+         } do
+      state = update_stream_response_process_to_test_pid(state, request_ref, self())
+      response = ConnectionProcess.handle_call({:cancel_request, request_ref}, nil, state)
+      assert {:reply, :ok, new_state} = response
+      assert %{} == new_state.requests
+      assert_receive {:"$gen_cast", {:consume_response, :done}}, 500
+    end
+  end
+
   describe "handle_continue/2 - :process_stream_queue" do
     setup :valid_connection
     setup :valid_stream_request
@@ -280,14 +297,10 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
          %{request_ref: request_ref, state: state} do
       # Close connection to simulate an error
       {:ok, conn} = Mint.HTTP.close(state.conn)
-      request_ref_state = state.requests[request_ref]
 
       # instead of a real process I put test process pid to test that the message is sent
-      state = %{
-        state
-        | conn: conn,
-          requests: %{request_ref => %{request_ref_state | stream_response_pid: self()}}
-      }
+      state =
+        update_stream_response_process_to_test_pid(%{state | conn: conn}, request_ref, self())
 
       {_, state, _} =
         ConnectionProcess.handle_call({:stream_body, request_ref, <<1, 2, 3>>}, nil, state)
@@ -326,5 +339,11 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
     state = :sys.get_state(pid)
     %{request_ref: request_ref, state: state}
+  end
+
+  def update_stream_response_process_to_test_pid(state, request_ref, test_pid) do
+    request_ref_state = state.requests[request_ref]
+
+    %{state | requests: %{request_ref => %{request_ref_state | stream_response_pid: test_pid}}}
   end
 end

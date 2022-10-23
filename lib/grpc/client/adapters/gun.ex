@@ -126,13 +126,20 @@ defmodule GRPC.Client.Adapters.Gun do
     stream
   end
 
+  @impl true
   def end_stream(%{channel: channel, payload: %{stream_ref: stream_ref}} = stream) do
     conn_pid = channel.adapter_payload[:conn_pid]
     :gun.data(conn_pid, stream_ref, :fin, "")
     stream
   end
 
-  def cancel(%{conn_pid: conn_pid}, %{stream_ref: stream_ref}) do
+  @impl true
+  def cancel(stream) do
+    %{
+      channel: %{adapter_payload: %{conn_pid: conn_pid}},
+      payload: %{stream_ref: stream_ref}
+    } = stream
+
     :gun.cancel(conn_pid, stream_ref)
   end
 
