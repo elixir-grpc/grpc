@@ -59,6 +59,10 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
     GenServer.call(pid, {:stream_body, request_ref, body})
   end
 
+  def cancel(pid, request_ref) do
+    GenServer.call(pid, {:cancel_request, request_ref})
+  end
+
   ## Callbacks
 
   @impl true
@@ -73,6 +77,10 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
         Logger.error("unable to establish a connection. reason: #{inspect(reason)}")
         {:stop, :normal}
     end
+  catch
+    :exit, reason ->
+      Logger.error("unable to establish a connection. reason: #{inspect(reason)}")
+      {:stop, :normal}
   end
 
   @impl true
@@ -141,6 +149,15 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
 
     {:noreply, State.update_request_stream_queue(state, queue),
      {:continue, :process_request_stream_queue}}
+  end
+
+  def handle_call({:cancel_request, request_ref}, _from, state) do
+    state = process_response({:done, request_ref}, state)
+
+    case Mint.HTTP2.cancel_request(state.conn, request_ref) do
+      {:ok, conn} -> {:reply, :ok, State.update_conn(state, conn)}
+      {:error, conn, error} -> {:reply, {:error, error}, State.update_conn(state, conn)}
+    end
   end
 
   @impl true

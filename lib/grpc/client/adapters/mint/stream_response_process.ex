@@ -61,7 +61,8 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
       buffer: <<>>,
       responses: [],
       done: false,
-      from: nil
+      from: nil,
+      compressor: nil
     }
 
     {:ok, state}
@@ -78,7 +79,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
       responses: responses
     } = state
 
-    case GRPC.Message.get_message(buffer <> data) do
+    case GRPC.Message.get_message(buffer <> data, state.compressor) do
       {{_, message}, rest} ->
         # TODO add code here to handle compressor headers
         response = codec.decode(message, res_mod)
@@ -97,6 +98,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
         %{send_headers_or_trailers: true, responses: responses} = state
       )
       when type in @header_types do
+    state = update_compressor({type, headers}, state)
     new_responses = [get_headers_response(headers, type) | responses]
     {:noreply, %{state | responses: new_responses}, {:continue, :produce_response}}
   end
@@ -106,6 +108,8 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
         %{send_headers_or_trailers: false, responses: responses} = state
       )
       when type in @header_types do
+    state = update_compressor({type, headers}, state)
+
     with {:error, _rpc_error} = error <- get_headers_response(headers, type) do
       {:noreply, %{state | responses: [error | responses]}, {:continue, :produce_response}}
     else
@@ -149,6 +153,23 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
       rpc_error = %GRPC.RPCError{status: status, message: decoded_trailers["grpc-message"]}
       {:error, rpc_error}
     end
+  end
+
+  defp update_compressor({:headers, headers}, state) do
+    decoded_trailers = GRPC.Transport.HTTP2.decode_headers(headers)
+
+    compressor =
+      get_compressor(decoded_trailers["grpc-encoding"], state.grpc_stream.accepted_compressors)
+
+    %{state | compressor: compressor}
+  end
+
+  defp update_compressor(_headers, state), do: state
+
+  defp get_compressor(nil = _encoding_name, _accepted_compressors), do: nil
+
+  defp get_compressor(encoding_name, accepted_compressors) do
+    Enum.find(accepted_compressors, nil, fn c -> c.name() == encoding_name end)
   end
 
   def terminate(_reason, _state) do

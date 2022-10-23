@@ -11,6 +11,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
       from: nil,
       grpc_stream: build(:client_stream),
       responses: [],
+      compressor: nil,
       send_headers_or_trailers: false
     }
 

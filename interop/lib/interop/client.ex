@@ -103,12 +103,9 @@ defmodule Interop.Client do
     params = Enum.map([31415, 9, 2653, 58979], &res_param(&1))
     req = Grpc.Testing.StreamingOutputCallRequest.new(response_parameters: params)
     {:ok, res_enum} = ch |> Grpc.Testing.TestService.Stub.streaming_output_call(req)
-    result = Enum.map([31415, 9, 2653, 58979], &String.duplicate(<<0>>, &1))
+    result = Enum.map([31415, 9, 2653, 58979], &String.duplicate(<<0>>, &1)) |> Enum.sort()
 
-    ^result =
-      Enum.map(res_enum, fn {:ok, res} ->
-        res.payload.body
-      end)
+    ^result = res_enum |> Enum.map(fn {:ok, res} -> res.payload.body end) |> Enum.sort()
   end
 
   def server_compressed_streaming!(ch) do
@@ -120,12 +117,9 @@ defmodule Interop.Client do
         size: 92653}
     ])
     {:ok, res_enum} = ch |> Grpc.Testing.TestService.Stub.streaming_output_call(req)
-    result = Enum.map([31415, 92653], &String.duplicate(<<0>>, &1))
+    result = Enum.map([31415, 92653], &String.duplicate(<<0>>, &1)) |> Enum.sort()
 
-    ^result =
-      Enum.map(res_enum, fn {:ok, res} ->
-        res.payload.body
-      end)
+    ^result = res_enum |> Enum.map(fn {:ok, res} -> res.payload.body end) |> Enum.sort()
   end
 
   def ping_pong!(ch) do
@@ -191,19 +185,31 @@ defmodule Interop.Client do
         payload: payload(271_828)
       )
 
-    {:ok, res_enum, %{headers: new_headers}} =
+    {headers, data, trailers} =
       ch
-      |> Grpc.Testing.TestService.Stub.full_duplex_call(metadata: metadata)
+      |> Grpc.Testing.TestService.Stub.full_duplex_call(metadata: metadata, return_headers: true)
       |> GRPC.Stub.send_request(req, end_stream: true)
       |> GRPC.Stub.recv(return_headers: true)
+      |> process_full_duplex_response()
 
     reply = String.duplicate(<<0>>, 314_159)
 
-    {:ok, %{payload: %{body: ^reply}}} =
-      Stream.take(res_enum, 1) |> Enum.to_list() |> List.first()
+    %{payload: %{body: ^reply}} = data
 
+    validate_headers!(headers, trailers)
+  end
+
+  defp process_full_duplex_response({:ok, res_enum, %{headers: new_headers}}) do
+    {:ok, data} = Stream.take(res_enum, 1) |> Enum.to_list() |> List.first()
     {:trailers, new_trailers} = Stream.take(res_enum, 1) |> Enum.to_list() |> List.first()
-    validate_headers!(new_headers, new_trailers)
+    {new_headers, data, new_trailers}
+  end
+
+  defp process_full_duplex_response({:ok, res_enum}) do
+    {:headers, headers} = Stream.take(res_enum, 1) |> Enum.to_list() |> List.first()
+    {:ok, data} = Stream.take(res_enum, 1) |> Enum.to_list() |> List.first()
+    {:trailers, trailers} = Stream.take(res_enum, 1) |> Enum.to_list() |> List.first()
+    {headers, data, trailers}
   end
 
   def status_code_and_message!(ch) do
@@ -226,6 +232,10 @@ defmodule Interop.Client do
       |> Grpc.Testing.TestService.Stub.full_duplex_call()
       |> GRPC.Stub.send_request(req, end_stream: true)
       |> GRPC.Stub.recv()
+      |> case do
+        {:ok, stream} -> Stream.take(stream, 1) |> Enum.to_list() |> List.first()
+        error -> error
+      end
   end
 
   def unimplemented_service!(ch) do

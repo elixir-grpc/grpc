@@ -89,6 +89,20 @@ defmodule GRPC.Client.Adapters.Mint do
     stream
   end
 
+  def end_stream(
+        %{
+          channel: %{adapter_payload: %{conn_pid: pid}},
+          payload: %{response: {:ok, %{request_ref: request_ref}}}
+        } = stream
+      ) do
+    ConnectionProcess.stream_request_body(pid, request_ref, :eof)
+    stream
+  end
+
+  def cancel(%{conn_pid: conn_pid}, %{response: {:ok, %{request_ref: request_ref}}}) do
+    ConnectionProcess.cancel(conn_pid, request_ref)
+  end
+
   defp connect_opts(%Channel{scheme: "https"} = channel, opts) do
     %Credential{ssl: ssl} = Map.get(channel, :cred, %Credential{})
 
