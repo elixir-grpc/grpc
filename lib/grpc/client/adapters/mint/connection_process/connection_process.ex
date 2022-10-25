@@ -333,30 +333,28 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
 
   defp finish_all_pending_requests(state) do
     new_state =
-      :queue.fold(
-        fn request, acc_state ->
-          case request do
-            {ref, _body, nil} ->
-              acc_state
-              |> State.stream_response_pid(ref)
-              |> send_connection_close_and_end_stream_response()
+      state.request_stream_queue
+      |> :queue.to_list()
+      |> Enum.reduce(state, fn request, acc_state ->
+        case request do
+          {ref, _body, nil} ->
+            acc_state
+            |> State.stream_response_pid(ref)
+            |> send_connection_close_and_end_stream_response()
 
-            {ref, _body, from} ->
-              acc_state
-              |> State.stream_response_pid(ref)
-              |> send_connection_close_and_end_stream_response()
+          {ref, _body, from} ->
+            acc_state
+            |> State.stream_response_pid(ref)
+            |> send_connection_close_and_end_stream_response()
 
-              GenServer.reply(from, {:error, @connection_closed_error})
-          end
+            GenServer.reply(from, {:error, @connection_closed_error})
+        end
 
-          {ref, _, _} = request
-          {_ref, new_state} = State.pop_ref(acc_state, ref)
+        {ref, _, _} = request
+        {_ref, new_state} = State.pop_ref(acc_state, ref)
 
-          new_state
-        end,
-        state,
-        state.request_stream_queue
-      )
+        new_state
+      end)
 
     # Inform the parent that the connection is down
     send(new_state.parent, {:elixir_grpc, :connection_down, self()})
