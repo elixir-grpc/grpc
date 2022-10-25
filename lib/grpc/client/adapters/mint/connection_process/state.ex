@@ -1,13 +1,14 @@
 defmodule GRPC.Client.Adapters.Mint.ConnectionProcess.State do
-  defstruct [:conn, requests: %{}, request_stream_queue: :queue.new()]
+  defstruct [:conn, :parent, requests: %{}, request_stream_queue: :queue.new()]
 
   @type t :: %__MODULE__{
           conn: Mint.HTTP.t(),
-          requests: map()
+          requests: map(),
+          parent: pid()
         }
 
-  def new(conn) do
-    %__MODULE__{conn: conn, request_stream_queue: :queue.new()}
+  def new(conn, parent) do
+    %__MODULE__{conn: conn, request_stream_queue: :queue.new(), parent: parent}
   end
 
   def update_conn(state, conn) do

@@ -343,6 +343,75 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     end
   end
 
+  describe "handle_info - connection_closed - no requests" do
+    setup :valid_connection
+
+    test "send a message to parent process to inform the connection is down", %{
+      state: state
+    } do
+      socket = state.conn.socket
+      # this is a mocked message to inform the connection is closed
+      tcp_message = {:tcp_closed, socket}
+
+      assert {:noreply, new_state} = ConnectionProcess.handle_info(tcp_message, state)
+      assert new_state.conn.state == :closed
+      assert_receive {:elixir_grpc, :connection_down, pid}, 500
+      assert pid == self()
+    end
+  end
+
+  describe "handle_info - connection_closed - with request" do
+    setup :valid_connection
+    setup :valid_stream_request
+
+    test "send a message to parent process to inform the connection is down and end stream response process",
+         %{
+           state: state,
+           request_ref: request_ref
+         } do
+      socket = state.conn.socket
+      # this is a mocked message to inform the connection is closed
+      tcp_message = {:tcp_closed, socket}
+
+      state = update_stream_response_process_to_test_pid(state, request_ref, self())
+      assert {:noreply, new_state} = ConnectionProcess.handle_info(tcp_message, state)
+      assert new_state.conn.state == :closed
+      assert_receive {:elixir_grpc, :connection_down, pid}, 500
+
+      assert_receive {:"$gen_cast", {:consume_response, {:error, "the connection is closed"}}},
+                     500
+
+      assert_receive {:"$gen_cast", {:consume_response, :done}}, 500
+      assert pid == self()
+    end
+
+    test "send a message to parent process to inform the connection is down and reply pending process",
+         %{
+           state: state,
+           request_ref: request_ref
+         } do
+      socket = state.conn.socket
+      # this is a mocked message to inform the connection is closed
+      tcp_message = {:tcp_closed, socket}
+
+      response =
+        ConnectionProcess.handle_call(
+          {:stream_body, request_ref, <<1, 2, 3>>},
+          {self(), :tag},
+          state
+        )
+
+      {:noreply, state, {:continue, :process_request_stream_queue}} = response
+
+      state = update_stream_response_process_to_test_pid(state, request_ref, self())
+      assert {:noreply, new_state} = ConnectionProcess.handle_info(tcp_message, state)
+      assert new_state.conn.state == :closed
+      assert_receive {:elixir_grpc, :connection_down, pid}, 500
+      assert_receive {:tag, {:error, "the connection is closed"}}, 500
+      assert pid == self()
+    end
+  end
+
   defp valid_connection(%{port: port}) do
     {:ok, pid} = ConnectionProcess.start_link(:http, "localhost", port, protocols: [:http2])
     state = :sys.get_state(pid)

@@ -21,6 +21,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   @spec start_link(Mint.Types.scheme(), Mint.Types.address(), :inet.port_number(), keyword()) ::
           GenServer.on_start()
   def start_link(scheme, host, port, opts \\ []) do
+    opts = Keyword.put(opts, :parent, self())
     GenServer.start_link(__MODULE__, {scheme, host, port, opts})
   end
 
@@ -75,7 +76,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   def init({scheme, host, port, opts}) do
     case Mint.HTTP.connect(scheme, host, port, opts) do
       {:ok, conn} ->
-        {:ok, State.new(conn)}
+        {:ok, State.new(conn, opts[:parent])}
 
       {:error, reason} ->
         Logger.error("unable to establish a connection. reason: #{inspect(reason)}")
@@ -176,15 +177,13 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
         {:noreply, state}
 
       {:ok, conn, responses} ->
-        IO.inspect(conn)
         state = State.update_conn(state, conn)
         state = Enum.reduce(responses, state, &process_response/2)
+        check_connection_status(state)
 
-        if(Mint.HTTP.open?(state.conn)) do
-          check_request_stream_queue(state)
-        else
-          finish_all_pending_requests(state)
-        end
+      {:error, conn, _error, _responses} ->
+        state = State.update_conn(state, conn)
+        check_connection_status(state)
     end
   end
 
@@ -333,33 +332,56 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   end
 
   defp finish_all_pending_requests(state) do
-    :queue.fold(
-      fn request, acc_state ->
-        case request do
-          {ref, _body, nil} ->
-            acc_state
-            |> State.stream_response_pid(ref)
-            |> send_connection_close_and_end_stream_response()
+    new_state =
+      :queue.fold(
+        fn request, acc_state ->
+          case request do
+            {ref, _body, nil} ->
+              acc_state
+              |> State.stream_response_pid(ref)
+              |> send_connection_close_and_end_stream_response()
 
-          {ref, _body, from} ->
-            acc_state
-            |> State.stream_response_pid(ref)
-            |> send_connection_close_and_end_stream_response()
+            {ref, _body, from} ->
+              acc_state
+              |> State.stream_response_pid(ref)
+              |> send_connection_close_and_end_stream_response()
 
-            GenServer.reply(from, {:error, @connection_closed_error})
-        end
+              GenServer.reply(from, {:error, @connection_closed_error})
+          end
 
-        acc_state
-      end,
-      state,
-      state.request_stream_queue
-    )
+          {ref, _, _} = request
+          {_ref, new_state} = State.pop_ref(acc_state, ref)
 
-    {:noreply, State.update_request_stream_queue(state, :queue.new())}
+          new_state
+        end,
+        state,
+        state.request_stream_queue
+      )
+
+    # Inform the parent that the connection is down
+    send(new_state.parent, {:elixir_grpc, :connection_down, self()})
+
+    new_state.requests
+    |> Map.keys()
+    |> Enum.each(fn ref ->
+      new_state
+      |> State.stream_response_pid(ref)
+      |> send_connection_close_and_end_stream_response()
+    end)
+
+    {:noreply, State.update_request_stream_queue(%{new_state | requests: %{}}, :queue.new())}
   end
 
   defp send_connection_close_and_end_stream_response(pid) do
     StreamResponseProcess.consume(pid, :error, @connection_closed_error)
     StreamResponseProcess.done(pid)
+  end
+
+  def check_connection_status(state) do
+    if(Mint.HTTP.open?(state.conn)) do
+      check_request_stream_queue(state)
+    else
+      finish_all_pending_requests(state)
+    end
   end
 end
