@@ -13,6 +13,8 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
 
   require Logger
 
+  @connection_closed_error "the connection is closed"
+
   @doc """
   Starts and link connection process
   """
@@ -77,19 +79,23 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
 
       {:error, reason} ->
         Logger.error("unable to establish a connection. reason: #{inspect(reason)}")
-        {:stop, :normal}
+        {:stop, reason}
     end
   catch
     :exit, reason ->
       Logger.error("unable to establish a connection. reason: #{inspect(reason)}")
-      {:stop, :normal}
+      {:stop, reason}
   end
 
   @impl true
   def handle_call({:disconnect, :brutal}, _from, state) do
-    # TODO add a code to if disconnect is brutal we just stop if is friendly we wait for pending requests
+    # TODO add a code to if disconnect is brutal we just  stop if is friendly we wait for pending requests
     {:ok, conn} = Mint.HTTP.close(state.conn)
     {:stop, :normal, :ok, State.update_conn(state, conn)}
+  end
+
+  def handle_call(_request, _from, %{conn: %Mint.HTTP2{state: :closed}} = state) do
+    {:reply, {:error, "the connection is closed"}, state}
   end
 
   def handle_call(
@@ -169,14 +175,16 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
         Logger.debug(fn -> "Received unknown message: " <> inspect(message) end)
         {:noreply, state}
 
-      {:ok, conn, [] = _responses} ->
-        check_request_stream_queue(State.update_conn(state, conn))
-
       {:ok, conn, responses} ->
+        IO.inspect(conn)
         state = State.update_conn(state, conn)
         state = Enum.reduce(responses, state, &process_response/2)
 
-        check_request_stream_queue(state)
+        if(Mint.HTTP.open?(state.conn)) do
+          check_request_stream_queue(state)
+        else
+          finish_all_pending_requests(state)
+        end
     end
   end
 
@@ -322,5 +330,36 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
       Mint.HTTP2.get_window_size(conn, {:request, ref}),
       Mint.HTTP2.get_window_size(conn, :connection)
     )
+  end
+
+  defp finish_all_pending_requests(state) do
+    :queue.fold(
+      fn request, acc_state ->
+        case request do
+          {ref, _body, nil} ->
+            acc_state
+            |> State.stream_response_pid(ref)
+            |> send_connection_close_and_end_stream_response()
+
+          {ref, _body, from} ->
+            acc_state
+            |> State.stream_response_pid(ref)
+            |> send_connection_close_and_end_stream_response()
+
+            GenServer.reply(from, {:error, @connection_closed_error})
+        end
+
+        acc_state
+      end,
+      state,
+      state.request_stream_queue
+    )
+
+    {:noreply, State.update_request_stream_queue(state, :queue.new())}
+  end
+
+  defp send_connection_close_and_end_stream_response(pid) do
+    StreamResponseProcess.consume(pid, :error, @connection_closed_error)
+    StreamResponseProcess.done(pid)
   end
 end

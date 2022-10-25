@@ -18,7 +18,8 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     test "non-successful connection stops the connection process without exit it's caller" do
       logs =
         capture_log(fn ->
-          assert {:error, :normal} == ConnectionProcess.start_link(:http, "localhost", 12345)
+          assert {:error, %Mint.TransportError{reason: :econnrefused}} ==
+                   ConnectionProcess.start_link(:http, "localhost", 12345)
         end)
 
       assert logs =~ "unable to establish a connection"
@@ -70,7 +71,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert state.conn != new_state.conn
     end
 
-    test "returns error response when mint returns an error when starting stream request", %{
+    test "returns error when connection is closed", %{
       request: {method, path, headers},
       state: state
     } do
@@ -80,7 +81,22 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
       assert {:reply, {:error, error}, new_state} = response
       assert state.conn != new_state.conn
-      assert %Mint.HTTPError{__exception__: true, module: Mint.HTTP2, reason: :closed} == error
+      assert "the connection is closed" == error
+    end
+
+    test "returns error response when mint returns an error when starting stream request", %{
+      request: {method, path, headers},
+      state: state
+    } do
+      # Simulates the server closing the connection before we update the state
+      {:ok, _conn} = Mint.HTTP.close(state.conn)
+
+      request = {:request, method, path, headers, :stream, [stream_response_pid: self()]}
+      response = ConnectionProcess.handle_call(request, nil, state)
+
+      assert {:reply, {:error, error}, new_state} = response
+      assert state.conn == new_state.conn
+      assert %Mint.TransportError{__exception__: true, reason: :closed} == error
     end
   end
 
@@ -110,7 +126,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert state.conn != new_state.conn
     end
 
-    test "returns error response when mint returns an error when starting stream request", %{
+    test "returns error response when connection is closed", %{
       request: {method, path, headers},
       state: state
     } do
@@ -121,7 +137,23 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
       assert {:reply, {:error, error}, new_state} = response
       assert state.conn != new_state.conn
-      assert %Mint.HTTPError{__exception__: true, module: Mint.HTTP2, reason: :closed} == error
+      assert "the connection is closed" == error
+    end
+
+    test "returns error response when mint returns an error when starting stream request", %{
+      request: {method, path, headers},
+      state: state
+    } do
+      body = <<1, 2, 3>>
+      request = {:request, method, path, headers, body, [stream_response_pid: self()]}
+
+      # Simulates the server closing the connection before we update the state
+      {:ok, _conn} = Mint.HTTP.close(state.conn)
+
+      response = ConnectionProcess.handle_call(request, nil, state)
+
+      assert {:reply, {:error, error}, _new_state} = response
+      assert %Mint.TransportError{reason: :closed} == error
     end
   end
 
@@ -139,17 +171,13 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     end
 
     test "reply with error when stream :eof is errors", %{request_ref: request_ref, state: state} do
-      {:ok, conn} = Mint.HTTP.close(state.conn)
+      # Simulates the server closing the connection before we update the state
+      {:ok, _conn} = Mint.HTTP.close(state.conn)
 
-      response =
-        ConnectionProcess.handle_call({:stream_body, request_ref, :eof}, nil, %{
-          state
-          | conn: conn
-        })
+      response = ConnectionProcess.handle_call({:stream_body, request_ref, :eof}, nil, state)
 
-      assert {:reply, {:error, error}, new_state} = response
-      assert %Mint.HTTPError{__exception__: true, module: Mint.HTTP2, reason: :closed} == error
-      assert new_state.conn != state.conn
+      assert {:reply, {:error, error}, _new_state} = response
+      assert %Mint.TransportError{__exception__: true, reason: :closed} == error
     end
 
     test "continue to process payload stream", %{request_ref: request_ref, state: state} do
@@ -277,8 +305,8 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
     test "send error to the caller process when server return an error and there is a process ref",
          %{request_ref: request_ref, state: state} do
-      {:ok, conn} = Mint.HTTP.close(state.conn)
-      state = %{state | conn: conn}
+      # Simulates the server closing the connection before we update the state
+      {:ok, _conn} = Mint.HTTP.close(state.conn)
 
       {_, state, _} =
         ConnectionProcess.handle_call(
@@ -290,27 +318,27 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert {:noreply, _new_state} =
                ConnectionProcess.handle_continue(:process_request_stream_queue, state)
 
-      assert_receive {:tag, {:error, %Mint.HTTPError{module: Mint.HTTP2, reason: :closed}}}, 500
+      assert_receive {:tag, {:error, %Mint.TransportError{reason: :closed, __exception__: true}}},
+                     500
     end
 
     test "send error message to stream response process when caller process ref is empty",
          %{request_ref: request_ref, state: state} do
-      # Close connection to simulate an error
-      {:ok, conn} = Mint.HTTP.close(state.conn)
-
       # instead of a real process I put test process pid to test that the message is sent
-      state =
-        update_stream_response_process_to_test_pid(%{state | conn: conn}, request_ref, self())
+      state = update_stream_response_process_to_test_pid(state, request_ref, self())
 
       {_, state, _} =
-        ConnectionProcess.handle_call({:stream_body, request_ref, <<1, 2, 3>>}, nil, state)
+        ConnectionProcess.handle_call({:stream_body, request_ref, <<1>>}, nil, state)
+
+      # Close connection to simulate an error (like the server closing the connection before we update state)
+      {:ok, _conn} = Mint.HTTP.close(state.conn)
 
       assert {:noreply, _new_state} =
                ConnectionProcess.handle_continue(:process_request_stream_queue, state)
 
       assert_receive {:"$gen_cast",
                       {:consume_response,
-                       {:error, %Mint.HTTPError{module: Mint.HTTP2, reason: :closed}}}},
+                       {:error, %Mint.TransportError{reason: :closed, __exception__: true}}}},
                      500
     end
   end

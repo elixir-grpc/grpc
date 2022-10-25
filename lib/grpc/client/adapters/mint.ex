@@ -14,6 +14,7 @@ defmodule GRPC.Client.Adapters.Mint do
   @impl true
   def connect(%{host: host, port: port} = channel, opts \\ []) do
     opts = Keyword.merge(@default_connect_opts, connect_opts(channel, opts))
+    Process.flag(:trap_exit, true)
 
     channel
     |> mint_scheme()
@@ -22,6 +23,9 @@ defmodule GRPC.Client.Adapters.Mint do
       {:ok, pid} -> {:ok, %{channel | adapter_payload: %{conn_pid: pid}}}
       error -> raise "An error happened while trying to opening the connection: #{inspect(error)}"
     end
+  catch
+    :exit, reason ->
+      raise "An error happened while trying to opening the connection: #{inspect(reason)}"
   end
 
   @impl true
