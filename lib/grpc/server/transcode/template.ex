@@ -50,6 +50,10 @@ defmodule GRPC.Server.Transcode.Template do
     parse(rest, segments)
   end
 
+  def parse([{:*, _}, {:*, _} | rest], segments) do
+    parse(rest, [{:__, []} | segments])
+  end
+
   def parse([{:*, _} | rest], segments) do
     parse(rest, [{:_, []} | segments])
   end

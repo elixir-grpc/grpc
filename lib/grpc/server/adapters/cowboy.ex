@@ -186,15 +186,12 @@ defmodule GRPC.Server.Adapters.Cowboy do
   end
 
   defp build_route({:grpc, path}, endpoint, server, opts) do
-    {String.to_charlist(path), GRPC.Server.Adapters.Cowboy.Handler,
-     {endpoint, server, path, Enum.into(opts, %{})}}
+    {path, GRPC.Server.Adapters.Cowboy.Handler, {endpoint, server, path, Enum.into(opts, %{})}}
   end
 
-  defp build_route({:http_transcode, spec}, endpoint, server, opts) do
+  defp build_route({:http_transcode, {_method, route} = spec}, endpoint, server, opts) do
     path = GRPC.Server.Transcode.to_path(spec)
-
-    {String.to_charlist(path), GRPC.Server.Adapters.Cowboy.Handler,
-     {endpoint, server, path, Enum.into(opts, %{})}}
+    {route, GRPC.Server.Adapters.Cowboy.Handler, {endpoint, server, path, Enum.into(opts, %{})}}
   end
 
   defp cowboy_start_args(endpoint, servers, port, opts) do
@@ -212,7 +209,8 @@ defmodule GRPC.Server.Adapters.Cowboy do
         handlers
       end
 
-    dispatch = :cowboy_router.compile([{:_, handlers}])
+    dispatch = GRPC.Server.Adapters.Cowboy.Router.compile([{:_, handlers}])
+
     idle_timeout = Keyword.get(opts, :idle_timeout) || :infinity
     num_acceptors = Keyword.get(opts, :num_acceptors) || @default_num_acceptors
     max_connections = Keyword.get(opts, :max_connections) || @default_max_connections

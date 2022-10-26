@@ -78,6 +78,20 @@ defmodule GRPC.Transcode.TemplateTest do
                {:"}", []}
              ] == Template.tokenize("/v1/messages/{message_id}/{sub.subfield}")
     end
+
+    test "can tokenize single wildcard" do
+      assert [{:/, []}, {:*, []}] == Template.tokenize("/*")
+    end
+
+    test "can tokenize multiple wildcards" do
+      assert [
+               {:/, []},
+               {:*, []},
+               {:/, []},
+               {:*, []},
+               {:*, []}
+             ] == Template.tokenize("/*/**")
+    end
   end
 
   describe "parse/3" do
@@ -95,9 +109,16 @@ defmodule GRPC.Transcode.TemplateTest do
                |> Template.parse([])
     end
 
-    test "can parse paths with wildcards" do
+    test "can parse paths with 'any'" do
       assert ["v1", "messages", {:_, []}] ==
                "/v1/messages/*"
+               |> Template.tokenize()
+               |> Template.parse([])
+    end
+
+    test "can parse paths with 'catch all'" do
+      assert ["v1", "messages", {:__, []}] ==
+               "/v1/messages/**"
                |> Template.tokenize()
                |> Template.parse([])
     end
@@ -112,6 +133,13 @@ defmodule GRPC.Transcode.TemplateTest do
     test "can parse bindings with variable assignment" do
       assert ["v1", {:name, ["messages", {:_, []}]}] ==
                "/v1/{name=messages/*}"
+               |> Template.tokenize()
+               |> Template.parse([])
+    end
+
+    test "can parse bindings with variable assignment to any" do
+      assert ["v1", {:name, [{:_, []}]}] ==
+               "/v1/{name=*}"
                |> Template.tokenize()
                |> Template.parse([])
     end
