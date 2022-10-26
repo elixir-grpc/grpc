@@ -31,15 +31,15 @@ curl -XPOST -H 'Content-type: application/json' -d '{"name": "test", "from": "an
 
 1. Modify the proto `priv/protos/helloworld.proto`
 2. Install `protoc` [here](https://developers.google.com/protocol-buffers/docs/downloads)
-3. Install `protoc-gen-elixir`
+
 ```
-mix escript.install hex protobuf
+mix deps.get
 ```
+
 4. Generate the code:
 
 ```shell
-$ (cd ../../; mix build_protobuf_escript && mix escript.build)
-$ protoc -I priv/protos --elixir_out=:./lib/ --grpc_elixir_out=./lib --plugin="../../deps/protobuf/protoc-gen-elixir" --plugin="../../protoc-gen-grpc_elixir" priv/protos/helloworld.proto
+$ mix protobuf.generate --include-path=priv/protos --plugins=ProtobufGenerate.Plugins.GRPCWithOptions --output-path=./lib priv/protos/helloworld.proto
 ```
 
 Refer to [protobuf-elixir](https://github.com/tony612/protobuf-elixir#usage) for more information.
