@@ -1,4 +1,4 @@
-defmodule GRPC.Server.Transcode.FieldPath do
+defmodule GRPC.Server.Router.FieldPath do
   @moduledoc false
 
   @spec decode_pair({binary(), term()}, map()) :: map()

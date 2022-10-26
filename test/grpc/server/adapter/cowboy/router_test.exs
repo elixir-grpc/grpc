@@ -69,7 +69,7 @@ defmodule GRPC.Server.Adapters.Cowboy.RouterTest do
     test "with 'any' and 'catch all'" do
       dispatch = make_dispatch("/*/**")
 
-      assert {:ok, Handler, [], %{}, :undefined, ["foo", "bar", "baz"]} ==
+      assert {:ok, Handler, [], %{}, :undefined, :undefined} ==
                Router.match(dispatch, "localhost", "/v1/foo/bar/baz")
     end
 
@@ -156,13 +156,12 @@ defmodule GRPC.Server.Adapters.Cowboy.RouterTest do
   end
 
   defp make_dispatch(path) do
-    rule = %{pattern: {:get, path}}
-    {_method, route} = GRPC.Server.Transcode.build_route(rule)
+    {_method, _, match} = GRPC.Server.Router.build_route(path)
 
     [
       {:_, [],
        [
-         {route, [], Handler, []}
+         {match, [], Handler, []}
        ]}
     ]
   end

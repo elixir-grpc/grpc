@@ -1,6 +1,6 @@
-defmodule GRPC.Transcode.QueryTest do
+defmodule GRPC.Server.Router.QueryTest do
   use ExUnit.Case, async: true
-  alias GRPC.Server.Transcode.Query
+  alias GRPC.Server.Router.Query
 
   test "`a=b&c=d` should be decoded as a map" do
     assert %{"a" => "b", "c" => "d"} == Query.decode("a=b&c=d")

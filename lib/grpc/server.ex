@@ -113,7 +113,7 @@ defmodule GRPC.Server do
   require Logger
 
   alias GRPC.RPCError
-  alias GRPC.Server.Transcode
+  alias GRPC.Server.{Router, Transcode}
 
   @type rpc_req :: struct | Enumerable.t()
   @type rpc_return :: struct | any
@@ -123,7 +123,7 @@ defmodule GRPC.Server do
     quote bind_quoted: [opts: opts], location: :keep do
       service_mod = opts[:service]
       service_name = service_mod.__meta__(:name)
-      codecs = opts[:codecs] || [GRPC.Codec.Proto, GRPC.Codec.WebText, GRPC.Codec.JSON]
+      codecs = opts[:codecs] || [GRPC.Codec.Proto, GRPC.Codec.WebText]
       compressors = opts[:compressors] || []
       http_transcode = opts[:http_transcode] || false
 
@@ -134,15 +134,16 @@ defmodule GRPC.Server do
           acc ->
             path = "/#{service_name}/#{name}"
 
-            http_paths =
+            acc =
               if http_transcode and Map.has_key?(options, :http) do
                 %{value: http_rule} = GRPC.Service.rpc_options(rpc, :http)
-                [{:http_transcode, Transcode.build_route(http_rule)}]
+                route = Macro.escape({:http_transcode, Router.build_route(http_rule)})
+                [route | acc]
               else
-                []
+                acc
               end
 
-            http_paths ++ [{:grpc, path} | acc]
+            [{:grpc, path} | acc]
         end
 
       Enum.each(service_mod.__rpc_calls__, fn {name, _, _, options} = rpc ->
@@ -166,8 +167,7 @@ defmodule GRPC.Server do
 
         if http_transcode and Map.has_key?(options, :http) do
           %{value: http_rule} = GRPC.Service.rpc_options(rpc, :http)
-          {http_method, _} = spec = Transcode.build_route(http_rule)
-          http_path = Transcode.to_path(spec)
+          {http_method, http_path, _matches} = Router.build_route(http_rule)
 
           def __call_rpc__(unquote(http_path), unquote(http_method), stream) do
             GRPC.Server.call(

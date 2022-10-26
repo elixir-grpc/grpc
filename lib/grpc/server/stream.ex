@@ -35,7 +35,7 @@ defmodule GRPC.Server.Stream do
           # `GRPC.Server.set_compressor`
           compressor: module() | nil,
           # For http transcoding
-          http_method: :get | :post | :put | :patch | :delete,
+          http_method: GRPC.Server.Router.http_method(),
           http_transcode: boolean(),
           __interface__: map()
         }

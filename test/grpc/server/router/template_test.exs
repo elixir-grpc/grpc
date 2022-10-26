@@ -1,6 +1,6 @@
-defmodule GRPC.Transcode.TemplateTest do
+defmodule GRPC.Server.Router.TemplateTest do
   use ExUnit.Case, async: true
-  alias GRPC.Server.Transcode.Template
+  alias GRPC.Server.Router.Template
 
   describe "tokenize/2" do
     test "can tokenize simple paths" do

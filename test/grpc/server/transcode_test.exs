@@ -48,24 +48,6 @@ defmodule GRPC.TranscodeTest do
     assert %{a: "b"} == Transcode.map_response_body(rule, request_body)
   end
 
-  test "build_route/1 returns a route with {http_method, route} based on the http rule" do
-    rule = build_simple_rule(:get, "/v1/messages/{message_id}")
-    assert {:get, segments} = Transcode.build_route(rule)
-    assert ["v1", "messages", {:message_id, []}] = segments
-  end
-
-  test "to_path/1 returns path segments as a string match" do
-    rule = build_simple_rule(:get, "/v1/messages/{message_id}")
-    assert spec = Transcode.build_route(rule)
-    assert "/v1/messages/:message_id" = Transcode.to_path(spec)
-  end
-
-  test "to_path/1 returns path segments as a string when there's multiple bindings" do
-    rule = build_simple_rule(:get, "/v1/users/{user_id}/messages/{message_id}")
-    assert spec = Transcode.build_route(rule)
-    assert "/v1/users/:user_id/messages/:message_id" = Transcode.to_path(spec)
-  end
-
   test "map_route_bindings/2 should stringify the keys" do
     path_binding_atom = %{foo: "bar"}
     path_binding_string = %{foo: "bar"}
@@ -77,9 +59,5 @@ defmodule GRPC.TranscodeTest do
   test "map_route_bindings/2 with '.' delimited identifiers should create a nested map" do
     path_binding = %{"foo.bar.baz" => "biz"}
     assert %{"foo" => %{"bar" => %{"baz" => "biz"}}} == Transcode.map_path_bindings(path_binding)
-  end
-
-  defp build_simple_rule(method, pattern) do
-    Google.Api.HttpRule.new(pattern: {method, pattern})
   end
 end

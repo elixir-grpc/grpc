@@ -1,6 +1,12 @@
 defmodule GRPC.Server.Adapters.Cowboy.Router do
-  use Bitwise
+  # Most of the functionality in this module is lifted from :cowboy_router, with the unused parts
+  # removed. Since the template language for Google.Api.HttpRule is quite rich, it cannot be expressed
+  # in terms of the default routing offered by cowboy.
+  # This module is configured to be used as middleware in `src/grpc_stream_h.erl` instead of :cowoby_router
+  @moduledoc false
   @behaviour :cowboy_middleware
+
+  alias GRPC.Server.Router
 
   @dialyzer {:nowarn_function, compile: 1}
 
@@ -17,10 +23,10 @@ defmodule GRPC.Server.Adapters.Cowboy.Router do
     Enum.reverse(acc)
   end
 
-  def compile_paths([{route, handler, opts} | paths], acc) when is_binary(route) do
-    {_, route} = GRPC.Server.Transcode.build_route(%{pattern: {:post, route}})
+  def compile_paths([{path, handler, opts} | paths], acc) when is_binary(path) do
+    {_, _, matches} = Router.build_route(path)
 
-    compile_paths(paths, [{route, [], handler, opts} | acc])
+    compile_paths(paths, [{matches, [], handler, opts} | acc])
   end
 
   def compile_paths([{route, handler, opts} | paths], acc) do
@@ -65,36 +71,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Router do
     match_path(path_matchs, :undefined, path, %{})
   end
 
-  def match([{host_match, fields, path_matchs} | tail], tokens, path)
-      when is_list(tokens) do
-    case list_match(tokens, host_match, %{}) do
-      false ->
-        match(tail, tokens, path)
-
-      {true, bindings, host_info} ->
-        host_info =
-          case host_info do
-            :undefined ->
-              :undefined
-
-            _ ->
-              Enum.reverse(host_info)
-          end
-
-        case check_constraints(fields, bindings) do
-          {:ok, bindings} ->
-            match_path(path_matchs, host_info, path, bindings)
-
-          :nomatch ->
-            match(tail, tokens, path)
-        end
-    end
-  end
-
-  def match(dispatch, host, path) do
-    match(dispatch, split_host(host), path)
-  end
-
   defp match_path([], _, _, _) do
     {:error, :notfound, :path}
   end
@@ -113,14 +89,14 @@ defmodule GRPC.Server.Adapters.Cowboy.Router do
 
   defp match_path([{path_match, fields, handler, opts} | tail], host_info, tokens, bindings)
        when is_list(tokens) do
-    case list_match(tokens, path_match, bindings) do
+    case Router.match(tokens, path_match, bindings) do
       false ->
         match_path(tail, host_info, tokens, bindings)
 
-      {true, path_binds, path_info} ->
+      {true, path_binds} ->
         case check_constraints(fields, path_binds) do
           {:ok, path_binds} ->
-            {:ok, handler, opts, path_binds, host_info, path_info}
+            {:ok, handler, opts, path_binds, host_info, :undefined}
 
           :nomatch ->
             match_path(tail, host_info, tokens, bindings)
@@ -133,7 +109,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Router do
   end
 
   defp match_path(dispatch, host_info, path, bindings) do
-    match_path(dispatch, host_info, split_path(path), bindings)
+    match_path(dispatch, host_info, Router.split_path(path), bindings)
   end
 
   defp check_constraints([], bindings) do
@@ -145,11 +121,11 @@ defmodule GRPC.Server.Adapters.Cowboy.Router do
   end
 
   defp check_constraints([field | tail], bindings) do
-    name = :erlang.element(1, field)
+    name = elem(field, 0)
 
     case bindings do
       %{^name => value} ->
-        constraints = :erlang.element(2, field)
+        constraints = elem(field, 1)
 
         case :cowboy_constraints.validate(
                value,
@@ -164,204 +140,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Router do
 
       _ ->
         check_constraints(tail, bindings)
-    end
-  end
-
-  defp split_host(host) do
-    split_host(host, [])
-  end
-
-  defp split_host(host, acc) do
-    case :binary.match(host, ".") do
-      :nomatch when host === <<>> ->
-        acc
-
-      :nomatch ->
-        [host | acc]
-
-      {pos, _} ->
-        <<segment::size(pos)-binary, _::size(8), rest::bits>> = host
-        false = byte_size(segment) == 0
-        split_host(rest, [segment | acc])
-    end
-  end
-
-  defp split_path(<<?/, path::bits>>) do
-    split_path(path, [])
-  end
-
-  defp split_path(_) do
-    :badrequest
-  end
-
-  defp split_path(path, acc) do
-    try do
-      case :binary.match(path, "/") do
-        :nomatch when path === <<>> ->
-            acc
-            |> Enum.map(&:cow_uri.urldecode/1)
-            |> Enum.reverse()
-            |> remove_dot_segments([])
-
-        :nomatch ->
-          [path | acc]
-          |> Enum.map(&:cow_uri.urldecode/1)
-          |> Enum.reverse()
-          |> remove_dot_segments([])
-
-        {pos, _} ->
-          <<segment::size(pos)-binary, _::size(8), rest::bits>> = path
-          split_path(rest, [segment | acc])
-      end
-    catch
-      :error, _ ->
-        :badrequest
-    end
-  end
-
-  defp remove_dot_segments([], acc) do
-    Enum.reverse(acc)
-  end
-
-  defp remove_dot_segments(["." | segments], acc) do
-    remove_dot_segments(segments, acc)
-  end
-
-  defp remove_dot_segments([".." | segments], acc = []) do
-    remove_dot_segments(segments, acc)
-  end
-
-  defp remove_dot_segments([".." | segments], [_ | acc]) do
-    remove_dot_segments(segments, acc)
-  end
-
-  defp remove_dot_segments([s | segments], acc) do
-    remove_dot_segments(segments, [s | acc])
-  end
-
-  def list_match(list, [{:__, []}], binds) do
-    {true, binds, list}
-  end
-
-  def list_match([_s | tail], [{:_, _} | tail_match], binds) do
-    list_match(tail, tail_match, binds)
-  end
-
-  def list_match([s | tail], [s | tail_match], binds) do
-    list_match(tail, tail_match, binds)
-  end
-
-  def list_match([segment | tail], [{binding, [{:_, _}]} | matchers], bindings) do
-    put_binding(bindings, binding, segment, tail, matchers)
-  end
-
-  def list_match([segment | tail], [{binding, [segment]} | matchers], bindings)
-      when is_atom(binding) do
-    put_binding(bindings, binding, segment, tail, matchers)
-  end
-
-  def list_match(rest, [{binding, [{any, _}]}], bindings)
-      when is_atom(binding) and any in [:_, :__] do
-    value = Enum.join(rest, "/")
-
-    list_match([], [], Map.put(bindings, binding, value))
-  end
-
-  def list_match([segment | _] = rest, [{binding, [segment, {any, _}]}], bindings)
-      when is_atom(binding) and any in [:_, :__] do
-    value = Enum.join(rest, "/")
-
-    list_match([], [], Map.put(bindings, binding, value))
-  end
-
-  def list_match(
-        [segment | tail],
-        [{binding, [segment | sub_matches]} | matches],
-        bindings
-      )
-      when is_atom(binding) do
-    end_condition =
-      case matches do
-        [next | _] -> next
-        [] -> :undefined
-      end
-
-    with {matched_segments, tail} <- match_until(tail, end_condition, sub_matches, []) do
-      value = Enum.join([segment | matched_segments], "/")
-      bindings = Map.put(bindings, binding, value)
-
-      list_match(tail, matches, bindings)
-    end
-  end
-
-  def list_match([segment | tail], [{binding, []} | matchers], bindings) when is_atom(binding) do
-    put_binding(bindings, binding, segment, tail, matchers)
-  end
-
-  def list_match([], [], binds) do
-    {true, binds, :undefined}
-  end
-
-  def list_match(_list, _match, _binds) do
-    false
-  end
-
-  # End recursion, since there's no "outside" matches we should iterate to end of segments
-  def match_until([], :undefined, [], acc) do
-    {Enum.reverse(acc), []}
-  end
-
-  # End recursion, end condition is a binding with a matching complex start segment
-  def match_until(
-        [segment | _] = segments,
-        _end_condition = {binding, [segment | _]},
-        [],
-        acc
-      )
-      when is_atom(binding) do
-    {Enum.reverse(acc), segments}
-  end
-
-  # End recursion since the submatch contains a trailing wildcard but we have more matches "outside" this sub-segment
-  def match_until([segment | _] = segments, _end_condition = segment, [], acc) do
-    {Enum.reverse(acc), segments}
-  end
-
-  # Reached the "end" of this wildcard, so we proceed with the next match
-  def match_until([_segment | _] = segments, end_condition, [{:__, []}, match | matches], acc) do
-    match_until(segments, end_condition, [match | matches], acc)
-  end
-
-  # Segment is matching the wildcard and have not reached "end" of wildcard
-  def match_until([segment | segments], end_condition, [{:__, []} | _] = matches, acc) do
-    match_until(segments, end_condition, matches, [segment | acc])
-  end
-
-  # Current match is matching segment, add to accumulator and set next match as the current one
-  def match_until([segment | segments], end_condition, [segment | matches], acc) do
-    match_until(segments, end_condition, matches, [segment | acc])
-  end
-
-  # 'Any' match is matching first segment, add to accumulator and set next match as the current one
-  def match_until([segment | segments], end_condition, [{:_, []} | matches], acc) do
-    match_until(segments, end_condition, matches, [segment | acc])
-  end
-
-  # No match
-  def match_until(_segments, _end_condition, _matches, _acc) do
-    false
-  end
-
-  defp put_binding(bindings, binding, value, tail, matchers) do
-    case bindings do
-      %{^binding => ^value} ->
-        list_match(tail, matchers, bindings)
-
-      %{^binding => _} ->
-        false
-
-      _ ->
-        list_match(tail, matchers, Map.put(bindings, binding, value))
     end
   end
 end

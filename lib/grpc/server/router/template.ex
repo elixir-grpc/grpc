@@ -1,4 +1,4 @@
-defmodule GRPC.Server.Transcode.Template do
+defmodule GRPC.Server.Router.Template do
   @moduledoc false
   # https://cloud.google.com/endpoints/docs/grpc-service-config/reference/rpc/google.api#google.api.HttpRule
   # Template = "/" Segments [ Verb ] ;
@@ -7,10 +7,10 @@ defmodule GRPC.Server.Transcode.Template do
   # Variable = "{" FieldPath [ "=" Segments ] "}" ;
   # FieldPath = IDENT { "." IDENT } ;
   # Verb     = ":" LITERAL ;
-  @type segments :: list(atom | String.t())
-  @type route :: {atom(), segments()}
+  @type segment_match :: String.t() | {atom(), [segment_match]}
+  @type matchers :: [segment_match]
 
-  @spec tokenize(binary(), list()) :: list()
+  @spec tokenize(binary(), [tuple()]) :: [tuple()]
   def tokenize(path, tokens \\ [])
 
   def tokenize(<<>>, tokens) do
@@ -24,7 +24,6 @@ defmodule GRPC.Server.Transcode.Template do
 
   @terminals [?/, ?{, ?}, ?=, ?*]
   defp do_tokenize(<<h, t::binary>>, <<>>) when h in @terminals do
-    # parse(t, acc)
     {{List.to_atom([h]), []}, t}
   end
 
@@ -41,57 +40,57 @@ defmodule GRPC.Server.Transcode.Template do
     {{:identifier, acc, []}, <<>>}
   end
 
-  @spec parse(list(tuple()), list()) :: route() | {list(), list()}
-  def parse([], segments) do
-    Enum.reverse(segments)
+  @spec parse(tokens :: [tuple()], matchers()) :: matchers() | {matchers, tokens :: [tuple()]}
+  def parse([], matchers) do
+    Enum.reverse(matchers)
   end
 
-  def parse([{:/, _} | rest], segments) do
-    parse(rest, segments)
+  def parse([{:/, _} | rest], matchers) do
+    parse(rest, matchers)
   end
 
-  def parse([{:*, _}, {:*, _} | rest], segments) do
-    parse(rest, [{:__, []} | segments])
+  def parse([{:*, _}, {:*, _} | rest], matchers) do
+    parse(rest, [{:__, []} | matchers])
   end
 
-  def parse([{:*, _} | rest], segments) do
-    parse(rest, [{:_, []} | segments])
+  def parse([{:*, _} | rest], matchers) do
+    parse(rest, [{:_, []} | matchers])
   end
 
-  def parse([{:identifier, identifier, _} | rest], segments) do
-    parse(rest, [identifier | segments])
+  def parse([{:identifier, identifier, _} | rest], matchers) do
+    parse(rest, [identifier | matchers])
   end
 
-  def parse([{:"{", _} | rest], segments) do
-    {segments, rest} = parse_binding(rest, segments)
-    parse(rest, segments)
+  def parse([{:"{", _} | rest], matchers) do
+    {matchers, rest} = parse_binding(rest, matchers)
+    parse(rest, matchers)
   end
 
-  def parse([{:"}", _} | _rest] = acc, segments) do
-    {segments, acc}
+  def parse([{:"}", _} | _rest] = acc, matchers) do
+    {matchers, acc}
   end
 
-  defp parse_binding([], segments) do
-    {segments, []}
+  defp parse_binding([], matchers) do
+    {matchers, []}
   end
 
-  defp parse_binding([{:"}", []} | rest], segments) do
-    {segments, rest}
+  defp parse_binding([{:"}", []} | rest], matchers) do
+    {matchers, rest}
   end
 
   defp parse_binding(
          [{:identifier, id, _}, {:=, _} | rest],
-         segments
+         matchers
        ) do
     variable = field_path(id)
     {assign, rest} = parse(rest, [])
 
-    parse_binding(rest, [{variable, Enum.reverse(assign)} | segments])
+    parse_binding(rest, [{variable, Enum.reverse(assign)} | matchers])
   end
 
-  defp parse_binding([{:identifier, id, []} | rest], segments) do
+  defp parse_binding([{:identifier, id, []} | rest], matchers) do
     variable = field_path(id)
-    parse_binding(rest, [{variable, []} | segments])
+    parse_binding(rest, [{variable, []} | matchers])
   end
 
   defp field_path(identifier) do

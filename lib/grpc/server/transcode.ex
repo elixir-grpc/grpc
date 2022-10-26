@@ -1,6 +1,6 @@
 defmodule GRPC.Server.Transcode do
   @moduledoc false
-  alias __MODULE__.{Query, Template, FieldPath}
+  alias GRPC.Server.Router.{Query, FieldPath}
 
   @type t :: map()
   # The request mapping follow the following rules:
@@ -64,46 +64,9 @@ defmodule GRPC.Server.Transcode do
   @spec map_response_body(t() | map(), map()) :: map()
   def map_response_body(%{response_body: ""}, response_body), do: response_body
 
-  # TODO The field is required to be present on the toplevel response message
   def map_response_body(%{response_body: field}, response_body) do
     key = String.to_existing_atom(field)
     Map.get(response_body, key)
-  end
-
-  def map_response_body(%{}, response_body), do: response_body
-
-  @spec to_path({atom(), Template.route()}) :: String.t()
-  def to_path({_method, segments} = _spec) do
-    match =
-      segments
-      |> Enum.map(&segment_to_string/1)
-      |> Enum.join("/")
-
-    "/" <> match
-  end
-
-  defp segment_to_string({:_, []}), do: "[...]"
-  defp segment_to_string({binding, []}) when is_atom(binding), do: ":#{Atom.to_string(binding)}"
-
-  defp segment_to_string({binding, [_ | rest]}) when is_atom(binding) do
-    sub_path =
-      rest
-      |> Enum.map(&segment_to_string/1)
-      |> Enum.join("/")
-
-    ":#{Atom.to_string(binding)}" <> "/" <> sub_path
-  end
-
-  defp segment_to_string(segment), do: segment
-
-  @spec build_route(t()) :: {atom(), Template.route()}
-  def build_route(%{pattern: {method, path}}) do
-    route =
-      path
-      |> Template.tokenize([])
-      |> Template.parse([])
-
-    {method, route}
   end
 
   @spec map_path_bindings(map()) :: map()

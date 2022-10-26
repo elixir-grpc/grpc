@@ -189,9 +189,8 @@ defmodule GRPC.Server.Adapters.Cowboy do
     {path, GRPC.Server.Adapters.Cowboy.Handler, {endpoint, server, path, Enum.into(opts, %{})}}
   end
 
-  defp build_route({:http_transcode, {_method, route} = spec}, endpoint, server, opts) do
-    path = GRPC.Server.Transcode.to_path(spec)
-    {route, GRPC.Server.Adapters.Cowboy.Handler, {endpoint, server, path, Enum.into(opts, %{})}}
+  defp build_route({:http_transcode, {_method, path, match}}, endpoint, server, opts) do
+    {match, GRPC.Server.Adapters.Cowboy.Handler, {endpoint, server, path, Enum.into(opts, %{})}}
   end
 
   defp cowboy_start_args(endpoint, servers, port, opts) do
