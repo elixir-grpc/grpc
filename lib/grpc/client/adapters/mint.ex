@@ -20,12 +20,15 @@ defmodule GRPC.Client.Adapters.Mint do
     |> mint_scheme()
     |> ConnectionProcess.start_link(host, port, opts)
     |> case do
-      {:ok, pid} -> {:ok, %{channel | adapter_payload: %{conn_pid: pid}}}
-      error -> raise "An error happened while trying to opening the connection: #{inspect(error)}"
+      {:ok, pid} ->
+        {:ok, %{channel | adapter_payload: %{conn_pid: pid}}}
+
+      error ->
+        {:error, "An error happened while trying to opening the connection: #{inspect(error)}"}
     end
   catch
     :exit, reason ->
-      raise "An error happened while trying to opening the connection: #{inspect(reason)}"
+      {:error, "An error happened while trying to opening the connection: #{inspect(reason)}"}
   end
 
   @impl true

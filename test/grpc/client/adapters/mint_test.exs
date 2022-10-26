@@ -28,9 +28,10 @@ defmodule GRPC.Client.Adapters.MintTest do
       assert %{channel | adapter_payload: %{conn_pid: result.adapter_payload.conn_pid}} == result
 
       # Ensure that changing one of the options breaks things
-      assert_raise RuntimeError, fn ->
-        Mint.connect(channel, transport_opts: [ip: "256.0.0.0"])
-      end
+      assert {:error, message} = Mint.connect(channel, transport_opts: [ip: "256.0.0.0"])
+
+      assert message ==
+               "An error happened while trying to opening the connection: {:error, :badarg}"
     end
   end
 end

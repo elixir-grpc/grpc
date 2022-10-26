@@ -178,7 +178,12 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
 
       {:ok, conn, responses} ->
         state = State.update_conn(state, conn)
-        state = Enum.reduce(responses, state, &process_response/2)
+
+        state =
+          if state.requests == %{},
+            do: state,
+            else: Enum.reduce(responses, state, &process_response/2)
+
         check_connection_status(state)
 
       {:error, conn, _error, _responses} ->
