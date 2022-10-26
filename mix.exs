@@ -70,10 +70,6 @@ defmodule GRPC.Mixfile do
 
   defp aliases do
     [
-      test: [
-        &gen_test_protos/1,
-        "test"
-      ],
       gen_bootstrap_protos: &gen_bootstrap_protos/1
     ]
   end
