@@ -70,7 +70,8 @@ defmodule GRPC.Mixfile do
 
   defp aliases do
     [
-      gen_bootstrap_protos: &gen_bootstrap_protos/1
+      gen_bootstrap_protos: &gen_bootstrap_protos/1,
+      gen_test_protos: [&gen_bootstrap_protos/1, &gen_test_protos/1]
     ]
   end
 
@@ -96,7 +97,7 @@ defmodule GRPC.Mixfile do
   defp gen_bootstrap_protos(_args) do
     proto_src = Mix.Project.deps_paths().googleapis
 
-    protoc!("--include-path=#{proto_src}", "./lib", [
+    protoc!("--include-path=#{proto_src}", "./test/support", [
       "google/api/http.proto",
       "google/api/annotations.proto"
     ])
