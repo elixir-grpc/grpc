@@ -119,7 +119,7 @@ Check [examples](examples) and [interop](interop)(Interoperability Test) for som
 
 ## Contributing
 
-You contributions are welcome!
+Your contributions are welcome!
 
 Please open issues if you have questions, problems and ideas. You can create pull
 requests directly if you want to fix little bugs, add small features and so on.
