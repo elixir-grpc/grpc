@@ -9,6 +9,18 @@ defmodule GRPC.Integration.ServerTest do
     end
   end
 
+  defmodule TranscodeErrorServer do
+    use GRPC.Server,
+      service: Transcode.Messaging.Service,
+      http_transcode: true
+
+    def get_message(req, _stream) do
+      status = String.to_existing_atom(req.name)
+
+      raise GRPC.RPCError, status: status
+    end
+  end
+
   defmodule TranscodeServer do
     use GRPC.Server,
       service: Transcode.Messaging.Service,
@@ -321,6 +333,42 @@ defmodule GRPC.Integration.ServerTest do
         assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
 
         assert %{"text" => "get_message"} = Jason.decode!(body)
+      end)
+    end
+
+    test "should map grpc error codes to http status" do
+      run_server([TranscodeErrorServer], fn port ->
+        for {code_name, status} <- [
+              {"cancelled", 400},
+              {"unknown", 500},
+              {"invalid_argument", 400},
+              {"deadline_exceeded", 504},
+              {"not_found", 404},
+              {"already_exists", 409},
+              {"permission_denied", 403},
+              {"resource_exhausted", 429},
+              {"failed_precondition", 412},
+              {"aborted", 409},
+              {"out_of_range", 400},
+              {"unimplemented", 501},
+              {"internal", 500},
+              {"unavailable", 503},
+              {"data_loss", 500},
+              {"unauthenticated", 401}
+            ] do
+          {:ok, conn_pid} = :gun.open('localhost', port)
+
+          stream_ref =
+            :gun.get(
+              conn_pid,
+              "/v1/messages/#{code_name}",
+              [
+                {"accept", "application/json"}
+              ]
+            )
+
+          assert_receive {:gun_response, ^conn_pid, ^stream_ref, :fin, ^status, _headers}
+        end
       end)
     end
 
