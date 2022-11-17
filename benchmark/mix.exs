@@ -22,7 +22,7 @@ defmodule Benchmark.MixProject do
   defp deps do
     [
       {:grpc, path: ".."},
-      {:protobuf, "~> 0.10"}
+      {:protobuf, "~> 0.11"}
     ]
   end
 end
