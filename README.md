@@ -34,7 +34,7 @@ The package can be installed as:
       # We don't force protobuf as a dependency for more
       # flexibility on which protobuf library is used,
       # but you probably want to use it as well
-      {:protobuf, "~> 0.10"}
+      {:protobuf, "~> 0.11"}
     ]
   end
   ```
