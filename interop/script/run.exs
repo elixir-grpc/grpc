@@ -17,33 +17,40 @@ alias GRPC.Client.Adapters.{Mint, Gun}
 
 {:ok, _pid, port} = GRPC.Server.start_endpoint(Interop.Endpoint, port)
 
-for adapter <- [Gun, Mint] do
-  1..concurrency
-  |> Task.async_stream(fn _cli ->
-                          ch = Client.connect("127.0.0.1", port, interceptors: [GRPCPrometheus.ClientInterceptor, GRPC.Logger.Client], adapter: adapter)
+defmodule InteropTestRunner do
+  def run(_cli, adapter, port, rounds) do
+    opts = [interceptors: [GRPCPrometheus.ClientInterceptor, GRPC.Logger.Client], adapter: adapter]
+    ch = Client.connect("127.0.0.1", port, opts)
 
-                          for _ <- 1..rounds do
-                            Client.empty_unary!(ch)
-                            Client.cacheable_unary!(ch)
-                            Client.large_unary!(ch)
-                            Client.large_unary2!(ch)
-                            Client.client_compressed_unary!(ch)
-                            Client.server_compressed_unary!(ch)
-                            Client.client_streaming!(ch)
-                            Client.client_compressed_streaming!(ch)
-                            Client.server_streaming!(ch)
-                            Client.server_compressed_streaming!(ch)
-                            Client.ping_pong!(ch)
-                            Client.empty_stream!(ch)
-                            Client.custom_metadata!(ch)
-                            Client.status_code_and_message!(ch)
-                            Client.unimplemented_service!(ch)
-                            Client.cancel_after_begin!(ch)
-                            Client.cancel_after_first_response!(ch)
-                            Client.timeout_on_sleeping_server!(ch)
-                          end
-                          :ok
-  end, max_concurrency: concurrency, ordered: false, timeout: :infinity)
+    for _ <- 1..rounds do
+      Client.empty_unary!(ch)
+      Client.cacheable_unary!(ch)
+      Client.large_unary!(ch)
+      Client.large_unary2!(ch)
+      Client.client_compressed_unary!(ch)
+      Client.server_compressed_unary!(ch)
+      Client.client_streaming!(ch)
+      Client.client_compressed_streaming!(ch)
+      Client.server_streaming!(ch)
+      Client.server_compressed_streaming!(ch)
+      Client.ping_pong!(ch)
+      Client.empty_stream!(ch)
+      Client.custom_metadata!(ch)
+      Client.status_code_and_message!(ch)
+      Client.unimplemented_service!(ch)
+      Client.cancel_after_begin!(ch)
+      Client.cancel_after_first_response!(ch)
+      Client.timeout_on_sleeping_server!(ch)
+    end
+    :ok
+  end
+end
+
+for adapter <- [Gun, Mint] do
+  args = [adapter, port, rounds]
+  stream_opts = [max_concurrency: concurrency, ordered: false, timeout: :infinity]
+  1..concurrency
+  |> Task.async_stream(InteropTestRunner, :run, args, stream_opts)
   |> Enum.to_list()
 end
 
