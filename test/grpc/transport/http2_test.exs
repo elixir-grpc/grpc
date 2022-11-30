@@ -1,6 +1,6 @@
 defmodule GRPC.Transport.HTTP2Test do
   use ExUnit.Case, async: true
-  alias GRPC.Channel
+  alias GRPC.{Channel, Status}
   alias GRPC.Transport.HTTP2
 
   alias GRPC.Client.Stream
@@ -112,5 +112,17 @@ defmodule GRPC.Transport.HTTP2Test do
       assert %{"content-type" => "application/" <> ^expected_content_type} =
                HTTP2.server_headers(stream)
     end
+  end
+
+  test "decode_headers/2 url decodes grpc-message" do
+    trailers = HTTP2.server_trailers(Status.unknown(), "Unknown error")
+    assert %{"grpc-message" => "Unknown error"} = HTTP2.decode_headers(trailers)
+  end
+
+  test "server_trailers/3 sets url encoded grpc-message" do
+    assert %{"grpc-message" => "Ok"} = HTTP2.server_trailers(Status.ok(), "Ok")
+
+    assert %{"grpc-message" => "Unknown%20error"} =
+             HTTP2.server_trailers(Status.unknown(), "Unknown error")
   end
 end
