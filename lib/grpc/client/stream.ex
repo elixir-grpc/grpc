@@ -50,7 +50,10 @@ defmodule GRPC.Client.Stream do
             compressor: nil,
             accepted_compressors: [],
             headers: %{},
-            __interface__: %{send_request: &__MODULE__.send_request/3, recv: &GRPC.Stub.do_recv/2}
+            __interface__: %{
+              send_request: &__MODULE__.send_request/3,
+              receive_data: &__MODULE__.receive_data/2
+            }
 
   @doc false
   def put_payload(%{payload: payload} = stream, key, val) do
@@ -89,5 +92,9 @@ defmodule GRPC.Client.Stream do
       send_end_stream: send_end_stream,
       compressor: compressor
     )
+  end
+
+  def receive_data(%{channel: %{adapter: adapter}} = stream, opts) do
+    adapter.receive_data(stream, opts)
   end
 end
