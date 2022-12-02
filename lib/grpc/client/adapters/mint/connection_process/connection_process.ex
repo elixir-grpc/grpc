@@ -1,9 +1,9 @@
 defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   @moduledoc """
-  This module is responsible for manage a connection with a grpc server.
-  It's also responsible for manage requests, which also includes check for the
-  connection/request window size, split a given payload into appropriate sized chunks
-  and stream those to the server using an internal queue.
+  This module is responsible for managing a connection with a gRPC server.
+  It's also responsible for managing requests, which also includes checks for the
+  connection/request window size, splitting a given payload into appropriate sized chunks
+  and streaming those to the server using an internal queue.
   """
 
   use GenServer
