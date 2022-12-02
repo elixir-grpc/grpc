@@ -12,8 +12,9 @@ Logger.configure(level: level)
 
 Logger.info("Rounds: #{rounds}; concurrency: #{concurrency}; port: #{port}")
 
+alias GRPC.Client.Adapters.Gun
+alias GRPC.Client.Adapters.Mint
 alias Interop.Client
-alias GRPC.Client.Adapters.{Mint, Gun}
 
 {:ok, _pid, port} = GRPC.Server.start_endpoint(Interop.Endpoint, port)
 
