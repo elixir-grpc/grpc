@@ -27,8 +27,10 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
 
   @doc """
   Sends a request to the connected server.
-  Opts:
-      - :stream_response_pid (required) - the process to where send the responses coming from the connection will be sent to be processed
+
+  ## Options
+
+    * :stream_response_pid (required) - the process to where send the responses coming from the connection will be sent to be processed
   """
   @spec request(
           pid :: pid(),
@@ -365,8 +367,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
     send(new_state.parent, {:elixir_grpc, :connection_down, self()})
 
     new_state.requests
-    |> Map.keys()
-    |> Enum.each(fn ref ->
+    |> Enum.each(fn {ref, _} ->
       new_state
       |> State.stream_response_pid(ref)
       |> send_connection_close_and_end_stream_response()
@@ -381,7 +382,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   end
 
   def check_connection_status(state) do
-    if(Mint.HTTP.open?(state.conn)) do
+    if Mint.HTTP.open?(state.conn) do
       check_request_stream_queue(state)
     else
       finish_all_pending_requests(state)
