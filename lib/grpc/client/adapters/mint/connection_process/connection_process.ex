@@ -340,7 +340,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
     new_state =
       state.request_stream_queue
       |> :queue.to_list()
-      |> Enum.reduce(state, fn request, acc_state ->
+      |> Enum.reduce(state, fn {ref, _, _} = request, acc_state ->
         case request do
           {ref, _body, nil} ->
             acc_state
@@ -355,9 +355,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
             GenServer.reply(from, {:error, @connection_closed_error})
         end
 
-        {ref, _, _} = request
         {_ref, new_state} = State.pop_ref(acc_state, ref)
-
         new_state
       end)
 
