@@ -286,14 +286,14 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
 
     case stream_body(state.conn, request_ref, body, send_eof?) do
       {:ok, conn} ->
-        if from != nil do
+        if not is_nil(from) do
           GenServer.reply(from, :ok)
         end
 
         check_request_stream_queue(State.update_conn(state, conn))
 
       {:error, conn, error} ->
-        if from != nil do
+        if not is_nil(from) do
           GenServer.reply(from, {:error, error})
         else
           state
@@ -313,9 +313,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   end
 
   defp stream_body(conn, request_ref, body, false = _stream_eof?) do
-    with {:ok, conn} <- Mint.HTTP.stream_request_body(conn, request_ref, body) do
-      {:ok, conn}
-    end
+    Mint.HTTP.stream_request_body(conn, request_ref, body)
   end
 
   def check_request_stream_queue(state) do
