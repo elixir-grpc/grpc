@@ -3,8 +3,10 @@ defmodule GRPC.Client.Adapters.Mint do
   A client adapter using mint
   """
 
-  alias GRPC.{Channel, Credential}
-  alias GRPC.Client.Adapters.Mint.{ConnectionProcess, StreamResponseProcess}
+  alias GRPC.Channel
+  alias GRPC.Client.Adapters.Mint.ConnectionProcess
+  alias GRPC.Client.Adapters.Mint.StreamResponseProcess
+  alias GRPC.Credential
 
   @behaviour GRPC.Client.Adapter
 

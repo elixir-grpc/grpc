@@ -1,9 +1,9 @@
 defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   @moduledoc """
-  This module is responsible for manage a connection with a grpc server.
-  It's also responsible for manage requests, which also includes check for the
-  connection/request window size, split a given payload into appropriate sized chunks
-  and stream those to the server using an internal queue.
+  This module is responsible for managing a connection with a gRPC server.
+  It's also responsible for managing requests, which also includes checks for the
+  connection/request window size, splitting a given payload into appropriate sized chunks
+  and streaming those to the server using an internal queue.
   """
 
   use GenServer
@@ -27,8 +27,10 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
 
   @doc """
   Sends a request to the connected server.
-  Opts:
-      - :stream_response_pid (required) - the process to where send the responses coming from the connection will be sent to be processed
+
+  ## Options
+
+    * :stream_response_pid (required) - the process to where send the responses coming from the connection will be sent to be processed
   """
   @spec request(
           pid :: pid(),
@@ -284,14 +286,14 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
 
     case stream_body(state.conn, request_ref, body, send_eof?) do
       {:ok, conn} ->
-        if from != nil do
+        if not is_nil(from) do
           GenServer.reply(from, :ok)
         end
 
         check_request_stream_queue(State.update_conn(state, conn))
 
       {:error, conn, error} ->
-        if from != nil do
+        if not is_nil(from) do
           GenServer.reply(from, {:error, error})
         else
           state
@@ -311,9 +313,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   end
 
   defp stream_body(conn, request_ref, body, false = _stream_eof?) do
-    with {:ok, conn} <- Mint.HTTP.stream_request_body(conn, request_ref, body) do
-      {:ok, conn}
-    end
+    Mint.HTTP.stream_request_body(conn, request_ref, body)
   end
 
   def check_request_stream_queue(state) do
@@ -340,7 +340,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
     new_state =
       state.request_stream_queue
       |> :queue.to_list()
-      |> Enum.reduce(state, fn request, acc_state ->
+      |> Enum.reduce(state, fn {ref, _, _} = request, acc_state ->
         case request do
           {ref, _body, nil} ->
             acc_state
@@ -355,9 +355,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
             GenServer.reply(from, {:error, @connection_closed_error})
         end
 
-        {ref, _, _} = request
         {_ref, new_state} = State.pop_ref(acc_state, ref)
-
         new_state
       end)
 
@@ -365,8 +363,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
     send(new_state.parent, {:elixir_grpc, :connection_down, self()})
 
     new_state.requests
-    |> Map.keys()
-    |> Enum.each(fn ref ->
+    |> Enum.each(fn {ref, _} ->
       new_state
       |> State.stream_response_pid(ref)
       |> send_connection_close_and_end_stream_response()
@@ -381,7 +378,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   end
 
   def check_connection_status(state) do
-    if(Mint.HTTP.open?(state.conn)) do
+    if Mint.HTTP.open?(state.conn) do
       check_request_stream_queue(state)
     else
       finish_all_pending_requests(state)

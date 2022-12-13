@@ -26,7 +26,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   """
   @spec build_stream(pid()) :: Enumerable.t()
   def build_stream(pid) do
-    Elixir.Stream.unfold(pid, fn pid ->
+    Stream.unfold(pid, fn pid ->
       case GenServer.call(pid, :get_response, :infinity) do
         nil -> nil
         response -> {response, pid}
