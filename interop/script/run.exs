@@ -48,6 +48,7 @@ defmodule InteropTestRunner do
 end
 
 for adapter <- [Gun, Mint] do
+  Logger.info("Starting run for adapter: #{adapter}")
   args = [adapter, port, rounds]
   stream_opts = [max_concurrency: concurrency, ordered: false, timeout: :infinity]
   1..concurrency

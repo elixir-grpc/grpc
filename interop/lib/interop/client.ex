@@ -103,7 +103,7 @@ defmodule Interop.Client do
     params = Enum.map([31415, 9, 2653, 58979], &res_param(&1))
     req = Grpc.Testing.StreamingOutputCallRequest.new(response_parameters: params)
     {:ok, res_enum} = ch |> Grpc.Testing.TestService.Stub.streaming_output_call(req)
-    result = Enum.map([31415, 9, 2653, 58979], &String.duplicate(<<0>>, &1)) |> Enum.sort()
+    result = Enum.map([9, 2653, 31415, 58979], &String.duplicate(<<0>>, &1))
 
     ^result = res_enum |> Enum.map(fn {:ok, res} -> res.payload.body end) |> Enum.sort()
   end
@@ -117,7 +117,7 @@ defmodule Interop.Client do
         size: 92653}
     ])
     {:ok, res_enum} = ch |> Grpc.Testing.TestService.Stub.streaming_output_call(req)
-    result = Enum.map([31415, 92653], &String.duplicate(<<0>>, &1)) |> Enum.sort()
+    result = Enum.map([31415, 92653], &String.duplicate(<<0>>, &1))
 
     ^result = res_enum |> Enum.map(fn {:ok, res} -> res.payload.body end) |> Enum.sort()
   end
