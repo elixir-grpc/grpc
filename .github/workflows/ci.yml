@@ -10,7 +10,7 @@ on:
 
 jobs:
   check_format:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     name: Check format
     steps:
       - uses: actions/checkout@v3
@@ -30,7 +30,7 @@ jobs:
         run: mix format --check-formatted
 
   tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
     strategy:
       matrix:
@@ -60,7 +60,7 @@ jobs:
         run: mix test
 
   interop-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     name: Interop tests
     needs: check_format
     if: ${{ github.ref != 'refs/heads/master' }}
@@ -84,7 +84,7 @@ jobs:
         working-directory: ./interop
 
   interop-tests-all:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     name: Interop tests OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
     needs: check_format
     if: ${{ github.ref == 'refs/heads/master' }}
@@ -118,7 +118,7 @@ jobs:
 
   dialyzer:
     name: Dialyzer
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         otp: [24.x, 25.x]
@@ -148,7 +148,7 @@ jobs:
       - run: mix dialyzer --format short
 
   check_release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     name: Check release
     needs: check_format
     steps:
