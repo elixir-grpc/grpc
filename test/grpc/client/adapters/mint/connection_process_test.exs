@@ -43,7 +43,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       state = :sys.get_state(pid)
 
       assert {:stop, :normal, :ok, new_state} =
-               ConnectionProcess.handle_call({:disconnect, :brutal}, nil, state)
+               ConnectionProcess.handle_call(:disconnect, nil, state)
 
       refute Mint.HTTP.open?(new_state.conn)
     end
