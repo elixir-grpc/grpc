@@ -118,7 +118,7 @@ defmodule GRPC.Client.Adapters.Mint do
   end
 
   defp connect_opts(%Channel{scheme: "https"} = channel, opts) do
-    %Credential{ssl: ssl} = Map.get(channel, :cred, %Credential{})
+    %Credential{ssl: ssl} = Map.get(channel, :cred) || %Credential{}
 
     transport_opts =
       opts
@@ -166,7 +166,7 @@ defmodule GRPC.Client.Adapters.Mint do
   end
 
   defp success_bidi_stream?(%GRPC.Client.Stream{
-         grpc_type: :bidi_stream,
+         grpc_type: :bidirectional_stream,
          payload: %{response: {:ok, _resp}}
        }),
        do: true
