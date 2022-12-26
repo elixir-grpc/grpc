@@ -55,21 +55,10 @@ defmodule GRPC.Client.Adapters.Mint do
 
   @impl true
   def receive_data(stream, opts) do
-    cond do
-      success_bidi_stream?(stream) ->
-        do_receive_data(stream, :bidirectional_stream, opts)
-
-      success_server_stream?(stream) ->
-        do_receive_data(stream, :unary_request_stream_response, opts)
-
-      success_client_stream?(stream) ->
-        do_receive_data(stream, :stream_request_unary_response, opts)
-
-      success_unary_request?(stream) ->
-        do_receive_data(stream, :unary_request_response, opts)
-
-      true ->
-        handle_errors_receive_data(stream, opts)
+    if success_response?(stream) do
+      do_receive_data(stream, stream.grpc_type, opts)
+    else
+      handle_errors_receive_data(stream, opts)
     end
   end
 
@@ -137,7 +126,7 @@ defmodule GRPC.Client.Adapters.Mint do
   defp mint_scheme(_channel), do: :http
 
   defp do_receive_data(%{payload: %{stream_response_pid: pid}}, request_type, _opts)
-       when request_type in [:bidirectional_stream, :unary_request_stream_response] do
+       when request_type in [:bidirectional_stream, :server_stream] do
     stream = StreamResponseProcess.build_stream(pid)
     {:ok, stream}
   end
@@ -147,7 +136,7 @@ defmodule GRPC.Client.Adapters.Mint do
          request_type,
          opts
        )
-       when request_type in [:stream_request_unary_response, :unary_request_response] do
+       when request_type in [:client_stream, :unary] do
     with stream <- StreamResponseProcess.build_stream(pid),
          responses <- Enum.to_list(stream),
          :ok <- check_for_error(responses) do
@@ -165,37 +154,12 @@ defmodule GRPC.Client.Adapters.Mint do
     {:error, "an error occurred while when receiving data: error=#{inspect(response)}"}
   end
 
-  defp success_bidi_stream?(%GRPC.Client.Stream{
-         grpc_type: :bidirectional_stream,
+  defp success_response?(%GRPC.Client.Stream{
          payload: %{response: {:ok, _resp}}
        }),
        do: true
 
-  defp success_bidi_stream?(_stream), do: false
-
-  defp success_server_stream?(%GRPC.Client.Stream{
-         grpc_type: :server_stream,
-         payload: %{response: {:ok, _resp}}
-       }),
-       do: true
-
-  defp success_server_stream?(_stream), do: false
-
-  defp success_client_stream?(%GRPC.Client.Stream{
-         grpc_type: :client_stream,
-         payload: %{response: {:ok, _resp}}
-       }),
-       do: true
-
-  defp success_client_stream?(_stream), do: false
-
-  defp success_unary_request?(%GRPC.Client.Stream{
-         grpc_type: :unary,
-         payload: %{response: {:ok, _resp}}
-       }),
-       do: true
-
-  defp success_unary_request?(_stream), do: false
+  defp success_response?(_stream), do: false
 
   defp do_request(
          %{channel: %{adapter_payload: %{conn_pid: pid}}, path: path} = stream,
