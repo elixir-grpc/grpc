@@ -1,4 +1,6 @@
 defmodule GRPC.Client.Adapters.Mint.ConnectionProcess.State do
+  @moduledoc false
+
   defstruct [:conn, :parent, requests: %{}, request_stream_queue: :queue.new()]
 
   @type t :: %__MODULE__{

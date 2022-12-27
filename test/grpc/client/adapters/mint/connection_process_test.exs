@@ -1,6 +1,7 @@
 defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   use GRPC.DataCase
   alias GRPC.Client.Adapters.Mint.ConnectionProcess
+  alias GRPC.Client.Adapters.Mint.StreamResponseProcess
 
   import ExUnit.CaptureLog
 
@@ -193,23 +194,27 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   describe "handle_call/2 - cancel_request" do
     setup :valid_connection
     setup :valid_stream_request
+    setup :valid_stream_response
 
     test "reply with :ok when canceling the request is successful, also set stream response pid to done and remove request ref from state",
          %{
            request_ref: request_ref,
+           stream_response_pid: response_pid,
            state: state
          } do
-      state = update_stream_response_process_to_test_pid(state, request_ref, self())
       response = ConnectionProcess.handle_call({:cancel_request, request_ref}, nil, state)
       assert {:reply, :ok, new_state} = response
       assert %{} == new_state.requests
-      assert_receive {:"$gen_cast", {:consume_response, :done}}, 500
+      response_state = :sys.get_state(response_pid)
+      assert [] == response_state.responses
+      assert true == response_state.done
     end
   end
 
   describe "handle_continue/2 - :process_stream_queue" do
     setup :valid_connection
     setup :valid_stream_request
+    setup :valid_stream_response
 
     test "do nothing when there is no window_size in the connection", %{
       request_ref: request_ref,
@@ -323,10 +328,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     end
 
     test "send error message to stream response process when caller process ref is empty",
-         %{request_ref: request_ref, state: state} do
-      # instead of a real process I put test process pid to test that the message is sent
-      state = update_stream_response_process_to_test_pid(state, request_ref, self())
-
+         %{request_ref: request_ref, state: state, stream_response_pid: response_pid} do
       {_, state, _} =
         ConnectionProcess.handle_call({:stream_body, request_ref, <<1>>}, nil, state)
 
@@ -336,10 +338,10 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert {:noreply, _new_state} =
                ConnectionProcess.handle_continue(:process_request_stream_queue, state)
 
-      assert_receive {:"$gen_cast",
-                      {:consume_response,
-                       {:error, %Mint.TransportError{reason: :closed, __exception__: true}}}},
-                     500
+      response_state = :sys.get_state(response_pid)
+
+      assert [error: %Mint.TransportError{reason: :closed, __exception__: true}] ==
+               response_state.responses
     end
   end
 
@@ -363,32 +365,31 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   describe "handle_info - connection_closed - with request" do
     setup :valid_connection
     setup :valid_stream_request
+    setup :valid_stream_response
 
     test "send a message to parent process to inform the connection is down and end stream response process",
          %{
            state: state,
-           request_ref: request_ref
+           stream_response_pid: response_pid
          } do
       socket = state.conn.socket
       # this is a mocked message to inform the connection is closed
       tcp_message = {:tcp_closed, socket}
 
-      state = update_stream_response_process_to_test_pid(state, request_ref, self())
       assert {:noreply, new_state} = ConnectionProcess.handle_info(tcp_message, state)
       assert new_state.conn.state == :closed
       assert_receive {:elixir_grpc, :connection_down, pid}, 500
-
-      assert_receive {:"$gen_cast", {:consume_response, {:error, "the connection is closed"}}},
-                     500
-
-      assert_receive {:"$gen_cast", {:consume_response, :done}}, 500
+      response_state = :sys.get_state(response_pid)
+      assert [error: "the connection is closed"] == response_state.responses
+      assert true == response_state.done
       assert pid == self()
     end
 
     test "send a message to parent process to inform the connection is down and reply pending process",
          %{
            state: state,
-           request_ref: request_ref
+           request_ref: request_ref,
+           stream_response_pid: response_pid
          } do
       socket = state.conn.socket
       # this is a mocked message to inform the connection is closed
@@ -403,11 +404,12 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
       {:noreply, state, {:continue, :process_request_stream_queue}} = response
 
-      state = update_stream_response_process_to_test_pid(state, request_ref, self())
       assert {:noreply, new_state} = ConnectionProcess.handle_info(tcp_message, state)
       assert new_state.conn.state == :closed
       assert_receive {:elixir_grpc, :connection_down, pid}, 500
-      assert_receive {:tag, {:error, "the connection is closed"}}, 500
+      response_state = :sys.get_state(response_pid)
+      assert [error: "the connection is closed"] == response_state.responses
+      assert true == response_state.done
       assert pid == self()
     end
   end
@@ -436,6 +438,13 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
     state = :sys.get_state(pid)
     %{request_ref: request_ref, state: state}
+  end
+
+  defp valid_stream_response(%{request_ref: request_ref, state: state} = ctx) do
+    stream = build(:client_stream)
+    {:ok, pid} = StreamResponseProcess.start_link(stream, true)
+    state = update_stream_response_process_to_test_pid(state, request_ref, pid)
+    Map.merge(ctx, %{state: state, stream_response_pid: pid})
   end
 
   def update_stream_response_process_to_test_pid(state, request_ref, test_pid) do
