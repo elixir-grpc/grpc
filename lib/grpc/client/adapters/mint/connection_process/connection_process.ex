@@ -223,32 +223,36 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
     if State.empty_headers?(state, request_ref) do
       new_state = State.update_response_headers(state, request_ref, headers)
 
-      new_state
-      |> State.stream_response_pid(request_ref)
-      |> StreamResponseProcess.consume(:headers, headers)
+      :ok =
+        new_state
+        |> State.stream_response_pid(request_ref)
+        |> StreamResponseProcess.consume(:headers, headers)
 
       new_state
     else
-      state
-      |> State.stream_response_pid(request_ref)
-      |> StreamResponseProcess.consume(:trailers, headers)
+      :ok =
+        state
+        |> State.stream_response_pid(request_ref)
+        |> StreamResponseProcess.consume(:trailers, headers)
 
       state
     end
   end
 
   defp process_response({:data, request_ref, new_data}, state) do
-    state
-    |> State.stream_response_pid(request_ref)
-    |> StreamResponseProcess.consume(:data, new_data)
+    :ok =
+      state
+      |> State.stream_response_pid(request_ref)
+      |> StreamResponseProcess.consume(:data, new_data)
 
     state
   end
 
   defp process_response({:done, request_ref}, state) do
-    state
-    |> State.stream_response_pid(request_ref)
-    |> StreamResponseProcess.done()
+    :ok =
+      state
+      |> State.stream_response_pid(request_ref)
+      |> StreamResponseProcess.done()
 
     {_ref, new_state} = State.pop_ref(state, request_ref)
     new_state
@@ -272,9 +276,10 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
         if from != nil do
           GenServer.reply(from, {:error, error})
         else
-          state
-          |> State.stream_response_pid(request_ref)
-          |> StreamResponseProcess.consume(:error, error)
+          :ok =
+            state
+            |> State.stream_response_pid(request_ref)
+            |> StreamResponseProcess.consume(:error, error)
         end
 
         {:noreply, State.update_conn(state, conn)}
@@ -296,9 +301,10 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
         if not is_nil(from) do
           GenServer.reply(from, {:error, error})
         else
-          state
-          |> State.stream_response_pid(request_ref)
-          |> StreamResponseProcess.consume(:error, error)
+          :ok =
+            state
+            |> State.stream_response_pid(request_ref)
+            |> StreamResponseProcess.consume(:error, error)
         end
 
         check_request_stream_queue(State.update_conn(state, conn))
@@ -373,8 +379,8 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   end
 
   defp send_connection_close_and_end_stream_response(pid) do
-    StreamResponseProcess.consume(pid, :error, @connection_closed_error)
-    StreamResponseProcess.done(pid)
+    :ok = StreamResponseProcess.consume(pid, :error, @connection_closed_error)
+    :ok = StreamResponseProcess.done(pid)
   end
 
   def check_connection_status(state) do
