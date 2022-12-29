@@ -137,15 +137,13 @@ defmodule Interop.Client do
     {:ok, res_enum} = GRPC.Stub.recv(stream)
     reply = String.duplicate(<<0>>, 31415)
 
-    {:ok, %{payload: %{body: ^reply}}} =
-      Stream.take(res_enum, 1) |> Enum.to_list() |> List.first()
+    {:ok, %{payload: %{body: ^reply}}} = Enum.at(res_enum, 0)
 
     Enum.each([{9, 8}, {2653, 1828}, {58979, 45904}], fn {res, payload} ->
       GRPC.Stub.send_request(stream, req.(res, payload))
       reply = String.duplicate(<<0>>, res)
 
-      {:ok, %{payload: %{body: ^reply}}} =
-        Stream.take(res_enum, 1) |> Enum.to_list() |> List.first()
+      {:ok, %{payload: %{body: ^reply}}} = Enum.at(res_enum, 0)
     end)
 
     GRPC.Stub.end_stream(stream)
@@ -163,6 +161,25 @@ defmodule Interop.Client do
     [] = Enum.to_list(res_enum)
   end
 
+  @doc """
+  We build the Stream struct (res_enum) using Stream.unfold/2
+  the unfold function is built in such a way - for both adapters - that the acc is map used to find a
+  connection_stream process and the next_fun arg is a function that reads directly from the connection_stream
+  that is producing data.
+  Every time we execute the next_fun we read a chunk of data and remove that from the buffer.
+  That action by itself will generate a side effect that will update the state of the connection_stream by removing the chunk of data we just read.
+  An easier way to visualize that is. Take the code and the execution bellow as an example
+
+
+  ```
+  iex(4)> ex_stream |> Stream.take(1) |> Enum.to_list()
+  [1]
+  iex(5)> ex_stream |> Enum.to_list()
+  [2, 3]
+  iex(6)> ex_stream |> Enum.to_list()
+  []
+  ```
+  """
   def custom_metadata!(ch) do
     Logger.info("Run custom_metadata!")
     # UnaryCall
@@ -200,15 +217,16 @@ defmodule Interop.Client do
   end
 
   defp process_full_duplex_response({:ok, res_enum, %{headers: new_headers}}) do
-    {:ok, data} = Stream.take(res_enum, 1) |> Enum.to_list() |> List.first()
-    {:trailers, new_trailers} = Stream.take(res_enum, 1) |> Enum.to_list() |> List.first()
+    {:ok, data} = Enum.at(res_enum, 0)
+    {:trailers, new_trailers} = Enum.at(res_enum, 0)
     {new_headers, data, new_trailers}
   end
 
+
   defp process_full_duplex_response({:ok, res_enum}) do
-    {:headers, headers} = Stream.take(res_enum, 1) |> Enum.to_list() |> List.first()
-    {:ok, data} = Stream.take(res_enum, 1) |> Enum.to_list() |> List.first()
-    {:trailers, trailers} = Stream.take(res_enum, 1) |> Enum.to_list() |> List.first()
+    {:headers, headers} = Enum.at(res_enum, 0)
+    {:ok, data} = Enum.at(res_enum, 0)
+    {:trailers, trailers} = Enum.at(res_enum, 0)
     {headers, data, trailers}
   end
 
@@ -233,7 +251,7 @@ defmodule Interop.Client do
       |> GRPC.Stub.send_request(req, end_stream: true)
       |> GRPC.Stub.recv()
       |> case do
-        {:ok, stream} -> Stream.take(stream, 1) |> Enum.to_list() |> List.first()
+        {:ok, stream} -> Enum.at(stream, 0)
         error -> error
       end
   end
@@ -270,7 +288,7 @@ defmodule Interop.Client do
       |> GRPC.Stub.send_request(req)
       |> GRPC.Stub.recv()
 
-    {:ok, _} = Stream.take(res_enum, 1) |> Enum.to_list() |> List.first()
+    {:ok, _} = Enum.at(res_enum, 0)
     stream = GRPC.Stub.cancel(stream)
     {:error, %GRPC.RPCError{status: 1}} = GRPC.Stub.recv(stream)
   end

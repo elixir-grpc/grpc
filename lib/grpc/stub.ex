@@ -381,6 +381,30 @@ defmodule GRPC.Stub do
     * `:timeout` - request timeout
     * `:deadline` - when the request is timeout, will override timeout
     * `:return_headers` - when true, headers will be returned.
+
+  ## Stream behavior
+  The action of consuming data from the replied stream will generate a side effect.
+  Unlikely the usual stream behavior you can see bellow.
+  ```
+  iex(1)> s = Stream.cycle([1, 2, 3, 4])
+  #Function<63.6935098/2 in Stream.unfold/2>
+  iex(2)> s |> Stream.take(1) |> Enum.to_list()
+  [1]
+  iex(3)> s |> Stream.take(1) |> Enum.to_list()
+  [1]
+  iex(4)> s |> Stream.take(3) |> Enum.to_list()
+  [1, 2, 3]
+  ```
+
+  when you try something similar with the stream returned by this function, you'll see a similar behavior as bellow
+  ```
+  iex(4)> ex_stream |> Stream.take(1) |> Enum.to_list()
+  [1]
+  iex(5)> ex_stream |> Enum.to_list()
+  [2, 3]
+  iex(6)> ex_stream |> Enum.to_list()
+  []
+  ```
   """
   @spec recv(GRPC.Client.Stream.t(), keyword()) ::
           {:ok, struct()}

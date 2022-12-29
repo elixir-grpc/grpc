@@ -129,7 +129,7 @@ defmodule GRPC.Client.Adapters.Mint do
        when request_type in [:bidirectional_stream, :server_stream] do
     produce_trailers? = opts[:return_headers] == true
     stream = StreamResponseProcess.build_stream(pid, produce_trailers?)
-    headers_or_error = stream |> Enum.take(1) |> List.first()
+    headers_or_error = Enum.at(stream, 0)
     # if this check fails then an error tuple will be returned
     with {:headers, headers} <- headers_or_error do
       if opts[:return_headers] do
