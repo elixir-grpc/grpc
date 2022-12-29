@@ -331,8 +331,10 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   end
 
   defp chunk_body(body, bytes_length) do
-    <<head::binary-size(bytes_length), tail::binary>> = body
-    {head, tail}
+    case body do
+      <<head::binary-size(bytes_length), tail::binary>> -> {head, tail}
+      _other -> {body, <<>>}
+    end
   end
 
   def get_window_size(conn, ref) do
