@@ -203,8 +203,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
           # https://github.com/ninenines/cowboy/issues/1398
           # If there are 1000 streams in one connection, then 1000/s frames per stream.
           max_received_frame_rate: {10_000_000, 10_000},
-          max_reset_stream_rate: {10_000, 10_000},
-          stream_window_update_threshold: 65_500
+          max_reset_stream_rate: {10_000, 10_000}
         },
         Enum.into(opts, %{})
       )
