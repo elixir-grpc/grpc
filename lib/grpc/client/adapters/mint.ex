@@ -125,10 +125,19 @@ defmodule GRPC.Client.Adapters.Mint do
   defp mint_scheme(%Channel{scheme: "https"} = _channel), do: :https
   defp mint_scheme(_channel), do: :http
 
-  defp do_receive_data(%{payload: %{stream_response_pid: pid}}, request_type, _opts)
+  defp do_receive_data(%{payload: %{stream_response_pid: pid}}, request_type, opts)
        when request_type in [:bidirectional_stream, :server_stream] do
-    stream = StreamResponseProcess.build_stream(pid)
-    {:ok, stream}
+    produce_trailers? = opts[:return_headers] == true
+    stream = StreamResponseProcess.build_stream(pid, produce_trailers?)
+    headers_or_error = stream |> Enum.take(1) |> List.first()
+    # if this check fails then an error tuple will be returned
+    with {:headers, headers} <- headers_or_error do
+      if opts[:return_headers] do
+        {:ok, stream, %{headers: headers}}
+      else
+        {:ok, stream}
+      end
+    end
   end
 
   defp do_receive_data(
@@ -137,9 +146,9 @@ defmodule GRPC.Client.Adapters.Mint do
          opts
        )
        when request_type in [:client_stream, :unary] do
-    with stream <- StreamResponseProcess.build_stream(pid),
-         responses <- Enum.to_list(stream),
-         :ok <- check_for_error(responses) do
+    responses = pid |> StreamResponseProcess.build_stream() |> Enum.to_list()
+
+    with :ok <- check_for_error(responses) do
       data = Keyword.fetch!(responses, :ok)
 
       if opts[:return_headers] do
@@ -169,7 +178,7 @@ defmodule GRPC.Client.Adapters.Mint do
     headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
 
     {:ok, stream_response_pid} =
-      StreamResponseProcess.start_link(stream, opts[:return_headers] || false)
+      StreamResponseProcess.start_link(stream, return_headers_for_request?(stream, opts))
 
     response =
       ConnectionProcess.request(pid, "POST", path, headers, body,
@@ -189,5 +198,15 @@ defmodule GRPC.Client.Adapters.Mint do
     error = Keyword.get(responses, :error)
 
     if error, do: {:error, error}, else: :ok
+  end
+
+  defp return_headers_for_request?(%GRPC.Client.Stream{grpc_type: type}, _opts)
+       when type in [:bidirectional_stream, :server_stream] do
+    true
+  end
+
+  defp return_headers_for_request?(_stream, opts) do
+    # Explicitly check for true to ensure the boolean type here
+    opts[:return_headers] == true or false
   end
 end

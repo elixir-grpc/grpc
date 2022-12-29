@@ -187,7 +187,7 @@ defmodule Interop.Client do
 
     {headers, data, trailers} =
       ch
-      |> Grpc.Testing.TestService.Stub.full_duplex_call(metadata: metadata, return_headers: true)
+      |> Grpc.Testing.TestService.Stub.full_duplex_call(metadata: metadata)
       |> GRPC.Stub.send_request(req, end_stream: true)
       |> GRPC.Stub.recv(return_headers: true)
       |> process_full_duplex_response()

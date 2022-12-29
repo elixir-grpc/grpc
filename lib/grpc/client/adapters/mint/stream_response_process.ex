@@ -23,14 +23,25 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   Given a pid from this process, build an Elixir.Stream that will consume the accumulated
     data inside this process
   """
-  @spec build_stream(pid()) :: Enumerable.t()
-  def build_stream(pid) do
+  @spec build_stream(pid(), produce_trailers? :: boolean) :: Enumerable.t()
+  def build_stream(pid, produce_trailers? \\ true) do
     Stream.unfold(pid, fn pid ->
-      case GenServer.call(pid, :get_response, :infinity) do
-        nil -> nil
-        response -> {response, pid}
-      end
+      pid
+      |> GenServer.call(:get_response, :infinity)
+      |> process_response(produce_trailers?, pid)
     end)
+  end
+
+  defp process_response(nil = _response, _produce_trailers, _pid), do: nil
+
+  defp process_response({:trailers, _trailers}, false = produce_trailers?, pid) do
+    pid
+    |> GenServer.call(:get_response, :infinity)
+    |> process_response(produce_trailers?, pid)
+  end
+
+  defp process_response(response, _produce_trailers, pid) do
+    {response, pid}
   end
 
   @doc """

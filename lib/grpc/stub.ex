@@ -373,8 +373,8 @@ defmodule GRPC.Stub do
       {:ok, reply} = GRPC.Stub.recv(stream)
 
       # Reply is streaming
-      {:ok, enum} = GRPC.Stub.recv(stream)
-      replies = Enum.map(enum, fn({:ok, reply}) -> reply end)
+      {:ok, ex_stream} = GRPC.Stub.recv(stream)
+      replies = Enum.map(ex_stream, fn({:ok, reply}) -> reply end)
 
   ## Options
 
