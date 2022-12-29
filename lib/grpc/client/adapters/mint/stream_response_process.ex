@@ -5,6 +5,9 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   # a process responsible for consuming its messages. At the end of a stream
   # this process will automatically be killed.
 
+  # TODO: Refactor the GenServer.call/3 occurrences on this module to produce
+  # telemetry errors in case of failures
+
   @typep accepted_types :: :data | :trailers | :headers | :error
   @typep data_types :: binary() | Mint.Types.headers() | Mint.Types.error()
 
