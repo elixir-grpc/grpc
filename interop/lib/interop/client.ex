@@ -1,7 +1,12 @@
 defmodule Interop.Client do
+
   import ExUnit.Assertions, only: [refute: 1]
 
   require Logger
+
+  # To better understand the behavior of streams used in this module
+  # we suggest you to check the documentation for `GRPC.Stub.recv/2`
+  # there is some unusual behavior that can be observed.
 
   def connect(host, port, opts \\ []) do
     {:ok, ch} = GRPC.Stub.connect(host, port, opts)
@@ -161,22 +166,6 @@ defmodule Interop.Client do
     [] = Enum.to_list(res_enum)
   end
 
-  @doc """
-  We build the Stream struct (`res_enum` in the code) using `Stream.unfold/2`.
-  
-  The unfold function is built in such a way that  - for both adapters - the accumulator is a map used to find the
-  `connection_stream`process and the `next_fun` argument is a function that reads directly from the `connection_stream`
-  that is producing data.
-  Every time we execute `next_fun` we read a chunk of data. This means that `next_fun` will have the side effect of updating the state of the `connection_stream` process, removing the chunk of data that's being read from the underlying `GenServer`'s state.
-  ## Examples
-
-      iex> ex_stream |> Stream.take(1) |> Enum.to_list()
-      [1]
-      iex> ex_stream |> Enum.to_list()
-      [2, 3]
-      iex> ex_stream |> Enum.to_list()
-      []
-  """
   def custom_metadata!(ch) do
     Logger.info("Run custom_metadata!")
     # UnaryCall

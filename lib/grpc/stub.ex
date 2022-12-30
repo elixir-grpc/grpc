@@ -383,8 +383,23 @@ defmodule GRPC.Stub do
     * `:return_headers` - when true, headers will be returned.
 
   ## Stream behavior
-  The action of consuming data from the replied stream will generate a side effect.
+  We build the Stream struct using `Stream.unfold/2`.
+
+  The unfold function is built in such a way that  - for both adapters - the accumulator is a map used to find the
+  `connection_stream`process and the `next_fun` argument is a function that reads directly from the `connection_stream`
+  that is producing data.
+  Every time we execute `next_fun` we read a chunk of data. This means that `next_fun` will have the side effect of updating the state of the `connection_stream` process, removing the chunk of data that's being read from the underlying `GenServer`'s state.
+  ## Examples
+
+      iex> ex_stream |> Stream.take(1) |> Enum.to_list()
+      [1]
+      iex> ex_stream |> Enum.to_list()
+      [2, 3]
+      iex> ex_stream |> Enum.to_list()
+      []
+
   Unlikely the usual stream behavior you can see bellow.
+
   ```
   iex(1)> s = Stream.cycle([1, 2, 3, 4])
   #Function<63.6935098/2 in Stream.unfold/2>
@@ -394,16 +409,6 @@ defmodule GRPC.Stub do
   [1]
   iex(4)> s |> Stream.take(3) |> Enum.to_list()
   [1, 2, 3]
-  ```
-
-  when you try something similar with the stream returned by this function, you'll see a similar behavior as bellow
-  ```
-  iex(4)> ex_stream |> Stream.take(1) |> Enum.to_list()
-  [1]
-  iex(5)> ex_stream |> Enum.to_list()
-  [2, 3]
-  iex(6)> ex_stream |> Enum.to_list()
-  []
   ```
   """
   @spec recv(GRPC.Client.Stream.t(), keyword()) ::
