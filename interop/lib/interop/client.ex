@@ -162,15 +162,12 @@ defmodule Interop.Client do
   end
 
   @doc """
-  We build the Stream struct (res_enum) using Stream.unfold/2
-  the unfold function is built in such a way - for both adapters - that the acc is map used to find a
-  connection_stream process and the next_fun arg is a function that reads directly from the connection_stream
+  We build the Stream struct (`res_enum` in the code) using `Stream.unfold/2`.
+  
+  The unfold function is built in such a way that  - for both adapters - the accumulator is a map used to find the
+  `connection_stream`process and the `next_fun` argument is a function that reads directly from the `connection_stream`
   that is producing data.
-  Every time we execute the next_fun we read a chunk of data and remove that from the buffer.
-  That action by itself will generate a side effect that will update the state of the connection_stream by removing the chunk of data we just read.
-  An easier way to visualize that is. Take the code and the execution bellow as an example
-
-
+  Every time we execute `next_fun` we read a chunk of data. This means that `next_fun` will have the side effect of updating the state of the `connection_stream` process, removing the chunk of data that's being read from the underlying `GenServer`'s state.
   ```
   iex(4)> ex_stream |> Stream.take(1) |> Enum.to_list()
   [1]
