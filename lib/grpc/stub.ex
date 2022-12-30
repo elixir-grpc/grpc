@@ -218,25 +218,24 @@ defmodule GRPC.Stub do
     adapter.disconnect(channel)
   end
 
-  @doc """
-  The actual function invoked when invoking a rpc function.
-
-  ## Returns
-
-    * Unary calls. `{:ok, reply} | {:ok, headers_map} | {:error, error}`
-    * Client streaming. A `GRPC.Client.Stream`
-    * Server streaming. `{:ok, Enumerable.t} | {:ok, Enumerable.t, trailers_map} | {:error, error}`
-
-  ## Options
-
-    * `:timeout` - request timeout. Default is 10s for unary calls and `:infinity` for
-      client or server streaming calls
-    * `:deadline` - when the request is timeout, will override timeout
-    * `:metadata` - a map, your custom metadata
-    * `:return_headers` - default is false. When it's true, a three elem tuple will be returned
-      with the last elem being a map of headers `%{headers: headers, trailers: trailers}`(unary) or
-      `%{headers: headers}`(server streaming)
-  """
+  @doc false
+  #  The actual function invoked when invoking a rpc function.
+  #
+  #  Returns
+  #
+  #    * Unary calls. `{:ok, reply} | {:ok, headers_map} | {:error, error}`
+  #    * Client streaming. A `GRPC.Client.Stream`
+  #    * Server streaming. `{:ok, Enumerable.t} | {:ok, Enumerable.t, trailers_map} | {:error, error}`
+  #
+  #  Options
+  #
+  #    * `:timeout` - request timeout. Default is 10s for unary calls and `:infinity` for
+  #      client or server streaming calls
+  #    * `:deadline` - when the request is timeout, will override timeout
+  #    * `:metadata` - a map, your custom metadata
+  #    * `:return_headers` - default is false. When it's true, a three elem tuple will be returned
+  #      with the last elem being a map of headers `%{headers: headers, trailers: trailers}`(unary) or
+  #      `%{headers: headers}`(server streaming)
   @spec call(atom(), tuple(), GRPC.Client.Stream.t(), struct() | nil, keyword()) :: rpc_return
   def call(_service_mod, rpc, %{channel: channel} = stream, request, opts) do
     {_, {req_mod, req_stream}, {res_mod, response_stream}} = rpc
