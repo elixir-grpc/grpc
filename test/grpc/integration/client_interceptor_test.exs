@@ -12,6 +12,8 @@ defmodule GRPC.Integration.ClientInterceptorTest do
   end
 
   defmodule AddHeadersClientInterceptor do
+    @behaviour GRPC.Client.Interceptor
+
     def init(label), do: label
 
     def call(%{headers: headers} = stream, req, next, label) do
