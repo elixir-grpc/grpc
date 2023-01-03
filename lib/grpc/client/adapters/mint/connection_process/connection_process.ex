@@ -385,7 +385,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
     :ok = StreamResponseProcess.done(pid)
   end
 
-  def check_connection_status(state) do
+  defp check_connection_status(state) do
     if Mint.HTTP.open?(state.conn) do
       check_request_stream_queue(state)
     else
