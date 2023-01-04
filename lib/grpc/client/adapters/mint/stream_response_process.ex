@@ -6,7 +6,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   # this process will automatically be killed.
 
   # TODO: Refactor the GenServer.call/3 occurrences on this module to produce
-  # telemetry errors in case of failures
+  # telemetry events and log entries in case of failures
 
   @typep accepted_types :: :data | :trailers | :headers | :error
   @typep data_types :: binary() | Mint.Types.headers() | Mint.Types.error()
@@ -24,7 +24,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
 
   @doc """
   Given a pid from this process, build an Elixir.Stream that will consume the accumulated
-    data inside this process
+  data inside this process
   """
   @spec build_stream(pid(), produce_trailers? :: boolean) :: Enumerable.t()
   def build_stream(pid, produce_trailers? \\ true) do
@@ -127,10 +127,12 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
       when type in @header_types do
     state = update_compressor({type, headers}, state)
 
-    with {:error, _rpc_error} = error <- get_headers_response(headers, type) do
-      {:reply, :ok, %{state | responses: [error | responses]}, {:continue, :produce_response}}
-    else
-      _any -> {:reply, :ok, state, {:continue, :produce_response}}
+    case get_headers_response(headers, type) do
+      {:error, _rpc_error} = error ->
+        {:reply, :ok, %{state | responses: [error | responses]}, {:continue, :produce_response}}
+
+      _any ->
+        {:reply, :ok, state, {:continue, :produce_response}}
     end
   end
 

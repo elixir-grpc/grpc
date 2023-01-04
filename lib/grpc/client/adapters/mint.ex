@@ -46,7 +46,7 @@ defmodule GRPC.Client.Adapters.Mint do
 
   @impl true
   def send_request(%{channel: %{adapter_payload: nil}}, _message, _opts),
-    do: raise("Can't perform a request without a connection process")
+    do: raise(ArgumentError, "Can't perform a request without a connection process")
 
   def send_request(stream, message, opts) do
     {:ok, data, _} = GRPC.Message.to_data(message, opts)
@@ -207,6 +207,6 @@ defmodule GRPC.Client.Adapters.Mint do
 
   defp return_headers_for_request?(_stream, opts) do
     # Explicitly check for true to ensure the boolean type here
-    opts[:return_headers] == true or false
+    opts[:return_headers] == true
   end
 end

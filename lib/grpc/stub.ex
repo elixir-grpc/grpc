@@ -219,7 +219,7 @@ defmodule GRPC.Stub do
   end
 
   @doc false
-  #  The actual function invoked when invoking a rpc function.
+  #  #  The actual function invoked when invoking an RPC function.
   #
   #  Returns
   #
@@ -236,7 +236,6 @@ defmodule GRPC.Stub do
   #    * `:return_headers` - default is false. When it's true, a three elem tuple will be returned
   #      with the last elem being a map of headers `%{headers: headers, trailers: trailers}`(unary) or
   #      `%{headers: headers}`(server streaming)
-  @spec call(atom(), tuple(), GRPC.Client.Stream.t(), struct() | nil, keyword()) :: rpc_return
   def call(_service_mod, rpc, %{channel: channel} = stream, request, opts) do
     {_, {req_mod, req_stream}, {res_mod, response_stream}} = rpc
 
@@ -396,19 +395,6 @@ defmodule GRPC.Stub do
       [2, 3]
       iex> ex_stream |> Enum.to_list()
       []
-
-  Unlikely the usual stream behavior you can see bellow.
-
-  ```
-  iex(1)> s = Stream.cycle([1, 2, 3, 4])
-  #Function<63.6935098/2 in Stream.unfold/2>
-  iex(2)> s |> Stream.take(1) |> Enum.to_list()
-  [1]
-  iex(3)> s |> Stream.take(1) |> Enum.to_list()
-  [1]
-  iex(4)> s |> Stream.take(3) |> Enum.to_list()
-  [1, 2, 3]
-  ```
   """
   @spec recv(GRPC.Client.Stream.t(), keyword()) ::
           {:ok, struct()}

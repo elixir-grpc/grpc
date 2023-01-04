@@ -199,13 +199,12 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
     {{:value, request}, queue} = :queue.out(state.request_stream_queue)
     {ref, body, _from} = request
     window_size = get_window_size(state.conn, ref)
-    body_size = IO.iodata_length(body)
     dequeued_state = State.update_request_stream_queue(state, queue)
 
     cond do
       # Do nothing, wait for server (on stream/2) to give us more window size
       window_size == 0 -> {:noreply, state}
-      body_size > window_size -> chunk_body_and_enqueue_rest(request, dequeued_state)
+      IO.iodata_length(body) > window_size -> chunk_body_and_enqueue_rest(request, dequeued_state)
       true -> stream_body_and_reply(request, dequeued_state)
     end
   end
@@ -312,9 +311,9 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   end
 
   defp stream_body(conn, request_ref, body, true = _stream_eof?) do
-    with {:ok, conn} <- Mint.HTTP.stream_request_body(conn, request_ref, body),
-         {:ok, conn} <- Mint.HTTP.stream_request_body(conn, request_ref, :eof) do
-      {:ok, conn}
+    case Mint.HTTP.stream_request_body(conn, request_ref, body) do
+      {:ok, conn} -> Mint.HTTP.stream_request_body(conn, request_ref, :eof)
+      error -> error
     end
   end
 
