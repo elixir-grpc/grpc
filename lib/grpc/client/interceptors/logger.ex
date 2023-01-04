@@ -1,4 +1,4 @@
-defmodule GRPC.Logger.Client do
+defmodule GRPC.Client.Interceptors.Logger do
   @moduledoc """
   Print log around client rpc calls, like
 
@@ -13,18 +13,18 @@ defmodule GRPC.Logger.Client do
 
   ## Usage
 
-      {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Logger.Client])
+      {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Client.Interceptors.Logger])
       # This will log on `:info` and greater priority
-      {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Logger.Client, level: :info}])
+      {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Client.Interceptors.Logger, level: :info}])
       # This will log only on `:info`
-      {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Logger.Client, level: :info, accepted_comparators: [:eq]}])
+      {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Client.Interceptors.Logger, level: :info, accepted_comparators: [:eq]}])
       # This will log on `:info` and lower priority
-      {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Logger.Client, level: :info, accepted_comparators: [:eq, :gt]}])
+      {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Client.Interceptors.Logger, level: :info, accepted_comparators: [:eq, :gt]}])
   """
 
   require Logger
 
-  @behaviour GRPC.ClientInterceptor
+  @behaviour GRPC.Client.Interceptor
 
   @impl true
   def init(opts) do
@@ -53,7 +53,7 @@ defmodule GRPC.Logger.Client do
         Logger.log(level, fn ->
           diff = System.convert_time_unit(stop - start, :native, :microsecond)
 
-          ["Got ", inspect(status), " in ", GRPC.Logger.Server.formatted_diff(diff)]
+          ["Got ", inspect(status), " in ", GRPC.Server.Interceptors.Logger.formatted_diff(diff)]
         end)
       end
 

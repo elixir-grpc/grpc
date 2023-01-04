@@ -65,7 +65,7 @@ You can start the gRPC server as a supervised process. First, add `GRPC.Server.S
 defmodule Helloworld.Endpoint do
   use GRPC.Endpoint
 
-  intercept GRPC.Logger.Server
+  intercept GRPC.Server.Interceptors.Logger
   run Helloworld.Greeter.Server
 end
 
@@ -92,7 +92,7 @@ iex> request = Helloworld.HelloRequest.new(name: "grpc-elixir")
 iex> {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(request)
 
 # With interceptors
-iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Logger.Client])
+iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Client.Interceptors.Logger])
 ...
 ```
 

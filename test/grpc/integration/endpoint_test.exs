@@ -13,7 +13,7 @@ defmodule GRPC.Integration.EndpointTest do
   defmodule HelloEndpoint do
     use GRPC.Endpoint
 
-    intercept GRPC.Logger.Server, level: :info, accepted_comparators: [:lt, :eq, :gt]
+    intercept GRPC.Server.Interceptors.Logger, level: :info, accepted_comparators: [:lt, :eq, :gt]
     run HelloServer
   end
 
@@ -51,14 +51,14 @@ defmodule GRPC.Integration.EndpointTest do
   defmodule FeatureEndpoint do
     use GRPC.Endpoint
 
-    intercept GRPC.Logger.Server, accepted_comparators: [:lt, :eq, :gt]
+    intercept GRPC.Server.Interceptors.Logger, accepted_comparators: [:lt, :eq, :gt]
     run FeatureServer
   end
 
   defmodule FeatureAndHelloHaltEndpoint do
     use GRPC.Endpoint
 
-    intercept GRPC.Logger.Server, accepted_comparators: [:lt, :eq, :gt]
+    intercept GRPC.Server.Interceptors.Logger, accepted_comparators: [:lt, :eq, :gt]
     run HelloServer, interceptors: [HelloHaltInterceptor]
     run FeatureServer
   end
