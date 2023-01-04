@@ -1,4 +1,4 @@
-opts = [interceptors: [GRPC.Logger.Client]]
+opts = [interceptors: [GRPC.Client.Interceptors.Logger]]
 
 opts =
   if System.get_env("TLS") do
