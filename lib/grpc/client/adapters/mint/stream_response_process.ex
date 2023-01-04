@@ -69,6 +69,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
 
   # Callbacks
 
+  @impl true
   def init({stream, send_headers_or_trailers?}) do
     state = %{
       grpc_stream: stream,
@@ -83,6 +84,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
     {:ok, state}
   end
 
+  @impl true
   def handle_call(:get_response, from, state) do
     {:noreply, put_in(state[:from], from), {:continue, :produce_response}}
   end
@@ -148,6 +150,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
     {:reply, :ok, %{state | done: true}, {:continue, :produce_response}}
   end
 
+  @impl true
   def handle_continue(:produce_response, state) do
     case state do
       %{from: nil} ->
@@ -195,6 +198,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
     Enum.find(accepted_compressors, nil, fn c -> c.name() == encoding_name end)
   end
 
+  @impl true
   def terminate(_reason, _state) do
     :normal
   end
