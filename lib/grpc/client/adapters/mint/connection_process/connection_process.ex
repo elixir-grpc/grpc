@@ -182,9 +182,13 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
         state = State.update_conn(state, conn)
 
         state =
-          if state.requests == %{},
-            do: state,
-            else: Enum.reduce(responses, state, &process_response/2)
+          case state.requests do
+            requests when map_size(requests) == 0 ->
+              state
+
+            _ ->
+              Enum.reduce(responses, state, &process_response/2)
+          end
 
         check_connection_status(state)
 
@@ -286,18 +290,18 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   end
 
   defp stream_body_and_reply({request_ref, body, from}, state) do
-    send_eof? = from == nil
+    send_eof? = is_nil(from)
 
     case stream_body(state.conn, request_ref, body, send_eof?) do
       {:ok, conn} ->
-        if not is_nil(from) do
+        if not send_eof? do
           GenServer.reply(from, :ok)
         end
 
         check_request_stream_queue(State.update_conn(state, conn))
 
       {:error, conn, error} ->
-        if not is_nil(from) do
+        if not send_eof? do
           GenServer.reply(from, {:error, error})
         else
           :ok =

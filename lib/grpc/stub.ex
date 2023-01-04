@@ -387,6 +387,7 @@ defmodule GRPC.Stub do
   `connection_stream`process and the `next_fun` argument is a function that reads directly from the `connection_stream`
   that is producing data.
   Every time we execute `next_fun` we read a chunk of data. This means that `next_fun` will have the side effect of updating the state of the `connection_stream` process, removing the chunk of data that's being read from the underlying `GenServer`'s state.
+
   ## Examples
 
       iex> ex_stream |> Stream.take(1) |> Enum.to_list()
