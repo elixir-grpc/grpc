@@ -277,6 +277,8 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
 
       {:error, conn, error} ->
         if from != nil do
+          # We need an explicit reply here because the process that called this GenServer
+          # isn't the same one that's expecting the reply.
           GenServer.reply(from, {:error, error})
         else
           :ok =
