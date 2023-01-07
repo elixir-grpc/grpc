@@ -26,11 +26,11 @@ defmodule GRPC.Client.Adapters.Mint do
         {:ok, %{channel | adapter_payload: %{conn_pid: pid}}}
 
       error ->
-        {:error, "An error happened while trying to opening the connection: #{inspect(error)}"}
+        {:error, "Error when opening connection: #{inspect(error)}"}
     end
   catch
     :exit, reason ->
-      {:error, "An error happened while trying to opening the connection: #{inspect(reason)}"}
+      {:error, "Error when opening connection: #{inspect(reason)}"}
   end
 
   @impl true
@@ -160,7 +160,7 @@ defmodule GRPC.Client.Adapters.Mint do
   end
 
   def handle_errors_receive_data(%GRPC.Client.Stream{payload: %{response: response}}, _opts) do
-    {:error, "an error occurred while when receiving data: error=#{inspect(response)}"}
+    {:error, "Error occurred when receiving data: #{inspect(response)}"}
   end
 
   defp success_response?(%GRPC.Client.Stream{
