@@ -30,7 +30,7 @@ defmodule GRPC.Client.Adapters.MintTest do
       # Ensure that changing one of the options breaks things
       assert {:error, message} = Mint.connect(channel, transport_opts: [ip: "256.0.0.0"])
 
-      assert message == "Error when opening connection: {:error, :badarg}"
+      assert message == "Error while opening connection: {:error, :badarg}"
     end
   end
 end
