@@ -10,10 +10,10 @@ defmodule GRPC.Message do
     Message-Length -> {length of Message} # encoded as 4 byte unsigned integer
     Message -> *{binary octet}
   """
-  use Bitwise, only_operators: true
-  @max_message_length 1 <<< (32 - 1)
 
   alias GRPC.RPCError
+
+  @max_message_length Bitwise.bsl(1, 32 - 1)
 
   @doc """
   Transforms Protobuf data into a gRPC body binary.
@@ -171,5 +171,29 @@ defmodule GRPC.Message do
 
   def get_message(_) do
     false
+  end
+
+  def get_message(data, nil = _compressor) do
+    case data do
+      <<flag::unsigned-integer-size(8), length::unsigned-integer-size(32),
+        message::bytes-size(length), rest::binary>> ->
+        {{flag, message}, rest}
+
+      _other ->
+        data
+    end
+  end
+
+  def get_message(data, compressor) do
+    case data do
+      <<1::8, length::unsigned-integer-32, message::bytes-size(length), rest::binary>> ->
+        {{1, compressor.decompress(message)}, rest}
+
+      <<0::8, length::unsigned-integer-32, message::bytes-size(length), rest::binary>> ->
+        {{0, message}, rest}
+
+      _other ->
+        data
+    end
   end
 end

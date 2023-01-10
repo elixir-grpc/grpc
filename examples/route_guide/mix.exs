@@ -2,20 +2,21 @@ defmodule RouteGuide.Mixfile do
   use Mix.Project
 
   def project do
-    [app: :route_guide,
-     version: "0.1.0",
-     elixir: "~> 1.11",
-     build_embedded: Mix.env == :prod,
-     start_permanent: Mix.env == :prod,
-     deps: deps()]
+    [
+      app: :route_guide,
+      version: "0.1.0",
+      elixir: "~> 1.11",
+      build_embedded: Mix.env() == :prod,
+      start_permanent: Mix.env() == :prod,
+      deps: deps()
+    ]
   end
 
   # Configuration for the OTP application
   #
   # Type "mix help compile.app" for more information
   def application do
-    [mod: {Routeguide.App, []},
-     applications: [:logger, :grpc, :protobuf, :jason]]
+    [mod: {Routeguide.App, []}, applications: [:logger, :grpc, :protobuf, :jason]]
   end
 
   # Dependencies can be Hex packages:
@@ -30,9 +31,9 @@ defmodule RouteGuide.Mixfile do
   defp deps do
     [
       {:grpc, path: "../../"},
-      {:protobuf, "~> 0.10"},
+      {:protobuf, "~> 0.11"},
       {:jason, "~> 1.2"},
-      {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false}
     ]
   end
 end
