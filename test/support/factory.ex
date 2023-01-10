@@ -4,10 +4,6 @@ defmodule GRPC.Factory do
   alias GRPC.Channel
   alias GRPC.Credential
 
-  @cert_path Path.expand("./tls/server1.pem", :code.priv_dir(:grpc))
-  @key_path Path.expand("./tls/server1.key", :code.priv_dir(:grpc))
-  @ca_path Path.expand("./tls/ca.pem", :code.priv_dir(:grpc))
-
   def build(resource, attrs \\ %{}) do
     name = :"#{resource}_factory"
 
@@ -38,15 +34,47 @@ defmodule GRPC.Factory do
   end
 
   def credential_factory do
+    cert_path = Path.expand("./tls/server1.pem", :code.priv_dir(:grpc))
+    key_path = Path.expand("./tls/server1.key", :code.priv_dir(:grpc))
+    ca_path = Path.expand("./tls/ca.pem", :code.priv_dir(:grpc))
+
     %Credential{
       ssl: [
-        certfile: @cert_path,
-        cacertfile: @ca_path,
-        keyfile: @key_path,
+        certfile: cert_path,
+        cacertfile: ca_path,
+        keyfile: key_path,
         verify: :verify_peer,
         fail_if_no_peer_cert: true,
         versions: [:"tlsv1.2"]
       ]
     }
+  end
+
+  def client_stream_factory do
+    %GRPC.Client.Stream{
+      __interface__: %{
+        receive_data: &GRPC.Client.Stream.receive_data/2,
+        send_request: &GRPC.Client.Stream.send_request/3
+      },
+      canceled: false,
+      channel: build(:channel, adapter: GRPC.Client.Adapters.Mint),
+      codec: GRPC.Codec.Proto,
+      compressor: nil,
+      grpc_type: :unary,
+      headers: %{},
+      method_name: "SayHello",
+      path: "/helloworld.Greeter/SayHello",
+      payload: %{},
+      request_mod: Helloworld.HelloRequest,
+      response_mod: Helloworld.HelloReply,
+      rpc: {"say_hello", {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false}},
+      server_stream: false,
+      service_name: "helloworld.Greeter",
+      accepted_compressors: [GRPC.Compressor.Gzip]
+    }
+  end
+
+  def hello_reply_rpc_factory do
+    %Helloworld.HelloReply{message: "Hello Luis"}
   end
 end
