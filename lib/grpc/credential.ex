@@ -17,7 +17,7 @@ defmodule GRPC.Credential do
   """
 
   @type t :: %__MODULE__{ssl: [:ssl.tls_option()]}
-  defstruct [:ssl]
+  defstruct ssl: []
 
   @doc """
   Creates credential.

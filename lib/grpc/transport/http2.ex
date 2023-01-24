@@ -20,7 +20,7 @@ defmodule GRPC.Transport.HTTP2 do
   def server_trailers(status \\ Status.ok(), message \\ "") do
     %{
       "grpc-status" => Integer.to_string(status),
-      "grpc-message" => message
+      "grpc-message" => URI.encode(message)
     }
   end
 
@@ -78,7 +78,7 @@ defmodule GRPC.Transport.HTTP2 do
       if is_metadata(k) do
         decode_metadata({k, v})
       else
-        {k, v}
+        decode_reserved({k, v})
       end
     end)
   end
@@ -141,6 +141,12 @@ defmodule GRPC.Transport.HTTP2 do
     val = if String.ends_with?(key, "-bin"), do: Base.decode64!(val, padding: false), else: val
     {key, val}
   end
+
+  defp decode_reserved({"grpc-message" = key, val}) do
+    {key, URI.decode(val)}
+  end
+
+  defp decode_reserved(kv), do: kv
 
   defp is_reserved_header(":" <> _), do: true
   defp is_reserved_header("grpc-" <> _), do: true

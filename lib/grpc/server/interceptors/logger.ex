@@ -1,4 +1,4 @@
-defmodule GRPC.Logger.Server do
+defmodule GRPC.Server.Interceptors.Logger do
   @moduledoc """
   Print log around server rpc calls, like:
 
@@ -16,27 +16,27 @@ defmodule GRPC.Logger.Server do
       defmodule Your.Endpoint do
         use GRPC.Endpoint
 
-        intercept GRPC.Logger.Server, level: :info
+        intercept GRPC.Server.Interceptors.Logger, level: :info
       end
 
       defmodule Your.Endpoint do
         use GRPC.Endpoint
 
         # logs on :info and higher priority (warn, error...)
-        intercept GRPC.Logger.Server, level: :info, accepted_comparators: [:lt, :eq]
+        intercept GRPC.Server.Interceptors.Logger, level: :info, accepted_comparators: [:lt, :eq]
       end
 
       defmodule Your.Endpoint do
         use GRPC.Endpoint
 
         # logs only on :error
-        intercept GRPC.Logger.Server, level: :error, accepted_comparators: [:eq]
+        intercept GRPC.Server.Interceptors.Logger, level: :error, accepted_comparators: [:eq]
       end
   """
 
   require Logger
 
-  @behaviour GRPC.ServerInterceptor
+  @behaviour GRPC.Server.Interceptor
 
   @impl true
   def init(opts) do

@@ -1,10 +1,9 @@
-defmodule GRPC.Logger.ServerTest do
+defmodule GRPC.Server.Interceptors.LoggerTest do
   use ExUnit.Case, async: false
 
   import ExUnit.CaptureLog
 
-  alias GRPC.Logger.Server
-
+  alias GRPC.Server.Interceptors.Logger, as: LoggerInterceptor
   alias GRPC.Server.Stream
 
   test "request id is only set if not previously set" do
@@ -13,22 +12,22 @@ defmodule GRPC.Logger.ServerTest do
     request_id = to_string(System.monotonic_time())
     stream = %Stream{server: :server, rpc: {1, 2, 3}, request_id: request_id}
 
-    Server.call(
+    LoggerInterceptor.call(
       :request,
       stream,
       fn :request, ^stream -> {:ok, :ok} end,
-      Server.init(level: :info)
+      LoggerInterceptor.init(level: :info)
     )
 
     assert [request_id: request_id] == Logger.metadata()
 
     stream = %{stream | request_id: nil}
 
-    Server.call(
+    LoggerInterceptor.call(
       :request,
       stream,
       fn :request, ^stream -> {:ok, :ok} end,
-      Server.init(level: :info)
+      LoggerInterceptor.init(level: :info)
     )
 
     assert request_id == Logger.metadata()[:request_id]
@@ -53,11 +52,11 @@ defmodule GRPC.Logger.ServerTest do
         capture_log(fn ->
           stream = %Stream{server: server_name, rpc: {1, 2, 3}, request_id: "1234"}
 
-          Server.call(
+          LoggerInterceptor.call(
             :request,
             stream,
             fn :request, ^stream -> {:ok, :ok} end,
-            Server.init(
+            LoggerInterceptor.init(
               level: configured_level,
               accepted_comparators: accepted_comparators
             )
