@@ -182,7 +182,7 @@ defmodule GRPC.Server do
          %{server: server, endpoint: endpoint} = stream,
          req
        ) do
-    t0 = System.monotonic_time(:native)
+    t0 = System.monotonic_time()
     :ok = GRPC.Telemetry.server_rpc_start(server, endpoint, func_name, stream)
 
     last = fn r, s ->
@@ -206,7 +206,7 @@ defmodule GRPC.Server do
       next.(req, stream)
     rescue
       e in GRPC.RPCError ->
-        duration = System.monotonic_time(:native) - t0
+        duration = System.monotonic_time() - t0
 
         :ok =
           GRPC.Telemetry.server_rpc_exception(
@@ -227,7 +227,7 @@ defmodule GRPC.Server do
         Logger.error(Exception.format(kind, reason, stacktrace))
         reason = Exception.normalize(kind, reason, stacktrace)
 
-        duration = System.monotonic_time(:native) - t0
+        duration = System.monotonic_time() - t0
 
         :ok =
           GRPC.Telemetry.server_rpc_exception(
@@ -244,7 +244,7 @@ defmodule GRPC.Server do
         {:error, %{kind: kind, reason: reason, stack: stacktrace}}
     else
       result ->
-        duration = System.monotonic_time(:native) - t0
+        duration = System.monotonic_time() - t0
         :ok = GRPC.Telemetry.server_rpc_stop(server, endpoint, func_name, stream, duration)
         result
     end
