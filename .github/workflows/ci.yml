@@ -16,8 +16,8 @@ jobs:
       - uses: actions/checkout@v3
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: 24
-          elixir-version: 1.13.1
+          otp-version: 25
+          elixir-version: 1.14.x
       - name: Retrieve dependencies cache
         uses: actions/cache@v3
         id: mix-cache # id to use in retrieve action
@@ -35,12 +35,14 @@ jobs:
     strategy:
       matrix:
         otp: [22.x, 23.x, 24.x, 25.x]
-        elixir: [1.11.x, 1.12.x, 1.13.x]
+        elixir: [1.11.x, 1.12.x, 1.13.x, 1.14.x]
         exclude:
           - otp: 25.x
             elixir: 1.11.x
           - otp: 25.x
             elixir: 1.12.x
+          - otp: 22.x
+            elixir: 1.14.x
     needs: check_format
     steps:
       - uses: actions/checkout@v3
@@ -69,7 +71,7 @@ jobs:
       - uses: erlef/setup-beam@v1
         with:
           otp-version: 25.x
-          elixir-version: 1.13.x
+          elixir-version: 1.14.x
       - name: Retrieve dependencies cache
         uses: actions/cache@v3
         id: mix-cache # id to use in retrieve action
@@ -80,7 +82,7 @@ jobs:
         run: mix deps.get 1>/dev/null
         working-directory: ./interop
       - name: Run interop tests
-        run: mix run script/run.exs --rounds 64
+        run: mix run script/run.exs
         working-directory: ./interop
 
   interop-tests-all:
@@ -91,7 +93,7 @@ jobs:
     strategy:
       matrix:
         otp: [22.x, 23.x, 24.x, 25.x]
-        elixir: [1.11.x, 1.12.x, 1.13.x]
+        elixir: [1.11.x, 1.12.x, 1.13.x, 1.14.x]
         exclude:
           - otp: 25.x
             elixir: 1.11.x
@@ -101,8 +103,8 @@ jobs:
       - uses: actions/checkout@v3
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: 25.x
-          elixir-version: 1.13.x
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
       - name: Retrieve dependencies cache
         uses: actions/cache@v3
         id: mix-cache # id to use in retrieve action
@@ -113,7 +115,7 @@ jobs:
         run: mix deps.get 1>/dev/null
         working-directory: ./interop
       - name: Run interop tests
-        run: mix run script/run.exs --rounds 64
+        run: mix run script/run.exs
         working-directory: ./interop
 
   dialyzer:
@@ -122,7 +124,7 @@ jobs:
     strategy:
       matrix:
         otp: [24.x, 25.x]
-        elixir: [1.13.x]
+        elixir: [1.14.x]
     env:
       MIX_ENV: test
     steps:
@@ -155,8 +157,8 @@ jobs:
       - uses: actions/checkout@v3
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: 24
-          elixir-version: 1.13.1
+          otp-version: 25.x
+          elixir-version: 1.14.x
       - name: Retrieve dependencies cache
         uses: actions/cache@v3
         id: mix-cache # id to use in retrieve action
