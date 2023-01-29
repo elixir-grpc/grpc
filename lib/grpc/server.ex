@@ -173,7 +173,7 @@ defmodule GRPC.Server do
         end
       end)
 
-    call_with_interceptors(res_stream, func_name, stream, reading_stream)
+    call_with_interceptors(res_stream, func_name, stream)
   end
 
   defp call_with_interceptors(
@@ -182,6 +182,9 @@ defmodule GRPC.Server do
          %{server: server, endpoint: endpoint} = stream,
          req
        ) do
+    t0 = System.monotonic_time(:native)
+    :ok = GRPC.Telemetry.server_rpc_start(server, endpoint, func_name, stream)
+
     last = fn r, s ->
       reply = apply(server, func_name, [r, s])
 
@@ -203,13 +206,47 @@ defmodule GRPC.Server do
       next.(req, stream)
     rescue
       e in GRPC.RPCError ->
+        duration = System.monotonic_time(:native) - t0
+
+        :ok =
+          GRPC.Telemetry.server_rpc_exception(
+            server,
+            endpoint,
+            func_name,
+            stream,
+            :error,
+            e,
+            __STACKTRACE__,
+            duration
+          )
+
         {:error, e}
     catch
       kind, reason ->
-        stack = __STACKTRACE__
-        Logger.error(Exception.format(kind, reason, stack))
-        reason = Exception.normalize(kind, reason, stack)
-        {:error, %{kind: kind, reason: reason, stack: stack}}
+        stacktrace = __STACKTRACE__
+        Logger.error(Exception.format(kind, reason, stacktrace))
+        reason = Exception.normalize(kind, reason, stacktrace)
+
+        duration = System.monotonic_time(:native) - t0
+
+        :ok =
+          GRPC.Telemetry.server_rpc_exception(
+            server,
+            endpoint,
+            func_name,
+            stream,
+            kind,
+            reason,
+            stacktrace,
+            duration
+          )
+
+        {:error, %{kind: kind, reason: reason, stack: stacktrace}}
+    else
+      result ->
+        duration = System.monotonic_time(:native) - t0
+        :ok = GRPC.Telemetry.server_rpc_stop(server, endpoint, func_name, stream, duration)
+        result
     end
   end
 
