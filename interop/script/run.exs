@@ -20,7 +20,7 @@ alias Interop.Client
 
 defmodule InteropTestRunner do
   def run(_cli, adapter, port, rounds) do
-    opts = [interceptors: [GRPCPrometheus.ClientInterceptor, GRPC.Client.Interceptors.Logger], adapter: adapter]
+    opts = [interceptors: [GRPC.Client.Interceptors.Logger], adapter: adapter]
     ch = Client.connect("127.0.0.1", port, opts)
 
     for _ <- 1..rounds do
