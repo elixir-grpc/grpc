@@ -24,11 +24,9 @@ defmodule Interop.MixProject do
     [
       {:grpc, path: "..", override: true},
       {:protobuf, "~> 0.11"},
-      {:grpc_prometheus, ">= 0.1.0"},
       {:grpc_statsd, "~> 0.1.0"},
       {:statix, ">= 1.2.1"},
       {:extrace, "~> 0.2"},
-      {:prometheus, "~> 4.0", override: true}
     ]
   end
 end
