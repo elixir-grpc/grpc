@@ -173,7 +173,7 @@ defmodule GRPC.Server do
         end
       end)
 
-    call_with_interceptors(res_stream, func_name, stream)
+    call_with_interceptors(res_stream, func_name, stream, reading_stream)
   end
 
   defp call_with_interceptors(
