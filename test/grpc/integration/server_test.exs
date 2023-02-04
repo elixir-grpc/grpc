@@ -1,5 +1,4 @@
 defmodule GRPC.Integration.ServerTest do
-  alias String.Chars.NaiveDateTime
   use GRPC.Integration.TestCase
 
   defmodule FeatureServer do
@@ -13,13 +12,13 @@ defmodule GRPC.Integration.ServerTest do
   defmodule HelloServer do
     use GRPC.Server, service: Helloworld.Greeter.Service
 
-    def say_hello(%{name: "raise exception delay " <> duration}, _stream) do
-      Process.sleep(String.to_integer(duration))
+    def say_hello(%{name: "raise", duration: duration}, _stream) do
+      Process.sleep(duration)
       raise ArgumentError, "exception raised"
     end
 
-    def say_hello(%{name: "delay " <> duration}, _stream) do
-      Process.sleep(String.to_integer(duration))
+    def say_hello(%{name: "delay", duration: duration}, _stream) do
+      Process.sleep(duration)
       Helloworld.HelloReply.new(message: "Hello")
     end
 
@@ -268,7 +267,7 @@ defmodule GRPC.Integration.ServerTest do
       run_server([HelloServer], fn port ->
         {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
-        req = Helloworld.HelloRequest.new(name: "delay 1000")
+        req = Helloworld.HelloRequest.new(name: "delay", duration: 1000)
 
         assert {:ok, _} = channel |> Helloworld.Greeter.Stub.say_hello(req)
       end)
@@ -311,7 +310,7 @@ defmodule GRPC.Integration.ServerTest do
       run_server([HelloServer], fn port ->
         {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
-        req = Helloworld.HelloRequest.new(name: "raise exception delay 1100")
+        req = Helloworld.HelloRequest.new(name: "raise", duration: 1100)
 
         assert {:error, %GRPC.RPCError{status: 2}} =
                  channel |> Helloworld.Greeter.Stub.say_hello(req)
