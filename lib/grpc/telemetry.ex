@@ -131,15 +131,27 @@ defmodule GRPC.Telemetry do
     })
   end
 
+  @client_rpc_start_name @client_rpc ++ [:start]
+  @doc false
+  def client_rpc_start_name, do: @client_rpc_start_name
+
   @doc false
   def client_rpc_start(stream) do
-    :telemetry.execute(@client_rpc ++ [:start], %{count: 1}, %{stream: stream})
+    :telemetry.execute(@client_rpc_start_name, %{count: 1}, %{stream: stream})
   end
+
+  @client_rpc_stop_name @client_rpc ++ [:stop]
+  @doc false
+  def client_rpc_stop_name, do: @client_rpc_stop_name
 
   @doc false
   def client_rpc_stop(stream, duration) do
-    :telemetry.execute(@client_rpc ++ [:stop], %{duration: duration}, %{stream: stream})
+    :telemetry.execute(@client_rpc_stop_name, %{duration: duration}, %{stream: stream})
   end
+
+  @client_rpc_exception_name @client_rpc ++ [:exception]
+  @doc false
+  def client_rpc_exception_name, do: @client_rpc_exception_name
 
   @doc false
   def client_rpc_exception(
@@ -149,7 +161,7 @@ defmodule GRPC.Telemetry do
         stacktrace,
         duration
       ) do
-    :telemetry.execute(@client_rpc ++ [:exception], %{duration: duration}, %{
+    :telemetry.execute(@client_rpc_exception_name, %{duration: duration}, %{
       stream: stream,
       kind: kind,
       reason: reason,

@@ -253,15 +253,21 @@ defmodule GRPC.Integration.ServerTest do
   end
 
   describe "telemetry" do
-    test "sends start+stop events on success" do
-      start_name = GRPC.Telemetry.server_rpc_start_name()
-      stop_name = GRPC.Telemetry.server_rpc_stop_name()
-      exception_name = GRPC.Telemetry.server_rpc_exception_name()
+    test "sends server start+stop events on success" do
+      start_server_name = GRPC.Telemetry.server_rpc_start_name()
+      stop_server_name = GRPC.Telemetry.server_rpc_stop_name()
+      exception_server_name = GRPC.Telemetry.server_rpc_exception_name()
+      start_client_name = GRPC.Telemetry.client_rpc_start_name()
+      stop_client_name = GRPC.Telemetry.client_rpc_stop_name()
+      exception_client_name = GRPC.Telemetry.client_rpc_exception_name()
 
       attach_events([
-        start_name,
-        stop_name,
-        exception_name
+        start_server_name,
+        stop_server_name,
+        exception_server_name,
+        start_client_name,
+        stop_client_name,
+        exception_client_name
       ])
 
       run_server([HelloServer], fn port ->
@@ -269,10 +275,10 @@ defmodule GRPC.Integration.ServerTest do
 
         req = Helloworld.HelloRequest.new(name: "delay", duration: 1000)
 
-        assert {:ok, _} = channel |> Helloworld.Greeter.Stub.say_hello(req)
+        assert {:ok, _} = Helloworld.Greeter.Stub.say_hello(channel, req)
       end)
 
-      assert_received {^start_name, measurements, metadata}
+      assert_received {^start_server_name, measurements, metadata}
       assert %{count: 1} == measurements
 
       assert %{
@@ -282,7 +288,7 @@ defmodule GRPC.Integration.ServerTest do
                stream: %GRPC.Server.Stream{}
              } = metadata
 
-      assert_received {^stop_name, measurements, metadata}
+      assert_received {^stop_server_name, measurements, metadata}
       assert %{duration: duration} = measurements
       assert duration > 1000
 
@@ -291,20 +297,49 @@ defmodule GRPC.Integration.ServerTest do
                endpoint: nil,
                function_name: :say_hello,
                stream: %GRPC.Server.Stream{}
-             } = metadata |> IO.inspect()
+             } = metadata
 
-      refute_receive({^exception_name, _, _})
+      assert_received {:gun_down, _, _, _, _}
+
+      assert_received {^start_client_name, measurements, metadata}
+      assert %{count: 1} == measurements
+
+      assert %{
+               stream: %GRPC.Client.Stream{
+                 rpc:
+                   {"say_hello", {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false}}
+               }
+             } = metadata
+
+      assert_received {^stop_client_name, measurements, metadata}
+      assert %{duration: duration} = measurements
+      assert duration > 1100
+
+      assert %{
+               stream: %GRPC.Client.Stream{
+                 rpc:
+                   {"say_hello", {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false}}
+               }
+             } = metadata
+
+      refute_receive _
     end
 
-    test "sends start+exception events on failure" do
-      start_name = GRPC.Telemetry.server_rpc_start_name()
-      stop_name = GRPC.Telemetry.server_rpc_stop_name()
-      exception_name = GRPC.Telemetry.server_rpc_exception_name()
+    test "sends server start+exception events on success" do
+      start_server_name = GRPC.Telemetry.server_rpc_start_name()
+      stop_server_name = GRPC.Telemetry.server_rpc_stop_name()
+      exception_server_name = GRPC.Telemetry.server_rpc_exception_name()
+      start_client_name = GRPC.Telemetry.client_rpc_start_name()
+      stop_client_name = GRPC.Telemetry.client_rpc_stop_name()
+      exception_client_name = GRPC.Telemetry.client_rpc_exception_name()
 
       attach_events([
-        start_name,
-        stop_name,
-        exception_name
+        start_server_name,
+        stop_server_name,
+        exception_server_name,
+        start_client_name,
+        stop_client_name,
+        exception_client_name
       ])
 
       run_server([HelloServer], fn port ->
@@ -313,10 +348,10 @@ defmodule GRPC.Integration.ServerTest do
         req = Helloworld.HelloRequest.new(name: "raise", duration: 1100)
 
         assert {:error, %GRPC.RPCError{status: 2}} =
-                 channel |> Helloworld.Greeter.Stub.say_hello(req)
+                 Helloworld.Greeter.Stub.say_hello(channel, req)
       end)
 
-      assert_received {^start_name, measurements, metadata}
+      assert_received {^start_server_name, measurements, metadata}
       assert %{count: 1} == measurements
 
       assert %{
@@ -326,7 +361,7 @@ defmodule GRPC.Integration.ServerTest do
                stream: %GRPC.Server.Stream{}
              } = metadata
 
-      assert_received {^exception_name, measurements, metadata}
+      assert_received {^exception_server_name, measurements, metadata}
       assert %{duration: duration} = measurements
       assert duration > 1100
 
@@ -351,26 +386,30 @@ defmodule GRPC.Integration.ServerTest do
         assert is_list(meta)
       end)
 
-      refute_receive {^stop_name, _, _}
+      assert_received {^start_client_name, measurements, metadata}
+      assert %{count: 1} == measurements
+
+      assert %{
+               stream: %GRPC.Client.Stream{
+                 rpc:
+                   {"say_hello", {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false}}
+               }
+             } = metadata
+
+      assert_received {^stop_client_name, measurements, metadata}
+      assert %{duration: duration} = measurements
+      assert duration > 1100
+
+      assert %{
+               stream: %GRPC.Client.Stream{
+                 rpc:
+                   {"say_hello", {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false}}
+               }
+             } = metadata
+
+      assert_received {:gun_down, _, _, _, _}
+
+      refute_receive _
     end
-  end
-
-  def attach_events(event_names) do
-    test_pid = self()
-
-    handler_id = "handler-#{inspect(test_pid)}"
-
-    :telemetry.attach_many(
-      handler_id,
-      event_names,
-      fn name, measurements, metadata, [] ->
-        send(test_pid, {name, measurements, metadata})
-      end,
-      []
-    )
-
-    on_exit(fn ->
-      :telemetry.detach(handler_id)
-    end)
   end
 end
