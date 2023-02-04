@@ -72,9 +72,14 @@ defmodule GRPC.Telemetry do
   @server_rpc [:grpc, :server, :rpc]
   @client_rpc [:grpc, :client, :rpc]
 
+  @server_rpc_start_name @server_rpc ++ [:start]
+
+  @doc false
+  def server_rpc_start_name, do: @server_rpc_start_name
+
   @doc false
   def server_rpc_start(server, endpoint, func_name, stream) do
-    :telemetry.execute(@server_rpc ++ [:start], %{count: 1}, %{
+    :telemetry.execute(@server_rpc_start_name, %{count: 1}, %{
       server: server,
       endpoint: endpoint,
       function_name: func_name,
@@ -82,15 +87,25 @@ defmodule GRPC.Telemetry do
     })
   end
 
+  @server_rpc_stop_name @server_rpc ++ [:stop]
+
+  @doc false
+  def server_rpc_stop_name, do: @server_rpc_stop_name
+
   @doc false
   def server_rpc_stop(server, endpoint, func_name, stream, duration) do
-    :telemetry.execute(@server_rpc ++ [:stop], %{duration: duration}, %{
+    :telemetry.execute(@server_rpc_stop_name, %{duration: duration}, %{
       server: server,
       endpoint: endpoint,
       function_name: func_name,
       stream: stream
     })
   end
+
+  @server_rpc_exception_name @server_rpc ++ [:exception]
+
+  @doc false
+  def server_rpc_exception_name, do: @server_rpc_exception_name
 
   @doc false
   def server_rpc_exception(
@@ -103,7 +118,7 @@ defmodule GRPC.Telemetry do
         stacktrace,
         duration
       ) do
-    :telemetry.execute(@server_rpc ++ [:exception], %{duration: duration}, %{
+    :telemetry.execute(@server_rpc_exception_name, %{duration: duration}, %{
       server: server,
       endpoint: endpoint,
       function_name: func_name,

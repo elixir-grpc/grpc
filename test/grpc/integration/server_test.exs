@@ -1,4 +1,5 @@
 defmodule GRPC.Integration.ServerTest do
+  alias String.Chars.NaiveDateTime
   use GRPC.Integration.TestCase
 
   defmodule FeatureServer do
@@ -11,6 +12,16 @@ defmodule GRPC.Integration.ServerTest do
 
   defmodule HelloServer do
     use GRPC.Server, service: Helloworld.Greeter.Service
+
+    def say_hello(%{name: "raise exception delay " <> duration}, _stream) do
+      Process.sleep(String.to_integer(duration))
+      raise ArgumentError, "exception raised"
+    end
+
+    def say_hello(%{name: "delay " <> duration}, _stream) do
+      Process.sleep(String.to_integer(duration))
+      Helloworld.HelloReply.new(message: "Hello")
+    end
 
     def say_hello(%{name: "large response"}, _stream) do
       name = String.duplicate("a", round(:math.pow(2, 14)))
@@ -234,11 +245,133 @@ defmodule GRPC.Integration.ServerTest do
 
   test "get cert returns correct client certificate when not present" do
     run_server([HelloServer], fn port ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      assert {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
       req = Helloworld.HelloRequest.new(name: "get cert")
-      {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
+      assert {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
       assert reply.message == "Hello, unauthenticated"
+    end)
+  end
+
+  describe "telemetry" do
+    test "sends start+stop events on success" do
+      start_name = GRPC.Telemetry.server_rpc_start_name()
+      stop_name = GRPC.Telemetry.server_rpc_stop_name()
+      exception_name = GRPC.Telemetry.server_rpc_exception_name()
+
+      attach_events([
+        start_name,
+        stop_name,
+        exception_name
+      ])
+
+      run_server([HelloServer], fn port ->
+        {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+
+        req = Helloworld.HelloRequest.new(name: "delay 1000")
+
+        assert {:ok, _} = channel |> Helloworld.Greeter.Stub.say_hello(req)
+      end)
+
+      assert_received {^start_name, measurements, metadata}
+      assert %{count: 1} == measurements
+
+      assert %{
+               server: HelloServer,
+               endpoint: nil,
+               function_name: :say_hello,
+               stream: %GRPC.Server.Stream{}
+             } = metadata
+
+      assert_received {^stop_name, measurements, metadata}
+      assert %{duration: duration} = measurements
+      assert duration > 1000
+
+      assert %{
+               server: HelloServer,
+               endpoint: nil,
+               function_name: :say_hello,
+               stream: %GRPC.Server.Stream{}
+             } = metadata
+
+      refute_receive({^exception_name, _, _})
+    end
+
+    test "sends start+exception events on failure" do
+      start_name = GRPC.Telemetry.server_rpc_start_name()
+      stop_name = GRPC.Telemetry.server_rpc_stop_name()
+      exception_name = GRPC.Telemetry.server_rpc_exception_name()
+
+      attach_events([
+        start_name,
+        stop_name,
+        exception_name
+      ])
+
+      run_server([HelloServer], fn port ->
+        {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+
+        req = Helloworld.HelloRequest.new(name: "raise exception delay 1100")
+
+        assert {:error, %GRPC.RPCError{status: 2}} =
+                 channel |> Helloworld.Greeter.Stub.say_hello(req)
+      end)
+
+      assert_received {^start_name, measurements, metadata}
+      assert %{count: 1} == measurements
+
+      assert %{
+               server: HelloServer,
+               endpoint: nil,
+               function_name: :say_hello,
+               stream: %GRPC.Server.Stream{}
+             } = metadata
+
+      assert_received {^exception_name, measurements, metadata}
+      assert %{duration: duration} = measurements
+      assert duration > 1100
+
+      assert %{
+               server: HelloServer,
+               endpoint: nil,
+               function_name: :say_hello,
+               stream: %GRPC.Server.Stream{},
+               kind: :error,
+               reason: %ArgumentError{message: "exception raised"},
+               stacktrace: stacktrace
+             } = metadata
+
+      assert is_list(stacktrace)
+
+      Enum.each(stacktrace, fn entry ->
+        # ensure stacktrace is a pure stacktrace
+        assert {mod, fun, arity, meta} = entry
+        assert is_atom(mod)
+        assert is_atom(fun)
+        assert is_integer(arity)
+        assert is_list(meta)
+      end)
+
+      refute_receive {^stop_name, _, _}
+    end
+  end
+
+  def attach_events(event_names) do
+    test_pid = self()
+
+    handler_id = "handler-#{inspect(test_pid)}"
+
+    :telemetry.attach_many(
+      handler_id,
+      event_names,
+      fn name, measurements, metadata, [] ->
+        send(test_pid, {name, measurements, metadata})
+      end,
+      []
+    )
+
+    on_exit(fn ->
+      :telemetry.detach(handler_id)
     end)
   end
 end
