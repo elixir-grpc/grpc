@@ -291,7 +291,7 @@ defmodule GRPC.Integration.ServerTest do
                endpoint: nil,
                function_name: :say_hello,
                stream: %GRPC.Server.Stream{}
-             } = metadata
+             } = metadata |> IO.inspect()
 
       refute_receive({^exception_name, _, _})
     end

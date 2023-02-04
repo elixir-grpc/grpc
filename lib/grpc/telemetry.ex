@@ -49,15 +49,16 @@ defmodule GRPC.Telemetry do
   | event        | measurements | metadata |
   |--------------|--------------|----------|
   | `[:rpc, :start]`  | `:count`     | `:stream`, `:server`, `:endpoint`, `:function_name` |
-  | `[:rpc, :stop]`  | `:duration`  | `:stream`, `:server`, `:endpoint`, `:function_name` |
+  | `[:rpc, :stop]`  | `:duration`  | `:stream`, `:server`, `:endpoint`, `:function_name` , `:result` |
   | `[:rpc, :exception]` | `:duration`  | `:stream`, `:server`, `:endpoint`, `:function_name`, `:kind`, `:reason`, `:stacktrace` |
 
   ### Metadata
 
-    * `:stream` - the `%GRPC.Server.Stream{}` for the request
-    * `:function_name` - the name of the function called
-    * `:server` - the server module name
-    * `:endpoint` - the endpoint module name
+    * `:stream` - the `%GRPC.Server.Stream{}` for the request.
+    * `:function_name` - the name of the function called.
+    * `:server` - the server module name.
+    * `:endpoint` - the endpoint module name.
+    * `:result` - the result returned from the interceptor pipeline.
 
   `:exception` events also include some error metadata:
 
@@ -93,12 +94,13 @@ defmodule GRPC.Telemetry do
   def server_rpc_stop_name, do: @server_rpc_stop_name
 
   @doc false
-  def server_rpc_stop(server, endpoint, func_name, stream, duration) do
+  def server_rpc_stop(server, endpoint, func_name, stream, result, duration) do
     :telemetry.execute(@server_rpc_stop_name, %{duration: duration}, %{
       server: server,
       endpoint: endpoint,
       function_name: func_name,
-      stream: stream
+      stream: stream,
+      result: result
     })
   end
 

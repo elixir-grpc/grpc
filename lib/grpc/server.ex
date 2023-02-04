@@ -245,7 +245,7 @@ defmodule GRPC.Server do
     else
       result ->
         duration = System.monotonic_time() - t0
-        :ok = GRPC.Telemetry.server_rpc_stop(server, endpoint, func_name, stream, duration)
+        :ok = GRPC.Telemetry.server_rpc_stop(server, endpoint, func_name, stream, result, duration)
         result
     end
   end
