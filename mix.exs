@@ -34,7 +34,7 @@ defmodule GRPC.Mixfile do
 
   defp deps do
     [
-      {:protobuf, "~> 0.5"},
+      {:protobuf, git: "https://github.com/surgeventures/protobuf.git"},
       {:cowboy, "~> 2.7"},
       {:gun, "~> 2.0.0", hex: :grpc_gun},
       # 2.9.0 fixes some important bugs, so it's better to use ~> 2.9.0
@@ -43,7 +43,7 @@ defmodule GRPC.Mixfile do
       {:inch_ex, "~> 2.0", only: [:dev, :test]},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:junit_formatter, "~> 3.1", only: [:test]},
-      {:credo, "~> 1.5", only: [:dev, :test], runtime: false}
+      {:credo, "~> 1.6", only: [:dev, :test], runtime: false}
     ]
   end
 
