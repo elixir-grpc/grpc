@@ -221,7 +221,22 @@ defmodule GRPC.Server.Adapters.Cowboy do
 
   defp socket_opts(port, opts) do
     socket_opts = [port: port]
-    socket_opts = if opts[:ip], do: [{:ip, opts[:ip]} | socket_opts], else: socket_opts
+
+    # https://ninenines.eu/docs/en/ranch/1.7/manual/ranch_tcp/
+    allowed_ranch_opts = %{
+      ip: {:ip, opts[:ip]},
+      ipv6_v6only: {:ipv6_v6only, opts[:ipv6_v6only]},
+      net: opts[:net]
+    }
+
+    socket_opts =
+      Enum.reduce(allowed_ranch_opts, socket_opts, fn {key, value}, acc ->
+        if opts[key] != nil do
+          [value | acc]
+        else
+          acc
+        end
+      end)
 
     if opts[:cred] do
       opts[:cred].ssl ++
