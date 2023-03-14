@@ -16,7 +16,6 @@ defmodule GRPC.Server.Adapters.Cowboy do
   @default_num_acceptors 20
   @default_max_connections 16384
 
-  #
   @doc """
   Starts a Cowboy server. Only used in starting a server manually using `GRPC.Server.start(servers)`. Otherwise `GRPC.Server.Adapters.Cowboy.child_spec/4` is used.
 
