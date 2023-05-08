@@ -29,8 +29,6 @@ defmodule GRPC.Integration.ConnectionTest do
   test "authentication works" do
     server = FeatureServer
 
-    tls_versions = [:"tlsv1.2"]
-
     cred = GRPC.Factory.build(:credential, verify: :verify_peer)
 
     {:ok, _, port} = GRPC.Server.start(server, 0, cred: cred)
