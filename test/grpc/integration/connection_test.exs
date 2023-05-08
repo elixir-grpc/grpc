@@ -38,12 +38,7 @@ defmodule GRPC.Integration.ConnectionTest do
     try do
       point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
 
-      client_cred =
-        GRPC.Credential.new(
-          ssl: [certfile: @cert_path, keyfile: @key_path, versions: tls_versions]
-        )
-
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", cred: client_cred)
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", cred: cred)
       assert {:ok, _} = Routeguide.RouteGuide.Stub.get_feature(channel, point)
     catch
       error ->
