@@ -38,6 +38,10 @@ defmodule GRPC.Factory do
     key_path = Path.expand("./tls/server1.key", :code.priv_dir(:grpc))
     ca_path = Path.expand("./tls/ca.pem", :code.priv_dir(:grpc))
 
+    File.read!(cert_path)
+    File.read!(key_path)
+    File.read!(ca_path)
+
     %Credential{
       ssl: [
         certfile: cert_path,

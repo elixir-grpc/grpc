@@ -4,6 +4,9 @@ defmodule Routeguide.App do
   @cert_path Path.expand("./tls/server1.pem", :code.priv_dir(:route_guide))
   @key_path Path.expand("./tls/server1.key", :code.priv_dir(:route_guide))
 
+  File.read!(@cert_path)
+  File.read!(@key_path)
+
   def start(_type, _args) do
     children = [
       RouteGuide.Data,
