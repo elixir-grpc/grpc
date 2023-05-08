@@ -64,7 +64,7 @@ defmodule GRPC.Client.Adapters.GunTest do
       # Ensure that it works
       assert {:ok, result} =
                Gun.connect(channel,
-                 transport_opts: [certfile: credential.ssl[:certfile], ip: :loopback]
+                 transport_opts: [verify: :verify_none, certfile: credential.ssl[:certfile], ip: :loopback]
                )
 
       assert %{channel | adapter_payload: %{conn_pid: result.adapter_payload.conn_pid}} == result
