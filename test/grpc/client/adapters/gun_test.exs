@@ -47,7 +47,7 @@ defmodule GRPC.Client.Adapters.GunTest do
           cred: credential
         )
 
-      assert {:ok, result} = Gun.connect(channel, tls_opts: channel.cred.ssl)
+      assert {:ok, result} = Gun.connect(channel, tls_opts: [verify: :verify_none, versions: [:"tlsv1.2"]])
 
       assert %{channel | adapter_payload: %{conn_pid: result.adapter_payload.conn_pid}} == result
     end
