@@ -47,7 +47,8 @@ defmodule GRPC.Integration.ConnectionTest do
           keyfile: @key_path,
           verify: :verify_peer,
           fail_if_no_peer_cert: true,
-          versions: tls_versions
+          versions: tls_versions,
+          certs_keys: [%{certfile: @cert_path, keyfile: @key_path}]
         ]
       )
 

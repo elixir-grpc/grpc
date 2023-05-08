@@ -47,6 +47,7 @@ defmodule GRPC.Factory do
         certfile: cert_path,
         cacertfile: ca_path,
         keyfile: key_path,
+        certs_keys: [%{certfile: cert_path, keyfile: key_path}],
         verify: :verify_peer,
         fail_if_no_peer_cert: true,
         versions: [:"tlsv1.2"]
