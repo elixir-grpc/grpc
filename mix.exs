@@ -42,7 +42,6 @@ defmodule GRPC.Mixfile do
       {:cowboy, "~> 2.10"},
       {:gun, "~> 2.0"},
       {:mint, "~> 1.4.2"},
-      # This is temporal only for code review until https://github.com/ninenines/cowboy/pull/1601 is merged
       {:cowlib, "~> 2.12"},
       {:protobuf, "~> 0.11", only: [:dev, :test]},
       {:ex_doc, "~> 0.28.6", only: :dev},

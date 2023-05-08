@@ -11,13 +11,12 @@ An Elixir implementation of [gRPC](http://www.grpc.io/).
 
 ## Table of contents
 
-- [gRPC Elixir](#grpc-elixir)
-  - [Table of contents](#table-of-contents)
-  - [Installation](#installation)
-  - [Usage](#usage)
-  - [Features](#features)
-  - [Benchmark](#benchmark)
-  - [Contributing](#contributing)
+- [Notice](#notice)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Features](#features)
+- [Benchmark](#benchmark)
+- [Contributing](#contributing)
 
 ## Installation
 
