@@ -5,10 +5,6 @@ defmodule GRPC.Integration.ConnectionTest do
   @key_path Path.expand("./tls/server1.key", :code.priv_dir(:grpc))
   @ca_path Path.expand("./tls/ca.pem", :code.priv_dir(:grpc))
 
-  File.read!(@cert_path)
-  File.read!(@key_path)
-  File.read!(@ca_path)
-
   test "reconnection works" do
     server = FeatureServer
     {:ok, _, port} = GRPC.Server.start(server, 0)
