@@ -7,6 +7,8 @@ defmodule GRPC.Factory do
   def build(resource, attrs \\ %{}) do
     name = :"#{resource}_factory"
 
+    attrs = Map.new(attrs)
+
     data =
       if function_exported?(__MODULE__, name, 1) do
         apply(__MODULE__, name, [attrs])
@@ -14,7 +16,7 @@ defmodule GRPC.Factory do
         apply(__MODULE__, name, [])
       end
 
-    Map.merge(data, Map.new(attrs))
+    Map.merge(data, attrs)
   end
 
   def channel_factory do
@@ -43,8 +45,7 @@ defmodule GRPC.Factory do
         certfile: cert_path,
         cacertfile: ca_path,
         keyfile: key_path,
-        verify: :verify_peer,
-        fail_if_no_peer_cert: true,
+        verify: :verify_none,
         versions: [:"tlsv1.2"]
       ]
     }

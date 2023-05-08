@@ -14,10 +14,7 @@ defmodule GRPC.Client.Adapters.GunTest do
 
       %{
         port: port,
-        credential:
-          build(:credential,
-            ssl: Keyword.take(server_credential.ssl, [:certfile, :keyfile, :versions])
-          )
+        credential: server_credential
       }
     end
 
@@ -67,7 +64,11 @@ defmodule GRPC.Client.Adapters.GunTest do
       # Ensure that it works
       assert {:ok, result} =
                Gun.connect(channel,
-                 transport_opts: [certfile: credential.ssl[:certfile], ip: :loopback]
+                 transport_opts: [
+                   verify: :verify_none,
+                   certfile: credential.ssl[:certfile],
+                   ip: :loopback
+                 ]
                )
 
       assert %{channel | adapter_payload: %{conn_pid: result.adapter_payload.conn_pid}} == result
@@ -77,6 +78,7 @@ defmodule GRPC.Client.Adapters.GunTest do
                Gun.connect(channel,
                  transport_opts: [
                    certfile: credential.ssl[:certfile] <> "invalidsuffix",
+                   verify: :verify_peer,
                    ip: :loopback
                  ]
                )
