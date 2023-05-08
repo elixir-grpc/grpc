@@ -11,7 +11,6 @@ An Elixir implementation of [gRPC](http://www.grpc.io/).
 
 ## Table of contents
 
-- [Notice](#notice)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Features](#features)
