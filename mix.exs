@@ -39,13 +39,13 @@ defmodule GRPC.Mixfile do
 
   defp deps do
     [
-      {:cowboy, "~> 2.9"},
+      {:cowboy, "~> 2.10"},
       {:gun, "~> 2.0"},
       {:mint, "~> 1.4.2"},
       # This is temporal only for code review until https://github.com/ninenines/cowboy/pull/1601 is merged
-      {:cowlib, "~> 2.12", override: true},
+      {:cowlib, "~> 2.12"},
       {:protobuf, "~> 0.11", only: [:dev, :test]},
-      {:ex_doc, "~> 0.28.0", only: :dev},
+      {:ex_doc, "~> 0.28.6", only: :dev},
       {:dialyxir, "~> 1.1.0", only: [:dev, :test], runtime: false},
       {:ex_parameterized, "~> 1.3.7", only: :test}
     ]
