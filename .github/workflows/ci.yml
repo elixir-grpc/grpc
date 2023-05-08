@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: 25
+          otp-version: 25.1.x
           elixir-version: 1.14.x
       - name: Retrieve dependencies cache
         uses: actions/cache@v3
@@ -28,18 +28,17 @@ jobs:
         run: mix deps.get 1>/dev/null
       - name: Check format
         run: mix format --check-formatted
-
   tests:
     runs-on: ubuntu-20.04
     name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
     strategy:
       matrix:
-        otp: [22.x, 23.x, 24.x, 25.x]
+        otp: [22.x, 23.x, 24.x, 25.1.x]
         elixir: [1.11.x, 1.12.x, 1.13.x, 1.14.x]
         exclude:
-          - otp: 25.x
+          - otp: 25.1.x
             elixir: 1.11.x
-          - otp: 25.x
+          - otp: 25.1.x
             elixir: 1.12.x
           - otp: 22.x
             elixir: 1.14.x
@@ -60,7 +59,6 @@ jobs:
         run: mix deps.get 1>/dev/null
       - name: Run Tests
         run: mix test
-
   interop-tests:
     runs-on: ubuntu-20.04
     name: Interop tests
@@ -70,7 +68,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: 25.x
+          otp-version: 25.1.x
           elixir-version: 1.14.x
       - name: Retrieve dependencies cache
         uses: actions/cache@v3
@@ -92,12 +90,12 @@ jobs:
     if: ${{ github.ref == 'refs/heads/master' }}
     strategy:
       matrix:
-        otp: [22.x, 23.x, 24.x, 25.x]
+        otp: [22.x, 23.x, 24.x, 25.1.x]
         elixir: [1.11.x, 1.12.x, 1.13.x, 1.14.x]
         exclude:
-          - otp: 25.x
+          - otp: 25.1.x
             elixir: 1.11.x
-          - otp: 25.x
+          - otp: 25.1.x
             elixir: 1.12.x
           - otp: 22.x
             elixir: 1.14.x
@@ -125,7 +123,7 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        otp: [24.x, 25.x]
+        otp: [24.x, 25.1.x]
         elixir: [1.14.x]
     env:
       MIX_ENV: test
@@ -159,7 +157,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: 25.x
+          otp-version: 25.1.x
           elixir-version: 1.14.x
       - name: Retrieve dependencies cache
         uses: actions/cache@v3
