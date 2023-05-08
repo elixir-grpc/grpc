@@ -1,10 +1,6 @@
 defmodule GRPC.Integration.ConnectionTest do
   use GRPC.Integration.TestCase
 
-  @cert_path Path.expand("./tls/server1.pem", :code.priv_dir(:grpc))
-  @key_path Path.expand("./tls/server1.key", :code.priv_dir(:grpc))
-  @ca_path Path.expand("./tls/ca.pem", :code.priv_dir(:grpc))
-
   test "reconnection works" do
     server = FeatureServer
     {:ok, _, port} = GRPC.Server.start(server, 0)
@@ -35,18 +31,7 @@ defmodule GRPC.Integration.ConnectionTest do
 
     tls_versions = [:"tlsv1.2"]
 
-    cred =
-      GRPC.Credential.new(
-        ssl: [
-          certfile: @cert_path,
-          cacertfile: @ca_path,
-          keyfile: @key_path,
-          verify: :verify_peer,
-          fail_if_no_peer_cert: true,
-          versions: tls_versions,
-          certs_keys: [%{certfile: @cert_path, keyfile: @key_path}]
-        ]
-      )
+    cred = GRPC.Factory.build(:credential, verify: :verify_peer)
 
     {:ok, _, port} = GRPC.Server.start(server, 0, cred: cred)
 
