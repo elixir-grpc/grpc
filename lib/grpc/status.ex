@@ -22,7 +22,7 @@ defmodule GRPC.Status do
     15  |  :data_loss            |  Unrecoverable data loss or corruption
     16  |  :unauthenticated      |  The request does not have valid authentication credentials for the operation
 
-  For more detail information, please refer to https://github.com/grpc/grpc/blob/master/include/grpc/impl/codegen/status.h
+  For more detail information, please refer to https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
   """
 
   @type t :: non_neg_integer
