@@ -13,15 +13,19 @@ defmodule GRPC.RPCError do
   """
 
   defexception [:status, :message]
+
+  defguard is_rpc_error(e, status) when is_struct(e, __MODULE__) and e.status == status
+
   @type t :: %__MODULE__{status: GRPC.Status.t(), message: String.t()}
 
   alias GRPC.Status
 
-  @spec exception(Status.t(), String.t()) :: t
+  @spec new(atom()) :: t()
   def new(status) when is_atom(status) do
     exception(status: status)
   end
 
+  @spec exception(list()) :: t()
   def exception(args) when is_list(args) do
     error = parse_args(args, %__MODULE__{})
 
@@ -49,6 +53,7 @@ defmodule GRPC.RPCError do
     parse_args(t, acc)
   end
 
+  @spec exception(Status.t() | atom(), String.t()) :: t()
   def exception(status, message) when is_atom(status) do
     %GRPC.RPCError{status: apply(GRPC.Status, status, []), message: message}
   end
@@ -57,6 +62,7 @@ defmodule GRPC.RPCError do
     %GRPC.RPCError{status: status, message: message}
   end
 
+  @spec status_message(non_neg_integer()) :: String.t()
   defp status_message(1), do: "The operation was cancelled (typically by the caller)"
   defp status_message(2), do: "Unknown error"
   defp status_message(3), do: "Client specified an invalid argument"
