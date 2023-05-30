@@ -8,6 +8,8 @@ defmodule GRPC.RPCError do
 
       # client side
       {:error, error} = Your.Stub.unary_call(channel, request)
+
+  See GRPC.Status for more details on possible statuses.
   """
 
   defexception [:status, :message]
