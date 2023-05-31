@@ -9,7 +9,19 @@ defmodule GRPC.RPCError do
       # client side
       {:error, error} = Your.Stub.unary_call(channel, request)
 
-  See GRPC.Status for more details on possible statuses.
+      # error handling with the `is_rpc_error/2` guard
+      cond do
+        is_rpc_error(error, GRPC.Status.not_found()) ->
+          do_something_when_not_found()
+
+        is_rpc_error(error, GRPC.Status.out_of_range()) ->
+          do_something_when_out_of_range()
+
+        true ->
+          fallback_code()
+      end
+
+  See `GRPC.Status` for more details on possible statuses.
   """
 
   defexception [:status, :message]
@@ -20,12 +32,12 @@ defmodule GRPC.RPCError do
 
   alias GRPC.Status
 
-  @spec new(atom()) :: t()
+  @spec new(status :: atom()) :: t()
   def new(status) when is_atom(status) do
     exception(status: status)
   end
 
-  @spec exception(list()) :: t()
+  @spec exception(args :: list()) :: t()
   def exception(args) when is_list(args) do
     error = parse_args(args, %__MODULE__{})
 
@@ -53,7 +65,7 @@ defmodule GRPC.RPCError do
     parse_args(t, acc)
   end
 
-  @spec exception(Status.t() | atom(), String.t()) :: t()
+  @spec exception(status :: Status.t() | atom(), message :: String.t()) :: t()
   def exception(status, message) when is_atom(status) do
     %GRPC.RPCError{status: apply(GRPC.Status, status, []), message: message}
   end
@@ -62,7 +74,7 @@ defmodule GRPC.RPCError do
     %GRPC.RPCError{status: status, message: message}
   end
 
-  @spec status_message(non_neg_integer()) :: String.t()
+  @spec status_message(Status.t()) :: String.t()
   defp status_message(1), do: "The operation was cancelled (typically by the caller)"
   defp status_message(2), do: "Unknown error"
   defp status_message(3), do: "Client specified an invalid argument"

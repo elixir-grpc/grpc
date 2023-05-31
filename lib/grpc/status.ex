@@ -1,28 +1,28 @@
 defmodule GRPC.Status do
   @moduledoc """
-  Collection of gRPC status:
+  A collection of gRPC statuses.
 
-   Code |         Status         |                                            Status Message
-  -----:|------------------------|-----------------------------------------------------------------------------------------------------
-     0  |  :ok                   |
-     1  |  :cancelled            |  The operation was cancelled (typically by the caller)
-     2  |  :unknown              |  Unknown error
-     3  |  :invalid_argument     |  Client specified an invalid argument
-     4  |  :deadline_exceeded    |  Deadline expired before operation could complete
-     5  |  :not_found            |  Some requested entity (e.g., file or directory) was not found
-     6  |  :already_exists       |  Some entity that we attempted to create (e.g., file or directory) already exists
-     7  |  :permission_denied    |  The caller does not have permission to execute the specified operation
-     8  |  :resource_exhausted   |  Some resource has been exhausted
-     9  |  :failed_precondition  |  Operation was rejected because the system is not in a state required for the operation's execution
-    10  |  :aborted              |  The operation was aborted
-    11  |  :out_of_range         |  Operation was attempted past the valid range
-    12  |  :unimplemented        |  Operation is not implemented or not supported/enabled in this service
-    13  |  :internal             |  Internal errors
-    14  |  :unavailable          |  The service is currently unavailable
-    15  |  :data_loss            |  Unrecoverable data loss or corruption
-    16  |  :unauthenticated      |  The request does not have valid authentication credentials for the operation
+  | Code |         Status         |                                            Status Message                                           |
+  |-----:|------------------------|-----------------------------------------------------------------------------------------------------|
+  |   0  |  :ok                   |  Success                                                                                            |
+  |   1  |  :cancelled            |  The operation was cancelled (typically by the caller)                                              |
+  |   2  |  :unknown              |  Unknown error                                                                                      |
+  |   3  |  :invalid_argument     |  Client specified an invalid argument                                                               |
+  |   4  |  :deadline_exceeded    |  Deadline expired before operation could complete                                                   |
+  |   5  |  :not_found            |  Some requested entity (e.g., file or directory) was not found                                      |
+  |   6  |  :already_exists       |  Some entity that we attempted to create (e.g., file or directory) already exists                   |
+  |   7  |  :permission_denied    |  The caller does not have permission to execute the specified operation                             |
+  |   8  |  :resource_exhausted   |  Some resource has been exhausted                                                                   |
+  |   9  |  :failed_precondition  |  Operation was rejected because the system is not in a state required for the operation's execution |
+  |  10  |  :aborted              |  The operation was aborted                                                                          |
+  |  11  |  :out_of_range         |  Operation was attempted past the valid range                                                       |
+  |  12  |  :unimplemented        |  Operation is not implemented or not supported/enabled in this service                              |
+  |  13  |  :internal             |  Internal errors                                                                                    |
+  |  14  |  :unavailable          |  The service is currently unavailable                                                               |
+  |  15  |  :data_loss            |  Unrecoverable data loss or corruption                                                              |
+  |  16  |  :unauthenticated      |  The request does not have valid authentication credentials for the operation                       |
 
-  For more detail information, please refer to https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
+  For more details, please refer to the [official gRPC docs](https://github.com/grpc/grpc/blob/master/doc/statuscodes.md)
   """
 
   @type t :: non_neg_integer
