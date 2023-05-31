@@ -1,9 +1,9 @@
 defmodule GRPC.StatusTest do
-	use ExUnit.Case
+  use ExUnit.Case, async: true
 
-	alias GRPC.Status
+  alias GRPC.Status
 
-  @status_grpc_codes %{
+  @grpc_status_codes %{
     ok: 0,
     cancelled: 1,
     unknown: 2,
@@ -24,7 +24,7 @@ defmodule GRPC.StatusTest do
   }
 
   test "match an error atom status to a gRPC status defined code" do
-    for {function, expected_value} <- @status_grpc_codes, do:
-      assert expected_value == apply(Status, function, [])
+    for {function, expected_value} <- @grpc_status_codes,
+        do: assert(expected_value == apply(Status, function, []))
   end
 end
