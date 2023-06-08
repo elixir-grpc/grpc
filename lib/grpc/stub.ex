@@ -265,61 +265,9 @@ defmodule GRPC.Stub do
         accepted_compressors: accepted_compressors
     }
 
-    t0 = System.monotonic_time()
-
-    try do
-      :ok = GRPC.Telemetry.client_rpc_start(stream)
+    GRPC.Telemetry.client_span(stream, fn ->
       do_call(req_stream, stream, request, opts)
-    rescue
-      e ->
-        stacktrace = __STACKTRACE__
-        Logger.error(Exception.format(:error, e, stacktrace))
-        duration = System.monotonic_time() - t0
-        normalized_reason = Exception.normalize(:error, e, stacktrace)
-
-        :ok =
-          GRPC.Telemetry.client_rpc_exception(
-            stream,
-            :error,
-            normalized_reason,
-            stacktrace,
-            duration
-          )
-
-        reraise e, __STACKTRACE__
-    catch
-      kind, reason ->
-        stacktrace = __STACKTRACE__
-        Logger.error(Exception.format(kind, reason, stacktrace))
-        duration = System.monotonic_time() - t0
-        normalized_reason = Exception.normalize(kind, reason, stacktrace)
-
-        :ok =
-          GRPC.Telemetry.client_rpc_exception(
-            stream,
-            kind,
-            normalized_reason,
-            stacktrace,
-            duration
-          )
-
-        # re-raise accordingly
-        case kind do
-          :exit ->
-            exit(reason)
-
-          :throw ->
-            throw(reason)
-
-          :error ->
-            :erlang.error(reason)
-        end
-    else
-      result ->
-        duration = System.monotonic_time() - t0
-        :ok = GRPC.Telemetry.client_rpc_stop(stream, duration)
-        result
-    end
+    end)
   end
 
   defp do_call(

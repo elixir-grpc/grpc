@@ -75,9 +75,13 @@ defmodule GRPC.Telemetry do
   @server_rpc [:grpc, :server, :rpc]
   @client_rpc [:grpc, :client, :rpc]
 
+  @doc "The server telemetry event prefix."
   def server_rpc_prefix, do: @server_rpc
+
+  @doc "The client telemetry event prefix."
   def client_rpc_prefix, do: @client_rpc
 
+  @doc false
   def server_span(server, endpoint, func_name, stream, span_fn) do
     start_metadata = %{
       server: server,
@@ -106,8 +110,22 @@ defmodule GRPC.Telemetry do
   def client_rpc_start_name, do: @client_rpc_start_name
 
   @doc false
-  def client_rpc_start(stream) do
-    :telemetry.execute(@client_rpc_start_name, %{count: 1}, %{stream: stream})
+  def client_span(stream, span_fn) do
+    start_metadata = %{stream: stream}
+
+    :telemetry.span(@client_rpc, start_metadata, fn ->
+      try do
+        {span_fn.(), start_metadata}
+      rescue
+        e ->
+          :erlang.error(Exception.normalize(:error, e, __STACKTRACE__))
+      end
+    end)
+  catch
+    kind, reason ->
+      stacktrace = __STACKTRACE__
+      Logger.error(Exception.format(kind, reason, stacktrace))
+      :erlang.raise(kind, reason, stacktrace)
   end
 
   @client_rpc_stop_name @client_rpc ++ [:stop]

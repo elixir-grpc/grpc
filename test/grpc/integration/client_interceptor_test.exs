@@ -46,7 +46,7 @@ defmodule GRPC.Integration.ClientInterceptorTest do
   defmodule HelloEndpoint do
     use GRPC.Endpoint
 
-    run HelloServer
+    run(HelloServer)
   end
 
   test "client sends headers" do
@@ -74,8 +74,9 @@ defmodule GRPC.Integration.ClientInterceptorTest do
           {&raise/1, :error, %RuntimeError{message: message}},
           {&:erlang.error/1, :error, %ErlangError{original: message}}
         ] do
-      stop_client_name = GRPC.Telemetry.client_rpc_stop_name()
-      exception_client_name = GRPC.Telemetry.client_rpc_exception_name()
+      client_prefix = GRPC.Telemetry.client_rpc_prefix()
+      stop_client_name = client_prefix ++ [:stop]
+      exception_client_name = client_prefix ++ [:exception]
 
       attach_events([
         stop_client_name,

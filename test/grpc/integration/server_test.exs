@@ -305,7 +305,7 @@ defmodule GRPC.Integration.ServerTest do
       assert_received {:gun_down, _, _, _, _}
 
       assert_received {^start_client_name, measurements, metadata}
-      assert %{count: 1} == measurements
+      assert %{monotonic_time: _, system_time: _} = measurements
 
       assert %{
                stream: %GRPC.Client.Stream{
@@ -393,7 +393,7 @@ defmodule GRPC.Integration.ServerTest do
       end)
 
       assert_received {^start_client_name, measurements, metadata}
-      assert %{count: 1} = measurements
+      assert %{monotonic_time: _, system_time: _} = measurements
 
       assert %{
                stream: %GRPC.Client.Stream{
