@@ -186,7 +186,7 @@ defmodule GRPC.Status do
   def code_name(15), do: "DataLoss"
   def code_name(16), do: "Unauthenticated"
 
-  @spec status_message(Status.t()) :: String.t() | nil
+  @spec status_message(t()) :: String.t() | nil
   def status_message(0), do: nil
   def status_message(1), do: "The operation was cancelled (typically by the caller)"
   def status_message(2), do: "Unknown error"
