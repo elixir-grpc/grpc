@@ -9,7 +9,11 @@ defmodule GRPC.RPCError do
       # client side
       {:error, error} = Your.Stub.unary_call(channel, request)
 
-      # error handling with the `is_rpc_error/2` guard
+  Error handling can be done with the `is_rpc_error/2` guard.
+
+  Expanding on the code above, the first option is for the guard to
+  be used in a `cond` or `case`, as follows:
+
       cond do
         is_rpc_error(error, GRPC.Status.not_found()) ->
           do_something_when_not_found()
@@ -19,6 +23,29 @@ defmodule GRPC.RPCError do
 
         true ->
           fallback_code()
+      end
+
+  Another option is for the error handling to be written into a multi-clause function.
+  In such case we must define module attributes for each of the errors we want because
+  the functions in `GRPC.Status` can't be called directly inside the guard.
+
+      ...
+      handle_error(error)
+      ...
+
+      @not_found GRPC.Status.not_found()
+      @out_of_range GRPC.Status.out_of_range()
+
+      defp handle_error(error) when is_rpc_error(error, @not_found) do
+        # not found
+      end
+
+      defp handle_error(error) when is_rpc_error(error, @out_of_range) do
+        # out of range
+      end
+
+      defp handle_error(error) do
+        # fallback
       end
 
   See `GRPC.Status` for more details on possible statuses.

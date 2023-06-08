@@ -6,6 +6,23 @@ defmodule GRPC.RPCErrorTest do
   alias GRPC.Status
   alias GRPC.RPCError
 
+  defmodule HandlingWithFunctionGuard do
+    @cancelled Status.cancelled()
+    @unknown Status.unknown()
+
+    def handle(err) when is_rpc_error(err, @cancelled) do
+      :cancelled
+    end
+
+    def handle(err) when is_rpc_error(err, @unknown) do
+      :unknown
+    end
+
+    def handle(_err) do
+      :fallback
+    end
+  end
+
   describe "is_rpc_error/2 guard clause" do
     test "returns true for GRPC.RPCError structs with same status" do
       exception = GRPC.RPCError.new(:unknown)
@@ -23,6 +40,12 @@ defmodule GRPC.RPCErrorTest do
       exception = %{status: :unknown}
 
       refute is_rpc_error(exception, Status.unknown())
+    end
+
+    test "supports clause guarding in function heads" do
+      assert HandlingWithFunctionGuard.handle(GRPC.RPCError.new(:unknown)) == :unknown
+      assert HandlingWithFunctionGuard.handle(GRPC.RPCError.new(:cancelled)) == :cancelled
+      assert HandlingWithFunctionGuard.handle(GRPC.RPCError.new(:not_found)) == :fallback
     end
   end
 
