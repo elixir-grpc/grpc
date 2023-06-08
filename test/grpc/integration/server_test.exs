@@ -254,12 +254,15 @@ defmodule GRPC.Integration.ServerTest do
 
   describe "telemetry" do
     test "sends server start+stop events on success" do
-      start_server_name = GRPC.Telemetry.server_rpc_start_name()
-      stop_server_name = GRPC.Telemetry.server_rpc_stop_name()
-      exception_server_name = GRPC.Telemetry.server_rpc_exception_name()
-      start_client_name = GRPC.Telemetry.client_rpc_start_name()
-      stop_client_name = GRPC.Telemetry.client_rpc_stop_name()
-      exception_client_name = GRPC.Telemetry.client_rpc_exception_name()
+      server_rpc_prefix = GRPC.Telemetry.server_rpc_prefix()
+      start_server_name = server_rpc_prefix ++ [:start]
+      stop_server_name = server_rpc_prefix ++ [:stop]
+      exception_server_name = server_rpc_prefix ++ [:exception]
+
+      client_rpc_prefix = GRPC.Telemetry.client_rpc_prefix()
+      start_client_name = client_rpc_prefix ++ [:start]
+      stop_client_name = client_rpc_prefix ++ [:stop]
+      exception_client_name = client_rpc_prefix ++ [:exception]
 
       attach_events([
         start_server_name,
@@ -279,7 +282,7 @@ defmodule GRPC.Integration.ServerTest do
       end)
 
       assert_received {^start_server_name, measurements, metadata}
-      assert %{count: 1} == measurements
+      assert %{monotonic_time: _, system_time: _} = measurements
 
       assert %{
                server: HelloServer,
@@ -326,12 +329,15 @@ defmodule GRPC.Integration.ServerTest do
     end
 
     test "sends server start+exception events on success" do
-      start_server_name = GRPC.Telemetry.server_rpc_start_name()
-      stop_server_name = GRPC.Telemetry.server_rpc_stop_name()
-      exception_server_name = GRPC.Telemetry.server_rpc_exception_name()
-      start_client_name = GRPC.Telemetry.client_rpc_start_name()
-      stop_client_name = GRPC.Telemetry.client_rpc_stop_name()
-      exception_client_name = GRPC.Telemetry.client_rpc_exception_name()
+      server_rpc_prefix = GRPC.Telemetry.server_rpc_prefix()
+      start_server_name = server_rpc_prefix ++ [:start]
+      stop_server_name = server_rpc_prefix ++ [:stop]
+      exception_server_name = server_rpc_prefix ++ [:exception]
+
+      client_rpc_prefix = GRPC.Telemetry.client_rpc_prefix()
+      start_client_name = client_rpc_prefix ++ [:start]
+      stop_client_name = client_rpc_prefix ++ [:stop]
+      exception_client_name = client_rpc_prefix ++ [:exception]
 
       attach_events([
         start_server_name,
@@ -352,7 +358,7 @@ defmodule GRPC.Integration.ServerTest do
       end)
 
       assert_received {^start_server_name, measurements, metadata}
-      assert %{count: 1} == measurements
+      assert %{monotonic_time: _, system_time: _} = measurements
 
       assert %{
                server: HelloServer,
@@ -387,7 +393,7 @@ defmodule GRPC.Integration.ServerTest do
       end)
 
       assert_received {^start_client_name, measurements, metadata}
-      assert %{count: 1} == measurements
+      assert %{count: 1} = measurements
 
       assert %{
                stream: %GRPC.Client.Stream{

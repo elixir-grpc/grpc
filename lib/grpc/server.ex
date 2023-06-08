@@ -182,75 +182,26 @@ defmodule GRPC.Server do
          %{server: server, endpoint: endpoint} = stream,
          req
        ) do
-    t0 = System.monotonic_time()
-    :ok = GRPC.Telemetry.server_rpc_start(server, endpoint, func_name, stream)
+    GRPC.Telemetry.server_span(server, endpoint, func_name, stream, fn ->
+      last = fn r, s ->
+        reply = apply(server, func_name, [r, s])
 
-    last = fn r, s ->
-      reply = apply(server, func_name, [r, s])
-
-      if res_stream do
-        {:ok, stream}
-      else
-        {:ok, stream, reply}
+        if res_stream do
+          {:ok, stream}
+        else
+          {:ok, stream, reply}
+        end
       end
-    end
 
-    interceptors = interceptors(endpoint, server)
+      interceptors = interceptors(endpoint, server)
 
-    next =
-      Enum.reduce(interceptors, last, fn {interceptor, opts}, acc ->
-        fn r, s -> interceptor.call(r, s, acc, opts) end
-      end)
+      next =
+        Enum.reduce(interceptors, last, fn {interceptor, opts}, acc ->
+          fn r, s -> interceptor.call(r, s, acc, opts) end
+        end)
 
-    try do
       next.(req, stream)
-    rescue
-      e in GRPC.RPCError ->
-        duration = System.monotonic_time() - t0
-
-        :ok =
-          GRPC.Telemetry.server_rpc_exception(
-            server,
-            endpoint,
-            func_name,
-            stream,
-            :error,
-            e,
-            __STACKTRACE__,
-            duration
-          )
-
-        {:error, e}
-    catch
-      kind, reason ->
-        stacktrace = __STACKTRACE__
-        Logger.error(Exception.format(kind, reason, stacktrace))
-        reason = Exception.normalize(kind, reason, stacktrace)
-
-        duration = System.monotonic_time() - t0
-
-        :ok =
-          GRPC.Telemetry.server_rpc_exception(
-            server,
-            endpoint,
-            func_name,
-            stream,
-            kind,
-            reason,
-            stacktrace,
-            duration
-          )
-
-        {:error, %{kind: kind, reason: reason, stack: stacktrace}}
-    else
-      result ->
-        duration = System.monotonic_time() - t0
-
-        :ok =
-          GRPC.Telemetry.server_rpc_stop(server, endpoint, func_name, stream, result, duration)
-
-        result
-    end
+    end)
   end
 
   defp interceptors(nil, _), do: []

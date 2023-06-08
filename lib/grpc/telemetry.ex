@@ -70,65 +70,35 @@ defmodule GRPC.Telemetry do
       * `:throw` — from a caught value, this doesn't necessarily mean that an error occurred.
   """
 
+  require Logger
+
   @server_rpc [:grpc, :server, :rpc]
   @client_rpc [:grpc, :client, :rpc]
 
-  @server_rpc_start_name @server_rpc ++ [:start]
+  def server_rpc_prefix, do: @server_rpc
+  def client_rpc_prefix, do: @client_rpc
 
-  @doc false
-  def server_rpc_start_name, do: @server_rpc_start_name
-
-  @doc false
-  def server_rpc_start(server, endpoint, func_name, stream) do
-    :telemetry.execute(@server_rpc_start_name, %{count: 1}, %{
+  def server_span(server, endpoint, func_name, stream, span_fn) do
+    start_metadata = %{
       server: server,
       endpoint: endpoint,
       function_name: func_name,
       stream: stream
-    })
-  end
+    }
 
-  @server_rpc_stop_name @server_rpc ++ [:stop]
+    :telemetry.span(@server_rpc, start_metadata, fn ->
+      result = span_fn.()
 
-  @doc false
-  def server_rpc_stop_name, do: @server_rpc_stop_name
-
-  @doc false
-  def server_rpc_stop(server, endpoint, func_name, stream, result, duration) do
-    :telemetry.execute(@server_rpc_stop_name, %{duration: duration}, %{
-      server: server,
-      endpoint: endpoint,
-      function_name: func_name,
-      stream: stream,
-      result: result
-    })
-  end
-
-  @server_rpc_exception_name @server_rpc ++ [:exception]
-
-  @doc false
-  def server_rpc_exception_name, do: @server_rpc_exception_name
-
-  @doc false
-  def server_rpc_exception(
-        server,
-        endpoint,
-        func_name,
-        stream,
-        kind,
-        reason,
-        stacktrace,
-        duration
-      ) do
-    :telemetry.execute(@server_rpc_exception_name, %{duration: duration}, %{
-      server: server,
-      endpoint: endpoint,
-      function_name: func_name,
-      stream: stream,
-      kind: kind,
-      reason: reason,
-      stacktrace: stacktrace
-    })
+      {result, Map.put(start_metadata, :result, result)}
+    end)
+  rescue
+    e in GRPC.RPCError ->
+      {:error, e}
+  catch
+    kind, reason ->
+      stacktrace = __STACKTRACE__
+      Logger.error(Exception.format(kind, reason, stacktrace))
+      {:error, %{kind: kind, reason: reason, stack: stacktrace}}
   end
 
   @client_rpc_start_name @client_rpc ++ [:start]
