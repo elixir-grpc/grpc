@@ -1,8 +1,28 @@
 defmodule GRPC.Status do
   @moduledoc """
-  Collection of gRPC status.
+  A collection of gRPC statuses.
 
-  Please refer to https://github.com/grpc/grpc/blob/master/include/grpc/impl/codegen/status.h
+  |  Code  |         Status           |                                            Status Message                                           |
+  |-------:|--------------------------|-----------------------------------------------------------------------------------------------------|
+  |   `0`  |  `:ok`                   |  Success                                                                                            |
+  |   `1`  |  `:cancelled`            |  The operation was cancelled (typically by the caller)                                              |
+  |   `2`  |  `:unknown`              |  Unknown error                                                                                      |
+  |   `3`  |  `:invalid_argument`     |  Client specified an invalid argument                                                               |
+  |   `4`  |  `:deadline_exceeded`    |  Deadline expired before operation could complete                                                   |
+  |   `5`  |  `:not_found`            |  Some requested entity (e.g., file or directory) was not found                                      |
+  |   `6`  |  `:already_exists`       |  Some entity that we attempted to create (e.g., file or directory) already exists                   |
+  |   `7`  |  `:permission_denied`    |  The caller does not have permission to execute the specified operation                             |
+  |   `8`  |  `:resource_exhausted`   |  Some resource has been exhausted                                                                   |
+  |   `9`  |  `:failed_precondition`  |  Operation was rejected because the system is not in a state required for the operation's execution |
+  |  `10`  |  `:aborted`              |  The operation was aborted                                                                          |
+  |  `11`  |  `:out_of_range`         |  Operation was attempted past the valid range                                                       |
+  |  `12`  |  `:unimplemented`        |  Operation is not implemented or not supported/enabled in this service                              |
+  |  `13`  |  `:internal`             |  Internal errors                                                                                    |
+  |  `14`  |  `:unavailable`          |  The service is currently unavailable                                                               |
+  |  `15`  |  `:data_loss`            |  Unrecoverable data loss or corruption                                                              |
+  |  `16`  |  `:unauthenticated`      |  The request does not have valid authentication credentials for the operation                       |
+
+  For more details, please refer to the [official gRPC docs](https://github.com/grpc/grpc/blob/master/doc/statuscodes.md)
   """
 
   @type t :: non_neg_integer
@@ -165,4 +185,37 @@ defmodule GRPC.Status do
   def code_name(14), do: "Unavailable"
   def code_name(15), do: "DataLoss"
   def code_name(16), do: "Unauthenticated"
+
+  @spec status_message(t()) :: String.t() | nil
+  def status_message(0), do: nil
+  def status_message(1), do: "The operation was cancelled (typically by the caller)"
+  def status_message(2), do: "Unknown error"
+  def status_message(3), do: "Client specified an invalid argument"
+  def status_message(4), do: "Deadline expired before operation could complete"
+  def status_message(5), do: "Some requested entity (e.g., file or directory) was not found"
+
+  def status_message(6),
+    do: "Some entity that we attempted to create (e.g., file or directory) already exists"
+
+  def status_message(7),
+    do: "The caller does not have permission to execute the specified operation"
+
+  def status_message(8), do: "Some resource has been exhausted"
+
+  def status_message(9),
+    do:
+      "Operation was rejected because the system is not in a state required for the operation's execution"
+
+  def status_message(10), do: "The operation was aborted"
+  def status_message(11), do: "Operation was attempted past the valid range"
+
+  def status_message(12),
+    do: "Operation is not implemented or not supported/enabled in this service"
+
+  def status_message(13), do: "Internal errors"
+  def status_message(14), do: "The service is currently unavailable"
+  def status_message(15), do: "Unrecoverable data loss or corruption"
+
+  def status_message(16),
+    do: "The request does not have valid authentication credentials for the operation"
 end
