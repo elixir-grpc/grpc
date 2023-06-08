@@ -265,7 +265,9 @@ defmodule GRPC.Stub do
         accepted_compressors: accepted_compressors
     }
 
-    do_call(req_stream, stream, request, opts)
+    GRPC.Telemetry.client_span(stream, fn ->
+      do_call(req_stream, stream, request, opts)
+    end)
   end
 
   defp do_call(
