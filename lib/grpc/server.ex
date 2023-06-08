@@ -182,35 +182,26 @@ defmodule GRPC.Server do
          %{server: server, endpoint: endpoint} = stream,
          req
        ) do
-    last = fn r, s ->
-      reply = apply(server, func_name, [r, s])
+    GRPC.Telemetry.server_span(server, endpoint, func_name, stream, fn ->
+      last = fn r, s ->
+        reply = apply(server, func_name, [r, s])
 
-      if res_stream do
-        {:ok, stream}
-      else
-        {:ok, stream, reply}
+        if res_stream do
+          {:ok, stream}
+        else
+          {:ok, stream, reply}
+        end
       end
-    end
 
-    interceptors = interceptors(endpoint, server)
+      interceptors = interceptors(endpoint, server)
 
-    next =
-      Enum.reduce(interceptors, last, fn {interceptor, opts}, acc ->
-        fn r, s -> interceptor.call(r, s, acc, opts) end
-      end)
+      next =
+        Enum.reduce(interceptors, last, fn {interceptor, opts}, acc ->
+          fn r, s -> interceptor.call(r, s, acc, opts) end
+        end)
 
-    try do
       next.(req, stream)
-    rescue
-      e in GRPC.RPCError ->
-        {:error, e}
-    catch
-      kind, reason ->
-        stack = __STACKTRACE__
-        Logger.error(Exception.format(kind, reason, stack))
-        reason = Exception.normalize(kind, reason, stack)
-        {:error, %{kind: kind, reason: reason, stack: stack}}
-    end
+    end)
   end
 
   defp interceptors(nil, _), do: []
