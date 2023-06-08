@@ -16,7 +16,21 @@ defmodule GRPC.Server.Adapters.Cowboy do
   @default_num_acceptors 20
   @default_max_connections 16384
 
-  # Only used in starting a server manually using `GRPC.Server.start(servers)`
+  @doc """
+  Starts a Cowboy server. Only used in starting a server manually using `GRPC.Server.start(servers)`. Otherwise `GRPC.Server.Adapters.Cowboy.child_spec/4` is used.
+
+  The available options below are a subset of [`ranch_tcp`](https://ninenines.eu/docs/en/ranch/1.7/manual/ranch_tcp/)'s options.
+
+  ## Options
+    * `:net` - If using `:inet` (IPv4 only - the default) or `:inet6` (IPv6)
+    * `:ip` - The IP to bind the server to.
+      Must be either a tuple in the format `{a, b, c, d}` with each value in `0..255` for IPv4,
+      or a tuple in the format `{a, b, c, d, e, f, g, h}` with each value in `0..65535` for IPv6,
+      or a tuple in the format `{:local, path}` for a unix socket at the given `path`.
+      If both `:net` and `:ip` options are given, make sure they are compatible
+      (i.e. give a IPv4 for `:inet` and IPv6 for `:inet6`). The default is to listen on all interfaces.
+    * `:ipv6_v6only` - If true, only bind on IPv6 addresses (default: `false`).
+  """
   @impl true
   def start(endpoint, servers, port, opts) do
     start_args = cowboy_start_args(endpoint, servers, port, opts)
@@ -32,6 +46,9 @@ defmodule GRPC.Server.Adapters.Cowboy do
     end
   end
 
+  @doc """
+  Return a child_spec to start server. See `GRPC.Server.Adapters.Cowboy.start/4` for a list of supported options.
+  """
   @spec child_spec(atom(), %{String.t() => [module()]}, non_neg_integer(), Keyword.t()) ::
           Supervisor.child_spec()
   def child_spec(endpoint, servers, port, opts) do
@@ -221,7 +238,14 @@ defmodule GRPC.Server.Adapters.Cowboy do
 
   defp socket_opts(port, opts) do
     socket_opts = [port: port]
-    socket_opts = if opts[:ip], do: [{:ip, opts[:ip]} | socket_opts], else: socket_opts
+
+    # https://ninenines.eu/docs/en/ranch/1.7/manual/ranch_tcp/
+    socket_opts =
+      Enum.reduce(opts, socket_opts, fn
+        {k, v}, acc when k in [:ip, :ipv6_v6only] and not is_nil(v) -> [{k, v} | acc]
+        {:net, v}, acc when not is_nil(v) -> [v | acc]
+        _, acc -> acc
+      end)
 
     if opts[:cred] do
       opts[:cred].ssl ++
