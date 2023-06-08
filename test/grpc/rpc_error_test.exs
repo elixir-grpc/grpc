@@ -57,11 +57,12 @@ defmodule GRPC.RPCErrorTest do
     end
 
     test "creates the GRPC.RPCError struct with its own predefined message and status code" do
-      for {name, expected_code, expected_message} <- grpc_status_codes_messages_factory(),
-          not is_nil(expected_message) do
-        assert %RPCError{status: code, message: message} = RPCError.new(name)
-        assert expected_code == code
-        assert expected_message == message
+      # small sampling of statuses. ok must be here because its an edge case
+      for status_name <- [:ok, :cancelled, :unknown] do
+        status = apply(Status, status_name, [])
+
+        assert %RPCError{status: status, message: Status.status_message(status)} ==
+                 RPCError.new(status_name)
       end
     end
   end

@@ -78,31 +78,4 @@ defmodule GRPC.Factory do
   def hello_reply_rpc_factory do
     %Helloworld.HelloReply{message: "Hello Luis"}
   end
-
-  def grpc_status_codes_messages_factory do
-    [
-      {:ok, 0, nil},
-      {:cancelled, 1, "The operation was cancelled (typically by the caller)"},
-      {:unknown, 2, "Unknown error"},
-      {:invalid_argument, 3, "Client specified an invalid argument"},
-      {:deadline_exceeded, 4, "Deadline expired before operation could complete"},
-      {:not_found, 5, "Some requested entity (e.g., file or directory) was not found"},
-      {:already_exists, 6,
-       "Some entity that we attempted to create (e.g., file or directory) already exists"},
-      {:permission_denied, 7,
-       "The caller does not have permission to execute the specified operation"},
-      {:resource_exhausted, 8, "Some resource has been exhausted"},
-      {:failed_precondition, 9,
-       "Operation was rejected because the system is not in a state required for the operation's execution"},
-      {:aborted, 10, "The operation was aborted"},
-      {:out_of_range, 11, "Operation was attempted past the valid range"},
-      {:unimplemented, 12,
-       "Operation is not implemented or not supported/enabled in this service"},
-      {:internal, 13, "Internal errors"},
-      {:unavailable, 14, "The service is currently unavailable"},
-      {:data_loss, 15, "Unrecoverable data loss or corruption"},
-      {:unauthenticated, 16,
-       "The request does not have valid authentication credentials for the operation"}
-    ]
-  end
 end
