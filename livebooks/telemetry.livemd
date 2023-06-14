@@ -112,10 +112,12 @@ defmodule MetricsSupervisor do
     :telemetry.attach_many(
       "handler-#{__MODULE__}",
       [
-        [:grpc, :server, :rpc, :stop],
-        [:grpc, :server, :rpc, :exception]
+        GRPC.Telemetry.server_rpc_prefix() ++ [:stop],
+        GRPC.Telemetry.server_rpc_prefix() ++ [:exception],
+        GRPC.Telemetry.client_rpc_prefix() ++ [:stop],
+        GRPC.Telemetry.client_rpc_prefix() ++ [:exception]
       ],
-      fn [:grpc, :server, :rpc, event_kind],
+      fn [:grpc, server_or_client, :rpc, event_kind],
          %{duration: duration},
          %{stream: stream} = metadata,
          _opts ->
@@ -136,10 +138,18 @@ defmodule MetricsSupervisor do
         }
 
         if is_message(stream) do
-          :telemetry.execute([:custom_grpc, :server_rpc, :sent], %{duration: duration}, metadata)
+          :telemetry.execute(
+            [:custom_grpc, :"#{server_or_client}_rpc", :sent],
+            %{duration: duration},
+            metadata
+          )
         end
 
-        :telemetry.execute([:custom_grpc, :server_rpc, :handled], %{duration: duration}, metadata)
+        :telemetry.execute(
+          [:custom_grpc, :"#{server_or_client}_rpc", :handled],
+          %{duration: duration},
+          metadata
+        )
       end,
       nil
     )
@@ -148,9 +158,12 @@ defmodule MetricsSupervisor do
     # without having to attach and publish a new event. However, that would
     # end up leaking an extraneous tag to Prometheus. 
     # This is cleaner in that sense. 
-    :telemetry.attach(
+    :telemetry.attach_many(
       "handler-#{__MODULE__}-start",
-      [:grpc, :server, :rpc, :start],
+      [
+        GRPC.Telemetry.server_rpc_prefix() ++ [:start],
+        GRPC.Telemetry.client_rpc_prefix() ++ [:start]
+      ],
       fn _event, _, %{stream: stream}, _opts ->
         if is_message(stream) do
           :telemetry.execute([:custom_grpc, :server_rpc, :message_received], %{count: 1})
@@ -219,10 +232,51 @@ defmodule MetricsSupervisor do
         reporter_options: [
           buckets: @histogram_buckets_seconds
         ]
-      )
+      ),
 
       # Client Metrics
-      # TO-DO
+      counter(
+        "grpc_client_started_total",
+        event_name: "grpc.client.rpc.start",
+        measurement: :count,
+        tags: @tags,
+        tag_values: &extract_tags_from_stream/1,
+        description: "Total number of RPCs started on the client"
+      ),
+      counter(
+        "grpc_client_msg_received_total",
+        event_name: "custom_grpc.client_rpc.message_received",
+        measurement: :count,
+        tags: @tags,
+        tag_values: &extract_tags_from_stream/1,
+        description: "Total number of RPC stream messages received on the client"
+      ),
+      counter(
+        "grpc_client_msg_sent_total",
+        event_name: "custom_grpc.client_rpc.sent",
+        measurement: :duration,
+        tags: @tags,
+        description: "Total number of gRPC stream messages sent by the client."
+      ),
+      counter(
+        "grpc_client_handled_total",
+        event_name: "custom_grpc.client_rpc.handled",
+        measurement: :duration,
+        tags: @tags_with_code,
+        description:
+          "Total number of RPCs completed on the client, regardless of success or failure."
+      ),
+      distribution(
+        "grpc_client_handled_latency_seconds",
+        event_name: "custom_grpc.client_rpc.handled",
+        description: "Histogram of response latency of rpcs handled by the client, in seconds.",
+        measurement: :duration,
+        tags: @tags_with_code,
+        unit: {:native, :second},
+        reporter_options: [
+          buckets: @histogram_buckets_seconds
+        ]
+      )
     ]
   end
 
