@@ -376,6 +376,12 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     result = server.__call_rpc__(path, stream)
 
     case result do
+      {:ok, _stream, error = %GRPC.RPCError{message: nil, status: status}} ->
+        {:error, %{error | message: GRPC.Status.status_message(status)}}
+
+      {:ok, _stream, error = %GRPC.RPCError{}} ->
+        {:error, error}
+
       {:ok, stream, response} ->
         stream
         |> GRPC.Server.send_reply(response)
