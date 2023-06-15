@@ -184,12 +184,16 @@ defmodule GRPC.Server do
        ) do
     GRPC.Telemetry.server_span(server, endpoint, func_name, stream, fn ->
       last = fn r, s ->
-        reply = apply(server, func_name, [r, s])
+        case apply(server, func_name, [r, s]) do
+          %GRPC.RPCError{} = error ->
+            {:error, error}
 
-        if res_stream do
-          {:ok, stream}
-        else
-          {:ok, stream, reply}
+          reply ->
+            if res_stream do
+              {:ok, stream}
+            else
+              {:ok, stream, reply}
+            end
         end
       end
 
