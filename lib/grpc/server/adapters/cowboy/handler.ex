@@ -416,7 +416,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     :cowboy_req.reply(200, trailers, req)
   end
 
-  def exit_handler(pid, reason) do
+  defp exit_handler(pid, reason) do
     if Process.alive?(pid) do
       Process.exit(pid, reason)
     end
