@@ -14,11 +14,11 @@ defmodule GRPC.Client.Interceptors.Logger do
   ## Usage
 
       {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Client.Interceptors.Logger])
-      # This will log on `:info` and lower priority
+      # This will log on `:info` and lower priority (debug)
       {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Client.Interceptors.Logger, level: :info}])
       # This will log only on `:info`
       {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Client.Interceptors.Logger, level: :info, accepted_comparators: [:eq]}])
-      # This will log on `:info` and higher priority
+      # This will log on `:info` and higher priority (warn, error...)
       {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Client.Interceptors.Logger, level: :info, accepted_comparators: [:eq, :gt]}])
   """
 
