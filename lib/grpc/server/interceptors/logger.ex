@@ -23,7 +23,7 @@ defmodule GRPC.Server.Interceptors.Logger do
         use GRPC.Endpoint
 
         # logs on :info and higher priority (warn, error...)
-        intercept GRPC.Server.Interceptors.Logger, level: :info, accepted_comparators: [:lt, :eq]
+        intercept GRPC.Server.Interceptors.Logger, level: :info, accepted_comparators: [:gt, :eq]
       end
 
       defmodule Your.Endpoint do
@@ -50,7 +50,7 @@ defmodule GRPC.Server.Interceptors.Logger do
     level = Keyword.fetch!(opts, :level)
     accepted_comparators = opts[:accepted_comparators]
 
-    if Logger.compare_levels(level, Logger.level()) in accepted_comparators do
+    if Logger.compare_levels(Logger.level(), level) in accepted_comparators do
       Logger.metadata(request_id: Logger.metadata()[:request_id] || stream.request_id)
 
       Logger.log(level, "Handled by #{inspect(stream.server)}.#{elem(stream.rpc, 0)}")

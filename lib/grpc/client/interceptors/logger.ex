@@ -14,11 +14,11 @@ defmodule GRPC.Client.Interceptors.Logger do
   ## Usage
 
       {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Client.Interceptors.Logger])
-      # This will log on `:info` and greater priority
+      # This will log on `:info` and lower priority
       {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Client.Interceptors.Logger, level: :info}])
       # This will log only on `:info`
       {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Client.Interceptors.Logger, level: :info, accepted_comparators: [:eq]}])
-      # This will log on `:info` and lower priority
+      # This will log on `:info` and higher priority
       {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Client.Interceptors.Logger, level: :info, accepted_comparators: [:eq, :gt]}])
   """
 
@@ -38,7 +38,7 @@ defmodule GRPC.Client.Interceptors.Logger do
     level = Keyword.fetch!(opts, :level)
     accepted_comparators = Keyword.fetch!(opts, :accepted_comparators)
 
-    if Logger.compare_levels(level, Logger.level()) in accepted_comparators do
+    if Logger.compare_levels(Logger.level(), level) in accepted_comparators do
       Logger.log(level, fn ->
         ["Call ", to_string(elem(stream.rpc, 0)), " of ", stream.service_name]
       end)

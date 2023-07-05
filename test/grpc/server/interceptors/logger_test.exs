@@ -36,9 +36,9 @@ defmodule GRPC.Server.Interceptors.LoggerTest do
   test "accepted_comparators filter logs correctly" do
     for {configured_level, accepted_comparators, should_log} <-
           [
-            {:error, [:lt], false},
+            {:error, [:lt], true},
             {:error, [:eq], false},
-            {:error, [:gt], true},
+            {:error, [:gt], false},
             {:debug, [:eq], false},
             {:debug, [:eq, :gt], false},
             {:info, [:lt, :eq], true}
