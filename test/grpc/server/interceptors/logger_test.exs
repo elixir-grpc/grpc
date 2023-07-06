@@ -13,6 +13,11 @@ defmodule GRPC.Server.Interceptors.LoggerTest do
   @server_name :server
   @rpc {1, 2, 3}
 
+  setup do
+    log_level = Logger.level()
+    on_exit(fn -> Logger.configure(level: log_level) end)
+  end
+
   test "request id is only set if not previously set" do
     assert Logger.metadata() == []
 
