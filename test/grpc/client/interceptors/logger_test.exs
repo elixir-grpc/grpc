@@ -57,7 +57,7 @@ defmodule GRPC.Client.Interceptors.LoggerTest do
     request = %FakeRequest{}
     stream = %Stream{grpc_type: :unary, rpc: @rpc, service_name: @service_name}
     next = fn stream, req -> send(self(), {:next_called, stream, req}) end
-    opts = LoggerInterceptor.init([level: :info])
+    opts = LoggerInterceptor.init(level: :info)
 
     LoggerInterceptor.call(stream, request, next, opts)
 
@@ -70,7 +70,7 @@ defmodule GRPC.Client.Interceptors.LoggerTest do
     request = %FakeRequest{}
     stream = %Stream{grpc_type: :unary, rpc: @rpc, service_name: @service_name}
     next = fn stream, req -> send(self(), {:next_called, stream, req}) end
-    opts = LoggerInterceptor.init([level: :info])
+    opts = LoggerInterceptor.init(level: :info)
 
     LoggerInterceptor.call(stream, request, next, opts)
 
