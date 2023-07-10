@@ -68,14 +68,14 @@ defmodule GRPC.Server.Interceptors.LoggerTest do
     request = %FakeRequest{}
     stream = %Stream{server: @server_name, rpc: @rpc, request_id: nil}
     next = fn _stream, _request -> {:ok, :ok} end
-    opts = LoggerInterceptor.init(level: :notice)
+    opts = LoggerInterceptor.init(level: :warn)
 
     logs =
       capture_log(fn ->
         LoggerInterceptor.call(request, stream, next, opts)
       end)
 
-    assert logs =~ ~r/\[notice\]\s+Handled by #{inspect(@server_name)}/
+    assert logs =~ ~r/\[warn(?:ing)?\]\s+Handled by #{inspect(@server_name)}/
   end
 
   @tag capture_log: true
@@ -93,7 +93,7 @@ defmodule GRPC.Server.Interceptors.LoggerTest do
   end
 
   test "calls next when below :logger level" do
-    Logger.configure(level: :notice)
+    Logger.configure(level: :warn)
 
     request = %FakeRequest{}
     stream = %Stream{server: @server_name, rpc: @rpc, request_id: nil}
