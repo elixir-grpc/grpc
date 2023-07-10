@@ -6,16 +6,29 @@ defmodule GRPC.Server.Interceptors.LoggerTest do
   alias GRPC.Server.Interceptors.Logger, as: LoggerInterceptor
   alias GRPC.Server.Stream
 
+  defmodule FakeRequest do
+    defstruct []
+  end
+
+  @server_name :server
+  @rpc {1, 2, 3}
+
+  setup do
+    log_level = Logger.level()
+    on_exit(fn -> Logger.configure(level: log_level) end)
+  end
+
   test "request id is only set if not previously set" do
     assert Logger.metadata() == []
 
     request_id = to_string(System.monotonic_time())
-    stream = %Stream{server: :server, rpc: {1, 2, 3}, request_id: request_id}
+    request = %FakeRequest{}
+    stream = %Stream{server: @server_name, rpc: @rpc, request_id: request_id}
 
     LoggerInterceptor.call(
-      :request,
+      request,
       stream,
-      fn :request, ^stream -> {:ok, :ok} end,
+      fn ^request, ^stream -> {:ok, :ok} end,
       LoggerInterceptor.init(level: :info)
     )
 
@@ -33,44 +46,62 @@ defmodule GRPC.Server.Interceptors.LoggerTest do
     assert request_id == Logger.metadata()[:request_id]
   end
 
-  test "accepted_comparators filter logs correctly" do
-    for {configured_level, accepted_comparators, should_log} <-
-          [
-            {:error, [:lt], false},
-            {:error, [:eq], false},
-            {:error, [:gt], true},
-            {:debug, [:eq], false},
-            {:debug, [:eq, :gt], false},
-            {:info, [:lt, :eq], true}
-          ] do
-      server_name = :"server_#{System.unique_integer()}"
+  test "logs info-level by default" do
+    Logger.configure(level: :all)
 
-      logger_level = Logger.level()
-      assert logger_level == :info
+    request = %FakeRequest{}
+    stream = %Stream{server: @server_name, rpc: @rpc, request_id: nil}
+    next = fn _stream, _request -> {:ok, :ok} end
+    opts = LoggerInterceptor.init([])
 
-      logs =
-        capture_log(fn ->
-          stream = %Stream{server: server_name, rpc: {1, 2, 3}, request_id: "1234"}
+    logs =
+      capture_log(fn ->
+        LoggerInterceptor.call(request, stream, next, opts)
+      end)
 
-          LoggerInterceptor.call(
-            :request,
-            stream,
-            fn :request, ^stream -> {:ok, :ok} end,
-            LoggerInterceptor.init(
-              level: configured_level,
-              accepted_comparators: accepted_comparators
-            )
-          )
-        end)
+    assert logs =~ ~r/\[info\]\s+Handled by #{inspect(@server_name)}/
+  end
 
-      if should_log do
-        assert Regex.match?(
-                 ~r/\[#{configured_level}\]\s+Handled by #{inspect(server_name)}/,
-                 logs
-               )
-      else
-        assert logs == ""
-      end
-    end
+  test "allows customizing log level" do
+    Logger.configure(level: :all)
+
+    request = %FakeRequest{}
+    stream = %Stream{server: @server_name, rpc: @rpc, request_id: nil}
+    next = fn _stream, _request -> {:ok, :ok} end
+    opts = LoggerInterceptor.init(level: :warn)
+
+    logs =
+      capture_log(fn ->
+        LoggerInterceptor.call(request, stream, next, opts)
+      end)
+
+    assert logs =~ ~r/\[warn(?:ing)?\]\s+Handled by #{inspect(@server_name)}/
+  end
+
+  @tag capture_log: true
+  test "calls next when above :logger level" do
+    Logger.configure(level: :all)
+
+    request = %FakeRequest{}
+    stream = %Stream{server: @server_name, rpc: @rpc, request_id: nil}
+    next = fn stream, req -> send(self(), {:next_called, stream, req}) end
+    opts = LoggerInterceptor.init(level: :info)
+
+    LoggerInterceptor.call(request, stream, next, opts)
+
+    assert_receive {:next_called, ^request, ^stream}
+  end
+
+  test "calls next when below :logger level" do
+    Logger.configure(level: :warn)
+
+    request = %FakeRequest{}
+    stream = %Stream{server: @server_name, rpc: @rpc, request_id: nil}
+    next = fn stream, req -> send(self(), {:next_called, stream, req}) end
+    opts = LoggerInterceptor.init(level: :info)
+
+    LoggerInterceptor.call(request, stream, next, opts)
+
+    assert_receive {:next_called, ^request, ^stream}
   end
 end
