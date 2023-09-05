@@ -6,7 +6,7 @@ my_app_root = Path.join(__DIR__, "..")
 Mix.install(
   [
     {:grpc, path: my_app_root, env: :dev},
-    {:telemetry_metrics, "~> 0.6"},
+    {:telemetry_metrics, "~> 0.7"},
     {:telemetry_metrics_prometheus, "~> 1.1"},
     {:req, "~> 0.3"}
   ],
@@ -156,8 +156,8 @@ defmodule MetricsSupervisor do
 
     # This can also be achieved through some clever use of tags+tag_values,
     # without having to attach and publish a new event. However, that would
-    # end up leaking an extraneous tag to Prometheus. 
-    # This is cleaner in that sense. 
+    # end up leaking an extraneous tag to Prometheus.
+    # This is cleaner in that sense.
     :telemetry.attach_many(
       "handler-#{__MODULE__}-start",
       [

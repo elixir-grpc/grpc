@@ -24,7 +24,7 @@ The package can be installed as:
   ```elixir
   def deps do
     [
-      {:grpc, "~> 0.6"},
+      {:grpc, "~> 0.7"},
       # We don't force protobuf as a dependency for more
       # flexibility on which protobuf library is used,
       # but you probably want to use it as well
