@@ -115,7 +115,8 @@ defmodule GRPC.Telemetry do
 
     :telemetry.span(@client_rpc, start_metadata, fn ->
       try do
-        {span_fn.(), start_metadata}
+        result = span_fn.()
+        {result, Map.put(start_metadata, :result, result)}
       rescue
         e ->
           :erlang.error(Exception.normalize(:error, e, __STACKTRACE__))
