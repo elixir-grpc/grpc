@@ -26,6 +26,7 @@ defmodule GRPC.Telemetry do
     * `:function_name` - the name of the function called
     * `:server` - the server module name
     * `:endpoint` - the endpoint module name
+    * `:result` - the result returned from the interceptor pipeline.
 
   `:exception` events also include some error metadata:
 
@@ -116,6 +117,7 @@ defmodule GRPC.Telemetry do
     :telemetry.span(@client_rpc, start_metadata, fn ->
       try do
         result = span_fn.()
+
         {result, Map.put(start_metadata, :result, result)}
       rescue
         e ->
