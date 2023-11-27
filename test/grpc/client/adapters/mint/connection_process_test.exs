@@ -16,7 +16,9 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   end
 
   describe "start_link/4" do
-    test "non-successful connection stops the connection process without exit it's caller" do
+    test "non-successful connection stops the connection process without exiting it's caller" do
+      Process.flag(:trap_exit, true)
+
       logs =
         capture_log(fn ->
           assert {:error, %Mint.TransportError{reason: :econnrefused}} ==

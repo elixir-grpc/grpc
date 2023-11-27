@@ -15,7 +15,9 @@ defmodule GRPC.Server.Adapters.CowboyTest do
         ])
 
       socket_opts = get_socket_opts_from_child_spec(spec)
-      assert socket_opts == [:inet, {:ipv6_v6only, false}, {:ip, {127, 0, 0, 1}}, {:port, 8080}]
+
+      assert Enum.sort(socket_opts) ==
+               Enum.sort([:inet, {:ip, {127, 0, 0, 1}}, {:ipv6_v6only, false}, {:port, 8080}])
     end
 
     test "produces the correct socket opts for ranch_tcp for inet6" do
@@ -30,12 +32,13 @@ defmodule GRPC.Server.Adapters.CowboyTest do
 
       socket_opts = get_socket_opts_from_child_spec(spec)
 
-      assert socket_opts == [
-               :inet6,
-               {:ipv6_v6only, true},
-               {:ip, {0, 0, 0, 0, 0, 0, 0, 1}},
-               {:port, 8081}
-             ]
+      assert Enum.sort(socket_opts) ==
+               Enum.sort([
+                 :inet6,
+                 {:ip, {0, 0, 0, 0, 0, 0, 0, 1}},
+                 {:ipv6_v6only, true},
+                 {:port, 8081}
+               ])
     end
   end
 
