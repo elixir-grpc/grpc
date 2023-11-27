@@ -7,7 +7,7 @@ defmodule GRPC.Mixfile do
     [
       app: :grpc,
       version: @version,
-      elixir: "~> 1.11",
+      elixir: "~> 1.12",
       elixirc_paths: elixirc_paths(Mix.env()),
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
@@ -21,7 +21,7 @@ defmodule GRPC.Mixfile do
         source_url: "https://github.com/elixir-grpc/grpc"
       ],
       dialyzer: [
-        plt_add_deps: :apps_tree,
+        plt_add_deps: :app_tree,
         plt_add_apps: [:iex, :mix, :ex_unit],
         list_unused_filters: true,
         plt_file: {:no_warn, "_build/#{Mix.env()}/plts/dialyzer.plt"}
@@ -45,7 +45,7 @@ defmodule GRPC.Mixfile do
       {:cowlib, "~> 2.12"},
       {:protobuf, "~> 0.11", only: [:dev, :test]},
       {:ex_doc, "~> 0.29", only: :dev},
-      {:dialyxir, "~> 1.1.0", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4.0", only: [:dev, :test], runtime: false},
       {:ex_parameterized, "~> 1.3.7", only: :test},
       {:telemetry, "~> 1.0"}
     ]

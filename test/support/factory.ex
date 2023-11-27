@@ -46,7 +46,7 @@ defmodule GRPC.Factory do
         cacertfile: ca_path,
         keyfile: key_path,
         verify: :verify_none,
-        versions: [:"tlsv1.2"]
+        versions: [:"tlsv1.2", :"tlsv1.3"]
       ]
     }
   end
