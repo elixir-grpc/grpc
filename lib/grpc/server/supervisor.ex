@@ -24,7 +24,8 @@ defmodule GRPC.Server.Supervisor do
   @type sup_flags() :: %{
           strategy: Supervisor.strategy(),
           intensity: non_neg_integer(),
-          period: pos_integer()
+          period: pos_integer(),
+          auto_shutdown: Supervisor.auto_shutdown()
         }
 
   @default_adapter GRPC.Server.Adapters.Cowboy

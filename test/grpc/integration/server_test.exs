@@ -138,7 +138,7 @@ defmodule GRPC.Integration.ServerTest do
         {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
         assert reply.message == "Hello, Elixir"
 
-        {:ok, conn_pid} = :gun.open('localhost', port)
+        {:ok, conn_pid} = :gun.open(~c"localhost", port)
         stream_ref = :gun.get(conn_pid, "/status")
 
         assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
