@@ -1,9 +1,9 @@
-{options, _, _} = OptionParser.parse(System.argv(), strict: [rounds: :integer, concurrency: :integer, port: :integer])
+{options, _, _} = OptionParser.parse(System.argv(), strict: [rounds: :integer, concurrency: :integer, port: :integer, level: :string])
 rounds = Keyword.get(options, :rounds) || 20
 max_concurrency = System.schedulers_online()
 concurrency = Keyword.get(options, :concurrency) || max_concurrency
 port = Keyword.get(options, :port) || 0
-level = Keyword.get(options, :log_level) || "warn"
+level = Keyword.get(options, :level) || "warning"
 level = String.to_existing_atom(level)
 
 require Logger
