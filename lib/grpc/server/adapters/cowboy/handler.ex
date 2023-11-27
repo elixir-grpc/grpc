@@ -167,7 +167,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     {:ok, req, state}
   catch
     :exit, :timeout ->
-      Logger.warn("Timeout when reading full body")
+      Logger.warning("Timeout when reading full body")
       info({:handling_timeout, self()}, req, state)
   end
 
@@ -458,7 +458,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   defp extract_subtype("application/grpc-web-text+" <> rest), do: {:ok, rest}
 
   defp extract_subtype(type) do
-    Logger.warn("Got unknown content-type #{type}, please create an issue.")
+    Logger.warning("Got unknown content-type #{type}, please create an issue.")
     {:ok, "proto"}
   end
 
