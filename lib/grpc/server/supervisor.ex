@@ -108,7 +108,7 @@ defmodule GRPC.Server.Supervisor do
         {endpoint, endpoint.__meta__(:servers)}
       rescue
         FunctionClauseError ->
-          Logger.warn(
+          Logger.warning(
             "deprecated: servers as argument of GRPC.Server.Supervisor, please use GRPC.Endpoint"
           )
 
