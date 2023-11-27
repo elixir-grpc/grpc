@@ -75,10 +75,10 @@ defmodule GRPC.Integration.ClientInterceptorTest do
       assert %{stream: stream, request: ^req} = metadata
 
       assert %{
-        channel: ^channel,
-        service_name: ^service_name,
-        method_name: "SayHello"
-      } = stream
+               channel: ^channel,
+               service_name: ^service_name,
+               method_name: "SayHello"
+             } = stream
     end)
   end
 
