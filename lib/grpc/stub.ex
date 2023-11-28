@@ -41,6 +41,38 @@ defmodule GRPC.Stub do
   module exposing that service.  The following function types are generated:
 
   ### Unary
+
+  Unary RPCs are where the client sends a single request, and receives a single response, like a normal
+  function call. Unary functions take following shape
+
+      case Greeter.Stub.say_hello(channel, %Request{}, opts) do
+        {:ok, %Response{}} ->
+          # Received a response
+        {:ok, headers_map} ->
+          # Re
+      end
+
+  See the [Options](#Options) section below for available options
+
+
+
+  #  #  The actual function invoked when invoking an RPC function.
+  #
+  #  Returns
+  #
+  #    * Unary calls. `{:ok, reply} | {:ok, headers_map} | {:error, error}`
+  #    * Client streaming. A `GRPC.Client.Stream`
+  #    * Server streaming. `{:ok, Enumerable.t} | {:ok, Enumerable.t, trailers_map} | {:error, error}`
+  #
+  #  Options
+  #
+  #    * `:timeout` - request timeout. Default is 10s for unary calls and `:infinity` for
+  #      client or server streaming calls
+  #    * `:deadline` - when the request is timeout, will override timeout
+  #    * `:metadata` - a map, your custom metadata
+  #    * `:return_headers` - default is false. When it's true, a three elem tuple will be returned
+  #      with the last elem being a map of headers `%{headers: headers, trailers: trailers}`(unary) or
+  #      `%{headers: headers}`(server streaming)
   """
   alias GRPC.Channel
   @insecure_scheme "http"
@@ -118,7 +150,7 @@ defmodule GRPC.Stub do
       iex> GRPC.Stub.connect("localhost:50051", accepted_compressors: [GRPC.Compressor.Gzip])
       {:ok, channel}
 
-      iex> GRPC.Stub.connect("/paht/to/unix.sock")
+      iex> GRPC.Stub.connect("/path/to/unix.sock")
       {:ok, channel}
 
   ## Options
