@@ -347,11 +347,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     result =
       try do
         case do_call_rpc(server, path, stream) do
-          {:error, _} = err ->
-            err
-
-          _ ->
-            :ok
+          {:error, _} = err -> err
+          _ -> :ok
         end
       catch
         kind, e ->
@@ -361,14 +358,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       end
 
     case result do
-      {:error, %GRPC.RPCError{} = e} ->
-        exit({e, ""})
-
-      {:error, %{kind: kind}} ->
-        exit({:handle_error, kind})
-
-      other ->
-        other
+      {:error, %GRPC.RPCError{} = e} -> exit({e, ""})
+      :ok -> :ok
     end
   end
 
@@ -387,8 +378,11 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         GRPC.Server.send_trailers(stream, @default_trailers)
         {:ok, stream}
 
-      error ->
-        error
+      {:error, error = %GRPC.RPCError{message: nil, status: status}} ->
+        {:error, %{error | message: GRPC.Status.status_message(status)}}
+
+      {:error, error = %GRPC.RPCError{}} ->
+        {:error, error}
     end
   end
 
@@ -422,7 +416,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     :cowboy_req.reply(200, trailers, req)
   end
 
-  def exit_handler(pid, reason) do
+  defp exit_handler(pid, reason) do
     if Process.alive?(pid) do
       Process.exit(pid, reason)
     end

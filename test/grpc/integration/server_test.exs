@@ -60,6 +60,19 @@ defmodule GRPC.Integration.ServerTest do
       raise "unknown error(This is a test, please ignore it)"
     end
 
+    def say_hello(%{name: "handled error"}, _stream) do
+      %GRPC.RPCError{
+        status: GRPC.Status.unauthenticated(),
+        message: "Please authenticate"
+      }
+    end
+
+    def say_hello(%{name: "handled error without message"}, _stream) do
+      %GRPC.RPCError{
+        status: GRPC.Status.unauthenticated()
+      }
+    end
+
     def say_hello(_req, _stream) do
       raise GRPC.RPCError, status: GRPC.Status.unauthenticated(), message: "Please authenticate"
     end
@@ -169,6 +182,33 @@ defmodule GRPC.Integration.ServerTest do
       assert {:error,
               %GRPC.RPCError{message: "Internal Server Error", status: GRPC.Status.unknown()}} ==
                channel |> Helloworld.Greeter.Stub.say_hello(req)
+    end)
+  end
+
+  test "return errors for handled errors" do
+    run_server([HelloErrorServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      req = Helloworld.HelloRequest.new(name: "handled error")
+      {:error, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
+
+      assert %GRPC.RPCError{
+               status: GRPC.Status.unauthenticated(),
+               message: "Please authenticate"
+             } == reply
+    end)
+  end
+
+  test "return errors for handled errors with the default message of the status" do
+    run_server([HelloErrorServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      req = Helloworld.HelloRequest.new(name: "handled error without message")
+      {:error, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
+
+      assert %GRPC.RPCError{
+               status: GRPC.Status.unauthenticated(),
+               message:
+                 "The request does not have valid authentication credentials for the operation"
+             } == reply
     end)
   end
 
