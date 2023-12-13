@@ -148,11 +148,12 @@ jobs:
       - run: mix dialyzer --format short
 
   check_release:
-    runs-on: ubuntu-20.04
+    runs-on: 'non-prod-scorebet-org-runner'
     name: Check release
     needs: check_format
     steps:
       - uses: actions/checkout@v3
+      - uses: jfrog/setup-jfrog-cli@v3
       - uses: erlef/setup-beam@v1
         with:
           otp-version: 24
@@ -169,3 +170,11 @@ jobs:
         run: mix hex.build
       - name: Generate docs
         run: mix docs
+      - name: Upload to artifactory
+        run: |
+          jf rt build-add-git hex-build 1.0.1
+          jf rt build-collect-env hex-build 1.0.1
+          jf rt build-add-dependencies hex-build 1.0.1 ./deps/
+          jf rt u ./_build/dev/lib/todos/ebin/todos.app
+          hex-virt/test-app/todos.app --build-name hex-build --build-number 1.0.1
+          jf rt build-publish hex-build 1.0.1 --access-token=${{ secrets.GA_DEBIAN }} --url=https://thescore.jfrog.io/artifactory/
