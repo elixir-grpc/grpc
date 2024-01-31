@@ -142,6 +142,10 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     sync_call(pid, :get_headers)
   end
 
+  def get_sock(pid) do
+    sync_call(pid, :get_sock)
+  end
+
   def get_peer(pid) do
     sync_call(pid, :get_peer)
   end
@@ -210,6 +214,12 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   def info({:get_headers, ref, pid}, req, state) do
     headers = :cowboy_req.headers(req)
     send(pid, {ref, headers})
+    {:ok, req, state}
+  end
+
+  def info({:get_sock, ref, pid}, req, state) do
+    sock = :cowboy_req.sock(req)
+    send(pid, {ref, sock})
     {:ok, req, state}
   end
 

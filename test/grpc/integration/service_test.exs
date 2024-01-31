@@ -167,4 +167,18 @@ defmodule GRPC.Integration.ServiceTest do
       end
     )
   end
+
+  test "server address from client stream works" do
+    run_server(FeatureServer, fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      point1 = Routeguide.Point.new(latitude: 400_000_000, longitude: -750_000_000)
+      point2 = Routeguide.Point.new(latitude: 420_000_000, longitude: -730_000_000)
+      stream = channel |> Routeguide.RouteGuide.Stub.record_route()
+      GRPC.Stub.send_request(stream, point1)
+      GRPC.Stub.send_request(stream, point2, end_stream: true)
+      {:ok, res} = GRPC.Stub.recv(stream)
+      assert %Routeguide.RouteSummary{point_count: 2} = res
+      assert {"localhost", _} = GRPC.Stream.get_server_address(stream)
+    end)
+  end
 end

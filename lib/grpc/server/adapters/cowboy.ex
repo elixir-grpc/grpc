@@ -174,6 +174,10 @@ defmodule GRPC.Server.Adapters.Cowboy do
     Handler.get_headers(pid)
   end
 
+  def get_sock(%{pid: pid}) do
+    Handler.get_sock(pid)
+  end
+
   def get_peer(%{pid: pid}) do
     Handler.get_peer(pid)
   end

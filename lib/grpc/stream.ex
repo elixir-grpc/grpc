@@ -14,4 +14,17 @@ defmodule GRPC.Stream do
     headers = adapter.get_headers(stream.payload)
     GRPC.Transport.HTTP2.decode_headers(headers)
   end
+
+  @doc """
+  Get server address (hostname and port)
+  """
+  @spec get_server_address(GRPC.Server.Stream.t() | GRPC.Client.Stream.t()) :: tuple()
+  def get_server_address(%GRPC.Server.Stream{adapter: adapter} = stream) do
+    {host, port} = adapter.get_sock(stream.payload)
+    {to_string(:inet_parse.ntoa(host)), port}
+  end
+
+  def get_server_address(%GRPC.Client.Stream{channel: channel}) do
+    {channel.host, channel.port}
+  end
 end

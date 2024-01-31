@@ -27,6 +27,17 @@ defmodule GRPC.Integration.ServerTest do
       Helloworld.HelloReply.new(message: "Hello, #{name}")
     end
 
+    def say_hello(%{name: "get sock"}, stream) do
+      {ip, _port} = stream.adapter.get_sock(stream.payload)
+      name = to_string(:inet_parse.ntoa(ip))
+      Helloworld.HelloReply.new(message: "Hello, #{name}")
+    end
+
+    def say_hello(%{name: "get address"}, stream) do
+      {host, _port} = GRPC.Stream.get_server_address(stream)
+      Helloworld.HelloReply.new(message: "Hello, #{host}")
+    end
+
     def say_hello(%{name: "get peer"}, stream) do
       {ip, _port} = stream.adapter.get_peer(stream.payload)
       name = to_string(:inet_parse.ntoa(ip))
@@ -229,6 +240,26 @@ defmodule GRPC.Integration.ServerTest do
         channel |> Helloworld.Greeter.Stub.check_headers(Helloworld.HeaderRequest.new())
 
       assert reply.authorization == token
+    end)
+  end
+
+  test "get address returns correct IP address" do
+    run_server([HelloServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+
+      req = Helloworld.HelloRequest.new(name: "get address")
+      {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
+      assert reply.message == "Hello, 127.0.0.1"
+    end)
+  end
+
+  test "get sock returns correct IP address" do
+    run_server([HelloServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+
+      req = Helloworld.HelloRequest.new(name: "get sock")
+      {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
+      assert reply.message == "Hello, 127.0.0.1"
     end)
   end
 
