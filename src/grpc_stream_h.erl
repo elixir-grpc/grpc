@@ -33,7 +33,7 @@
 	-> {[{spawn, pid(), timeout()}], #state{}}.
 init(StreamID, Req=#{ref := Ref}, Opts) ->
 	Env = maps:get(env, Opts, #{}),
-	Middlewares = maps:get(middlewares, Opts, [cowboy_router, cowboy_handler]),
+	Middlewares = maps:get(middlewares, Opts, ['Elixir.GRPC.Server.Adapters.Cowboy.Router', cowboy_handler]),
 	Shutdown = maps:get(shutdown_timeout, Opts, 5000),
 	Pid = proc_lib:spawn_link(?MODULE, request_process, [Req, Env, Middlewares]),
 	Expect = expect(Req),

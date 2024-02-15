@@ -44,13 +44,16 @@ defmodule GRPC.Stub do
   # 10 seconds
   @default_timeout 10000
 
-  @type rpc_return ::
+  @type receive_data_return ::
           {:ok, struct()}
           | {:ok, struct(), map()}
-          | GRPC.Client.Stream.t()
           | {:ok, Enumerable.t()}
           | {:ok, Enumerable.t(), map()}
+
+  @type rpc_return ::
+          GRPC.Client.Stream.t()
           | {:error, GRPC.RPCError.t()}
+          | receive_data_return
 
   require Logger
 
@@ -407,203 +410,7 @@ defmodule GRPC.Stub do
         opts
       end
 
-    interface[:recv].(stream, opts)
-  end
-
-  @doc false
-  def do_recv(%{server_stream: true, channel: channel, payload: payload} = stream, opts) do
-    case recv_headers(channel.adapter, channel.adapter_payload, payload, opts) do
-      {:ok, headers, is_fin} ->
-        res_enum =
-          case is_fin do
-            :fin -> []
-            :nofin -> response_stream(stream, opts)
-          end
-
-        if opts[:return_headers] do
-          {:ok, res_enum, %{headers: headers}}
-        else
-          {:ok, res_enum}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  def do_recv(
-        %{payload: payload, channel: channel} = stream,
-        opts
-      ) do
-    with {:ok, headers, _is_fin} <-
-           recv_headers(channel.adapter, channel.adapter_payload, payload, opts),
-         {:ok, body, trailers} <-
-           recv_body(channel.adapter, channel.adapter_payload, payload, opts) do
-      {status, msg} = parse_response(stream, headers, body, trailers)
-
-      if opts[:return_headers] do
-        {status, msg, %{headers: headers, trailers: trailers}}
-      else
-        {status, msg}
-      end
-    else
-      {:error, _} = error ->
-        error
-    end
-  end
-
-  defp recv_headers(adapter, conn_payload, stream_payload, opts) do
-    case adapter.recv_headers(conn_payload, stream_payload, opts) do
-      {:ok, headers, is_fin} ->
-        {:ok, GRPC.Transport.HTTP2.decode_headers(headers), is_fin}
-
-      other ->
-        other
-    end
-  end
-
-  defp recv_body(adapter, conn_payload, stream_payload, opts) do
-    recv_body(adapter, conn_payload, stream_payload, "", opts)
-  end
-
-  defp recv_body(adapter, conn_payload, stream_payload, acc, opts) do
-    case adapter.recv_data_or_trailers(conn_payload, stream_payload, opts) do
-      {:data, data} ->
-        recv_body(adapter, conn_payload, stream_payload, <<acc::binary, data::binary>>, opts)
-
-      {:trailers, trailers} ->
-        {:ok, acc, GRPC.Transport.HTTP2.decode_headers(trailers)}
-
-      err ->
-        err
-    end
-  end
-
-  defp parse_response(
-         %{response_mod: res_mod, codec: codec, accepted_compressors: accepted_compressors},
-         headers,
-         body,
-         trailers
-       ) do
-    case parse_trailers(trailers) do
-      :ok ->
-        compressor =
-          case headers do
-            %{"grpc-encoding" => encoding} ->
-              Enum.find(accepted_compressors, nil, fn c -> c.name() == encoding end)
-
-            _ ->
-              nil
-          end
-
-        body =
-          if function_exported?(codec, :unpack_from_channel, 1) do
-            codec.unpack_from_channel(body)
-          else
-            body
-          end
-
-        case GRPC.Message.from_data(%{compressor: compressor}, body) do
-          {:ok, msg} ->
-            {:ok, codec.decode(msg, res_mod)}
-
-          err ->
-            err
-        end
-
-      error ->
-        error
-    end
-  end
-
-  defp parse_trailers(trailers) do
-    status = String.to_integer(trailers["grpc-status"])
-
-    if status == GRPC.Status.ok() do
-      :ok
-    else
-      {:error, %GRPC.RPCError{status: status, message: trailers["grpc-message"]}}
-    end
-  end
-
-  defp response_stream(
-         %{
-           channel: %{adapter: adapter, adapter_payload: ap},
-           response_mod: res_mod,
-           codec: codec,
-           payload: payload
-         },
-         opts
-       ) do
-    state = %{
-      adapter: adapter,
-      adapter_payload: ap,
-      payload: payload,
-      buffer: <<>>,
-      fin: false,
-      need_more: true,
-      opts: opts,
-      response_mod: res_mod,
-      codec: codec
-    }
-
-    Stream.unfold(state, fn s -> read_stream(s) end)
-  end
-
-  defp read_stream(%{buffer: <<>>, fin: true, fin_resp: nil}), do: nil
-
-  defp read_stream(%{buffer: <<>>, fin: true, fin_resp: fin_resp} = s),
-    do: {fin_resp, Map.put(s, :fin_resp, nil)}
-
-  defp read_stream(
-         %{
-           adapter: adapter,
-           adapter_payload: ap,
-           payload: payload,
-           buffer: buffer,
-           need_more: true,
-           opts: opts
-         } = s
-       ) do
-    case adapter.recv_data_or_trailers(ap, payload, opts) do
-      {:data, data} ->
-        buffer = buffer <> data
-        new_s = s |> Map.put(:need_more, false) |> Map.put(:buffer, buffer)
-        read_stream(new_s)
-
-      {:trailers, trailers} ->
-        trailers = GRPC.Transport.HTTP2.decode_headers(trailers)
-
-        case parse_trailers(trailers) do
-          :ok ->
-            fin_resp =
-              if opts[:return_headers] do
-                {:trailers, trailers}
-              end
-
-            new_s = s |> Map.put(:fin, true) |> Map.put(:fin_resp, fin_resp)
-            read_stream(new_s)
-
-          error ->
-            {error, %{buffer: <<>>, fin: true, fin_resp: nil}}
-        end
-
-      error = {:error, _} ->
-        {error, %{buffer: <<>>, fin: true, fin_resp: nil}}
-    end
-  end
-
-  defp read_stream(%{buffer: buffer, need_more: false, response_mod: res_mod, codec: codec} = s) do
-    case GRPC.Message.get_message(buffer) do
-      # TODO
-      {{_, message}, rest} ->
-        reply = codec.decode(message, res_mod)
-        new_s = Map.put(s, :buffer, rest)
-        {{:ok, reply}, new_s}
-
-      _ ->
-        read_stream(Map.put(s, :need_more, true))
-    end
+    interface[:receive_data].(stream, opts)
   end
 
   @valid_req_opts [

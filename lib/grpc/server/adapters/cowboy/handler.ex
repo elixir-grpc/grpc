@@ -18,7 +18,14 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
              opts :: keyword()}
         ) :: {:cowboy_loop, map(), map()}
   def init(req, {endpoint, {_name, server}, route, opts} = state) do
-    with {:ok, codec} <- find_codec(req, server),
+    http_method =
+      req
+      |> :cowboy_req.method()
+      |> String.downcase()
+      |> String.to_existing_atom()
+
+    with {:ok, sub_type, content_type} <- find_content_type_subtype(req),
+         {:ok, codec} <- find_codec(sub_type, content_type, server),
          {:ok, compressor} <- find_compressor(req, server) do
       stream = %GRPC.Server.Stream{
         server: server,
@@ -27,7 +34,9 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         payload: %{pid: self()},
         local: opts[:local],
         codec: codec,
-        compressor: compressor
+        http_method: http_method,
+        compressor: compressor,
+        http_transcode: transcode?(req)
       }
 
       pid = spawn_link(__MODULE__, :call_rpc, [server, route, stream])
@@ -51,28 +60,39 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       {:error, error} ->
         Logger.error(fn -> inspect(error) end)
         trailers = HTTP2.server_trailers(error.status, error.message)
-        req = send_error_trailers(req, trailers)
+        req = send_error_trailers(req, 200, trailers)
         {:ok, req, state}
     end
   end
 
-  defp find_codec(req, server) do
-    req_content_type = :cowboy_req.header("content-type", req)
-
-    with {:ok, subtype} <- extract_subtype(req_content_type),
-         codec when not is_nil(codec) <-
-           Enum.find(server.__meta__(:codecs), nil, fn c -> c.name() == subtype end) do
+  defp find_codec(subtype, content_type, server) do
+    if codec = Enum.find(server.__meta__(:codecs), nil, fn c -> c.name() == subtype end) do
       {:ok, codec}
     else
-      err ->
-        Logger.error(fn -> inspect(err) end)
-
-        {:error,
-         RPCError.exception(
-           status: :unimplemented,
-           message: "No codec registered for content-type #{req_content_type}"
-         )}
+      {:error,
+       RPCError.exception(
+         status: :unimplemented,
+         message: "No codec registered for content-type #{content_type}"
+       )}
     end
+  end
+
+  defp find_content_type_subtype(req) do
+    content_type =
+      case :cowboy_req.header("content-type", req) do
+        :undefined ->
+          :cowboy_req.header("accept", req)
+
+        content_type ->
+          content_type
+      end
+
+    find_subtype(content_type)
+  end
+
+  defp find_subtype(content_type) do
+    {:ok, subtype} = extract_subtype(content_type)
+    {:ok, subtype, content_type}
   end
 
   defp find_compressor(req, server) do
@@ -265,7 +285,9 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       msg =
         "A unaccepted encoding #{compressor.name()} is set, valid are: #{:cowboy_req.header("grpc-accept-encoding", req)}"
 
-      req = send_error(req, state, msg)
+      error = RPCError.exception(status: :internal, message: msg)
+      req = send_error(req, error, state, :rpc_error)
+
       {:stop, req, state}
     else
       case GRPC.Message.to_data(data, compressor: compressor, codec: opts[:codec]) do
@@ -275,7 +297,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           {:ok, req, state}
 
         {:error, msg} ->
-          req = send_error(req, state, msg)
+          error = RPCError.exception(status: :internal, message: msg)
+          req = send_error(req, error, state, :rpc_error)
           {:stop, req, state}
       end
     end
@@ -302,11 +325,10 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     {:ok, req, state}
   end
 
-  def info({:handling_timeout, _}, req, state = %{pid: pid}) do
+  def info({:handling_timeout, _}, req, state) do
     error = %RPCError{status: GRPC.Status.deadline_exceeded(), message: "Deadline expired"}
-    trailers = HTTP2.server_trailers(error.status, error.message)
-    exit_handler(pid, :timeout)
-    req = send_error_trailers(req, trailers)
+    req = send_error(req, error, state, :timeout)
+
     {:stop, req, state}
   end
 
@@ -328,27 +350,26 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
   # expected error raised from user to return error immediately
   def info({:EXIT, pid, {%RPCError{} = error, _stacktrace}}, req, state = %{pid: pid}) do
-    trailers = HTTP2.server_trailers(error.status, error.message)
-    exit_handler(pid, :rpc_error)
-    req = send_error_trailers(req, trailers)
+    req = send_error(req, error, state, :rpc_error)
     {:stop, req, state}
   end
 
   # unknown error raised from rpc
-  def info({:EXIT, pid, {:handle_error, _kind}}, req, state = %{pid: pid}) do
+  def info({:EXIT, pid, {:handle_error, _kind}} = err, req, state = %{pid: pid}) do
+    Logger.warn("3. #{inspect(state)} #{inspect(err)}")
+
     error = %RPCError{status: GRPC.Status.unknown(), message: "Internal Server Error"}
-    trailers = HTTP2.server_trailers(error.status, error.message)
-    exit_handler(pid, :error)
-    req = send_error_trailers(req, trailers)
+    req = send_error(req, error, state, :error)
+
     {:stop, req, state}
   end
 
   def info({:EXIT, pid, {reason, stacktrace}}, req, state = %{pid: pid}) do
     Logger.error(Exception.format(:error, reason, stacktrace))
+
     error = %RPCError{status: GRPC.Status.unknown(), message: "Internal Server Error"}
-    trailers = HTTP2.server_trailers(error.status, error.message)
-    exit_handler(pid, reason)
-    req = send_error_trailers(req, trailers)
+    req = send_error(req, error, state, reason)
+
     {:stop, req, state}
   end
 
@@ -390,8 +411,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  defp do_call_rpc(server, path, stream) do
-    result = server.__call_rpc__(path, stream)
+  defp do_call_rpc(server, path, %{http_method: http_method} = stream) do
+    result = server.__call_rpc__(path, http_method, stream)
 
     case result do
       {:ok, stream, response} ->
@@ -432,12 +453,12 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     :cowboy_req.stream_reply(200, req)
   end
 
-  defp send_error_trailers(%{has_sent_resp: _} = req, trailers) do
+  defp send_error_trailers(%{has_sent_resp: _} = req, _, trailers) do
     :cowboy_req.stream_trailers(trailers, req)
   end
 
-  defp send_error_trailers(req, trailers) do
-    :cowboy_req.reply(200, trailers, req)
+  defp send_error_trailers(req, status, trailers) do
+    :cowboy_req.reply(status, trailers, req)
   end
 
   def exit_handler(pid, reason) do
@@ -481,12 +502,25 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     {:ok, "proto"}
   end
 
-  defp send_error(req, %{pid: pid}, msg) do
-    error = RPCError.exception(status: :internal, message: msg)
+  defp transcode?(%{version: "HTTP/1.1"}), do: true
+
+  defp transcode?(req) do
+    case find_content_type_subtype(req) do
+      {:ok, "json", _} -> true
+      _ -> false
+    end
+  end
+
+  defp send_error(req, error, state, reason) do
     trailers = HTTP2.server_trailers(error.status, error.message)
 
-    exit_handler(pid, :rpc_error)
-    send_error_trailers(req, trailers)
+    status = if transcode?(req), do: GRPC.Status.http_code(error.status), else: 200
+
+    if pid = Map.get(state, :pid) do
+      exit_handler(pid, reason)
+    end
+
+    send_error_trailers(req, status, trailers)
   end
 
   # Similar with cowboy's read_body, but we need to receive the message

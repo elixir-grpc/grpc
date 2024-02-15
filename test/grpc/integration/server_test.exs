@@ -9,6 +9,7 @@ defmodule GRPC.Integration.ServerTest do
     end
   end
 
+<<<<<<< HEAD
   defmodule FeatureTranscodeServer do
     use GRPC.Server,
       service: RouteguideTranscode.RouteGuide.Service,
@@ -16,6 +17,75 @@ defmodule GRPC.Integration.ServerTest do
 
     def get_feature(point, _stream) do
       Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
+=======
+  defmodule TranscodeErrorServer do
+    use GRPC.Server,
+      service: Transcode.Messaging.Service,
+      http_transcode: true
+
+    def get_message(req, _stream) do
+      status = String.to_existing_atom(req.name)
+
+      raise GRPC.RPCError, status: status
+    end
+  end
+
+  defmodule TranscodeServer do
+    use GRPC.Server,
+      service: Transcode.Messaging.Service,
+      http_transcode: true
+
+    def get_message(msg_request, _stream) do
+      Transcode.Message.new(name: msg_request.name, text: "get_message")
+    end
+
+    def stream_messages(msg_request, stream) do
+      Enum.each(1..5, fn i ->
+        msg =
+          Transcode.Message.new(
+            name: msg_request.name,
+            text: "#{i}"
+          )
+
+        GRPC.Server.send_reply(stream, msg)
+      end)
+    end
+
+    def create_message(msg, _stream) do
+      msg
+    end
+
+    def create_message_with_nested_body(msg_request, _stream) do
+      Transcode.Message.new(
+        name: msg_request.message.name,
+        text: "create_message_with_nested_body"
+      )
+    end
+
+    def get_message_with_field_path(msg_request, _) do
+      msg_request.message
+    end
+
+    def get_message_with_response_body(msg_request, _) do
+      Transcode.MessageOut.new(
+        response:
+          Transcode.Message.new(
+            name: msg_request.name,
+            text: "get_message_with_response_body"
+          )
+      )
+    end
+
+    def get_message_with_query(msg_request, _stream) do
+      Transcode.Message.new(name: msg_request.name, text: "get_message_with_query")
+    end
+
+    def get_message_with_subpath_query(msg_request, _stream) do
+      Transcode.Message.new(
+        name: msg_request.message.name,
+        text: "get_message_with_subpath_query"
+      )
+>>>>>>> drowz/grpc_transcoding
     end
   end
 
@@ -253,14 +323,98 @@ defmodule GRPC.Integration.ServerTest do
   end
 
   describe "http/json transcode" do
+<<<<<<< HEAD
     test "can transcode path params" do
       run_server([FeatureTranscodeServer], fn port ->
         latitude = 10
         longitude = 20
+=======
+    test "grpc method can be called using json when http_transcode == true" do
+      run_server([TranscodeServer], fn port ->
+        name = "direct_call"
 
         {:ok, conn_pid} = :gun.open('localhost', port)
 
         stream_ref =
+          :gun.post(
+            conn_pid,
+            "/transcode.Messaging/GetMessage",
+            [
+              {"content-type", "application/json"}
+            ],
+            Jason.encode!(%{"name" => name})
+          )
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+
+        assert %{"text" => "get_message"} = Jason.decode!(body)
+      end)
+    end
+
+    test "should map grpc error codes to http status" do
+      run_server([TranscodeErrorServer], fn port ->
+        for {code_name, status} <- [
+              {"cancelled", 400},
+              {"unknown", 500},
+              {"invalid_argument", 400},
+              {"deadline_exceeded", 504},
+              {"not_found", 404},
+              {"already_exists", 409},
+              {"permission_denied", 403},
+              {"resource_exhausted", 429},
+              {"failed_precondition", 412},
+              {"aborted", 409},
+              {"out_of_range", 400},
+              {"unimplemented", 501},
+              {"internal", 500},
+              {"unavailable", 503},
+              {"data_loss", 500},
+              {"unauthenticated", 401}
+            ] do
+          {:ok, conn_pid} = :gun.open('localhost', port)
+
+          stream_ref =
+            :gun.get(
+              conn_pid,
+              "/v1/messages/#{code_name}",
+              [
+                {"accept", "application/json"}
+              ]
+            )
+
+          assert_receive {:gun_response, ^conn_pid, ^stream_ref, :fin, ^status, _headers}
+        end
+      end)
+    end
+
+    test "accept: application/json can be used with get requests" do
+      run_server([TranscodeServer], fn port ->
+        name = "direct_call"
+
+        {:ok, conn_pid} = :gun.open('localhost', port)
+
+        stream_ref =
+          :gun.get(conn_pid, "/v1/messages/#{name}", [
+            {"accept", "application/json"}
+          ])
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+
+        assert %{"text" => "get_message"} = Jason.decode!(body)
+      end)
+    end
+
+    test "can transcode path params" do
+      run_server([TranscodeServer], fn port ->
+        name = "foo"
+>>>>>>> drowz/grpc_transcoding
+
+        {:ok, conn_pid} = :gun.open('localhost', port)
+
+        stream_ref =
+<<<<<<< HEAD
           :gun.get(conn_pid, "/v1/feature/#{latitude}/#{longitude}", [
             {"content-type", "application/json"}
           ])
@@ -274,6 +428,160 @@ defmodule GRPC.Integration.ServerTest do
                } = Jason.decode!(body)
 
         assert name == "#{latitude},#{longitude}"
+=======
+          :gun.get(conn_pid, "/v1/messages/#{name}", [
+            {"content-type", "application/json"}
+          ])
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+
+        assert %{
+                 "name" => ^name,
+                 "text" => _name
+               } = Jason.decode!(body)
+      end)
+    end
+
+    test "can transcode query params" do
+      run_server([TranscodeServer], fn port ->
+        {:ok, conn_pid} = :gun.open('localhost', port)
+
+        stream_ref =
+          :gun.get(conn_pid, "/v1/messages?name=some_name", [
+            {"content-type", "application/json"}
+          ])
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+
+        assert %{
+                 "name" => "some_name",
+                 "text" => "get_message_with_query"
+               } = Jason.decode!(body)
+      end)
+    end
+
+    test "can map request body using HttpRule.body and response using HttpRule.response_body" do
+      run_server([TranscodeServer], fn port ->
+        {:ok, conn_pid} = :gun.open('localhost', port)
+
+        body = %{"name" => "name"}
+
+        stream_ref =
+          :gun.post(
+            conn_pid,
+            "/v1/messages/nested",
+            [
+              {"content-type", "application/json"}
+            ],
+            Jason.encode!(body)
+          )
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+
+        assert %{"name" => "name", "text" => "create_message_with_nested_body"} =
+                 Jason.decode!(body)
+      end)
+    end
+
+    test "can map response body using HttpRule.response_body" do
+      run_server([TranscodeServer], fn port ->
+        {:ok, conn_pid} = :gun.open('localhost', port)
+        name = "response_body_mapper"
+
+        stream_ref =
+          :gun.get(
+            conn_pid,
+            "/v1/messages/response_body/#{name}",
+            [
+              {"content-type", "application/json"}
+            ]
+          )
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+
+        assert %{"name" => ^name, "text" => "get_message_with_response_body"} =
+                 Jason.decode!(body)
+      end)
+    end
+
+    test "can send streaming responses" do
+      run_server([TranscodeServer], fn port ->
+        {:ok, conn_pid} = :gun.open('localhost', port)
+
+        stream_ref =
+          :gun.get(
+            conn_pid,
+            "/v1/messages/stream/stream_test",
+            [
+              {"content-type", "application/json"}
+            ]
+          )
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+        msgs = String.split(body, "\n", trim: true)
+        assert length(msgs) == 5
+      end)
+    end
+
+    test "can use field paths in requests" do
+      run_server([TranscodeServer], fn port ->
+        {:ok, conn_pid} = :gun.open('localhost', port)
+        name = "fieldpath"
+
+        stream_ref =
+          :gun.get(
+            conn_pid,
+            "/v1/messages/fieldpath/#{name}",
+            [
+              {"content-type", "application/json"}
+            ]
+          )
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+        assert %{"name" => ^name} = Jason.decode!(body)
+      end)
+    end
+
+    test "service methods can have the same path but different methods in http rule option" do
+      run_server([TranscodeServer], fn port ->
+        {:ok, conn_pid} = :gun.open('localhost', port)
+
+        payload = %{"name" => "foo", "text" => "bar"}
+
+        stream_ref =
+          :gun.post(
+            conn_pid,
+            "/v1/messages",
+            [
+              {"content-type", "application/json"}
+            ],
+            Jason.encode!(payload)
+          )
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+
+        assert ^payload = Jason.decode!(body)
+
+        stream_ref =
+          :gun.get(conn_pid, "/v1/messages?name=another_name", [
+            {"content-type", "application/json"}
+          ])
+
+        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
+
+        assert %{
+                 "name" => "another_name",
+                 "text" => "get_message_with_query"
+               } = Jason.decode!(body)
+>>>>>>> drowz/grpc_transcoding
       end)
     end
   end

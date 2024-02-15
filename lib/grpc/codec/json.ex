@@ -38,6 +38,7 @@ defmodule GRPC.Codec.JSON do
   ```
 
   """
+
   def encode(struct) do
     Protobuf.JSON.encode!(struct)
   end
