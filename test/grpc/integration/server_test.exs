@@ -9,15 +9,6 @@ defmodule GRPC.Integration.ServerTest do
     end
   end
 
-<<<<<<< HEAD
-  defmodule FeatureTranscodeServer do
-    use GRPC.Server,
-      service: RouteguideTranscode.RouteGuide.Service,
-      http_transcode: true
-
-    def get_feature(point, _stream) do
-      Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
-=======
   defmodule TranscodeErrorServer do
     use GRPC.Server,
       service: Transcode.Messaging.Service,
@@ -85,7 +76,6 @@ defmodule GRPC.Integration.ServerTest do
         name: msg_request.message.name,
         text: "get_message_with_subpath_query"
       )
->>>>>>> drowz/grpc_transcoding
     end
   end
 
@@ -323,12 +313,6 @@ defmodule GRPC.Integration.ServerTest do
   end
 
   describe "http/json transcode" do
-<<<<<<< HEAD
-    test "can transcode path params" do
-      run_server([FeatureTranscodeServer], fn port ->
-        latitude = 10
-        longitude = 20
-=======
     test "grpc method can be called using json when http_transcode == true" do
       run_server([TranscodeServer], fn port ->
         name = "direct_call"
@@ -409,26 +393,10 @@ defmodule GRPC.Integration.ServerTest do
     test "can transcode path params" do
       run_server([TranscodeServer], fn port ->
         name = "foo"
->>>>>>> drowz/grpc_transcoding
 
         {:ok, conn_pid} = :gun.open('localhost', port)
 
         stream_ref =
-<<<<<<< HEAD
-          :gun.get(conn_pid, "/v1/feature/#{latitude}/#{longitude}", [
-            {"content-type", "application/json"}
-          ])
-
-        assert_received {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
-        assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
-
-        assert %{
-                 "location" => %{"latitude" => ^latitude, "longitude" => ^longitude},
-                 "name" => name
-               } = Jason.decode!(body)
-
-        assert name == "#{latitude},#{longitude}"
-=======
           :gun.get(conn_pid, "/v1/messages/#{name}", [
             {"content-type", "application/json"}
           ])
@@ -581,7 +549,6 @@ defmodule GRPC.Integration.ServerTest do
                  "name" => "another_name",
                  "text" => "get_message_with_query"
                } = Jason.decode!(body)
->>>>>>> drowz/grpc_transcoding
       end)
     end
   end

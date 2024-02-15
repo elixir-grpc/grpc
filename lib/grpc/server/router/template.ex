@@ -94,6 +94,9 @@ defmodule GRPC.Server.Router.Template do
   end
 
   defp field_path(identifier) do
-    String.to_atom(identifier)
+    String.to_existing_atom(identifier)
+  rescue
+    _e ->
+      String.to_atom(identifier)
   end
 end

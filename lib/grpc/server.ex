@@ -30,7 +30,7 @@ defmodule GRPC.Server do
   if it's streaming. If a reply is streaming, you need to call `send_reply/2` to send
   replies one by one instead of returning reply in the end.
 
-  ## gRPC http/json transcoding
+  ## gRPC HTTP/JSON transcoding
 
   Transcoding can be enabled by using the option `http_transcode: true`:
 
@@ -131,18 +131,14 @@ defmodule GRPC.Server do
       codecs = if http_transcode, do: [GRPC.Codec.JSON | codecs], else: codecs
 
       routes =
-        for {name, _, _, options} = rpc <- service_mod.__rpc_calls__, reduce: [] do
+        for {name, _, _, options} = rpc <- service_mod.__rpc_calls__,
+            http_transcode and Map.has_key?(options, :http),
+            reduce: [] do
           acc ->
             path = "/#{service_name}/#{name}"
-
-            acc =
-              if http_transcode and Map.has_key?(options, :http) do
-                %{value: http_rule} = GRPC.Service.rpc_options(rpc, :http)
-                route = Macro.escape({:http_transcode, Router.build_route(http_rule)})
-                [route | acc]
-              else
-                acc
-              end
+            %{value: http_rule} = GRPC.Service.rpc_options(rpc, :http)
+            route = Macro.escape({:http_transcode, Router.build_route(http_rule)})
+            acc = [route | acc]
 
             [{:grpc, path} | acc]
         end

@@ -119,15 +119,15 @@ defmodule GRPC.Protoc.CLI do
     end
   end
 
-  defp parse_param("include_docs=" <> value, ctx) do
-    case value do
-      "true" ->
-        %Context{ctx | include_docs?: true}
+  # defp parse_param("include_docs=" <> value, ctx) do
+  #   case value do
+  #     "true" ->
+  #       %Context{ctx | include_docs?: true}
 
-      other ->
-        raise "invalid value for include_docs option, expected \"true\", got: #{inspect(other)}"
-    end
-  end
+  #     other ->
+  #       raise "invalid value for include_docs option, expected \"true\", got: #{inspect(other)}"
+  #   end
+  # end
 
   defp parse_param(_unknown, ctx) do
     ctx

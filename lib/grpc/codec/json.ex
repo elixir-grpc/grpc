@@ -16,9 +16,7 @@ defmodule GRPC.Codec.JSON do
   """
   @behaviour GRPC.Codec
 
-  def name() do
-    "json"
-  end
+  def name(), do: "json"
 
   @doc """
   Encodes a struct using the Protobuf.JSON.encode!/1 function.
@@ -64,17 +62,7 @@ defmodule GRPC.Codec.JSON do
   binary_data |> GRPC.Codec.JSON.decode(__MODULE__)
   ```
   """
-  def decode(<<>>, _module) do
-    %{}
-  end
+  def decode(<<>>, _module), do: %{}
 
-  def decode(binary, _module) do
-    if jason = load_jason() do
-      jason.decode!(binary)
-    else
-      raise "`:jason` library not loaded"
-    end
-  end
-
-  defp load_jason, do: Code.ensure_loaded?(Jason) and Jason
+  def decode(binary, _module), do: Jason.decode!(binary)
 end
