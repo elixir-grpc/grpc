@@ -32,9 +32,6 @@ defmodule GRPC.Mixfile do
     ]
   end
 
-  # Configuration for the OTP application
-  #
-  # Type "mix help compile.app" for more information
   def application do
     [extra_applications: [:logger]]
   end
@@ -49,7 +46,7 @@ defmodule GRPC.Mixfile do
       # This is the same as :gun 2.0.0-rc.2,
       # but we can't depend on an RC for releases
       {:gun, "~> 2.0.1", hex: :grpc_gun},
-      {:jason, "~> 1.0", optional: true},
+      {:jason, ">= 0.0.0", optional: true},
       {:cowlib, "~> 2.11"},
       {:protobuf, github: "elixir-protobuf/protobuf", branch: "main"},
       {:ex_doc, "~> 0.28.0", only: :dev},

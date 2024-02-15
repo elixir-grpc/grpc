@@ -141,7 +141,7 @@ defmodule GRPC.Integration.ServerTest do
         {:ok, conn_pid} = :gun.open('localhost', port)
         stream_ref = :gun.get(conn_pid, "/status")
 
-        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert_received {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
       end,
       0,
       adapter_opts: [status_handler: status_handler]
@@ -265,7 +265,7 @@ defmodule GRPC.Integration.ServerTest do
             {"content-type", "application/json"}
           ])
 
-        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert_received {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
         assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
 
         assert %{
