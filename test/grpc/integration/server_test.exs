@@ -585,7 +585,7 @@ defmodule GRPC.Integration.ServerTest do
       run_server([HelloServer], fn port ->
         {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
-        req = Helloworld.HelloRequest.new(name: "delay", duration: 1000)
+        req = %Helloworld.HelloRequest{name: "delay", duration: 1000}
 
         assert {:ok, _} = Helloworld.Greeter.Stub.say_hello(channel, req)
       end)
@@ -619,7 +619,8 @@ defmodule GRPC.Integration.ServerTest do
       assert %{
                stream: %GRPC.Client.Stream{
                  rpc:
-                   {"say_hello", {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false}}
+                   {"say_hello", {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false},
+                    %{}}
                }
              } = metadata
 
@@ -630,7 +631,8 @@ defmodule GRPC.Integration.ServerTest do
       assert %{
                stream: %GRPC.Client.Stream{
                  rpc:
-                   {"say_hello", {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false}}
+                   {"say_hello", {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false},
+                    %{}}
                }
              } = metadata
 
@@ -707,7 +709,8 @@ defmodule GRPC.Integration.ServerTest do
       assert %{
                stream: %GRPC.Client.Stream{
                  rpc:
-                   {"say_hello", {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false}}
+                   {"say_hello", {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false},
+                    %{}}
                }
              } = metadata
 
@@ -718,7 +721,8 @@ defmodule GRPC.Integration.ServerTest do
       assert %{
                stream: %GRPC.Client.Stream{
                  rpc:
-                   {"say_hello", {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false}}
+                   {"say_hello", {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false},
+                    %{}}
                }
              } = metadata
 
