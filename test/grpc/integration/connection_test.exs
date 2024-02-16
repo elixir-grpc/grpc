@@ -34,7 +34,7 @@ defmodule GRPC.Integration.ConnectionTest do
     {:ok, _, port} = GRPC.Server.start(server, 0, cred: cred)
 
     try do
-      point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
+      point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
 
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", cred: cred)
       assert {:ok, _} = Routeguide.RouteGuide.Stub.get_feature(channel, point)

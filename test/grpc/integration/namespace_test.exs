@@ -12,9 +12,9 @@ defmodule GRPC.Integration.NamespaceTest do
   test "it works when outer namespace is same with inner's" do
     run_server(FeatureServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-      point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
+      point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
       {:ok, feature} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
-      assert feature == Routeguide.Feature.new(location: point, name: "409146138,-746188906")
+      assert feature == %Routeguide.Feature{location: point, name: "409146138,-746188906"}
     end)
   end
 end

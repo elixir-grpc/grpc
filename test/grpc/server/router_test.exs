@@ -156,6 +156,6 @@ defmodule GRPC.Server.RouterTest do
   end
 
   defp build_simple_rule(method, pattern) do
-    Google.Api.HttpRule.new(pattern: {method, pattern})
+    %Google.Api.HttpRule{pattern: {method, pattern}}
   end
 end

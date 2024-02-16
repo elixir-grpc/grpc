@@ -6,7 +6,7 @@ defmodule GRPC.Integration.EndpointTest do
     use GRPC.Server, service: Helloworld.Greeter.Service
 
     def say_hello(req, _stream) do
-      Helloworld.HelloReply.new(message: "Hello, #{req.name}")
+      %Helloworld.HelloReply{message: "Hello, #{req.name}"}
     end
   end
 

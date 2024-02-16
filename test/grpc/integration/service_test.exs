@@ -87,8 +87,8 @@ defmodule GRPC.Integration.ServiceTest do
   test "client streaming RPC works" do
     run_server(FeatureServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-      point1 = Routeguide.Point.new(latitude: 400_000_000, longitude: -750_000_000)
-      point2 = Routeguide.Point.new(latitude: 420_000_000, longitude: -730_000_000)
+      point1 = %Routeguide.Point{latitude: 400_000_000, longitude: -750_000_000}
+      point2 = %Routeguide.Point{latitude: 420_000_000, longitude: -730_000_000}
       stream = channel |> Routeguide.RouteGuide.Stub.record_route()
       GRPC.Stub.send_request(stream, point1)
       GRPC.Stub.send_request(stream, point2, end_stream: true)
@@ -105,8 +105,8 @@ defmodule GRPC.Integration.ServiceTest do
       task =
         Task.async(fn ->
           Enum.each(1..6, fn i ->
-            point = Routeguide.Point.new(latitude: 0, longitude: rem(i, 3) + 1)
-            note = Routeguide.RouteNote.new(location: point, message: "Message #{i}")
+            point = %Routeguide.Point{latitude: 0, longitude: rem(i, 3) + 1}
+            note = %Routeguide.RouteNote{location: point, message: "Message #{i}"}
             opts = if i == 6, do: [end_stream: true], else: []
             GRPC.Stub.send_request(stream, note, opts)
           end)
@@ -137,8 +137,8 @@ defmodule GRPC.Integration.ServiceTest do
         task =
           Task.async(fn ->
             Enum.each(1..5, fn i ->
-              point = Routeguide.Point.new(latitude: 0, longitude: rem(i, 3) + 1)
-              note = Routeguide.RouteNote.new(location: point, message: "Message #{i}")
+              point = %Routeguide.Point{latitude: 0, longitude: rem(i, 3) + 1}
+              note = %Routeguide.RouteNote{location: point, message: "Message #{i}"}
               # note that we don't send end of stream yet here
               GRPC.Stub.send_request(stream, note, [])
             end)
@@ -155,8 +155,8 @@ defmodule GRPC.Integration.ServiceTest do
             assert "Reply: " <> _msg = note.message
 
             if note.message == "Reply: Message 5" do
-              point = Routeguide.Point.new(latitude: 0, longitude: rem(6, 3) + 1)
-              note = Routeguide.RouteNote.new(location: point, message: "Message #{6}")
+              point = %Routeguide.Point{latitude: 0, longitude: rem(6, 3) + 1}
+              note = %Routeguide.RouteNote{location: point, message: "Message #{6}"}
               GRPC.Stub.send_request(stream, note, end_stream: true)
             end
 

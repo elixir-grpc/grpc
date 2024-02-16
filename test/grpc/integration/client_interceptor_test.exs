@@ -7,7 +7,7 @@ defmodule GRPC.Integration.ClientInterceptorTest do
     def say_hello(req, stream) do
       headers = GRPC.Stream.get_headers(stream)
       label = headers["x-test-label"]
-      Helloworld.HelloReply.new(message: "Hello, #{req.name} #{label}")
+      %Helloworld.HelloReply{message: "Hello, #{req.name} #{label}"}
     end
   end
 

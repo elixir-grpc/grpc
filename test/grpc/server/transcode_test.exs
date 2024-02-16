@@ -3,7 +3,7 @@ defmodule GRPC.TranscodeTest do
   alias GRPC.Server.Transcode
 
   test "map_request/5 with HttpRule.body: '*'" do
-    rule = Google.Api.HttpRule.new(body: "*")
+    rule = %Google.Api.HttpRule{body: "*"}
     request_body = %{"latitude" => 1, "longitude" => 2}
     bindings = %{}
     qs = "latitude=10&longitude=20"
@@ -13,7 +13,7 @@ defmodule GRPC.TranscodeTest do
   end
 
   test "map_request/5 with empty HttpRule.body" do
-    rule = Google.Api.HttpRule.new(body: "")
+    rule = %Google.Api.HttpRule{body: ""}
     request_body = %{"latitude" => 10, "longitude" => 20}
     bindings = %{"latitude" => 5}
     qs = "longitude=6"
@@ -23,7 +23,7 @@ defmodule GRPC.TranscodeTest do
   end
 
   test "map_request/2 with HttpRule.body: <field>" do
-    rule = Google.Api.HttpRule.new(body: "location")
+    rule = %Google.Api.HttpRule{body: "location"}
     request_body = %{"latitude" => 1, "longitude" => 2}
     bindings = %{"name" => "test"}
 
@@ -35,14 +35,14 @@ defmodule GRPC.TranscodeTest do
   end
 
   test "map_response_body/2 with empty HttpRule.response_body" do
-    rule = Google.Api.HttpRule.new(response_body: "")
+    rule = %Google.Api.HttpRule{response_body: ""}
     request_body = %{message: %{a: "b"}}
 
     assert request_body == Transcode.map_response_body(rule, request_body)
   end
 
   test "map_response_body/2 with HttpRule.response_body: <field>" do
-    rule = Google.Api.HttpRule.new(response_body: "message")
+    rule = %Google.Api.HttpRule{response_body: "message"}
     request_body = %{message: %{a: "b"}}
 
     assert %{a: "b"} == Transcode.map_response_body(rule, request_body)
