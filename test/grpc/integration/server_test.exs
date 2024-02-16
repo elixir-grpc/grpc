@@ -208,6 +208,7 @@ defmodule GRPC.Integration.ServerTest do
 
         {:ok, conn_pid} = :gun.open(~c"localhost", port)
         stream_ref = :gun.get(conn_pid, "/status")
+        Process.sleep(100)
 
         assert_received {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
       end,
