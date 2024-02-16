@@ -7,15 +7,15 @@ defmodule GRPC.Endpoint do
       defmodule Your.Endpoint do
         use GRPC.Endpoint
 
-        intercept GRPC.Logger.Server, level: :info
+        intercept GRPC.Server.Interceptors.Logger, level: :info
         intercept Other.Interceptor
         run HelloServer, interceptors: [HelloHaltInterceptor]
         run FeatureServer
       end
 
   Interceptors will be run around your rpc calls from top to bottom. And you can even set
-  interceptors for some of servers. In the above example, `[GRPC.Logger.Server, Other.Interceptor,
-  HelloHaltInterceptor]` will be run for `HelloServer`, and `[GRPC.Logger.Server, Other.Interceptor]`
+  interceptors for some of servers. In the above example, `[GRPC.Server.Interceptors.Logger, Other.Interceptor,
+  HelloHaltInterceptor]` will be run for `HelloServer`, and `[GRPC.Server.Interceptors.Logger, Other.Interceptor]`
   will be run for `FeatureServer`.
   """
 

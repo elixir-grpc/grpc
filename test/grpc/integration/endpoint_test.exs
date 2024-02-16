@@ -13,7 +13,7 @@ defmodule GRPC.Integration.EndpointTest do
   defmodule HelloEndpoint do
     use GRPC.Endpoint
 
-    intercept GRPC.Logger.Server, level: :info, accepted_comparators: [:lt, :eq, :gt]
+    intercept GRPC.Server.Interceptors.Logger
     run HelloServer
   end
 
@@ -21,7 +21,7 @@ defmodule GRPC.Integration.EndpointTest do
     def init(_), do: []
 
     def call(_, stream, _next, _) do
-      {:ok, stream, Helloworld.HelloReply.new(message: "Hello by interceptor")}
+      {:ok, stream, %Helloworld.HelloReply{message: "Hello by interceptor"}}
     end
   end
 
@@ -29,7 +29,7 @@ defmodule GRPC.Integration.EndpointTest do
     use GRPC.Server, service: Routeguide.RouteGuide.Service
 
     def get_feature(point, _stream) do
-      Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
+      %Routeguide.Feature{location: point, name: "#{point.latitude},#{point.longitude}"}
     end
 
     def list_features(rectangle, stream) do
@@ -40,25 +40,25 @@ defmodule GRPC.Integration.EndpointTest do
     end
 
     def record_route(enum, _stream) do
-      Routeguide.RouteSummary.new(point_count: Enum.count(enum))
+      %Routeguide.RouteSummary{point_count: Enum.count(enum)}
     end
 
     defp simple_feature(point) do
-      Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
+      %Routeguide.Feature{location: point, name: "#{point.latitude},#{point.longitude}"}
     end
   end
 
   defmodule FeatureEndpoint do
     use GRPC.Endpoint
 
-    intercept GRPC.Logger.Server, accepted_comparators: [:lt, :eq, :gt]
+    intercept GRPC.Server.Interceptors.Logger
     run FeatureServer
   end
 
   defmodule FeatureAndHelloHaltEndpoint do
     use GRPC.Endpoint
 
-    intercept GRPC.Logger.Server, accepted_comparators: [:lt, :eq, :gt]
+    intercept GRPC.Server.Interceptors.Logger
     run HelloServer, interceptors: [HelloHaltInterceptor]
     run FeatureServer
   end
@@ -68,7 +68,7 @@ defmodule GRPC.Integration.EndpointTest do
              run_endpoint(HelloEndpoint, fn port ->
                {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
-               req = Helloworld.HelloRequest.new(name: "Elixir")
+               req = %Helloworld.HelloRequest{name: "Elixir"}
                {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
                assert reply.message == "Hello, Elixir"
              end)
@@ -80,10 +80,10 @@ defmodule GRPC.Integration.EndpointTest do
              run_endpoint(FeatureEndpoint, fn port ->
                {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
-               point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
-               rect = Routeguide.Rectangle.new(hi: point, lo: point)
+               point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
+               rect = %Routeguide.Rectangle{hi: point, lo: point}
                {:ok, enum} = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
-               loc = Routeguide.Feature.new(location: point, name: "409146138,-746188906")
+               loc = %Routeguide.Feature{location: point, name: "409146138,-746188906"}
                assert [{:ok, loc}, {:ok, loc}] == Enum.to_list(enum)
              end)
            end) =~ "GRPC.Integration.EndpointTest.FeatureServer.list_features"
@@ -94,13 +94,13 @@ defmodule GRPC.Integration.EndpointTest do
              run_endpoint(FeatureEndpoint, fn port ->
                {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
-               point0 = Routeguide.Point.new(latitude: 0, longitude: -1)
-               point1 = Routeguide.Point.new(latitude: 1, longitude: 1)
+               point0 = %Routeguide.Point{latitude: 0, longitude: -1}
+               point1 = %Routeguide.Point{latitude: 1, longitude: 1}
                stream = channel |> Routeguide.RouteGuide.Stub.record_route()
                GRPC.Stub.send_request(stream, point0)
                GRPC.Stub.send_request(stream, point1, end_stream: true)
                reply = GRPC.Stub.recv(stream)
-               assert {:ok, Routeguide.RouteSummary.new(point_count: 2)} == reply
+               assert {:ok, %Routeguide.RouteSummary{point_count: 2}} == reply
              end)
            end) =~ "GRPC.Integration.EndpointTest.FeatureServer.record_route"
   end
@@ -110,13 +110,13 @@ defmodule GRPC.Integration.EndpointTest do
              run_endpoint(FeatureAndHelloHaltEndpoint, fn port ->
                {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
-               point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
+               point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
                {:ok, feature} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
 
                assert feature ==
-                        Routeguide.Feature.new(location: point, name: "409146138,-746188906")
+                        %Routeguide.Feature{location: point, name: "409146138,-746188906"}
 
-               req = Helloworld.HelloRequest.new(name: "Elixir")
+               req = %Helloworld.HelloRequest{name: "Elixir"}
                {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
                assert reply.message == "Hello by interceptor"
              end)

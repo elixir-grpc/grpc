@@ -97,7 +97,7 @@ defmodule GRPC.Transport.HTTP2 do
   end
 
   defp append_encoding(headers, grpc_encoding) when is_binary(grpc_encoding) do
-    Logger.warn("grpc_encoding option is deprecated, please use compressor.")
+    Logger.warning("grpc_encoding option is deprecated, please use compressor.")
     [{"grpc-encoding", grpc_encoding} | headers]
   end
 

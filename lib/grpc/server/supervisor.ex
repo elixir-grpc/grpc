@@ -20,6 +20,14 @@ defmodule GRPC.Server.Supervisor do
 
   use Supervisor
 
+  # TODO: remove this type after support Elixir 1.14 exclusively.
+  @type sup_flags() :: %{
+          strategy: Supervisor.strategy(),
+          intensity: non_neg_integer(),
+          period: pos_integer(),
+          auto_shutdown: Supervisor.auto_shutdown()
+        }
+
   @default_adapter GRPC.Server.Adapters.Cowboy
   require Logger
 
@@ -37,8 +45,8 @@ defmodule GRPC.Server.Supervisor do
   Either `:endpoint` or `:servers` must be present, but not both.
   """
   @spec init(tuple()) :: no_return
-  @spec init(keyword()) :: {:ok, {:supervisor.sup_flags(), [:supervisor.child_spec()]}} | :ignore
-  def init(opts \\ [])
+  @spec init(keyword()) :: {:ok, {sup_flags(), [Supervisor.child_spec()]}} | :ignore
+  def init(opts)
 
   def init(opts) when is_tuple(opts) do
     raise ArgumentError,
@@ -100,7 +108,7 @@ defmodule GRPC.Server.Supervisor do
         {endpoint, endpoint.__meta__(:servers)}
       rescue
         FunctionClauseError ->
-          Logger.warn(
+          Logger.warning(
             "deprecated: servers as argument of GRPC.Server.Supervisor, please use GRPC.Endpoint"
           )
 

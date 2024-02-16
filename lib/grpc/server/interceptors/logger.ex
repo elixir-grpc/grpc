@@ -1,4 +1,4 @@
-defmodule GRPC.Logger.Server do
+defmodule GRPC.Server.Interceptors.Logger do
   @moduledoc """
   Print log around server rpc calls, like:
 
@@ -8,49 +8,31 @@ defmodule GRPC.Logger.Server do
   ## Options
 
     * `:level` - the desired log level. Defaults to `:info`
-    * `:accepted_comparators` - a list with the accepted `Logger.compare_levels(configured_level, Logger.level())` results.
-    Defaults to `[:lt, :eq]`
 
   ## Usage
 
       defmodule Your.Endpoint do
         use GRPC.Endpoint
 
-        intercept GRPC.Logger.Server, level: :info
-      end
-
-      defmodule Your.Endpoint do
-        use GRPC.Endpoint
-
-        # logs on :info and higher priority (warn, error...)
-        intercept GRPC.Logger.Server, level: :info, accepted_comparators: [:lt, :eq]
-      end
-
-      defmodule Your.Endpoint do
-        use GRPC.Endpoint
-
-        # logs only on :error
-        intercept GRPC.Logger.Server, level: :error, accepted_comparators: [:eq]
+        intercept GRPC.Server.Interceptors.Logger, level: :info
       end
   """
 
   require Logger
 
-  @behaviour GRPC.ServerInterceptor
+  @behaviour GRPC.Server.Interceptor
 
   @impl true
   def init(opts) do
     level = Keyword.get(opts, :level) || :info
-    accepted_comparators = Keyword.get(opts, :accepted_comparators) || [:lt, :eq]
-    [level: level, accepted_comparators: accepted_comparators]
+    [level: level]
   end
 
   @impl true
   def call(req, stream, next, opts) do
     level = Keyword.fetch!(opts, :level)
-    accepted_comparators = opts[:accepted_comparators]
 
-    if Logger.compare_levels(level, Logger.level()) in accepted_comparators do
+    if Logger.compare_levels(level, Logger.level()) != :lt do
       Logger.metadata(request_id: Logger.metadata()[:request_id] || stream.request_id)
 
       Logger.log(level, "Handled by #{inspect(stream.server)}.#{elem(stream.rpc, 0)}")

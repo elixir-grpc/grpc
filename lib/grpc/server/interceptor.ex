@@ -2,6 +2,9 @@ defmodule GRPC.ServerInterceptor do
   @moduledoc """
   Interceptor on server side. See `GRPC.Endpoint`.
   """
+
+  @moduledoc deprecated: "Use `GRPC.Server.Interceptor` instead"
+
   alias GRPC.Server.Stream
 
   @type options :: any()
@@ -13,16 +16,17 @@ defmodule GRPC.ServerInterceptor do
   @callback call(GRPC.Server.rpc_req(), stream :: Stream.t(), next, options) :: rpc_return
 end
 
-defmodule GRPC.ClientInterceptor do
+defmodule GRPC.Server.Interceptor do
   @moduledoc """
-  Interceptor on client side. See `GRPC.Stub.connect/2`.
+  Interceptor on server side. See `GRPC.Endpoint`.
   """
-  alias GRPC.Client.Stream
+  alias GRPC.Server.Stream
 
   @type options :: any()
-  @type req :: struct() | nil
-  @type next :: (Stream.t(), req -> GRPC.Stub.rpc_return())
+  @type rpc_return ::
+          {:ok, Stream.t(), struct()} | {:ok, Stream.t()} | {:error, GRPC.RPCError.t()}
+  @type next :: (GRPC.Server.rpc_req(), Stream.t() -> rpc_return())
 
   @callback init(options) :: options
-  @callback call(stream :: Stream.t(), req, next, options) :: GRPC.Stub.rpc_return()
+  @callback call(GRPC.Server.rpc_req(), stream :: Stream.t(), next, options) :: rpc_return
 end

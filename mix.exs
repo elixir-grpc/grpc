@@ -1,13 +1,13 @@
 defmodule GRPC.Mixfile do
   use Mix.Project
 
-  @version "0.5.0"
+  @version "0.7.0"
 
   def project do
     [
       app: :grpc,
       version: @version,
-      elixir: "~> 1.11",
+      elixir: "~> 1.12",
       elixirc_paths: elixirc_paths(Mix.env()),
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
@@ -22,7 +22,7 @@ defmodule GRPC.Mixfile do
         source_url: "https://github.com/elixir-grpc/grpc"
       ],
       dialyzer: [
-        plt_add_deps: :apps_tree,
+        plt_add_deps: :app_tree,
         plt_add_apps: [:iex, :mix, :ex_unit],
         list_unused_filters: true,
         plt_file: {:no_warn, "_build/#{Mix.env()}/plts/dialyzer.plt"}
@@ -41,28 +41,29 @@ defmodule GRPC.Mixfile do
 
   defp deps do
     [
-      {:cowboy, "~> 2.9"},
-      # This is the same as :gun 2.0.0-rc.2,
-      # but we can't depend on an RC for releases
-      {:gun, "~> 2.0.1", hex: :grpc_gun},
+      {:cowboy, "~> 2.10"},
+      {:gun, "~> 2.0"},
       {:jason, ">= 0.0.0", optional: true},
-      {:cowlib, "~> 2.11"},
+      {:cowlib, "~> 2.12"},
       {:protobuf, "~> 0.11"},
       {:protobuf_generate, "~> 0.1.1", only: [:dev, :test]},
-      {:ex_doc, "~> 0.28.0", only: :dev},
-      {:dialyxir, "~> 1.1.0", only: [:dev, :test], runtime: false},
       {:googleapis,
        github: "googleapis/googleapis",
        branch: "master",
        app: false,
        compile: false,
-       only: [:dev, :test]}
+       only: [:dev, :test]},
+      {:mint, "~> 1.5"},
+      {:ex_doc, "~> 0.29", only: :dev},
+      {:dialyxir, "~> 1.4.0", only: [:dev, :test], runtime: false},
+      {:ex_parameterized, "~> 1.3.7", only: :test},
+      {:telemetry, "~> 1.0"}
     ]
   end
 
   defp package do
     %{
-      maintainers: ["Bing Han"],
+      maintainers: ["Bing Han", "Paulo Valente"],
       licenses: ["Apache 2"],
       links: %{"GitHub" => "https://github.com/elixir-grpc/grpc"},
       files: ~w(mix.exs README.md lib src config LICENSE .formatter.exs)
@@ -99,6 +100,7 @@ defmodule GRPC.Mixfile do
     proto_src = Mix.Project.deps_paths().googleapis
 
     protoc!("--include-path=#{proto_src}", "./test/support", [
+      "google/protobuf/descriptor.proto",
       "google/api/http.proto",
       "google/api/annotations.proto"
     ])

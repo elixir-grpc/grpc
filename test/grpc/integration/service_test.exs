@@ -24,12 +24,12 @@ defmodule GRPC.Integration.ServiceTest do
 
       fake_num = length(points)
 
-      Routeguide.RouteSummary.new(
+      %Routeguide.RouteSummary{
         point_count: fake_num,
         feature_count: fake_num,
         distance: fake_num,
         elapsed_time: fake_num
-      )
+      }
     end
 
     def route_chat(req_enum, stream) do
@@ -56,30 +56,30 @@ defmodule GRPC.Integration.ServiceTest do
     end
 
     defp simple_feature(point) do
-      Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
+      %Routeguide.Feature{location: point, name: "#{point.latitude},#{point.longitude}"}
     end
   end
 
   test "unary RPC works" do
     run_server(FeatureServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-      point = Routeguide.Point.new(latitude: 409_146_138, longitude: -746_188_906)
+      point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
       {:ok, feature} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
-      assert feature == Routeguide.Feature.new(location: point, name: "409146138,-746188906")
+      assert feature == %Routeguide.Feature{location: point, name: "409146138,-746188906"}
     end)
   end
 
   test "server streaming RPC works" do
     run_server(FeatureServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-      low = Routeguide.Point.new(latitude: 400_000_000, longitude: -750_000_000)
-      high = Routeguide.Point.new(latitude: 420_000_000, longitude: -730_000_000)
-      rect = Routeguide.Rectangle.new(lo: low, hi: high)
+      low = %Routeguide.Point{latitude: 400_000_000, longitude: -750_000_000}
+      high = %Routeguide.Point{latitude: 420_000_000, longitude: -730_000_000}
+      rect = %Routeguide.Rectangle{lo: low, hi: high}
       {:ok, stream} = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
 
       assert Enum.to_list(stream) == [
-               {:ok, Routeguide.Feature.new(location: low, name: "400000000,-750000000")},
-               {:ok, Routeguide.Feature.new(location: high, name: "420000000,-730000000")}
+               {:ok, %Routeguide.Feature{location: low, name: "400000000,-750000000"}},
+               {:ok, %Routeguide.Feature{location: high, name: "420000000,-730000000"}}
              ]
     end)
   end

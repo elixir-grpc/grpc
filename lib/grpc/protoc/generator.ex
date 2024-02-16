@@ -16,10 +16,10 @@ defmodule GRPC.Protoc.Generator do
       Enum.map(module_definitions, fn {mod_name, content} ->
         file_name = Macro.underscore(mod_name) <> ".svc.ex"
 
-        Google.Protobuf.Compiler.CodeGeneratorResponse.File.new(
+        %Google.Protobuf.Compiler.CodeGeneratorResponse.File{
           name: file_name,
           content: content
-        )
+        }
       end)
     else
       # desc.name is the filename, ending in ".proto".
@@ -32,10 +32,10 @@ defmodule GRPC.Protoc.Generator do
         |> Generator.Util.format()
 
       [
-        Google.Protobuf.Compiler.CodeGeneratorResponse.File.new(
+        %Google.Protobuf.Compiler.CodeGeneratorResponse.File{
           name: file_name,
           content: content
-        )
+        }
       ]
     end
   end

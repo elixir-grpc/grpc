@@ -5,7 +5,7 @@ defmodule GRPC.Integration.NamespaceTest do
     use GRPC.Server, service: Routeguide.RouteGuide.Service
 
     def get_feature(point, _stream) do
-      Routeguide.Feature.new(location: point, name: "#{point.latitude},#{point.longitude}")
+      %Routeguide.Feature{location: point, name: "#{point.latitude},#{point.longitude}"}
     end
   end
 

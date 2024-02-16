@@ -7,8 +7,8 @@ defmodule GRPC.Client.Stream do
     * `:channel`           - `GRPC.Channel`, the channel established by client
     * `:payload`           - data used by adapter in a request
     * `:path`              - the request path to sent
-    * `request_mod`        - the request module, or nil for untyped protocols
-    * `response_mod`       - the response module, or nil for untyped protocols
+    * `:request_mod`       - the request module, or nil for untyped protocols
+    * `:response_mod`      - the response module, or nil for untyped protocols
     * `:codec`             - the codec
     * `:req_stream`        - indicates if request is streaming
     * `:res_stream`        - indicates if reply is streaming
