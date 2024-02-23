@@ -1,12 +1,13 @@
 defmodule GRPC.Client.Adapters.Mint.ConnectionProcess.State do
   @moduledoc false
 
-  defstruct [:conn, :parent, requests: %{}, request_stream_queue: :queue.new()]
+  defstruct [:conn, :parent, :ping_ref, requests: %{}, request_stream_queue: :queue.new()]
 
   @type t :: %__MODULE__{
           conn: Mint.HTTP.t(),
           requests: map(),
-          parent: pid()
+          parent: pid(),
+          ping_ref: Mint.Types.request_ref() | nil
         }
 
   def new(conn, parent) do
@@ -15,6 +16,10 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess.State do
 
   def update_conn(state, conn) do
     %{state | conn: conn}
+  end
+
+  def set_ping_ref(state, ref) do
+    %{state | ping_ref: ref}
   end
 
   def update_request_stream_queue(state, queue) do
