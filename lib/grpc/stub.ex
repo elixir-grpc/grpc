@@ -77,7 +77,7 @@ defmodule GRPC.Stub do
         }
 
         if req_stream do
-          def unquote(String.to_atom(func_name))(channel, opts \\ []) do
+          def unquote(String.to_atom(func_name))(%GRPC.Channel{} = channel, opts \\ []) do
             GRPC.Stub.call(
               unquote(service_mod),
               unquote(Macro.escape(rpc)),
@@ -87,7 +87,7 @@ defmodule GRPC.Stub do
             )
           end
         else
-          def unquote(String.to_atom(func_name))(channel, request, opts \\ []) do
+          def unquote(String.to_atom(func_name))(%GRPC.Channel{} = channel, request, opts \\ []) do
             GRPC.Stub.call(
               unquote(service_mod),
               unquote(Macro.escape(rpc)),
