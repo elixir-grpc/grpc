@@ -53,7 +53,7 @@ defmodule GRPC.Codec.JSON do
 
   Raises:
 
-  Raises an error if the :jason library is not loaded.
+  Raises an error if the Jason library is not loaded.
 
   Example:
 
