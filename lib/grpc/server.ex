@@ -152,7 +152,7 @@ defmodule GRPC.Server do
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
 
-        def __call_rpc__(unquote(path), unquote(:post), stream) do
+        def __call_rpc__(unquote(path), :post, stream) do
           GRPC.Server.call(
             unquote(service_mod),
             %{
