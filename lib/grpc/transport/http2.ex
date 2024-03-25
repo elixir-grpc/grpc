@@ -12,8 +12,9 @@ defmodule GRPC.Transport.HTTP2 do
     %{"content-type" => "application/grpc-web-#{codec.name()}"}
   end
 
-  def server_headers(%{codec: GRPC.Codec.JSON = codec}) do
-    %{"content-type" => "application/#{codec.name()}"}
+  # TO-DO: refactor when we add a GRPC.Codec.content_type callback
+  def server_headers(%{codec: GRPC.Codec.JSON}) do
+    %{"content-type" => "application/json"}
   end
 
   def server_headers(%{codec: codec}) do
