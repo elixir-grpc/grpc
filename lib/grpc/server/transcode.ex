@@ -1,6 +1,7 @@
 defmodule GRPC.Server.Transcode do
   @moduledoc false
-  alias GRPC.Server.Router.{Query, FieldPath}
+  alias GRPC.Server.Router.Query
+  alias GRPC.Server.Router.FieldPath
 
   @type t :: map()
   # The request mapping follow the following rules:
