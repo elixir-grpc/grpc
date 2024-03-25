@@ -68,6 +68,14 @@ defmodule GRPC.Integration.StubTest do
     end)
   end
 
+  test "invalid channel function clause error" do
+    req = Helloworld.HelloRequest.new(name: "GRPC")
+
+    assert_raise FunctionClauseError, ~r/Helloworld.Greeter.Stub.say_hello/, fn ->
+      Helloworld.Greeter.Stub.say_hello(nil, req)
+    end
+  end
+
   test "returns error when timeout" do
     run_server(SlowServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
