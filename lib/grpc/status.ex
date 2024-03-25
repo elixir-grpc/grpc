@@ -186,6 +186,25 @@ defmodule GRPC.Status do
   def code_name(15), do: "DataLoss"
   def code_name(16), do: "Unauthenticated"
 
+  @spec http_code(t()) :: t()
+  def http_code(0), do: 200
+  def http_code(1), do: 400
+  def http_code(2), do: 500
+  def http_code(3), do: 400
+  def http_code(4), do: 504
+  def http_code(5), do: 404
+  def http_code(6), do: 409
+  def http_code(7), do: 403
+  def http_code(8), do: 429
+  def http_code(9), do: 412
+  def http_code(10), do: 409
+  def http_code(11), do: 400
+  def http_code(12), do: 501
+  def http_code(13), do: 500
+  def http_code(14), do: 503
+  def http_code(15), do: 500
+  def http_code(16), do: 401
+
   @spec status_message(t()) :: String.t() | nil
   def status_message(0), do: nil
   def status_message(1), do: "The operation was cancelled (typically by the caller)"

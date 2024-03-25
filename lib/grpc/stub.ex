@@ -62,7 +62,8 @@ defmodule GRPC.Stub do
       service_mod = opts[:service]
       service_name = service_mod.__meta__(:name)
 
-      Enum.each(service_mod.__rpc_calls__, fn {name, {_, req_stream}, {_, res_stream}} = rpc ->
+      Enum.each(service_mod.__rpc_calls__, fn {name, {_, req_stream}, {_, res_stream}, _options} =
+                                                rpc ->
         func_name = name |> to_string |> Macro.underscore()
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
@@ -237,7 +238,7 @@ defmodule GRPC.Stub do
   #      with the last elem being a map of headers `%{headers: headers, trailers: trailers}`(unary) or
   #      `%{headers: headers}`(server streaming)
   def call(_service_mod, rpc, %{channel: channel} = stream, request, opts) do
-    {_, {req_mod, req_stream}, {res_mod, response_stream}} = rpc
+    {_, {req_mod, req_stream}, {res_mod, response_stream}, _rpc_options} = rpc
 
     stream = %{stream | request_mod: req_mod, response_mod: res_mod}
 

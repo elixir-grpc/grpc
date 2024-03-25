@@ -23,7 +23,7 @@ defmodule GRPC.Integration.CodecTest do
       codecs: [GRPC.Codec.Proto, GRPC.Codec.Erlpack, GRPC.Codec.WebText]
 
     def say_hello(req, _stream) do
-      Helloworld.HelloReply.new(message: "Hello, #{req.name}")
+      %Helloworld.HelloReply{message: "Hello, #{req.name}"}
     end
   end
 
@@ -35,7 +35,7 @@ defmodule GRPC.Integration.CodecTest do
     run_server(HelloServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       name = "Mairbek"
-      req = Helloworld.HelloRequest.new(name: name)
+      req = %Helloworld.HelloRequest{name: name}
 
       for codec <- [GRPC.Codec.Erlpack, GRPC.Codec.WebText, GRPC.Codec.Proto] do
         {:ok, reply} = HelloStub.say_hello(channel, req, codec: codec)
@@ -56,7 +56,7 @@ defmodule GRPC.Integration.CodecTest do
     run_server(HelloServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       name = "Mairbek"
-      req = Helloworld.HelloRequest.new(name: name)
+      req = %Helloworld.HelloRequest{name: name}
 
       for {expected_content_type, codec} <- [
             {"grpc-web-text", GRPC.Codec.WebText},

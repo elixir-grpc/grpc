@@ -7,7 +7,7 @@ defmodule GRPC.Integration.ClientInterceptorTest do
     def say_hello(req, stream) do
       headers = GRPC.Stream.get_headers(stream)
       label = headers["x-test-label"]
-      Helloworld.HelloReply.new(message: "Hello, #{req.name} #{label}")
+      %Helloworld.HelloReply{message: "Hello, #{req.name} #{label}"}
     end
   end
 
@@ -67,7 +67,7 @@ defmodule GRPC.Integration.ClientInterceptorTest do
           ]
         )
 
-      req = Helloworld.HelloRequest.new(name: "Elixir")
+      req = %Helloworld.HelloRequest{name: "Elixir"}
       {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
       assert reply.message == "Hello, Elixir one two"
 
@@ -111,7 +111,7 @@ defmodule GRPC.Integration.ClientInterceptorTest do
             ]
           )
 
-        req = Helloworld.HelloRequest.new(name: "Elixir")
+        req = %Helloworld.HelloRequest{name: "Elixir"}
 
         try do
           Helloworld.Greeter.Stub.say_hello(channel, req)
