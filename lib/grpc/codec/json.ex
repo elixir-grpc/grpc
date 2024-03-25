@@ -12,7 +12,6 @@ defmodule GRPC.Codec.JSON do
   - `decode/2`: Decodes binary data into a map using the Jason library.
 
   This module requires the Jason dependency.
-
   """
   @behaviour GRPC.Codec
 
