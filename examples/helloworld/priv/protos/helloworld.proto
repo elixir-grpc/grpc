@@ -5,6 +5,7 @@ option java_package = "io.grpc.examples.helloworld";
 option java_outer_classname = "HelloWorldProto";
 option objc_class_prefix = "HLW";
 
+import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 
 package helloworld;
@@ -12,7 +13,18 @@ package helloworld;
 // The greeting service definition.
 service Greeter {
   // Sends a greeting
-  rpc SayHello (HelloRequest) returns (HelloReply) {}
+  rpc SayHello (HelloRequest) returns (HelloReply) {
+    option (google.api.http) = {
+      get: "/v1/greeter/{name}"
+    };
+  }
+
+  rpc SayHelloFrom (HelloRequestFrom) returns (HelloReply) {
+    option (google.api.http) = {
+      post: "/v1/greeter"
+      body: "*"
+    };
+  }
 }
 
 // The request message containing the user's name.
@@ -20,8 +32,31 @@ message HelloRequest {
   string name = 1;
 }
 
+// HelloRequestFrom!
+message HelloRequestFrom {
+  // Name!
+  string name = 1;
+  // From!
+  string from = 2;
+}
+
 // The response message containing the greetings
 message HelloReply {
   string message = 1;
   google.protobuf.Timestamp today = 2;
+}
+
+service Messaging {
+  rpc GetMessage(GetMessageRequest) returns (Message) {
+    option (google.api.http) = {
+        get: "/v1/{name=messages/*}"
+    };
+  }
+}
+
+message GetMessageRequest {
+  string name = 1; // Mapped to URL path.
+}
+message Message {
+  string text = 1; // The resource content.
 }

@@ -29,11 +29,92 @@ defmodule GRPC.Server do
   The request will be a `Enumerable.t`(created by Elixir's `Stream`) of requests
   if it's streaming. If a reply is streaming, you need to call `send_reply/2` to send
   replies one by one instead of returning reply in the end.
+
+  ## gRPC HTTP/JSON transcoding
+
+  Transcoding can be enabled by using the option `http_transcode: true`:
+
+      defmodule Greeter.Service do
+        use GRPC.Service, name: "ping"
+
+        rpc :SayHello, Request, Reply
+        rpc :SayGoodbye, stream(Request), stream(Reply)
+      end
+
+      defmodule Greeter.Server do
+        use GRPC.Server, service: Greeter.Service, http_transcode: true
+
+        def say_hello(request, _stream) do
+          Reply.new(message: "Hello" <> request.name)
+        end
+
+        def say_goodbye(request_enum, stream) do
+          requests = Enum.map request_enum, &(&1)
+          GRPC.Server.send_reply(stream, reply1)
+          GRPC.Server.send_reply(stream, reply2)
+        end
+      end
+
+  With transcoding enabled gRPC methods can be used over HTTP/1 with JSON i.e
+
+      POST localhost/helloworld.Greeter/SayHello`
+      Content-Type: application/json
+      {
+        "message": "gRPC"
+      }
+
+      HTTP/1.1 200 OK
+      Content-Type: application/json
+      {
+        "message": "Hello gRPC"
+      }
+
+  By using  `option (google.api.http)` annotations in the `.proto` file the mapping between
+  HTTP/JSON to gRPC methods and parameters can be customized:
+
+      syntax = "proto3";
+
+      import "google/api/annotations.proto";
+      import "google/protobuf/timestamp.proto";
+
+      package helloworld;
+
+      service Greeter {
+        rpc SayHello (HelloRequest) returns (HelloReply) {
+          option (google.api.http) = {
+            get: "/v1/greeter/{name}"
+          };
+        }
+      }
+
+      message HelloRequest {
+        string name = 1;
+      }
+
+      message HelloReply {
+        string message = 1;
+      }
+
+  In addition to the `POST localhost/helloworld.Greeter/SayHello` route in the previous examples
+  this creates an additional route: `GET localhost/v1/greeter/:name`
+
+      GET localhost/v1/greeter/gRPC
+      Accept: application/json
+
+      HTTP/1.1 200 OK
+      Content-Type: application/json
+      {
+        "message": "Hello gRPC"
+      }
+
+  For more comprehensive documentation on annotation usage in `.proto` files [see](https://cloud.google.com/endpoints/docs/grpc/transcoding)
   """
 
   require Logger
 
   alias GRPC.RPCError
+  alias GRPC.Server.Router
+  alias GRPC.Server.Transcode
 
   @type rpc_req :: struct | Enumerable.t()
   @type rpc_return :: struct | any
@@ -43,15 +124,35 @@ defmodule GRPC.Server do
     quote bind_quoted: [opts: opts], location: :keep do
       service_mod = opts[:service]
       service_name = service_mod.__meta__(:name)
-      codecs = opts[:codecs] || [GRPC.Codec.Proto, GRPC.Codec.WebText]
+      codecs = opts[:codecs] || [GRPC.Codec.Proto, GRPC.Codec.WebText, GRPC.Codec.JSON]
       compressors = opts[:compressors] || []
+      http_transcode = opts[:http_transcode] || false
 
-      Enum.each(service_mod.__rpc_calls__, fn {name, _, _} = rpc ->
+      codecs = if http_transcode, do: [GRPC.Codec.JSON | codecs], else: codecs
+
+      routes =
+        for {name, _, _, options} = rpc <- service_mod.__rpc_calls__, reduce: [] do
+          acc ->
+            path = "/#{service_name}/#{name}"
+
+            acc =
+              if http_transcode and Map.has_key?(options, :http) do
+                %{value: http_rule} = GRPC.Service.rpc_options(rpc, :http)
+                route = Macro.escape({:http_transcode, Router.build_route(http_rule)})
+                [route | acc]
+              else
+                acc
+              end
+
+            [{:grpc, path} | acc]
+        end
+
+      Enum.each(service_mod.__rpc_calls__, fn {name, _, _, options} = rpc ->
         func_name = name |> to_string |> Macro.underscore() |> String.to_atom()
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
 
-        def __call_rpc__(unquote(path), stream) do
+        def __call_rpc__(unquote(path), :post, stream) do
           GRPC.Server.call(
             unquote(service_mod),
             %{
@@ -64,15 +165,41 @@ defmodule GRPC.Server do
             unquote(func_name)
           )
         end
+
+        if http_transcode and Map.has_key?(options, :http) do
+          %{value: http_rule} = GRPC.Service.rpc_options(rpc, :http)
+          {http_method, http_path, _matches} = Router.build_route(http_rule)
+
+          def __call_rpc__(unquote(http_path), unquote(http_method), stream) do
+            GRPC.Server.call(
+              unquote(service_mod),
+              %{
+                stream
+                | service_name: unquote(service_name),
+                  method_name: unquote(to_string(name)),
+                  grpc_type: unquote(grpc_type),
+                  http_method: unquote(http_method),
+                  http_transcode: unquote(http_transcode)
+              },
+              unquote(Macro.escape(put_elem(rpc, 0, func_name))),
+              unquote(func_name)
+            )
+          end
+        end
       end)
 
       def __call_rpc__(_, stream) do
         raise GRPC.RPCError, status: :unimplemented
       end
 
+      def service_name(_) do
+        ""
+      end
+
       def __meta__(:service), do: unquote(service_mod)
       def __meta__(:codecs), do: unquote(codecs)
       def __meta__(:compressors), do: unquote(compressors)
+      def __meta__(:routes), do: unquote(routes)
     end
   end
 
@@ -82,7 +209,7 @@ defmodule GRPC.Server do
   def call(
         _service_mod,
         stream,
-        {_, {req_mod, req_stream}, {res_mod, res_stream}} = rpc,
+        {_, {req_mod, req_stream}, {res_mod, res_stream}, _options} = rpc,
         func_name
       ) do
     request_id = generate_request_id()
@@ -113,6 +240,34 @@ defmodule GRPC.Server do
       do_handle_request(req_s, res_s, stream, func_name)
     else
       {:error, GRPC.RPCError.new(:unimplemented)}
+    end
+  end
+
+  defp do_handle_request(
+         false,
+         res_stream,
+         %{
+           rpc: rpc,
+           request_mod: req_mod,
+           codec: codec,
+           adapter: adapter,
+           payload: payload,
+           http_transcode: true
+         } = stream,
+         func_name
+       ) do
+    {:ok, data} = adapter.read_body(payload)
+    request_body = codec.decode(data, req_mod)
+    rule = GRPC.Service.rpc_options(rpc, :http) || %{value: %{}}
+    bindings = adapter.get_bindings(payload)
+    qs = adapter.get_qs(payload)
+
+    case Transcode.map_request(rule.value, request_body, bindings, qs, req_mod) do
+      {:ok, request} ->
+        call_with_interceptors(res_stream, func_name, stream, request)
+
+      resp = {:error, _} ->
+        resp
     end
   end
 
@@ -292,7 +447,11 @@ defmodule GRPC.Server do
       iex> GRPC.Server.send_reply(stream, reply)
   """
   @spec send_reply(GRPC.Server.Stream.t(), struct()) :: GRPC.Server.Stream.t()
-  def send_reply(%{__interface__: interface} = stream, reply, opts \\ []) do
+  def send_reply(
+        %{__interface__: interface} = stream,
+        reply,
+        opts \\ []
+      ) do
     interface[:send_reply].(stream, reply, opts)
   end
 
@@ -341,13 +500,6 @@ defmodule GRPC.Server do
   def send_trailers(%{adapter: adapter} = stream, trailers) do
     adapter.send_trailers(stream.payload, trailers)
     stream
-  end
-
-  @doc false
-  @spec service_name(String.t()) :: String.t()
-  def service_name(path) do
-    ["", name | _] = String.split(path, "/")
-    name
   end
 
   @doc false
