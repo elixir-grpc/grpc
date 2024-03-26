@@ -114,12 +114,16 @@ defmodule GRPC.Client.Adapters.Mint do
       |> Keyword.get(:transport_opts, [])
       |> Keyword.merge(ssl)
 
-    [transport_opts: Keyword.merge(@default_transport_opts, transport_opts)]
+    keep_alive = Keyword.get(opts, :keep_alive, false)
+
+    [transport_opts: Keyword.merge(@default_transport_opts, transport_opts), keep_alive: keep_alive]
   end
 
   defp connect_opts(_channel, opts) do
     transport_opts = Keyword.get(opts, :transport_opts, [])
-    [transport_opts: Keyword.merge(@default_transport_opts, transport_opts)]
+    keep_alive = Keyword.get(opts, :keep_alive, false)
+
+    [transport_opts: Keyword.merge(@default_transport_opts, transport_opts), keep_alive: keep_alive]
   end
 
   defp mint_scheme(%Channel{scheme: "https"} = _channel), do: :https
