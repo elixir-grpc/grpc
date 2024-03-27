@@ -63,7 +63,11 @@ service Greeter {
 
 ```
 
-2. Then generate Elixir code from proto file as [protobuf-elixir](https://github.com/tony612/protobuf-elixir#usage) shows (especially the `gRPC Support` section) or using [protobuf_generate](https://hex.pm/packages/protobuf_generate) hex package.
+2. Then generate Elixir code from proto file as [protobuf-elixir](https://github.com/tony612/protobuf-elixir#usage) shows (especially the `gRPC Support` section) or using [protobuf_generate](https://hex.pm/packages/protobuf_generate) hex package. Example using `protobuf_generate` lib:
+
+```shell
+mix protobuf.generate --output-path=./lib --include-path=./priv/protos helloworld.proto
+```
 
 In the following sections you will see how to implement gRPC server logic.
 
