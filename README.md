@@ -94,7 +94,7 @@ defmodule Helloworld.Endpoint do
 end
 ```
 
-We will use this module later during gRPC server startup.
+We will use this module [later](#start-application) during gRPC server startup.
 
 **__Note:__** For other types of RPC call like streams see [here](interop/lib/interop/server.ex).
 
