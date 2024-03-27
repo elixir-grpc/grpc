@@ -13,6 +13,9 @@ An Elixir implementation of [gRPC](http://www.grpc.io/).
 
 - [Installation](#installation)
 - [Usage](#usage)
+  - [Simple RPC](#simple-rpc)
+  - [HTTP Transcoding](#http-transcoding)
+  - [Start Application](#start-application)
 - [Features](#features)
 - [Benchmark](#benchmark)
 - [Contributing](#contributing)
@@ -35,9 +38,38 @@ The package can be installed as:
 
 ## Usage
 
-1. Generate Elixir code from proto file as [protobuf-elixir](https://github.com/tony612/protobuf-elixir#usage) shows(especially the `gRPC Support` section).
+1. Write your protobuf file like as follow:
 
-2. Implement the server side code like below and remember to return the expected message types.
+```protobuf
+syntax = "proto3";
+
+package helloworld;
+
+// The request message containing the user's name.
+message HelloRequest {
+  string name = 1;
+}
+
+// The response message containing the greetings
+message HelloReply {
+  string message = 1;
+}
+
+// The greeting service definition.
+service Greeter {
+  // Sends a greeting
+  rpc SayHello (HelloRequest) returns (HelloReply) {}
+}
+
+```
+
+2. Then generate Elixir code from proto file as [protobuf-elixir](https://github.com/tony612/protobuf-elixir#usage) shows (especially the `gRPC Support` section) or using [protobuf_generate](https://hex.pm/packages/protobuf_generate) hex package.
+
+In the following sections you will see how to implement gRPC server logic.
+
+### **Simple RPC**
+
+1. Implement the server side code like below and remember to return the expected message types.
 
 ```elixir
 defmodule Helloworld.Greeter.Server do
@@ -50,7 +82,7 @@ defmodule Helloworld.Greeter.Server do
 end
 ```
 
-3. Start the server
+2. Define gRPC endpoints
 
 You can start the gRPC server as a supervised process. First, add `GRPC.Server.Supervisor` to your supervision tree.
 
@@ -62,7 +94,84 @@ defmodule Helloworld.Endpoint do
   intercept GRPC.Server.Interceptors.Logger
   run Helloworld.Greeter.Server
 end
+```
 
+For other types of RPC call like streams see [here](interop/lib/interop/server.ex)
+
+### **HTTP Transcoding**
+
+1. Adding [grpc-gateway annotations](https://cloud.google.com/endpoints/docs/grpc/transcoding) to your protobuf file definition: 
+
+```protobuf
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+package helloworld;
+
+// The greeting service definition.
+service Greeter {
+  // Sends a greeting
+  rpc SayHello (HelloRequest) returns (HelloReply) {
+    option (google.api.http) = {
+      get: "/v1/greeter/{name}"
+    };
+  }
+
+  rpc SayHelloFrom (HelloRequestFrom) returns (HelloReply) {
+    option (google.api.http) = {
+      post: "/v1/greeter"
+      body: "*"
+    };
+  }
+}
+```
+
+2. Add protoc plugin dependency and compile your protos using [protobuf_generate](https://github.com/drowzy/protobuf_generate) hex [package](https://hex.pm/packages/protobuf_generate):
+
+In mix.exs:
+
+```elixir
+def deps do
+  [
+    {:grpc, "~> 0.7"},
+    {:protobuf_generate, "~> 0.1.1"}
+  ]
+end
+```
+
+And in your terminal:
+
+```shell
+mix protobuf.generate \
+  --include-path=priv/proto \
+  --include-path=deps/googleapis \
+  --generate-descriptors=true \
+  --output-path=./lib \
+  --plugins=ProtobufGenerate.Plugins.GRPCWithOptions \
+  google/api/annotations.proto google/api/http.proto helloworld.proto
+```
+
+3. Enable http_transcode option in your Server module
+```elixir
+defmodule Helloworld.Greeter.Server do
+  use GRPC.Server, 
+    service: Helloworld.Greeter.Service,
+    http_transcode: true
+
+  @spec say_hello(Helloworld.HelloRequest.t, GRPC.Server.Stream.t) :: Helloworld.HelloReply.t
+  def say_hello(request, _stream) do
+    Helloworld.HelloReply.new(message: "Hello #{request.name}")
+  end
+end
+```
+
+See full application code in [helloworld_transcoding](examples/helloworld_transcoding) example.
+
+### **Start Application**
+
+1. Start gRPC Server in your supervisor tree or Application module:
+
+```elixir
 # In the start function of your Application
 defmodule HelloworldApp do
   use Application
@@ -78,7 +187,7 @@ defmodule HelloworldApp do
 end
 ```
 
-4. Call rpc:
+2. Call rpc:
 
 ```elixir
 iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051")
@@ -90,7 +199,7 @@ iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.C
 ...
 ```
 
-Check [examples](examples) and [interop](interop)(Interoperability Test) for some examples.
+Check more [examples](examples) and [interop](interop) (Interoperability Test) for some examples.
 
 ## Features
 
@@ -99,11 +208,13 @@ Check [examples](examples) and [interop](interop)(Interoperability Test) for som
   - [Server-streaming](https://grpc.io/docs/what-is-grpc/core-concepts/#server-streaming-rpc)
   - [Client-streaming](https://grpc.io/docs/what-is-grpc/core-concepts/#client-streaming-rpc)
   - [Bidirectional-streaming](https://grpc.io/docs/what-is-grpc/core-concepts/#bidirectional-streaming-rpc)
+- [HTTP Transcoding](https://cloud.google.com/endpoints/docs/grpc/transcoding)
 - [TLS Authentication](https://grpc.io/docs/guides/auth/#supported-auth-mechanisms)
 - [Error handling](https://grpc.io/docs/guides/error/)
-- Interceptors(See [`GRPC.Endpoint`](https://github.com/elixir-grpc/grpc/blob/master/lib/grpc/endpoint.ex))
+- Interceptors (See [`GRPC.Endpoint`](https://github.com/elixir-grpc/grpc/blob/master/lib/grpc/endpoint.ex))
 - [Connection Backoff](https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md)
 - Data compression
+- [gRPC Reflection](https://github.com/elixir-grpc/grpc-reflection)
 
 ## Benchmark
 
