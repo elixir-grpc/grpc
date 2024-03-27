@@ -84,8 +84,6 @@ end
 
 2. Define gRPC endpoints
 
-You can start the gRPC server as a supervised process. First, add `GRPC.Server.Supervisor` to your supervision tree.
-
 ```elixir
 # Define your endpoint
 defmodule Helloworld.Endpoint do
@@ -96,7 +94,9 @@ defmodule Helloworld.Endpoint do
 end
 ```
 
-For other types of RPC call like streams see [here](interop/lib/interop/server.ex)
+We will use this module later during gRPC server startup
+
+**__Note:__** For other types of RPC call like streams see [here](interop/lib/interop/server.ex).
 
 ### **HTTP Transcoding**
 
