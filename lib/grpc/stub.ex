@@ -131,13 +131,47 @@ defmodule GRPC.Stub do
   """
   @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(addr, opts \\ []) when is_binary(addr) and is_list(opts) do
-    {host, port} =
-      case String.split(addr, ":") do
-        [host, port] -> {host, port}
-        [socket_path] -> {{:local, socket_path}, 0}
-      end
+    case URI.parse(addr) do
+      %URI{scheme: @secure_scheme, host: host, port: port}
+      when is_binary(host) and is_integer(port) ->
+        opts = Keyword.put_new_lazy(opts, :cred, &default_ssl_option/0)
+        connect(host, port, opts)
 
-    connect(host, port, opts)
+      %URI{scheme: @insecure_scheme, host: host, port: port}
+      when is_binary(host) and is_integer(port) ->
+        connect(host, port, opts)
+
+      # For compatibility with previous versions, we accept URIs in the "#{address}:#{port}" format
+      _ ->
+        case String.split(addr, ":") do
+          [socket_path] ->
+            connect({:local, socket_path}, 0, opts)
+
+          [address, port] ->
+            Logger.warning("Usage of non-local URIs without scheme is deprecated")
+            port = String.to_integer(port)
+            connect(address, port, opts)
+        end
+    end
+  end
+
+  defp default_ssl_option do
+    if Code.ensure_loaded?(CAStore) do
+      %GRPC.Credential{
+        ssl: [
+          verify: :verify_peer,
+          depth: 99,
+          cacert_file: CAStore.file_path()
+        ]
+      }
+    else
+      raise """
+      no GRPC credentials provided. Please either:
+
+      - Pass the `:cred` option to `GRPC.Stub.connect/3`
+      - Add `:castore` to your dependencies
+      """
+    end
   end
 
   @spec connect(String.t(), binary() | non_neg_integer(), keyword()) ::
