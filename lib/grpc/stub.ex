@@ -167,7 +167,7 @@ defmodule GRPC.Stub do
       raise """
       no GRPC credentials provided. Please either:
 
-      - Pass the `:cred` option to `GRPC.Stub.connect/3`
+      - Pass the `:cred` option to `GRPC.Stub.connect/2,3`
       - Add `:castore` to your list of dependencies in `mix.exs`
       """
     end
