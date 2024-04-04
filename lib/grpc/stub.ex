@@ -132,16 +132,15 @@ defmodule GRPC.Stub do
   @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(addr, opts \\ []) when is_binary(addr) and is_list(opts) do
     case URI.parse(addr) do
-      %URI{scheme: @secure_scheme, host: host, port: port}
-      when is_binary(host) and is_integer(port) ->
+      %URI{scheme: @secure_scheme, host: host, port: port} ->
         opts = Keyword.put_new_lazy(opts, :cred, &default_ssl_option/0)
         connect(host, port, opts)
 
-      %URI{scheme: @insecure_scheme, host: host, port: port}
-      when is_binary(host) and is_integer(port) ->
+      %URI{scheme: @insecure_scheme, host: host, port: port} ->
         connect(host, port, opts)
 
-      # For compatibility with previous versions, we accept URIs in the "#{address}:#{port}" format
+      # For compatibility with previous versions, we accept URIs in
+      # the "#{address}:#{port}" format
       _ ->
         case String.split(addr, ":") do
           [socket_path] ->
@@ -169,7 +168,7 @@ defmodule GRPC.Stub do
       no GRPC credentials provided. Please either:
 
       - Pass the `:cred` option to `GRPC.Stub.connect/3`
-      - Add `:castore` to your dependencies
+      - Add `:castore` to your list of dependencies in `mix.exs`
       """
     end
   end
