@@ -158,8 +158,8 @@ defmodule GRPC.Stub do
     end
   end
 
-  defp default_ssl_option do
-    if Code.ensure_loaded?(CAStore) do
+  if {:module, CAStore} == Code.ensure_loaded!(CAStore) do
+    defp default_ssl_option do
       %GRPC.Credential{
         ssl: [
           verify: :verify_peer,
@@ -167,7 +167,9 @@ defmodule GRPC.Stub do
           cacert_file: CAStore.file_path()
         ]
       }
-    else
+    end
+  else
+    defp default_ssl_option do
       raise """
       no GRPC credentials provided. Please either:
 
@@ -175,6 +177,7 @@ defmodule GRPC.Stub do
       - Add `:castore` to your list of dependencies in `mix.exs`
       """
     end
+  end
   end
 
   @spec connect(String.t(), binary() | non_neg_integer(), keyword()) ::
