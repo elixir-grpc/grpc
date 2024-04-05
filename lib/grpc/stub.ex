@@ -155,7 +155,6 @@ defmodule GRPC.Stub do
             connect({:local, socket_path}, 0, opts)
 
           [address, port] ->
-            Logger.warning("Usage of non-local URIs without scheme is deprecated")
             port = String.to_integer(port)
             connect(address, port, opts)
         end
