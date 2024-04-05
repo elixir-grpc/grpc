@@ -178,7 +178,6 @@ defmodule GRPC.Stub do
       """
     end
   end
-  end
 
   @spec connect(String.t(), binary() | non_neg_integer(), keyword()) ::
           {:ok, Channel.t()} | {:error, any()}
