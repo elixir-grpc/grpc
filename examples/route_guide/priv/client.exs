@@ -9,5 +9,5 @@ opts =
     opts
   end
 
-{:ok, channel} = GRPC.Stub.connect("localhost:10000", opts)
+{:ok, channel} = GRPC.Stub.connect("http://localhost:10000", opts)
 RouteGuide.Client.main(channel)

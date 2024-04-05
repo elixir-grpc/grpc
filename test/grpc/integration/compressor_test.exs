@@ -42,7 +42,7 @@ defmodule GRPC.Integration.CompressorTest do
 
   test "only client compress" do
     run_server(HelloServer, fn port ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
 
       name = "only client compress"
       req = %Helloworld.HelloRequest{name: name}
@@ -58,7 +58,7 @@ defmodule GRPC.Integration.CompressorTest do
 
   test "only server compress" do
     run_server(HelloServer, fn port ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
 
       name = "only server compress"
       req = %Helloworld.HelloRequest{name: name}
@@ -82,7 +82,7 @@ defmodule GRPC.Integration.CompressorTest do
 
   test "both sides compress" do
     run_server(HelloServer, fn port ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
 
       name = "both compress"
       req = %Helloworld.HelloRequest{name: name}
@@ -98,7 +98,7 @@ defmodule GRPC.Integration.CompressorTest do
 
   test "error when server doesn't support" do
     run_server(NoCompressServer, fn port ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
 
       name = "both compress"
       req = %Helloworld.HelloRequest{name: name}

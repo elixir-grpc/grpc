@@ -11,11 +11,11 @@ defmodule GRPC.Client.Interceptors.Logger do
 
   ## Usage
 
-      {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Client.Interceptors.Logger])
+      {:ok, channel} = GRPC.Stub.connect("http://localhost:50051", interceptors: [GRPC.Client.Interceptors.Logger])
 
   ## Usage with custom level
 
-      {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Client.Interceptors.Logger, level: :warning}])
+      {:ok, channel} = GRPC.Stub.connect("http://localhost:50051", interceptors: [{GRPC.Client.Interceptors.Logger, level: :warning}])
   """
 
   require Logger

@@ -33,7 +33,7 @@ defmodule GRPC.Integration.CodecTest do
 
   test "Says hello over erlpack, GRPC-web-text" do
     run_server(HelloServer, fn port ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
       name = "Mairbek"
       req = %Helloworld.HelloRequest{name: name}
 
@@ -54,7 +54,7 @@ defmodule GRPC.Integration.CodecTest do
 
   test "sets the correct content-type based on codec name" do
     run_server(HelloServer, fn port ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
       name = "Mairbek"
       req = %Helloworld.HelloRequest{name: name}
 

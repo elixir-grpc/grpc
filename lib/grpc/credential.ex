@@ -13,7 +13,7 @@ defmodule GRPC.Credential do
   ## Examples
 
       iex> cred = GRPC.Credential.new(ssl: [cacertfile: ca_path])
-      iex> GRPC.Stub.connect("localhost:10000", cred: cred)
+      iex> GRPC.Stub.connect("https://localhost:10000", cred: cred)
   """
 
   @type t :: %__MODULE__{ssl: [:ssl.tls_option()]}
