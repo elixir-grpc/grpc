@@ -3,42 +3,60 @@ defmodule GRPC.ChannelTest do
   alias GRPC.Test.ClientAdapter
   alias GRPC.Channel
 
-  describe "connect/2 with scheme" do
-    test "works for insecure" do
-      {:ok, channel} = GRPC.Stub.connect("http://10.1.0.0:50051", adapter: ClientAdapter)
-      assert %Channel{host: "10.1.0.0", port: 50051, scheme: "http", cred: nil} = channel
+  for {kind, addr} <- [{"ip", "10.0.0.1"}, {"hostname", "example.com"}] do
+    describe "connect/2 with http and #{kind}" do
+      test "works" do
+        {:ok, channel} =
+          GRPC.Stub.connect("http://#{unquote(addr)}:50051", adapter: ClientAdapter)
+
+        assert %Channel{host: unquote(addr), port: 50051, scheme: "http", cred: nil} = channel
+      end
+
+      test "errors if credential is provided" do
+        cred = %GRPC.Credential{ssl: []}
+
+        assert_raise ArgumentError, "invalid option for insecure (http) address: :cred", fn ->
+          GRPC.Stub.connect("http://#{unquote(addr)}:50051", adapter: ClientAdapter, cred: cred)
+        end
+      end
     end
 
-    test "default ssl credentials" do
-      {:ok, channel} = GRPC.Stub.connect("https://10.1.0.0:50051", adapter: ClientAdapter)
+    describe "connect/2 with https and #{kind}" do
+      test "sets default credential" do
+        {:ok, channel} =
+          GRPC.Stub.connect("https://#{unquote(addr)}:50051", adapter: ClientAdapter)
 
-      assert %Channel{host: "10.1.0.0", port: 50051, scheme: "https", cred: cred} = channel
+        assert %Channel{host: unquote(addr), port: 50051, scheme: "https", cred: cred} = channel
 
-      assert Keyword.has_key?(cred.ssl, :verify)
-      assert Keyword.has_key?(cred.ssl, :depth)
-      assert Keyword.has_key?(cred.ssl, :cacert_file)
+        assert Keyword.has_key?(cred.ssl, :verify)
+        assert Keyword.has_key?(cred.ssl, :depth)
+        assert Keyword.has_key?(cred.ssl, :cacert_file)
+      end
+
+      test "allows overriding default credentials" do
+        cred = %GRPC.Credential{ssl: []}
+
+        {:ok, channel} =
+          GRPC.Stub.connect("https://#{unquote(addr)}:50051", adapter: ClientAdapter, cred: cred)
+
+        assert %Channel{host: unquote(addr), port: 50051, scheme: "https", cred: ^cred} = channel
+      end
     end
 
-    test "allows overriding ssl credentials" do
-      cred = %GRPC.Credential{ssl: []}
+    describe "connect/2 with no scheme, #{kind} and" do
+      test "no cred uses http" do
+        {:ok, channel} = GRPC.Stub.connect("#{unquote(addr)}:50051", adapter: ClientAdapter)
+        assert %Channel{host: unquote(addr), port: 50051, scheme: "http", cred: nil} = channel
+      end
 
-      {:ok, channel} =
-        GRPC.Stub.connect("https://10.1.0.0:50051", adapter: ClientAdapter, cred: cred)
+      test "cred uses https" do
+        cred = %{ssl: []}
 
-      assert %Channel{host: "10.1.0.0", port: 50051, scheme: "https", cred: ^cred} = channel
-    end
-  end
+        {:ok, channel} =
+          GRPC.Stub.connect("#{unquote(addr)}:50051", adapter: ClientAdapter, cred: cred)
 
-  describe "connect/2 without scheme" do
-    test "works for insecure" do
-      {:ok, channel} = GRPC.Stub.connect("10.1.0.0:50051", adapter: ClientAdapter)
-      assert %Channel{host: "10.1.0.0", port: 50051, scheme: "http", cred: nil} = channel
-    end
-
-    test "works for ssl" do
-      cred = %{ssl: []}
-      {:ok, channel} = GRPC.Stub.connect("10.1.0.0:50051", adapter: ClientAdapter, cred: cred)
-      assert %Channel{host: "10.1.0.0", port: 50051, scheme: "https", cred: ^cred} = channel
+        assert %Channel{host: unquote(addr), port: 50051, scheme: "https", cred: ^cred} = channel
+      end
     end
   end
 
@@ -46,8 +64,8 @@ defmodule GRPC.ChannelTest do
     headers = [{"authorization", "Bearer TOKEN"}]
 
     {:ok, channel} =
-      GRPC.Stub.connect("http://10.1.0.0:50051", adapter: ClientAdapter, headers: headers)
+      GRPC.Stub.connect("http://10.0.0.1:50051", adapter: ClientAdapter, headers: headers)
 
-    assert %Channel{host: "10.1.0.0", port: 50051, headers: ^headers} = channel
+    assert %Channel{host: "10.0.0.1", port: 50051, headers: ^headers} = channel
   end
 end
