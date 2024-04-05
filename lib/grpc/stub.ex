@@ -141,8 +141,9 @@ defmodule GRPC.Stub do
         connect(host, port, opts)
 
       %URI{scheme: @insecure_scheme, host: host, port: port} ->
-        if opts[:cred],
-          do: raise(ArgumentError, "invalid option for insecure (http) address: :cred")
+        if opts[:cred] do
+          raise ArgumentError, "invalid option for insecure (http) address: :cred"
+        end
 
         connect(host, port, opts)
 
