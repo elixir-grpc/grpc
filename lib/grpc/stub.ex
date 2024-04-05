@@ -182,8 +182,11 @@ defmodule GRPC.Stub do
     end
   end
 
-  @spec connect(String.t(), binary() | non_neg_integer(), keyword()) ::
-          {:ok, Channel.t()} | {:error, any()}
+  @spec connect(
+          String.t() | {:local, String.t()},
+          binary() | non_neg_integer(),
+          keyword()
+        ) :: {:ok, Channel.t()} | {:error, any()}
   def connect(host, port, opts) when is_binary(port) do
     connect(host, String.to_integer(port), opts)
   end
