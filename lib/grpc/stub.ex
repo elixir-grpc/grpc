@@ -108,10 +108,10 @@ defmodule GRPC.Stub do
 
   ## Examples
 
-      iex> GRPC.Stub.connect("http://localhost:50051")
+      iex> GRPC.Stub.connect("localhost:50051")
       {:ok, channel}
 
-      iex> GRPC.Stub.connect("http://localhost:50051", accepted_compressors: [GRPC.Compressor.Gzip])
+      iex> GRPC.Stub.connect("localhost:50051", accepted_compressors: [GRPC.Compressor.Gzip])
       {:ok, channel}
 
       iex> GRPC.Stub.connect("/paht/to/unix.sock")

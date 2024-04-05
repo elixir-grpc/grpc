@@ -66,7 +66,7 @@ defmodule GRPC.Integration.EndpointTest do
   test "endpoint uses Logger interceptor for unary" do
     assert capture_log(fn ->
              run_endpoint(HelloEndpoint, fn port ->
-               {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
+               {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
                req = %Helloworld.HelloRequest{name: "Elixir"}
                {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
@@ -78,7 +78,7 @@ defmodule GRPC.Integration.EndpointTest do
   test "endpoint uses Logger interceptor for streaming server" do
     assert capture_log(fn ->
              run_endpoint(FeatureEndpoint, fn port ->
-               {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
+               {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
                point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
                rect = %Routeguide.Rectangle{hi: point, lo: point}
@@ -92,7 +92,7 @@ defmodule GRPC.Integration.EndpointTest do
   test "endpoint uses Logger interceptor for streaming client" do
     assert capture_log(fn ->
              run_endpoint(FeatureEndpoint, fn port ->
-               {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
+               {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
                point0 = %Routeguide.Point{latitude: 0, longitude: -1}
                point1 = %Routeguide.Point{latitude: 1, longitude: 1}
@@ -108,7 +108,7 @@ defmodule GRPC.Integration.EndpointTest do
   test "endpoint uses Logger and custom interceptor" do
     assert capture_log(fn ->
              run_endpoint(FeatureAndHelloHaltEndpoint, fn port ->
-               {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
+               {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
                point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
                {:ok, feature} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)

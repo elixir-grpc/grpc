@@ -37,9 +37,7 @@ defmodule GRPC.Integration.ErplackNotypesTest do
   test "Says hello over erlpack call level" do
     run_server(HelloServer, fn port ->
       {:ok, channel} =
-        GRPC.Stub.connect("http://localhost:#{port}",
-          interceptors: [GRPC.Client.Interceptors.Logger]
-        )
+        GRPC.Stub.connect("localhost:#{port}", interceptors: [GRPC.Client.Interceptors.Logger])
 
       name = "World"
       {:ok, reply} = channel |> HelloErlpackStub.reply_hello(name, codec: GRPC.Codec.Erlpack)

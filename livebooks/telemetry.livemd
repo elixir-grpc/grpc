@@ -306,7 +306,7 @@ GRPC.Server.start([HelloServer], 1337, [])
 ```
 
 ```elixir
-{:ok, channel} = GRPC.Stub.connect("http://localhost:1337")
+{:ok, channel} = GRPC.Stub.connect("localhost:1337")
 
 # the requests take some time internally, so we might not get _exactly_
 # the bucket distribution we expect

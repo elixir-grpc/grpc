@@ -184,7 +184,7 @@ defmodule GRPC.Integration.ServerTest do
 
   test "multiple servers works" do
     run_server([FeatureServer, HelloServer], fn port ->
-      {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
       {:ok, feature} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
       assert feature == %Routeguide.Feature{location: point, name: "409146138,-746188906"}
@@ -201,7 +201,7 @@ defmodule GRPC.Integration.ServerTest do
     run_server(
       [HelloServer],
       fn port ->
-        {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
+        {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
         req = %Helloworld.HelloRequest{name: "Elixir"}
         {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
         assert reply.message == "Hello, Elixir"
@@ -219,7 +219,7 @@ defmodule GRPC.Integration.ServerTest do
 
   test "returns appropriate error for unary requests" do
     run_server([HelloErrorServer], fn port ->
-      {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       req = %Helloworld.HelloRequest{name: "Elixir"}
       {:error, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
 
@@ -232,7 +232,7 @@ defmodule GRPC.Integration.ServerTest do
 
   test "return errors for unknown errors" do
     run_server([HelloErrorServer], fn port ->
-      {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       req = %Helloworld.HelloRequest{name: "unknown error"}
 
       assert {:error,
@@ -243,7 +243,7 @@ defmodule GRPC.Integration.ServerTest do
 
   test "returns appropriate error for stream requests" do
     run_server([FeatureErrorServer], fn port ->
-      {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       rect = %Routeguide.Rectangle{}
       error = %GRPC.RPCError{message: "Please authenticate", status: 16}
       assert {:error, ^error} = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
@@ -252,7 +252,7 @@ defmodule GRPC.Integration.ServerTest do
 
   test "return large response(more than MAX_FRAME_SIZE 16384)" do
     run_server([HelloServer], fn port ->
-      {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       req = %Helloworld.HelloRequest{name: "large response"}
       {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
       name = String.duplicate("a", round(:math.pow(2, 14)))
@@ -262,7 +262,7 @@ defmodule GRPC.Integration.ServerTest do
 
   test "return deadline error for slow server" do
     run_server([TimeoutServer], fn port ->
-      {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       rect = %Routeguide.Rectangle{}
       error = %GRPC.RPCError{message: "Deadline expired", status: 4}
 
@@ -273,7 +273,7 @@ defmodule GRPC.Integration.ServerTest do
 
   test "return normally for a little slow server" do
     run_server([SlowServer], fn port ->
-      {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       low = %Routeguide.Point{latitude: 400_000_000, longitude: -750_000_000}
       high = %Routeguide.Point{latitude: 420_000_000, longitude: -730_000_000}
       rect = %Routeguide.Rectangle{lo: low, hi: high}
@@ -290,7 +290,7 @@ defmodule GRPC.Integration.ServerTest do
       token = "Bearer TOKEN"
 
       {:ok, channel} =
-        GRPC.Stub.connect("http://localhost:#{port}",
+        GRPC.Stub.connect("localhost:#{port}",
           headers: [{"authorization", token}]
         )
 
@@ -302,7 +302,7 @@ defmodule GRPC.Integration.ServerTest do
 
   test "get peer returns correct IP address" do
     run_server([HelloServer], fn port ->
-      {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
       req = %Helloworld.HelloRequest{name: "get peer"}
       {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
@@ -312,7 +312,7 @@ defmodule GRPC.Integration.ServerTest do
 
   test "get cert returns correct client certificate when not present" do
     run_server([HelloServer], fn port ->
-      assert {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
+      assert {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
       req = %Helloworld.HelloRequest{name: "get cert"}
       assert {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
@@ -583,7 +583,7 @@ defmodule GRPC.Integration.ServerTest do
       ])
 
       run_server([HelloServer], fn port ->
-        {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
+        {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
         req = %Helloworld.HelloRequest{name: "delay", duration: 1000}
 
@@ -660,7 +660,7 @@ defmodule GRPC.Integration.ServerTest do
       ])
 
       run_server([HelloServer], fn port ->
-        {:ok, channel} = GRPC.Stub.connect("http://localhost:#{port}")
+        {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
         req = %Helloworld.HelloRequest{name: "raise", duration: 1100}
 

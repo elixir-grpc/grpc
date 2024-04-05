@@ -4,7 +4,7 @@ defmodule HelloworldTest do
   use ExUnit.Case
 
   setup_all do
-    {:ok, channel} = GRPC.Stub.connect("http://localhost:50051", interceptors: [GRPC.Client.Interceptors.Logger])
+    {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Client.Interceptors.Logger])
     [channel: channel]
   end
 
