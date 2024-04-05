@@ -131,6 +131,10 @@ defmodule GRPC.Stub do
   """
   @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(addr, opts \\ []) when is_binary(addr) and is_list(opts) do
+    # This works because we only accept `http` and `https` schemes (allowlisted below explicitly)
+    # addresses like "localhost:1234" parse as if `localhost` is the scheme for URI, and this falls through to
+    # the base case. Accepting only `http/https` is a trait of `connect/3`.
+    
     case URI.parse(addr) do
       %URI{scheme: @secure_scheme, host: host, port: port} ->
         opts = Keyword.put_new_lazy(opts, :cred, &default_ssl_option/0)
