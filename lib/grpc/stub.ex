@@ -141,6 +141,9 @@ defmodule GRPC.Stub do
         connect(host, port, opts)
 
       %URI{scheme: @insecure_scheme, host: host, port: port} ->
+        if Keyword.has_key?(opts, :cred),
+          do: raise("invalid option for insecure (http) address: :cred")
+
         connect(host, port, opts)
 
       # For compatibility with previous versions, we accept URIs in
