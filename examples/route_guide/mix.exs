@@ -33,7 +33,6 @@ defmodule RouteGuide.Mixfile do
       {:grpc, path: "../../"},
       {:protobuf, "~> 0.11"},
       {:jason, "~> 1.2"},
-      {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false}
     ]
   end
 end

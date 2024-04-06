@@ -21,12 +21,6 @@ defmodule GRPC.Mixfile do
         source_ref: "v#{@version}",
         source_url: "https://github.com/elixir-grpc/grpc"
       ],
-      dialyzer: [
-        plt_add_deps: :app_tree,
-        plt_add_apps: [:iex, :mix, :ex_unit],
-        list_unused_filters: true,
-        plt_file: {:no_warn, "_build/#{Mix.env()}/plts/dialyzer.plt"}
-      ],
       xref: [exclude: [IEx]]
     ]
   end
@@ -56,7 +50,6 @@ defmodule GRPC.Mixfile do
        only: [:dev, :test]},
       {:mint, "~> 1.5"},
       {:ex_doc, "~> 0.29", only: :dev},
-      {:dialyxir, "~> 1.4.0", only: [:dev, :test], runtime: false},
       {:ex_parameterized, "~> 1.3.7", only: :test},
       {:telemetry, "~> 1.0"}
     ]
