@@ -38,7 +38,7 @@ The package can be installed as:
 
 ## Usage
 
-1. Write your protobuf file like as follow:
+1. Write your protobuf file:
 
 ```protobuf
 syntax = "proto3";
@@ -50,14 +50,14 @@ message HelloRequest {
   string name = 1;
 }
 
-// The response message containing the greetings
+// The response message containing the greeting
 message HelloReply {
   string message = 1;
 }
 
 // The greeting service definition.
 service Greeter {
-  // Sends a greeting
+  // Greeting function
   rpc SayHello (HelloRequest) returns (HelloReply) {}
 }
 
@@ -98,7 +98,7 @@ defmodule Helloworld.Endpoint do
 end
 ```
 
-We will use this module [later](#start-application) during gRPC server startup.
+We will use this module [in the gRPC server startup section](#start-application).
 
 **__Note:__** For other types of RPC call like streams see [here](interop/lib/interop/server.ex).
 
@@ -164,7 +164,7 @@ defmodule Helloworld.Greeter.Server do
 
   @spec say_hello(Helloworld.HelloRequest.t, GRPC.Server.Stream.t) :: Helloworld.HelloReply.t
   def say_hello(request, _stream) do
-    Helloworld.HelloReply.new(message: "Hello #{request.name}")
+    %Helloworld.HelloReply{message: "Hello #{request.name}"}
   end
 end
 ```
@@ -203,7 +203,7 @@ iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.C
 ...
 ```
 
-Check more [examples](examples) and [interop](interop) (Interoperability Test) for some examples.
+Check the [examples](examples) and [interop](interop) directories in the project's source code for some examples.
 
 ## Features
 
