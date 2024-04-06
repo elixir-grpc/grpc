@@ -33,15 +33,11 @@ jobs:
     name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
     strategy:
       matrix:
-        otp: [26.1.x]
-        elixir: [1.12.x, 1.15.x]
+        otp: [24.x, 25.x, 26.1.x]
+        elixir: [1.15.x]
         include:
-          - otp: 23.x
-            elixir: 1.15.x
           - otp: 24.x
-            elixir: 1.15.x
-          - otp: 25.x
-            elixir: 1.15.x
+            elixir: 1.12.x
     needs: check_format
     steps:
       - uses: actions/checkout@v3
@@ -90,15 +86,11 @@ jobs:
     if: ${{ github.ref == 'refs/heads/master' }}
     strategy:
       matrix:
-        otp: [26.1.x]
-        elixir: [1.12.x, 1.15.x]
+        otp: [24.x, 25.x, 26.1.x]
+        elixir: [1.15.x]
         include:
-          - otp: 23.x
-            elixir: 1.15.x
           - otp: 24.x
-            elixir: 1.15.x
-          - otp: 25.x
-            elixir: 1.15.x
+            elixir: 1.12.x
     steps:
       - uses: actions/checkout@v3
       - uses: erlef/setup-beam@v1
