@@ -1,7 +1,7 @@
 defmodule GRPC.Mixfile do
   use Mix.Project
 
-  @version "0.8.0"
+  @version "0.8.1"
 
   def project do
     [
@@ -60,7 +60,7 @@ defmodule GRPC.Mixfile do
       maintainers: ["Bing Han", "Paulo Valente"],
       licenses: ["Apache 2"],
       links: %{"GitHub" => "https://github.com/elixir-grpc/grpc"},
-      files: ~w(mix.exs README.md lib src config LICENSE .formatter.exs)
+      files: ~w(mix.exs README.md lib src config priv/templates LICENSE .formatter.exs)
     }
   end
 
