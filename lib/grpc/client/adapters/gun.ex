@@ -245,11 +245,7 @@ defmodule GRPC.Client.Adapters.Gun do
                )}
           end
         else
-          {:error,
-           GRPC.RPCError.exception(
-             GRPC.Status.internal(),
-             "status got is #{status} instead of 200"
-           )}
+          {:error, GRPC.RPCError.from_status(status)}
         end
 
       {:response, :nofin, status, headers} ->
@@ -266,11 +262,7 @@ defmodule GRPC.Client.Adapters.Gun do
             {:response, headers, :nofin}
           end
         else
-          {:error,
-           GRPC.RPCError.exception(
-             GRPC.Status.internal(),
-             "status got is #{status} instead of 200"
-           )}
+          {:error, GRPC.RPCError.from_status(status)}
         end
 
       {:data, :fin, data} ->
