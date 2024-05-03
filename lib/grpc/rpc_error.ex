@@ -71,7 +71,7 @@ defmodule GRPC.RPCError do
     %{error | message: error.message || Status.status_message(error.status)}
   end
 
-  def from_status(401), do: exception(GRPC.Status.unauthorized(), status_message(401))
+  def from_status(401), do: exception(GRPC.Status.unauthenticated(), status_message(401))
   def from_status(403), do: exception(GRPC.Status.permission_denied(), status_message(403))
   def from_status(404), do: exception(GRPC.Status.unimplemented(), status_message(404))
   def from_status(429), do: exception(GRPC.Status.unavailable(), status_message(429))
