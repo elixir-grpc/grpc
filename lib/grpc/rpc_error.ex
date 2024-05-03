@@ -85,7 +85,7 @@ defmodule GRPC.RPCError do
   end
 
   defp status_message(status) do
-    "got http status #{status_code} instead of 200"
+    "got http status #{status} instead of 200"
   end
 
   defp parse_args([], acc), do: acc
