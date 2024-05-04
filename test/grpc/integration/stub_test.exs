@@ -30,6 +30,30 @@ defmodule GRPC.Integration.StubTest do
     end)
   end
 
+  error_table = [
+    {401, GRPC.Status.unauthenticated()},
+    {403, GRPC.Status.permission_denied()},
+    {404, GRPC.Status.unimplemented()},
+    {429, GRPC.Status.unavailable()},
+    {502, GRPC.Status.unavailable()},
+    {503, GRPC.Status.unavailable()},
+    {504, GRPC.Status.unavailable()},
+    # General case
+    {518, GRPC.Status.internal()}
+  ]
+
+  client_adapters = [GRPC.Client.Adapters.Gun, GRPC.Client.Adapters.Mint]
+
+  for {http_code, expected_error_code} <- error_table, client_adapter <- client_adapters  do
+    test "#{client_adapter} returns RPC Error when getting HTTP #{http_code}" do
+      run_error_server(unquote(http_code), fn port ->
+        {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", adapter: unquote(client_adapter))
+        req = %Helloworld.HelloRequest{name: "GRPC"}
+        {:error, %GRPC.RPCError{status: unquote(expected_error_code)}} = Helloworld.Greeter.Stub.say_hello(channel, req)
+      end)
+    end
+  end
+
   test "you can disconnect stubs" do
     run_server(HelloServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
