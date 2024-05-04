@@ -9,7 +9,6 @@ defmodule GRPC.Integration.TestCase do
     end
   end
 
-
   defmodule ErrorHandler do
     @behaviour :cowboy_handler
 
@@ -22,9 +21,10 @@ defmodule GRPC.Integration.TestCase do
   end
 
   def run_error_server(error_code, func, port \\ 0) do
-    dispatch = :cowboy_router.compile([
-      ({:_, [{:_, ErrorHandler, error_code}]})
-    ])
+    dispatch =
+      :cowboy_router.compile([
+        {:_, [{:_, ErrorHandler, error_code}]}
+      ])
 
     {:ok, _} = :cowboy.start_clear("error_server", [port: port], %{env: %{dispatch: dispatch}})
     port = :ranch.get_port("error_server")

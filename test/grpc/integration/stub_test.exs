@@ -44,12 +44,14 @@ defmodule GRPC.Integration.StubTest do
 
   client_adapters = [GRPC.Client.Adapters.Gun, GRPC.Client.Adapters.Mint]
 
-  for {http_code, expected_error_code} <- error_table, client_adapter <- client_adapters  do
+  for {http_code, expected_error_code} <- error_table, client_adapter <- client_adapters do
     test "#{client_adapter} returns RPC Error when getting HTTP #{http_code}" do
       run_error_server(unquote(http_code), fn port ->
         {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", adapter: unquote(client_adapter))
         req = %Helloworld.HelloRequest{name: "GRPC"}
-        {:error, %GRPC.RPCError{status: unquote(expected_error_code)}} = Helloworld.Greeter.Stub.say_hello(channel, req)
+
+        {:error, %GRPC.RPCError{status: unquote(expected_error_code)}} =
+          Helloworld.Greeter.Stub.say_hello(channel, req)
       end)
     end
   end
