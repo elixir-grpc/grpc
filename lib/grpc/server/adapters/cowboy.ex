@@ -223,6 +223,8 @@ defmodule GRPC.Server.Adapters.Cowboy do
       end
 
     dispatch = GRPC.Server.Adapters.Cowboy.Router.compile([{:_, handlers}])
+    dispatch_key = Module.concat(endpoint, Dispatch)
+    :persistent_term.put(dispatch_key, dispatch)
 
     idle_timeout = Keyword.get(opts, :idle_timeout) || :infinity
     num_acceptors = Keyword.get(opts, :num_acceptors) || @default_num_acceptors
@@ -232,7 +234,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
     opts =
       Map.merge(
         %{
-          env: %{dispatch: dispatch},
+          env: %{dispatch: {:persistent_term, dispatch_key}},
           idle_timeout: idle_timeout,
           inactivity_timeout: idle_timeout,
           settings_timeout: idle_timeout,
