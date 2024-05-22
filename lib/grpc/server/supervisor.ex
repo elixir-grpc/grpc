@@ -74,7 +74,7 @@ defmodule GRPC.Server.Supervisor do
         {endpoint, endpoint.__meta__(:servers)}
       rescue
         FunctionClauseError ->
-          Logger.warn(
+          Logger.warning(
             "deprecated: servers as argument of GRPC.Server.Supervisor, please use GRPC.Endpoint"
           )
 
@@ -99,7 +99,9 @@ defmodule GRPC.Server.Supervisor do
         ver = to_string(vsn)
 
         unless Version.match?(ver, ">= 2.9.0") do
-          Logger.warn("cowlib should be >= 2.9.0, it's #{ver} now. See grpc's README for details")
+          Logger.warning(
+            "cowlib should be >= 2.9.0, it's #{ver} now. See grpc's README for details"
+          )
         end
 
       _ ->

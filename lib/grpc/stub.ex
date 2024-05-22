@@ -640,7 +640,7 @@ defmodule GRPC.Stub do
   end
 
   defp parse_req_opts([{:content_type, content_type} | t], acc) do
-    Logger.warn(":content_type has been deprecated, please use :codec")
+    Logger.warning(":content_type has been deprecated, please use :codec")
     parse_req_opts(t, Map.put(acc, :content_type, content_type))
   end
 
