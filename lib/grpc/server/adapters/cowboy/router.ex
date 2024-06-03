@@ -8,8 +8,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Router do
 
   alias GRPC.Server.Router
 
-  @dialyzer {:nowarn_function, compile: 1}
-
   def compile(routes) do
     for {host, paths} <- routes do
       [{host_match, _, _}] = :cowboy_router.compile([{host, []}])

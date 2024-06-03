@@ -1,7 +1,7 @@
 defmodule GRPC.Mixfile do
   use Mix.Project
 
-  @version "0.7.0"
+  @version "0.8.1"
 
   def project do
     [
@@ -21,12 +21,6 @@ defmodule GRPC.Mixfile do
         source_ref: "v#{@version}",
         source_url: "https://github.com/elixir-grpc/grpc"
       ],
-      dialyzer: [
-        plt_add_deps: :app_tree,
-        plt_add_apps: [:iex, :mix, :ex_unit],
-        list_unused_filters: true,
-        plt_file: {:no_warn, "_build/#{Mix.env()}/plts/dialyzer.plt"}
-      ],
       xref: [exclude: [IEx]]
     ]
   end
@@ -45,6 +39,7 @@ defmodule GRPC.Mixfile do
       {:gun, "~> 2.0"},
       {:jason, ">= 0.0.0", optional: true},
       {:cowlib, "~> 2.12"},
+      {:castore, "~> 0.1 or ~> 1.0", optional: true},
       {:protobuf, "~> 0.11"},
       {:protobuf_generate, "~> 0.1.1", only: [:dev, :test]},
       {:googleapis,
@@ -55,7 +50,6 @@ defmodule GRPC.Mixfile do
        only: [:dev, :test]},
       {:mint, "~> 1.5"},
       {:ex_doc, "~> 0.29", only: :dev},
-      {:dialyxir, "~> 1.4.0", only: [:dev, :test], runtime: false},
       {:ex_parameterized, "~> 1.3.7", only: :test},
       {:telemetry, "~> 1.0"}
     ]
@@ -66,7 +60,7 @@ defmodule GRPC.Mixfile do
       maintainers: ["Bing Han", "Paulo Valente"],
       licenses: ["Apache 2"],
       links: %{"GitHub" => "https://github.com/elixir-grpc/grpc"},
-      files: ~w(mix.exs README.md lib src config LICENSE .formatter.exs)
+      files: ~w(mix.exs README.md lib src config priv/templates LICENSE .formatter.exs)
     }
   end
 
