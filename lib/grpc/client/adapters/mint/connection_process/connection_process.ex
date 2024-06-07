@@ -75,7 +75,11 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   ## Callbacks
 
   @impl true
-  def init({scheme, host, port, opts}) do
+  def init({scheme, host, port, _opts}) do
+    # Bypassing opts for now since it prevents
+    # some connections from being established.
+    # TODO: look into why this is needed
+    opts = []
     case Mint.HTTP.connect(scheme, host, port, opts) do
       {:ok, conn} ->
         {:ok, State.new(conn, opts[:parent])}
