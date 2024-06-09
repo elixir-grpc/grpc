@@ -63,7 +63,7 @@ defmodule GRPC.Stub do
       service_name = service_mod.__meta__(:name)
 
       Enum.each(service_mod.__rpc_calls__(), fn {name, {_, req_stream}, {_, res_stream}, _options} =
-                                                rpc ->
+                                                  rpc ->
         func_name = name |> to_string |> Macro.underscore()
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
