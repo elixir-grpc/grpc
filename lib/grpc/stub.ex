@@ -353,14 +353,6 @@ defmodule GRPC.Stub do
   end
 
   @doc """
-  DEPRECATED. Use `send_request/3` instead
-  """
-  @deprecated "Use send_request/3 instead"
-  def stream_send(stream, request, opts \\ []) do
-    send_request(stream, request, opts)
-  end
-
-  @doc """
   Send streaming requests.
 
   The last request can be sent with `:end_stream` option, or you can call `end_stream/1`
