@@ -432,14 +432,6 @@ defmodule GRPC.Server do
   end
 
   @doc """
-  DEPRECATED. Use `send_reply/3` instead
-  """
-  @deprecated "Use send_reply/3 instead"
-  def stream_send(stream, reply) do
-    send_reply(stream, reply)
-  end
-
-  @doc """
   Send streaming reply.
 
   ## Examples
