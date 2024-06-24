@@ -18,7 +18,6 @@ defmodule GRPC.Client.Adapters.MintTest do
       channel = build(:channel, adapter: Mint, port: port, host: "localhost")
 
       assert {:ok, result} = Mint.connect(channel, [])
-
       assert %{channel | adapter_payload: %{conn_pid: result.adapter_payload.conn_pid}} == result
     end
 
