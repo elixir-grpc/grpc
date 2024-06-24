@@ -15,7 +15,8 @@ defmodule GRPC.Client.Adapters.Mint do
 
   @impl true
   def connect(%{host: host, port: port} = channel, opts \\ []) do
-    opts = Keyword.merge(@default_connect_opts, connect_opts(channel, opts))
+    opts = connect_opts(channel, opts) |> merge_opts()
+
     Process.flag(:trap_exit, true)
 
     channel
@@ -120,6 +121,14 @@ defmodule GRPC.Client.Adapters.Mint do
   defp connect_opts(_channel, opts) do
     transport_opts = Keyword.get(opts, :transport_opts, [])
     [transport_opts: Keyword.merge(@default_transport_opts, transport_opts)]
+  end
+
+  # Merges default opts with application specific opts
+  # set via `config :grpc, GRPC.Client.Adapters.Mint, custom_opts`
+  defp merge_opts(opts) do
+    module_opts = Application.get_env(:grpc, __MODULE__, [])
+    opts = Keyword.merge(opts, module_opts)
+    Keyword.merge(@default_connect_opts, opts)
   end
 
   defp mint_scheme(%Channel{scheme: "https"} = _channel), do: :https
