@@ -15,14 +15,15 @@ defmodule GRPC.Client.Adapters.MintTest do
     end
 
     test "connects insecurely (default options)", %{port: port} do
-      channel = build(:channel, port: port, host: "localhost")
+      channel = build(:channel, adapter: Mint, port: port, host: "localhost")
 
       assert {:ok, result} = Mint.connect(channel, [])
+
       assert %{channel | adapter_payload: %{conn_pid: result.adapter_payload.conn_pid}} == result
     end
 
     test "connects insecurely (custom options)", %{port: port} do
-      channel = build(:channel, port: port, host: "localhost")
+      channel = build(:channel, adapter: Mint, port: port, host: "localhost")
 
       assert {:ok, result} = Mint.connect(channel, transport_opts: [ip: :loopback])
       assert %{channel | adapter_payload: %{conn_pid: result.adapter_payload.conn_pid}} == result
