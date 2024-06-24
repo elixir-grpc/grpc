@@ -42,7 +42,7 @@ defmodule GRPC.Client.Adapters.MintTest do
 
       assert %{channel | adapter_payload: %{conn_pid: result.adapter_payload.conn_pid}} == result
 
-      # Ensure that changing one of the options breaks things
+      # Ensure that changing one of the options via config_options also breaks things
       assert {:error, message} =
                Mint.connect(channel, config_options: [transport_opts: [ip: "256.0.0.0"]])
 
