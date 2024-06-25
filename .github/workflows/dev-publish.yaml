@@ -1,0 +1,39 @@
+name: Elixir Dev Publish
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  DEPENDENCY_FILE: mix.lock
+  ELIXIR_VERSION: 1.11.4
+  JOB_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  OTP_VERSION: 23.3.4.7
+  RELEVANT_FILES: 'mix.lock mix.exs lib config test'
+  REPOSITORY: kafkaesque
+  RUNNER_OS: ubuntu20
+  SHA: ${{ github.sha }}
+  
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+    inputs: {}
+
+jobs:
+  dev-publish:
+    name: Dev Publish
+    runs-on: runs-on,runner=4cpu-linux-x64
+    steps:
+      - name: Publish Hex package
+        uses: surgeventures/platform-tribe-actions/elixir/dev-publish@fast-elixir-repo-setup
+        with:
+          repository: ${{ env.REPOSITORY}}
+          dependency-file: ${{ env.DEPENDENCY_FILE }}
+          sha: ${{ env.SHA }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          hex-token: ${{ secrets.HEX_ORGANIZATION_WRITE_KEY }}
+          mix-env: dev
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+          runner-os: ${{ env.RUNNER_OS }}
+          relevant-files: ${{ env.RELEVANT_FILES}}
