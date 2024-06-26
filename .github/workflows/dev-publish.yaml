@@ -1,15 +1,15 @@
 name: Elixir Dev Publish
 
 env:
-  DEBIAN_FRONTEND: noninteractive
-  DEPENDENCY_FILE: mix.lock
-  ELIXIR_VERSION: 1.11.4
-  JOB_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-  OTP_VERSION: 23.3.4.7
-  RELEVANT_FILES: 'mix.lock mix.exs lib config test'
-  REPOSITORY: kafkaesque
-  RUNNER_OS: ubuntu20
   SHA: ${{ github.sha }}
+  JOB_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  DEBIAN_FRONTEND: noninteractive
+  REPOSITORY: kafkaesque
+  ELIXIR_VERSION: 1.10.x # Elixir version used during package publishing
+  OTP_VERSION: 22.x # OTP version used during package publishing
+  RUNNER_OS: ubuntu22 # Must match Elixir/OTP version in described in action erlef/setup-beam@v1
+  RELEVANT_FILES: "mix.lock mix.exs lib config test"  # Important, this controls the caching, make sure to keep this right
+  DEPENDENCY_FILE: mix.lock
   
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
