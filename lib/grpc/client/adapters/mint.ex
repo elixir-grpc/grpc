@@ -17,8 +17,6 @@ defmodule GRPC.Client.Adapters.Mint do
   def connect(%{host: host, port: port} = channel, opts \\ []) do
     # Added :config_options to facilitate testing.
     {config_opts, opts} = Keyword.pop(opts, :config_options, [])
-    # Merges default opts with application specific opts set
-    # via `config :grpc, GRPC.Client.Adapters.Mint, custom_opts`
     module_opts = Application.get_env(:grpc, __MODULE__, config_opts)
 
     opts = connect_opts(channel, opts) |> merge_opts(module_opts)
