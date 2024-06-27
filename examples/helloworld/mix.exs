@@ -19,9 +19,9 @@ defmodule Helloworld.Mixfile do
   defp deps do
     [
       {:grpc, path: "../../"},
+      {:jason, "~> 1.3.0"},
       {:protobuf, "~> 0.11"},
       {:google_protos, "~> 0.3.0"},
-      {:dialyxir, "~> 1.1", only: [:dev, :test], runtime: false}
     ]
   end
 end

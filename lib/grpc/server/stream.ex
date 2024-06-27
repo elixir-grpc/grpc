@@ -34,6 +34,9 @@ defmodule GRPC.Server.Stream do
           # compressor mainly is used in client decompressing, responses compressing should be set by
           # `GRPC.Server.set_compressor`
           compressor: module() | nil,
+          # For http transcoding
+          http_method: GRPC.Server.Router.http_method(),
+          http_transcode: boolean(),
           __interface__: map()
         }
 
@@ -51,12 +54,44 @@ defmodule GRPC.Server.Stream do
             adapter: nil,
             local: nil,
             compressor: nil,
+            http_method: :post,
+            http_transcode: false,
             __interface__: %{send_reply: &__MODULE__.send_reply/3}
 
-  def send_reply(%{adapter: adapter, codec: codec} = stream, reply, opts) do
-    # {:ok, data, _size} = reply |> codec.encode() |> GRPC.Message.to_data()
-    data = codec.encode(reply)
-    adapter.send_reply(stream.payload, data, Keyword.put(opts, :codec, codec))
+  def send_reply(
+        %{grpc_type: :server_stream, codec: codec, http_transcode: true, rpc: rpc} = stream,
+        reply,
+        opts
+      ) do
+    rule = GRPC.Service.rpc_options(rpc, :http) || %{value: %{}}
+    response = GRPC.Server.Transcode.map_response_body(rule.value, reply)
+
+    do_send_reply(stream, [codec.encode(response), "\n"], opts)
+  end
+
+  def send_reply(%{codec: codec, http_transcode: true, rpc: rpc} = stream, reply, opts) do
+    rule = GRPC.Service.rpc_options(rpc, :http) || %{value: %{}}
+    response = GRPC.Server.Transcode.map_response_body(rule.value, reply)
+
+    do_send_reply(stream, codec.encode(response), opts)
+  end
+
+  def send_reply(%{codec: codec} = stream, reply, opts) do
+    do_send_reply(stream, codec.encode(reply), opts)
+  end
+
+  defp do_send_reply(
+         %{adapter: adapter, codec: codec, http_transcode: http_transcode} = stream,
+         data,
+         opts
+       ) do
+    opts =
+      opts
+      |> Keyword.put(:codec, codec)
+      |> Keyword.put(:http_transcode, http_transcode)
+
+    adapter.send_reply(stream.payload, data, opts)
+
     stream
   end
 end

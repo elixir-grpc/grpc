@@ -180,7 +180,7 @@ defmodule MetricsSupervisor do
   end
 
   defp is_message(stream) do
-    stream.grpc_type in [:client_stream, :bidi_stream]
+    stream.grpc_type in [:client_stream, :bidirectional_stream]
   end
 
   @histogram_buckets_seconds [5.0e-3, 10.0e-3, 25.0e-3, 50.0e-3, 0.1, 0.25, 0.5, 1, 2.5, 5, 10]

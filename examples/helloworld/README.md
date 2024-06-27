@@ -17,6 +17,16 @@ $ mix run --no-halt
 $ mix run priv/client.exs
 ```
 
+## HTTP Transcoding
+
+``` shell
+# Say hello
+curl -H 'Content-type: application/json' http://localhost:50051/v1/greeter/test
+
+# Say hello from
+curl -XPOST -H 'Content-type: application/json' -d '{"name": "test", "from": "anon"}' http://localhost:50051/v1/greeter
+```
+
 ## Regenerate Elixir code from proto
 
 1. Modify the proto `priv/protos/helloworld.proto`
@@ -26,8 +36,10 @@ $ mix run priv/client.exs
 mix escript.install hex protobuf
 ```
 4. Generate the code:
+
 ```shell
-$ protoc -I priv/protos --elixir_out=plugins=grpc:./lib/ priv/protos/helloworld.proto
+$ (cd ../../; mix build_protobuf_escript && mix escript.build)
+$ protoc -I priv/protos --elixir_out=:./lib/ --grpc_elixir_out=./lib --plugin="../../deps/protobuf/protoc-gen-elixir" --plugin="../../protoc-gen-grpc_elixir" priv/protos/helloworld.proto
 ```
 
 Refer to [protobuf-elixir](https://github.com/tony612/protobuf-elixir#usage) for more information.

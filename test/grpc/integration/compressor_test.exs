@@ -8,7 +8,7 @@ defmodule GRPC.Integration.CompressorTest do
 
     def say_hello(%{name: name = "only client compress"}, stream) do
       %{"grpc-encoding" => "gzip"} = GRPC.Stream.get_headers(stream)
-      Helloworld.HelloReply.new(message: "Hello, #{name}")
+      %Helloworld.HelloReply{message: "Hello, #{name}"}
     end
 
     def say_hello(%{name: name = "only server compress"}, stream) do
@@ -17,13 +17,13 @@ defmodule GRPC.Integration.CompressorTest do
       end
 
       GRPC.Server.set_compressor(stream, GRPC.Compressor.Gzip)
-      Helloworld.HelloReply.new(message: "Hello, #{name}")
+      %Helloworld.HelloReply{message: "Hello, #{name}"}
     end
 
     def say_hello(%{name: name = "both compress"}, stream) do
       %{"grpc-encoding" => "gzip"} = GRPC.Stream.get_headers(stream)
       GRPC.Server.set_compressor(stream, GRPC.Compressor.Gzip)
-      Helloworld.HelloReply.new(message: "Hello, #{name}")
+      %Helloworld.HelloReply{message: "Hello, #{name}"}
     end
   end
 
@@ -32,7 +32,7 @@ defmodule GRPC.Integration.CompressorTest do
       service: Helloworld.Greeter.Service
 
     def say_hello(%{name: name}, _stream) do
-      Helloworld.HelloReply.new(message: "Hello, #{name}")
+      %Helloworld.HelloReply{message: "Hello, #{name}"}
     end
   end
 
@@ -45,7 +45,7 @@ defmodule GRPC.Integration.CompressorTest do
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
       name = "only client compress"
-      req = Helloworld.HelloRequest.new(name: name)
+      req = %Helloworld.HelloRequest{name: name}
 
       {:ok, reply, headers} =
         channel
@@ -61,7 +61,7 @@ defmodule GRPC.Integration.CompressorTest do
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
       name = "only server compress"
-      req = Helloworld.HelloRequest.new(name: name)
+      req = %Helloworld.HelloRequest{name: name}
 
       # no accept-encoding header
       {:ok, reply, headers} = channel |> HelloStub.say_hello(req, return_headers: true)
@@ -85,7 +85,7 @@ defmodule GRPC.Integration.CompressorTest do
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
       name = "both compress"
-      req = Helloworld.HelloRequest.new(name: name)
+      req = %Helloworld.HelloRequest{name: name}
 
       {:ok, reply, headers} =
         channel
@@ -101,7 +101,7 @@ defmodule GRPC.Integration.CompressorTest do
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
       name = "both compress"
-      req = Helloworld.HelloRequest.new(name: name)
+      req = %Helloworld.HelloRequest{name: name}
 
       assert {:error, %GRPC.RPCError{message: _, status: 12}} =
                channel
