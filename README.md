@@ -205,6 +205,26 @@ iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.C
 
 Check the [examples](examples) and [interop](interop) directories in the project's source code for some examples.
 
+## Client Adapter and Configuration
+
+The default adapter used by `GRPC.Stub.connect/2` is `GRPC.Client.Adapter.Gun`. Another option is to use `GRPC.Client.Adapters.Mint` instead, like so:
+
+```elixir
+GRPC.Stub.connect("localhost:50051",
+  # Use Mint adapter instead of default Gun
+  adapter: GRPC.Client.Adapters.Mint
+)
+```
+
+The `GRPC.Client.Adapters.Mint` adapter accepts custom configuration. To do so, you can configure it from your mix application via:
+
+```elixir
+# File: your application's config file.
+config :grpc, GRPC.Client.Adapters.Mint, custom_opts
+```
+
+The accepted options for configuration are the ones listed on [Mint.HTTP.connect/4](https://hexdocs.pm/mint/Mint.HTTP.html#connect/4-options)
+
 ## Features
 
 - Various kinds of RPC:
