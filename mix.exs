@@ -4,7 +4,7 @@ defmodule GRPC.Mixfile do
   def project do
     [
       app: :grpc,
-      version: "0.6.4",
+      version: "0.6.5",
       elixir: "~> 1.5",
       elixirc_paths: elixirc_paths(Mix.env()),
       build_embedded: Mix.env() == :prod,
