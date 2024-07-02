@@ -7,6 +7,12 @@ defmodule GRPC.Integration.ServerTest do
     def get_feature(point, _stream) do
       %Routeguide.Feature{location: point, name: "#{point.latitude},#{point.longitude}"}
     end
+
+    def route_chat(_ex_stream, stream) do
+      GRPC.Server.send_headers(stream, %{})
+      Process.exit(self(), :shutdown)
+      Process.sleep(500)
+    end
   end
 
   defmodule TranscodeErrorServer do
@@ -318,6 +324,21 @@ defmodule GRPC.Integration.ServerTest do
       assert {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
       assert reply.message == "Hello, unauthenticated"
     end)
+  end
+
+  test "gracefully handles server shutdown disconnects" do
+    logs =
+      ExUnit.CaptureLog.capture_log(fn ->
+        run_server(FeatureServer, fn port ->
+          {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+          client_stream = Routeguide.RouteGuide.Stub.route_chat(channel)
+          assert %GRPC.Client.Stream{} = client_stream
+          {:ok, ex_stream} = GRPC.Stub.recv(client_stream, timeout: :infinity)
+          assert [{:error, %GRPC.RPCError{status: 13}}] = Enum.into(ex_stream, [])
+        end)
+      end)
+
+    assert logs == ""
   end
 
   describe "http/json transcode" do

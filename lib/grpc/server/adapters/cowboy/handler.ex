@@ -449,8 +449,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  def info({:EXIT, pid, :normal}, req, state = %{pid: pid}) do
-    exit_handler(pid, :normal)
+  def info({:EXIT, server_rpc_pid, reason}, req, state = %{pid: server_rpc_pid})
+      when reason in [:normal, :shutdown] do
     {:stop, req, state}
   end
 
