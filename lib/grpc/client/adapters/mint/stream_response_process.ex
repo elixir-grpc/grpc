@@ -143,7 +143,8 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
         _from,
         %{responses: responses} = state
       ) do
-    {:reply, :ok, %{state | responses: [error | responses]}, {:continue, :produce_response}}
+
+    {:reply, :ok, %{state | done: true, responses: [error | responses]}, {:continue, :produce_response}}
   end
 
   def handle_call({:consume_response, :done}, _from, state) do
