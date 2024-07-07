@@ -47,5 +47,36 @@ defmodule GRPC.Client.Adapters.MintTest do
 
       assert message == "Error while opening connection: {:error, :badarg}"
     end
+
+    test "defaults client settings when none is passed", %{port: port} do
+      channel = build(:channel, adapter: Mint, port: port, host: "localhost")
+
+      assert {:ok, result} = Mint.connect(channel, [])
+      # wait for settings to be pushed
+      Process.sleep(50)
+      state = :sys.get_state(result.adapter_payload.conn_pid)
+
+      assert %{initial_window_size: 8_000_000, max_frame_size: 8_000_000} =
+               Map.get(state.conn, :client_settings)
+    end
+
+    test "allow client settings to be passed", %{port: port} do
+      channel = build(:channel, adapter: Mint, port: port, host: "localhost")
+
+      assert {:ok, result} =
+               Mint.connect(channel,
+                 client_settings: [
+                   initial_window_size: 50_000,
+                   max_frame_size: 50_000
+                 ]
+               )
+
+      # wait for settings to be pushed
+      Process.sleep(50)
+      state = :sys.get_state(result.adapter_payload.conn_pid)
+
+      assert %{initial_window_size: 50_000, max_frame_size: 50_000} =
+               Map.get(state.conn, :client_settings)
+    end
   end
 end

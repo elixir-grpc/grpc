@@ -10,7 +10,13 @@ defmodule GRPC.Client.Adapters.Mint do
 
   @behaviour GRPC.Client.Adapter
 
-  @default_connect_opts [protocols: [:http2]]
+  @default_connect_opts [
+    protocols: [:http2]
+  ]
+  @default_client_settings [
+    initial_window_size: 8_000_000,
+    max_frame_size: 8_000_000
+  ]
   @default_transport_opts [timeout: :infinity]
 
   @impl true
@@ -119,12 +125,22 @@ defmodule GRPC.Client.Adapters.Mint do
       |> Keyword.get(:transport_opts, [])
       |> Keyword.merge(ssl)
 
-    [transport_opts: Keyword.merge(@default_transport_opts, transport_opts)]
+    client_settings = Keyword.get(opts, :client_settings, @default_client_settings)
+
+    [
+      transport_opts: Keyword.merge(@default_transport_opts, transport_opts),
+      client_settings: client_settings
+    ]
   end
 
   defp connect_opts(_channel, opts) do
     transport_opts = Keyword.get(opts, :transport_opts, [])
-    [transport_opts: Keyword.merge(@default_transport_opts, transport_opts)]
+    client_settings = Keyword.get(opts, :client_settings, @default_client_settings)
+
+    [
+      transport_opts: Keyword.merge(@default_transport_opts, transport_opts),
+      client_settings: client_settings
+    ]
   end
 
   defp merge_opts(opts, module_opts) do
