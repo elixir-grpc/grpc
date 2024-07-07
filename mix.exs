@@ -40,7 +40,7 @@ defmodule GRPC.Mixfile do
       {:jason, ">= 0.0.0", optional: true},
       {:cowlib, "~> 2.12"},
       {:castore, "~> 0.1 or ~> 1.0", optional: true},
-      {:protobuf, "~> 0.11"},
+      {:protobuf, "~> 0.11", only: [:dev, :test]},
       {:protobuf_generate, "~> 0.1.1", only: [:dev, :test]},
       {:googleapis,
        github: "googleapis/googleapis",
