@@ -1,11 +1,11 @@
 # gRPC Elixir
 
+[![GitHub CI](https://github.com/elixir-grpc/grpc/actions/workflows/ci.yml/badge.svg)](https://github.com/elixir-grpc/grpc/actions/workflows/ci.yml)
 [![Hex.pm](https://img.shields.io/hexpm/v/grpc.svg)](https://hex.pm/packages/grpc)
-[![Travis Status](https://app.travis-ci.com/elixir-grpc/grpc.svg?branch=master)](https://app.travis-ci.com/elixir-grpc/grpc)
-[![GitHub actions Status](https://github.com/elixir-grpc/grpc/workflows/CI/badge.svg)](https://github.com/elixir-grpc/grpc/actions)
+[![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/grpc/)
 [![License](https://img.shields.io/hexpm/l/grpc.svg)](https://github.com/elixir-grpc/grpc/blob/master/LICENSE.md)
-[![Last Updated](https://img.shields.io/github/last-commit/elixir-grpc/grpc.svg)](https://github.com/elixir-grpc/grpc/commits/master)
 [![Total Download](https://img.shields.io/hexpm/dt/grpc.svg)](https://hex.pm/packages/elixir-grpc/grpc)
+[![Last Updated](https://img.shields.io/github/last-commit/elixir-grpc/grpc.svg)](https://github.com/elixir-grpc/grpc/commits/master)
 
 An Elixir implementation of [gRPC](http://www.grpc.io/).
 
@@ -100,7 +100,7 @@ We will use this module [in the gRPC server startup section](#start-application)
 
 ### **HTTP Transcoding**
 
-1. Adding [grpc-gateway annotations](https://cloud.google.com/endpoints/docs/grpc/transcoding) to your protobuf file definition: 
+1. Adding [grpc-gateway annotations](https://cloud.google.com/endpoints/docs/grpc/transcoding) to your protobuf file definition:
 
 ```protobuf
 import "google/api/annotations.proto";
@@ -154,7 +154,7 @@ mix protobuf.generate \
 3. Enable http_transcode option in your Server module
 ```elixir
 defmodule Helloworld.Greeter.Server do
-  use GRPC.Server, 
+  use GRPC.Server,
     service: Helloworld.Greeter.Service,
     http_transcode: true
 
