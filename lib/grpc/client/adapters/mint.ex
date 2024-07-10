@@ -1,6 +1,6 @@
 defmodule GRPC.Client.Adapters.Mint do
   @moduledoc """
-  A client adapter using mint
+  A client adapter using Mint
   """
 
   alias GRPC.Channel
@@ -19,6 +19,16 @@ defmodule GRPC.Client.Adapters.Mint do
   ]
   @default_transport_opts [timeout: :infinity]
 
+  @doc """
+  Connects using Mint based on the provided configs. Options
+    * `:transport_opts`: Defaults to `[timeout: :infinity]`, given the nature of H2 connections (with support to
+      long-lived streams) this default is set to avoid timeouts while waiting for server streams to complete. The other
+      options may vary based on the transport used for this connection (tcp or ssl). Check [Mint.HTTP.connect/4](https://hexdocs.pm/mint/Mint.HTTP.html#connect/4)
+    * `:client_settings`: Defaults to `[initial_window_size: 8_000_000, max_frame_size: 8_000_000]`, a larger default
+      window size ensures that the number of packages exchanges is smaller, thus speeding up the requests by reducing the
+      amount of networks round trip, with the cost of having larger packages reaching the server per connection.
+      Check [Mint.HTTP2.setting() type](https://hexdocs.pm/mint/Mint.HTTP2.html#t:setting/0) for additional configs.
+  """
   @impl true
   def connect(%{host: host, port: port} = channel, opts \\ []) do
     # Added :config_options to facilitate testing.
