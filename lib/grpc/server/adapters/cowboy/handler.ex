@@ -73,7 +73,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         http_transcode: transcode?(req)
       }
 
-      server_rpc_pid = spawn_link(__MODULE__, :call_rpc, [server, route, stream])
+      server_rpc_pid = :proc_lib.spawn_link(__MODULE__, :call_rpc, [server, route, stream])
       Process.flag(:trap_exit, true)
 
       req = :cowboy_req.set_resp_headers(HTTP2.server_headers(stream), req)

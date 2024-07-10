@@ -224,27 +224,37 @@ defmodule GRPC.Integration.ServerTest do
   end
 
   test "returns appropriate error for unary requests" do
-    run_server([HelloErrorServer], fn port ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-      req = %Helloworld.HelloRequest{name: "Elixir"}
-      {:error, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
+    logs =
+      ExUnit.CaptureLog.capture_log(fn ->
+        run_server([HelloErrorServer], fn port ->
+          {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+          req = %Helloworld.HelloRequest{name: "Elixir"}
+          {:error, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
 
-      assert %GRPC.RPCError{
-               status: GRPC.Status.unauthenticated(),
-               message: "Please authenticate"
-             } == reply
-    end)
+          assert %GRPC.RPCError{
+                   status: GRPC.Status.unauthenticated(),
+                   message: "Please authenticate"
+                 } == reply
+        end)
+      end)
+
+    assert logs =~ "Exception raised while handling /helloworld.Greeter/SayHello"
   end
 
   test "return errors for unknown errors" do
-    run_server([HelloErrorServer], fn port ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-      req = %Helloworld.HelloRequest{name: "unknown error"}
+    logs =
+      ExUnit.CaptureLog.capture_log(fn ->
+        run_server([HelloErrorServer], fn port ->
+          {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+          req = %Helloworld.HelloRequest{name: "unknown error"}
 
-      assert {:error,
-              %GRPC.RPCError{message: "Internal Server Error", status: GRPC.Status.unknown()}} ==
-               channel |> Helloworld.Greeter.Stub.say_hello(req)
-    end)
+          assert {:error,
+                  %GRPC.RPCError{message: "Internal Server Error", status: GRPC.Status.unknown()}} ==
+                   channel |> Helloworld.Greeter.Stub.say_hello(req)
+        end)
+      end)
+
+    assert logs =~ "Exception raised while handling /helloworld.Greeter/SayHello"
   end
 
   test "returns appropriate error for stream requests" do
