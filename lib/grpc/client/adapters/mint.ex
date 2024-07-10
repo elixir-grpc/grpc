@@ -1,6 +1,6 @@
 defmodule GRPC.Client.Adapters.Mint do
   @moduledoc """
-  A client adapter using Mint
+  A client adapter using Mint.
   """
 
   alias GRPC.Channel
