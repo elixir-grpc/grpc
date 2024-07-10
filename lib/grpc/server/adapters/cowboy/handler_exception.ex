@@ -1,4 +1,8 @@
 defmodule GRPC.Server.Adapters.Cowboy.HandlerException do
+  @moduledoc """
+  Exception meant to represent failures captured in Cowboy.Handler
+  """
+
   defexception [:req, :kind, :reason, :stack]
 
   def new(req, %{__exception__: _} = exception, stack \\ [], kind \\ :error) do
