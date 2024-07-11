@@ -1,4 +1,4 @@
-defmodule GRPC.Server.Adapters.AdapterException do
+defmodule GRPC.Server.Adapters.ReportException do
   @moduledoc """
   Exception raised by server adapter, meant to be used as part of metadata `crash_report`
   """
