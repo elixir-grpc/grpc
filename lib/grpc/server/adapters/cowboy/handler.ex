@@ -3,7 +3,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   A cowboy handler accepting all requests and calls corresponding functions defined by users.
   """
 
-  alias GRPC.Server.Adapters.AdapterException
+  alias GRPC.Server.Adapters.ReportException
   alias GRPC.Transport.HTTP2
   alias GRPC.RPCError
   require Logger
