@@ -473,7 +473,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     req = send_error(req, rpc_error, state, :error)
 
     [req: req]
-    |> AdapterException.new(reason, stack, kind)
+    |> ReportException.new(reason, stack, kind)
     |> log_error(stack)
 
     {:stop, req, state}
