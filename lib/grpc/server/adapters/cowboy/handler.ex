@@ -3,7 +3,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   A cowboy handler accepting all requests and calls corresponding functions defined by users.
   """
 
-  alias GRPC.Server.Adapters.Cowboy.HandlerException
+  alias GRPC.Server.Adapters.AdapterException
   alias GRPC.Transport.HTTP2
   alias GRPC.RPCError
   require Logger
@@ -459,8 +459,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   def info({:EXIT, pid, {%RPCError{} = error, stacktrace}}, req, state = %{pid: pid}) do
     req = send_error(req, error, state, :rpc_error)
 
-    req
-    |> HandlerException.new(error, stacktrace)
+    [req: req]
+    |> AdapterException.new(error, stacktrace)
     |> log_error(stacktrace)
 
     {:stop, req, state}
@@ -472,8 +472,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     rpc_error = %RPCError{status: GRPC.Status.unknown(), message: "Internal Server Error"}
     req = send_error(req, rpc_error, state, :error)
 
-    req
-    |> HandlerException.new(reason, stack, kind)
+    [req: req]
+    |> AdapterException.new(reason, stack, kind)
     |> log_error(stack)
 
     {:stop, req, state}
@@ -483,8 +483,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     error = %RPCError{status: GRPC.Status.unknown(), message: "Internal Server Error"}
     req = send_error(req, error, state, reason)
 
-    req
-    |> HandlerException.new(reason, stacktrace)
+    [req: req]
+    |> AdapterException.new(reason, stacktrace)
     |> log_error(stacktrace)
 
     {:stop, req, state}
@@ -660,7 +660,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     {:wait, ref}
   end
 
-  defp log_error(%HandlerException{kind: kind} = exception, stacktrace) do
+  defp log_error(%AdapterException{kind: kind} = exception, stacktrace) do
     crash_reason = GRPC.Logger.crash_reason(kind, exception, stacktrace)
 
     kind
