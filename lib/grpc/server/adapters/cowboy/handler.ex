@@ -460,7 +460,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     req = send_error(req, error, state, :rpc_error)
 
     [req: req]
-    |> AdapterException.new(error, stacktrace)
+    |> ReportException.new(error, stacktrace)
     |> log_error(stacktrace)
 
     {:stop, req, state}
