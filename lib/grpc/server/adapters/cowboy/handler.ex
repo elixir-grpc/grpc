@@ -660,7 +660,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     {:wait, ref}
   end
 
-  defp log_error(%AdapterException{kind: kind} = exception, stacktrace) do
+  defp log_error(%ReportException{kind: kind} = exception, stacktrace) do
     crash_reason = GRPC.Logger.crash_reason(kind, exception, stacktrace)
 
     kind
