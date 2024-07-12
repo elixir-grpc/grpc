@@ -69,7 +69,7 @@ defmodule GRPC.Integration.StubTest do
   end
 
   test "invalid channel function clause error" do
-    req = Helloworld.HelloRequest.new(name: "GRPC")
+    req = %Helloworld.HelloRequest{name: "GRPC"}
 
     assert_raise FunctionClauseError, ~r/Helloworld.Greeter.Stub.say_hello/, fn ->
       Helloworld.Greeter.Stub.say_hello(nil, req)

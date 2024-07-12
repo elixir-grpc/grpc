@@ -131,7 +131,7 @@ defmodule GRPC.Server do
       codecs = if http_transcode, do: [GRPC.Codec.JSON | codecs], else: codecs
 
       routes =
-        for {name, _, _, options} = rpc <- service_mod.__rpc_calls__, reduce: [] do
+        for {name, _, _, options} = rpc <- service_mod.__rpc_calls__(), reduce: [] do
           acc ->
             path = "/#{service_name}/#{name}"
 
@@ -147,7 +147,7 @@ defmodule GRPC.Server do
             [{:grpc, path} | acc]
         end
 
-      Enum.each(service_mod.__rpc_calls__, fn {name, _, _, options} = rpc ->
+      Enum.each(service_mod.__rpc_calls__(), fn {name, _, _, options} = rpc ->
         func_name = name |> to_string |> Macro.underscore() |> String.to_atom()
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
@@ -188,7 +188,7 @@ defmodule GRPC.Server do
         end
       end)
 
-      def __call_rpc__(_, stream) do
+      def __call_rpc__(_http_path, _http_method, stream) do
         raise GRPC.RPCError, status: :unimplemented
       end
 
@@ -429,14 +429,6 @@ defmodule GRPC.Server do
     servers = endpoint.__meta__(:servers)
     servers = GRPC.Server.servers_to_map(servers)
     adapter.stop(endpoint, servers)
-  end
-
-  @doc """
-  DEPRECATED. Use `send_reply/3` instead
-  """
-  @deprecated "Use send_reply/3 instead"
-  def stream_send(stream, reply) do
-    send_reply(stream, reply)
   end
 
   @doc """
