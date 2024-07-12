@@ -62,8 +62,8 @@ defmodule GRPC.Stub do
       service_mod = opts[:service]
       service_name = service_mod.__meta__(:name)
 
-      Enum.each(service_mod.__rpc_calls__, fn {name, {_, req_stream}, {_, res_stream}, _options} =
-                                                rpc ->
+      Enum.each(service_mod.__rpc_calls__(), fn {name, {_, req_stream}, {_, res_stream}, _options} =
+                                                  rpc ->
         func_name = name |> to_string |> Macro.underscore()
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
@@ -131,17 +131,62 @@ defmodule GRPC.Stub do
   """
   @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(addr, opts \\ []) when is_binary(addr) and is_list(opts) do
-    {host, port} =
-      case String.split(addr, ":") do
-        [host, port] -> {host, port}
-        [socket_path] -> {{:local, socket_path}, 0}
-      end
+    # This works because we only accept `http` and `https` schemes (allowlisted below explicitly)
+    # addresses like "localhost:1234" parse as if `localhost` is the scheme for URI, and this falls through to
+    # the base case. Accepting only `http/https` is a trait of `connect/3`.
 
-    connect(host, port, opts)
+    case URI.parse(addr) do
+      %URI{scheme: @secure_scheme, host: host, port: port} ->
+        opts = Keyword.put_new_lazy(opts, :cred, &default_ssl_option/0)
+        connect(host, port, opts)
+
+      %URI{scheme: @insecure_scheme, host: host, port: port} ->
+        if opts[:cred] do
+          raise ArgumentError, "invalid option for insecure (http) address: :cred"
+        end
+
+        connect(host, port, opts)
+
+      # For compatibility with previous versions, we accept URIs in
+      # the "#{address}:#{port}" format
+      _ ->
+        case String.split(addr, ":") do
+          [socket_path] ->
+            connect({:local, socket_path}, 0, opts)
+
+          [address, port] ->
+            port = String.to_integer(port)
+            connect(address, port, opts)
+        end
+    end
   end
 
-  @spec connect(String.t(), binary() | non_neg_integer(), keyword()) ::
-          {:ok, Channel.t()} | {:error, any()}
+  if {:module, CAStore} == Code.ensure_loaded(CAStore) do
+    defp default_ssl_option do
+      %GRPC.Credential{
+        ssl: [
+          verify: :verify_peer,
+          depth: 99,
+          cacert_file: CAStore.file_path()
+        ]
+      }
+    end
+  else
+    defp default_ssl_option do
+      raise """
+      no GRPC credentials provided. Please either:
+
+      - Pass the `:cred` option to `GRPC.Stub.connect/2,3`
+      - Add `:castore` to your list of dependencies in `mix.exs`
+      """
+    end
+  end
+
+  @spec connect(
+          String.t() | {:local, String.t()},
+          binary() | non_neg_integer(),
+          keyword()
+        ) :: {:ok, Channel.t()} | {:error, any()}
   def connect(host, port, opts) when is_binary(port) do
     connect(host, String.to_integer(port), opts)
   end
@@ -305,14 +350,6 @@ defmodule GRPC.Stub do
       end)
 
     next.(stream, req)
-  end
-
-  @doc """
-  DEPRECATED. Use `send_request/3` instead
-  """
-  @deprecated "Use send_request/3 instead"
-  def stream_send(stream, request, opts \\ []) do
-    send_request(stream, request, opts)
   end
 
   @doc """
