@@ -346,7 +346,7 @@ defmodule GRPC.Integration.ServerTest do
 
     test "should map grpc error codes to http status" do
       run_server([TranscodeErrorServer], fn port ->
-        for {code_name, status} <- [
+        for {code_name, _status} <- [
               {"cancelled", 400},
               {"unknown", 500},
               {"invalid_argument", 400},
@@ -366,7 +366,7 @@ defmodule GRPC.Integration.ServerTest do
             ] do
           {:ok, conn_pid} = :gun.open(~c"localhost", port)
 
-          stream_ref =
+          _stream_ref =
             :gun.get(
               conn_pid,
               "/v1/messages/#{code_name}",
