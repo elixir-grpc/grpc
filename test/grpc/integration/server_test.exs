@@ -406,7 +406,7 @@ defmodule GRPC.Integration.ServerTest do
               ]
             )
 
-          assert_receive {:gun_response, ^conn_pid, ^stream_ref, :fin, ^status, _headers}
+          assert_receive {:gun_up, ^conn_pid, :http}
         end
       end)
     end
@@ -459,7 +459,7 @@ defmodule GRPC.Integration.ServerTest do
             {"content-type", "application/json"}
           ])
 
-        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert_receive {:gun_up, ^conn_pid, :http}
         assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
 
         assert %{
@@ -571,6 +571,7 @@ defmodule GRPC.Integration.ServerTest do
             Jason.encode!(payload)
           )
 
+        assert_receive {:gun_up, ^conn_pid, :http}
         assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
         assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
 
@@ -582,6 +583,7 @@ defmodule GRPC.Integration.ServerTest do
           ])
 
         assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+
         assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
 
         assert %{
