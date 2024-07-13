@@ -368,7 +368,7 @@ defmodule GRPC.Integration.ServerTest do
             Jason.encode!(%{"name" => name})
           )
 
-        assert_receive {:gun_response, ^conn_pid, ^stream_ref, :nofin, 200, _headers}
+        assert_receive {:gun_up, ^conn_pid, :http}
         assert {:ok, body} = :gun.await_body(conn_pid, stream_ref)
 
         assert %{"text" => "get_message"} = Jason.decode!(body)
