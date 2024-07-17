@@ -27,7 +27,7 @@ The package can be installed as:
   ```elixir
   def deps do
     [
-      {:grpc, "~> 0.8"}
+      {:grpc, "~> 0.9"}
     ]
   end
   ```
