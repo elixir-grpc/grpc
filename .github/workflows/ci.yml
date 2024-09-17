@@ -55,7 +55,7 @@ jobs:
       - name: Get SHA sum (HASH) of relevant files
         id: hash
         run: |
-          git config --global --add safe.directory /__w/${{ env.repository }}/${{ env.repository }}
+          git config --global --add safe.directory /__w/${{ env.REPOSITORY }}/${{ env.REPOSITORY }}
           echo "Get SHA sum (HASH) of relevant files"
           HASH="$(git ls-tree ${{ env.SHA }} -- ${{ env.RELEVANT_FILES }} | sha1sum | cut -d' ' -f1)"
           echo "BUILD HASH FOR THE CODEBASE IS: $HASH"
@@ -124,7 +124,7 @@ jobs:
       - name: Get SHA sum (HASH) of relevant files
         id: hash
         run: |
-          git config --global --add safe.directory /__w/${{ env.repository }}/${{ env.repository }}
+          git config --global --add safe.directory /__w/${{ env.REPOSITORY }}/${{ env.REPOSITORY }}
           echo "Get SHA sum (HASH) of relevant files"
           HASH="$(git ls-tree ${{ env.SHA }} -- ${{ env.RELEVANT_FILES }} | sha1sum | cut -d' ' -f1)"
           echo "BUILD HASH FOR THE CODEBASE IS: $HASH"

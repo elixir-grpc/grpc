@@ -44,7 +44,7 @@ jobs:
       - name: Check for CI successes
         uses: runs-on/cache/restore@v4
         with:
-          key: ${{ runner.os }}-${{ env.repository }}-approval-${{ steps.hash.outputs.HASH }}
+          key: ${{ runner.os }}-${{ env.REPOSITORY }}-approval-${{ steps.hash.outputs.HASH }}
           path: approval.txt
           fail-on-cache-miss: true
       - name: Setup Elixir
