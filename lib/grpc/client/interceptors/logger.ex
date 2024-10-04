@@ -28,7 +28,7 @@ defmodule GRPC.Client.Interceptors.Logger do
   end
 
   @impl GRPC.Client.Interceptor
-  def call(stream = %{grpc_type: grpc_type}, req, next, opts) do
+  def call(%{grpc_type: grpc_type} = stream, req, next, opts) do
     {time, result} = :timer.tc(next, [stream, req])
     level = Keyword.fetch!(opts, :level)
 
