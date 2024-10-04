@@ -2,8 +2,7 @@ defmodule GRPC.Client.Interceptors.Logger do
   @moduledoc """
   Print log around client rpc calls, like
 
-      17:13:33.021 [info]  Call say_hello of helloworld.Greeter
-      17:13:33.079 [info]  Got :ok in 58ms
+      17:13:33.021 [info]  Call helloworld.Greeter.say_hello -> :ok (58 ms)
 
   ## Options
 
@@ -15,43 +14,52 @@ defmodule GRPC.Client.Interceptors.Logger do
 
   ## Usage with custom level
 
-      {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Client.Interceptors.Logger, level: :warning}])
+      {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Client.Interceptors.Logger, level: :warn}])
   """
-
-  require Logger
 
   @behaviour GRPC.Client.Interceptor
 
-  @impl true
+  require Logger
+
+  @impl GRPC.Client.Interceptor
   def init(opts) do
     level = Keyword.get(opts, :level) || :info
     [level: level]
   end
 
-  @impl true
-  def call(%{grpc_type: grpc_type} = stream, req, next, opts) do
+  @impl GRPC.Client.Interceptor
+  def call(stream = %{grpc_type: grpc_type}, req, next, opts) do
+    {time, result} = :timer.tc(next, [stream, req])
     level = Keyword.fetch!(opts, :level)
 
     if Logger.compare_levels(level, Logger.level()) != :lt do
-      Logger.log(level, fn ->
-        ["Call ", to_string(elem(stream.rpc, 0)), " of ", stream.service_name]
-      end)
+      case grpc_type do
+        :unary ->
+          status = elem(result, 0)
 
-      start = System.monotonic_time()
-      result = next.(stream, req)
-      stop = System.monotonic_time()
+          Logger.log(level, fn ->
+            [
+              "Call ",
+              stream.service_name,
+              ".",
+              to_string(elem(stream.rpc, 0)),
+              " -> ",
+              inspect(status),
+              " (",
+              :io_lib.format("~.3f", [time / 1000]),
+              " ms)"
+            ]
+          end)
 
-      if grpc_type == :unary do
-        status = elem(result, 0)
+          result
 
-        Logger.log(level, fn ->
-          diff = System.convert_time_unit(stop - start, :native, :microsecond)
+        _otherwise ->
+          Logger.log(level, fn ->
+            ["Call ", to_string(elem(stream.rpc, 0)), " of ", stream.service_name]
+          end)
 
-          ["Got ", inspect(status), " in ", GRPC.Server.Interceptors.Logger.formatted_diff(diff)]
-        end)
+          result
       end
-
-      result
     else
       next.(stream, req)
     end

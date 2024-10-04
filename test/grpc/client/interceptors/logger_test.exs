@@ -31,7 +31,7 @@ defmodule GRPC.Client.Interceptors.LoggerTest do
         LoggerInterceptor.call(stream, request, next, opts)
       end)
 
-    assert logs =~ ~r/\[info\]\s+Call #{to_string(elem(@rpc, 0))} of #{@service_name}/
+    assert logs =~ ~r/\[info\]\s+Call #{@service_name}\.#{to_string(elem(@rpc, 0))} -> :ok \(\d+\.\d+ ms\)/
   end
 
   test "allows customizing log level" do
@@ -47,7 +47,7 @@ defmodule GRPC.Client.Interceptors.LoggerTest do
         LoggerInterceptor.call(stream, request, next, opts)
       end)
 
-    assert logs =~ ~r/\[warn(?:ing)?\]\s+Call #{to_string(elem(@rpc, 0))} of #{@service_name}/
+    assert logs =~ ~r/\[warn(?:ing)?\]\s+Call #{@service_name}\.#{to_string(elem(@rpc, 0))} -> :ok \(\d+\.\d+ ms\)/
   end
 
   @tag capture_log: true
