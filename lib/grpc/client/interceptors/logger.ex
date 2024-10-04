@@ -14,7 +14,7 @@ defmodule GRPC.Client.Interceptors.Logger do
 
   ## Usage with custom level
 
-      {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Client.Interceptors.Logger, level: :warn}])
+      {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [{GRPC.Client.Interceptors.Logger, level: :warning}])
   """
 
   @behaviour GRPC.Client.Interceptor
