@@ -114,4 +114,17 @@ defmodule GRPC.Client.Interceptors.LoggerTest do
                ~r/\[error\]\s+Call #{@service_name}\.#{to_string(elem(@rpc, 0))} -> %GRPC.RPCError{status: 3, message: "Client specified an invalid argument"}/
     end)
   end
+
+  test "does not log when error is not a GRPC.RPCError" do
+    Logger.configure(level: :all)
+
+    request = %FakeRequest{}
+    stream = %Stream{grpc_type: :unary, rpc: @rpc, service_name: @service_name}
+    next = fn _stream, _request -> raise "oops" end
+    opts = LoggerInterceptor.init(level: :info)
+
+    assert_raise(RuntimeError, fn ->
+      LoggerInterceptor.call(stream, request, next, opts)
+    end)
+  end
 end

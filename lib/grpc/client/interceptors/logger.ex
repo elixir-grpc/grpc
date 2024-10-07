@@ -41,7 +41,7 @@ defmodule GRPC.Client.Interceptors.Logger do
         log_result(result, level, grpc_type, stream, start, stop)
         result
       rescue
-        error ->
+        error in GRPC.RPCError ->
           log_error(error, stream)
 
           raise error
