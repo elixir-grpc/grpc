@@ -124,7 +124,12 @@ defmodule GRPC.Client.Interceptors.LoggerTest do
     opts = LoggerInterceptor.init(level: :info)
 
     assert_raise(RuntimeError, fn ->
-      LoggerInterceptor.call(stream, request, next, opts)
+      logs =
+        capture_log(fn ->
+          LoggerInterceptor.call(stream, request, next, opts)
+        end)
+
+      assert logs == ""
     end)
   end
 end
