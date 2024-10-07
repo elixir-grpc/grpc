@@ -32,7 +32,7 @@ defmodule GRPC.Client.Interceptors.LoggerTest do
       end)
 
     assert logs =~
-             ~r/\[info\]\s+Call #{@service_name}\.#{to_string(elem(@rpc, 0))} -> :ok \(\d+\.\d+ ms\)/
+             ~r/\[info\]\s+Call #{@service_name}\.#{to_string(elem(@rpc, 0))} -> :ok \(\d+\.\d+ ms|µs\)/
   end
 
   test "allows customizing log level" do
@@ -49,7 +49,24 @@ defmodule GRPC.Client.Interceptors.LoggerTest do
       end)
 
     assert logs =~
-             ~r/\[warn(?:ing)?\]\s+Call #{@service_name}\.#{to_string(elem(@rpc, 0))} -> :ok \(\d+\.\d+ ms\)/
+             ~r/\[warn(?:ing)?\]\s+Call #{@service_name}\.#{to_string(elem(@rpc, 0))} -> :ok \(\d+\.\d+ ms|µs\)/
+  end
+
+  test "logs stream requests" do
+    Logger.configure(level: :all)
+
+    request = %FakeRequest{}
+    stream = %Stream{grpc_type: :client_stream, rpc: @rpc, service_name: @service_name}
+    next = fn _stream, _request -> {:ok, :stream} end
+    opts = LoggerInterceptor.init([])
+
+    logs =
+      capture_log(fn ->
+        LoggerInterceptor.call(stream, request, next, opts)
+      end)
+
+    assert logs =~
+             ~r/\[info\]\s+Call #{to_string(elem(@rpc, 0))} of #{@service_name}/
   end
 
   @tag capture_log: true
@@ -77,5 +94,24 @@ defmodule GRPC.Client.Interceptors.LoggerTest do
     LoggerInterceptor.call(stream, request, next, opts)
 
     assert_receive {:next_called, ^stream, ^request}
+  end
+
+  test "logs error when next raises" do
+    Logger.configure(level: :all)
+
+    request = %FakeRequest{}
+    stream = %Stream{grpc_type: :unary, rpc: @rpc, service_name: @service_name}
+    next = fn _stream, _request -> raise GRPC.RPCError, status: :invalid_argument end
+    opts = LoggerInterceptor.init(level: :info)
+
+    assert_raise(GRPC.RPCError, fn ->
+      logs =
+        capture_log(fn ->
+          LoggerInterceptor.call(stream, request, next, opts)
+        end)
+
+      assert logs =~
+               ~r/\[error\]\s+Call #{@service_name}\.#{to_string(elem(@rpc, 0))} -> %GRPC.RPCError{status: 3, message: "Client specified an invalid argument"}/
+    end)
   end
 end
