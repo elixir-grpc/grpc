@@ -33,8 +33,9 @@ defmodule GRPC.Client.Interceptors.Logger do
     level = Keyword.fetch!(opts, :level)
 
     if Logger.compare_levels(level, Logger.level()) != :lt do
+      start = System.monotonic_time()
+
       try do
-        start = System.monotonic_time()
         result = next.(stream, req)
         stop = System.monotonic_time()
 
@@ -42,16 +43,19 @@ defmodule GRPC.Client.Interceptors.Logger do
         result
       rescue
         error in GRPC.RPCError ->
-          log_error(error, stream)
+          stop = System.monotonic_time()
+          log_error(error, stream, start, stop)
 
-          raise error
+          reraise error, __STACKTRACE__
       end
     else
       next.(stream, req)
     end
   end
 
-  defp log_error(error, stream) do
+  defp log_error(error, stream, start, stop) do
+    diff = System.convert_time_unit(stop - start, :native, :microsecond)
+
     Logger.log(:error, fn ->
       [
         "Call ",
@@ -59,7 +63,10 @@ defmodule GRPC.Client.Interceptors.Logger do
         ".",
         to_string(elem(stream.rpc, 0)),
         " -> ",
-        inspect(error)
+        inspect(error),
+        " (",
+        formatted_diff(diff),
+        ")"
       ]
     end)
   end
@@ -80,7 +87,7 @@ defmodule GRPC.Client.Interceptors.Logger do
             " -> ",
             inspect(status),
             " (",
-            GRPC.Server.Interceptors.Logger.formatted_diff(diff),
+            formatted_diff(diff),
             ")"
           ]
         end)
@@ -91,4 +98,7 @@ defmodule GRPC.Client.Interceptors.Logger do
         end)
     end
   end
+
+  def formatted_diff(diff) when diff > 1000, do: [diff |> div(1000) |> Integer.to_string(), "ms"]
+  def formatted_diff(diff), do: [Integer.to_string(diff), "µs"]
 end
