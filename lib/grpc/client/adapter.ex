@@ -14,7 +14,7 @@ defmodule GRPC.Client.Adapter do
 
   @callback disconnect(channel :: Channel.t()) :: {:ok, Channel.t()} | {:error, any()}
 
-  @callback send_request(stream :: Stream.t(), contents :: binary(), opts :: keyword()) ::
+  @callback send_request(stream :: Stream.t(), contents :: iodata(), opts :: keyword()) ::
               Stream.t()
 
   @doc """
@@ -36,7 +36,7 @@ defmodule GRPC.Client.Adapter do
    Opts:
       - :send_end_stream (optional) - ends the request stream
   """
-  @callback send_data(stream :: Stream.t(), message :: binary(), opts :: keyword()) :: Stream.t()
+  @callback send_data(stream :: Stream.t(), message :: iodata(), opts :: keyword()) :: Stream.t()
 
   @doc """
   Similarly to the option sent on `send_data/2` - :send_end_stream -
