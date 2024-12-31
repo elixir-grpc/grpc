@@ -5,7 +5,7 @@ defmodule GRPC.Codec.Proto do
     "proto"
   end
 
-  def encode(%mod{} = struct) do
+  def encode(struct) do
     Protobuf.Encoder.encode_to_iodata(struct)
   end
 
