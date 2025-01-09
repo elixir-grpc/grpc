@@ -10,7 +10,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
       done: false,
       from: nil,
       grpc_stream: build(:client_stream),
-      responses: [],
+      responses: :queue.new(),
       compressor: nil,
       send_headers_or_trailers: false
     }
@@ -41,7 +41,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
       state: state,
       data: {_, _, full_message}
     } do
-      expected_response_message = build(:hello_reply_rpc)
+      expected_response_message = {:ok, build(:hello_reply_rpc)}
 
       response =
         StreamResponseProcess.handle_call(
@@ -52,35 +52,32 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
 
       assert {:reply, :ok, new_state, {:continue, :produce_response}} = response
       assert new_state.buffer == <<>>
-      assert [{:ok, response_message}] = new_state.responses
-      assert expected_response_message == response_message
+      assert :queue.to_list(new_state.responses) == [expected_response_message]
     end
 
     test "append incoming message to existing buffer", %{state: state, data: {part1, part2, _}} do
       state = %{state | buffer: part1}
-      expected_response_message = build(:hello_reply_rpc)
+      expected_response_message = {:ok, build(:hello_reply_rpc)}
 
       response =
         StreamResponseProcess.handle_call({:consume_response, {:data, part2}}, self(), state)
 
       assert {:reply, :ok, new_state, {:continue, :produce_response}} = response
       assert new_state.buffer == <<>>
-      assert [{:ok, response_message}] = new_state.responses
-      assert expected_response_message == response_message
+      assert :queue.to_list(new_state.responses) == [expected_response_message]
     end
 
     test "decode message and put rest on buffer", %{state: state, data: {_, _, full}} do
       extra_data = <<0, 1, 2>>
       data = full <> extra_data
-      expected_response_message = build(:hello_reply_rpc)
+      expected_response_message = {:ok, build(:hello_reply_rpc)}
 
       response =
         StreamResponseProcess.handle_call({:consume_response, {:data, data}}, self(), state)
 
       assert {:reply, :ok, new_state, {:continue, :produce_response}} = response
       assert new_state.buffer == extra_data
-      assert [{:ok, response_message}] = new_state.responses
-      assert expected_response_message == response_message
+      assert :queue.to_list(new_state.responses) == [expected_response_message]
     end
   end
 
@@ -106,9 +103,10 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
             state
           )
 
+        expected_error = {:error, %GRPC.RPCError{message: "Internal Server Error", status: 2}}
+
         assert {:reply, :ok, new_state, {:continue, :produce_response}} = response
-        assert [{:error, error}] = new_state.responses
-        assert %GRPC.RPCError{message: "Internal Server Error", status: 2} == error
+        assert :queue.to_list(new_state.responses) == [expected_error]
       end,
       do: [
         {%{type: :headers, is_header_enabled: false}},
@@ -139,17 +137,10 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
             state
           )
 
-        assert {:reply, :ok, new_state, {:continue, :produce_response}} = response
-        assert [{type_response, response_headers}] = new_state.responses
-        assert type == type_response
+        expected_response = {type, Map.new(headers)}
 
-        assert %{
-                 "content-length" => "0",
-                 "content-type" => "application/grpc+proto",
-                 "grpc-message" => "",
-                 "grpc-status" => "0",
-                 "server" => "Cowboy"
-               } == response_headers
+        assert {:reply, :ok, new_state, {:continue, :produce_response}} = response
+        assert :queue.to_list(new_state.responses) == [expected_response]
       end,
       do: [{:headers}, {:trailers}]
     )
@@ -174,7 +165,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
           )
 
         assert {:reply, :ok, new_state, {:continue, :produce_response}} = response
-        assert [] == new_state.responses
+        assert :queue.is_empty(new_state.responses)
       end,
       do: [{:headers}, {:trailers}]
     )
@@ -238,8 +229,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
         )
 
       assert {:reply, :ok, new_state, {:continue, :produce_response}} = response
-      assert [response_error] = new_state.responses
-      assert response_error == error
+      assert :queue.to_list(new_state.responses) == [error]
     end
   end
 
@@ -282,11 +272,11 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
     end
 
     test "send response to caller when there are responses in the queue", %{state: state} do
-      state = %{state | from: {self(), :tag}, done: false, responses: [1, 2]}
+      state = %{state | from: {self(), :tag}, done: false, responses: :queue.from_list([1, 2])}
       {:noreply, new_state} = StreamResponseProcess.handle_continue(:produce_response, state)
       %{from: from, responses: responses} = new_state
-      assert nil == from
-      assert [2] == responses
+      assert is_nil(from)
+      assert :queue.to_list(responses) == [2]
       assert_receive {:tag, 1}
     end
   end
@@ -319,6 +309,27 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
       StreamResponseProcess.done(pid)
       assert [data] = Enum.to_list(stream)
       assert {:ok, build(:hello_reply_rpc)} == data
+    end
+
+    test "preserves response messages order", %{pid: pid} do
+      hello_luis =
+        <<0, 0, 0, 0, 12, 10, 10, 72, 101, 108, 108, 111, 32, 76, 117, 105, 115>>
+
+      bye_luis =
+        <<0, 0, 0, 0, 10, 10, 8, 66, 121, 101, 32, 76, 117, 105, 115>>
+
+      stream = StreamResponseProcess.build_stream(pid)
+      StreamResponseProcess.consume(pid, :data, hello_luis)
+      StreamResponseProcess.consume(pid, :data, bye_luis)
+      StreamResponseProcess.done(pid)
+
+      expected_elements =
+        [
+          ok: build(:hello_reply_rpc),
+          ok: build(:bye_reply_rpc)
+        ]
+
+      assert Enum.to_list(stream) == expected_elements
     end
 
     test_with_params(
