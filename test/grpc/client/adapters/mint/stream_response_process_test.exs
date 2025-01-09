@@ -316,7 +316,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
         <<0, 0, 0, 0, 12, 10, 10, 72, 101, 108, 108, 111, 32, 76, 117, 105, 115>>
 
       bye_luis =
-        <<0, 0, 0, 0, 12, 10, 10, 72, 101, 108, 108, 111, 32, 76, 117, 105, 116>>
+        <<0, 0, 0, 0, 10, 10, 8, 66, 121, 101, 32, 76, 117, 105, 115>>
 
       stream = StreamResponseProcess.build_stream(pid)
       StreamResponseProcess.consume(pid, :data, hello_luis)
