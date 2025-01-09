@@ -311,22 +311,22 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
       assert {:ok, build(:hello_reply_rpc)} == data
     end
 
-    test "ordering bug", %{pid: pid} do
+    test "preserves response messages order", %{pid: pid} do
       hello_luis =
         <<0, 0, 0, 0, 12, 10, 10, 72, 101, 108, 108, 111, 32, 76, 117, 105, 115>>
 
-      hello_luit =
+      bye_luis =
         <<0, 0, 0, 0, 12, 10, 10, 72, 101, 108, 108, 111, 32, 76, 117, 105, 116>>
 
       stream = StreamResponseProcess.build_stream(pid)
       StreamResponseProcess.consume(pid, :data, hello_luis)
-      StreamResponseProcess.consume(pid, :data, hello_luit)
+      StreamResponseProcess.consume(pid, :data, bye_luis)
       StreamResponseProcess.done(pid)
 
       expected_elements =
         [
-          ok: %Helloworld.HelloReply{message: "Hello Luis", __unknown_fields__: []},
-          ok: %Helloworld.HelloReply{message: "Hello Luit", __unknown_fields__: []}
+          ok: build(:hello_reply_rpc),
+          ok: build(:bye_reply_rpc)
         ]
 
       assert Enum.to_list(stream) == expected_elements
