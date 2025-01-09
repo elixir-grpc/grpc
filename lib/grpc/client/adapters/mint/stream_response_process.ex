@@ -100,7 +100,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
       {{_, message}, rest} ->
         # TODO add code here to handle compressor headers
         response = codec.decode(message, res_mod)
-        new_responses = [{:ok, response} | responses]
+        new_responses = responses ++ [{:ok, response}]
         new_state = %{state | buffer: rest, responses: new_responses}
         {:reply, :ok, new_state, {:continue, :produce_response}}
 
@@ -117,7 +117,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
       )
       when type in @header_types do
     state = update_compressor({type, headers}, state)
-    new_responses = [get_headers_response(headers, type) | responses]
+    new_responses = responses ++ [get_headers_response(headers, type)]
     {:reply, :ok, %{state | responses: new_responses}, {:continue, :produce_response}}
   end
 
@@ -131,7 +131,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
 
     case get_headers_response(headers, type) do
       {:error, _rpc_error} = error ->
-        {:reply, :ok, %{state | responses: [error | responses]}, {:continue, :produce_response}}
+        {:reply, :ok, %{state | responses: responses ++ [error]}, {:continue, :produce_response}}
 
       _any ->
         {:reply, :ok, state, {:continue, :produce_response}}
@@ -143,7 +143,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
         _from,
         %{responses: responses} = state
       ) do
-    {:reply, :ok, %{state | responses: [error | responses]}, {:continue, :produce_response}}
+    {:reply, :ok, %{state | responses: responses ++ [error]}, {:continue, :produce_response}}
   end
 
   def handle_call({:consume_response, :done}, _from, state) do
