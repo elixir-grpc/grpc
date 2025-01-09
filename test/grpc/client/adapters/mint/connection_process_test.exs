@@ -208,7 +208,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert {:reply, :ok, new_state} = response
       assert %{} == new_state.requests
       response_state = :sys.get_state(response_pid)
-      assert :queue.to_list(response_state.responses) == []
+      assert :queue.is_empty(response_state.responses)
       assert true == response_state.done
     end
   end
