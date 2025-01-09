@@ -52,7 +52,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
 
       assert {:reply, :ok, new_state, {:continue, :produce_response}} = response
       assert new_state.buffer == <<>>
-      assert :queue.peek(new_state.responses) == {:value, expected_response_message}
+      assert :queue.to_list(new_state.responses) == [expected_response_message]
     end
 
     test "append incoming message to existing buffer", %{state: state, data: {part1, part2, _}} do
@@ -64,7 +64,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
 
       assert {:reply, :ok, new_state, {:continue, :produce_response}} = response
       assert new_state.buffer == <<>>
-      assert :queue.peek(new_state.responses) == {:value, expected_response_message}
+      assert :queue.to_list(new_state.responses) == [expected_response_message]
     end
 
     test "decode message and put rest on buffer", %{state: state, data: {_, _, full}} do
@@ -77,7 +77,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
 
       assert {:reply, :ok, new_state, {:continue, :produce_response}} = response
       assert new_state.buffer == extra_data
-      assert :queue.peek(new_state.responses) == {:value, expected_response_message}
+      assert :queue.to_list(new_state.responses) == [expected_response_message]
     end
   end
 
@@ -106,7 +106,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
         expected_error = {:error, %GRPC.RPCError{message: "Internal Server Error", status: 2}}
 
         assert {:reply, :ok, new_state, {:continue, :produce_response}} = response
-        assert :queue.peek(new_state.responses) == {:value, expected_error}
+        assert :queue.to_list(new_state.responses) == [expected_error]
       end,
       do: [
         {%{type: :headers, is_header_enabled: false}},
@@ -140,7 +140,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
         expected_response = {type, Map.new(headers)}
 
         assert {:reply, :ok, new_state, {:continue, :produce_response}} = response
-        assert :queue.peek(new_state.responses) == {:value, expected_response}
+        assert :queue.to_list(new_state.responses) == [expected_response]
       end,
       do: [{:headers}, {:trailers}]
     )
@@ -229,7 +229,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
         )
 
       assert {:reply, :ok, new_state, {:continue, :produce_response}} = response
-      assert :queue.peek(new_state.responses) == {:value, error}
+      assert :queue.to_list(new_state.responses) == [error]
     end
   end
 
@@ -276,7 +276,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
       {:noreply, new_state} = StreamResponseProcess.handle_continue(:produce_response, state)
       %{from: from, responses: responses} = new_state
       assert is_nil(from)
-      assert :queue.peek(responses) == {:value, 2}
+      assert :queue.to_list(responses) == [2]
       assert_receive {:tag, 1}
     end
   end
