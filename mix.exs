@@ -41,7 +41,8 @@ defmodule GRPC.Mixfile do
       {:cowlib, "~> 2.12"},
       {:castore, "~> 0.1 or ~> 1.0", optional: true},
       {:protobuf, "~> 0.11"},
-      {:protobuf_generate, "~> 0.1.1", only: [:dev, :test]},
+      # {:protobuf_generate, "~> 0.1.3", only: [:dev, :test]},
+      {:protobuf_generate, github: "drowzy/protobuf_generate", only: [:dev, :test]},
       {:googleapis,
        github: "googleapis/googleapis",
        branch: "master",
@@ -67,7 +68,8 @@ defmodule GRPC.Mixfile do
   defp aliases do
     [
       gen_bootstrap_protos: &gen_bootstrap_protos/1,
-      gen_test_protos: [&gen_bootstrap_protos/1, &gen_test_protos/1]
+      gen_test_protos: [&gen_bootstrap_protos/1, &gen_test_protos/1],
+      gen_lib_protos: [&gen_lib_protos/1]
     ]
   end
 
@@ -97,6 +99,15 @@ defmodule GRPC.Mixfile do
       "google/protobuf/descriptor.proto",
       "google/api/http.proto",
       "google/api/annotations.proto"
+    ])
+  end
+
+  defp gen_lib_protos(_args) do
+    proto_src = Mix.Project.deps_paths().googleapis
+
+    protoc!("--include-path=#{proto_src}", "./lib", [
+      "google/rpc/status.proto",
+      "google/rpc/error_details.proto"
     ])
   end
 

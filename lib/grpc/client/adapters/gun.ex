@@ -158,6 +158,13 @@ defmodule GRPC.Client.Adapters.Gun do
       else
         {:ok, response}
       end
+    else
+      {:error, error, headers} ->
+        if opts[:return_headers] do
+          {:error, error, headers}
+        else
+          {:error, error}
+        end
     end
   end
 
@@ -172,6 +179,13 @@ defmodule GRPC.Client.Adapters.Gun do
       else
         {:ok, response}
       end
+    else
+      {:error, error, headers} ->
+        if opts[:return_headers] do
+          {:error, error, headers}
+        else
+          {:error, error}
+        end
     end
   end
 
@@ -180,7 +194,7 @@ defmodule GRPC.Client.Adapters.Gun do
       {:response, headers, fin} ->
         {:ok, headers, fin}
 
-      {:error, _} = error ->
+      {:error, _, _headers} = error ->
         error
 
       other ->
@@ -188,7 +202,7 @@ defmodule GRPC.Client.Adapters.Gun do
          GRPC.RPCError.exception(
            GRPC.Status.unknown(),
            "unexpected when waiting for headers: #{inspect(other)}"
-         )}
+         ), %{}}
     end
   end
 
@@ -200,7 +214,7 @@ defmodule GRPC.Client.Adapters.Gun do
       trailers = {:trailers, _} ->
         trailers
 
-      {:error, _} = error ->
+      {:error, _, _} = error ->
         error
 
       other ->
@@ -231,8 +245,9 @@ defmodule GRPC.Client.Adapters.Gun do
               {:error,
                GRPC.RPCError.exception(
                  GRPC.Status.internal(),
-                 "shouldn't finish when getting headers"
-               )}
+                 "shouldn't finish when getting headers",
+                 decode_status_details(headers)
+               ), headers}
 
             "0" ->
               {:response, headers, :fin}
@@ -241,8 +256,9 @@ defmodule GRPC.Client.Adapters.Gun do
               {:error,
                GRPC.RPCError.exception(
                  String.to_integer(headers["grpc-status"]),
-                 headers["grpc-message"]
-               )}
+                 headers["grpc-message"],
+                 decode_status_details(headers)
+               ), headers}
           end
         else
           {:error,
@@ -260,8 +276,9 @@ defmodule GRPC.Client.Adapters.Gun do
             {:error,
              GRPC.RPCError.exception(
                String.to_integer(headers["grpc-status"]),
-               headers["grpc-message"]
-             )}
+               headers["grpc-message"],
+               decode_status_details(headers)
+             ), headers}
           else
             {:response, headers, :nofin}
           end
@@ -291,18 +308,20 @@ defmodule GRPC.Client.Adapters.Gun do
 
       {:error, {reason, msg}} when reason in [:stream_error, :connection_error] ->
         {:error,
-         GRPC.RPCError.exception(GRPC.Status.internal(), "#{inspect(reason)}: #{inspect(msg)}")}
+         GRPC.RPCError.exception(GRPC.Status.internal(), "#{inspect(reason)}: #{inspect(msg)}"),
+         %{}}
 
       {:error, {reason, msg}} ->
         {:error,
-         GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}: #{inspect(msg)}")}
+         GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}: #{inspect(msg)}"),
+         %{}}
 
       other ->
         {:error,
          GRPC.RPCError.exception(
            GRPC.Status.unknown(),
            "unexpected message when waiting for server: #{inspect(other)}"
-         )}
+         ), %{}}
     end
   end
 
@@ -394,7 +413,7 @@ defmodule GRPC.Client.Adapters.Gun do
       {:trailers, trailers} ->
         update_stream_with_trailers(stream, trailers, opts[:return_headers])
 
-      error = {:error, _} ->
+      error = {:error, _, _} ->
         {error, %{buffer: <<>>, fin: true, fin_resp: nil}}
     end
   end
@@ -465,4 +484,11 @@ defmodule GRPC.Client.Adapters.Gun do
       body
     end
   end
+
+  defp decode_status_details(%{"grpc-status-details-bin" => details})
+       when is_binary(details) do
+    GRPC.Transport.Utils.decode_status_details(details)
+  end
+
+  defp decode_status_details(_headers), do: nil
 end

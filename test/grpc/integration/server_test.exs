@@ -134,6 +134,15 @@ defmodule GRPC.Integration.ServerTest do
       raise "unknown error(This is a test, please ignore it)"
     end
 
+    def say_hello(%{name: "error with details"}, _stream) do
+      detail =
+        %Google.Rpc.QuotaFailure{
+          violations: [%{subject: "hello", description: "Limit one greeting per person"}]
+        }
+
+      raise GRPC.RPCError, status: GRPC.Status.resource_exhausted(), details: [detail]
+    end
+
     def say_hello(_req, _stream) do
       raise GRPC.RPCError, status: GRPC.Status.unauthenticated(), message: "Please authenticate"
     end
@@ -241,6 +250,30 @@ defmodule GRPC.Integration.ServerTest do
     assert logs =~ "Exception raised while handling /helloworld.Greeter/SayHello"
   end
 
+  test "returns error details for unary requests" do
+    run_server([HelloErrorServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      req = %Helloworld.HelloRequest{name: "error with details"}
+      {:error, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
+
+      assert %GRPC.RPCError{
+               __exception__: true,
+               details: [
+                 %Google.Rpc.QuotaFailure{
+                   violations: [
+                     %Google.Rpc.QuotaFailure.Violation{
+                       description: "Limit one greeting per person",
+                       subject: "hello"
+                     }
+                   ]
+                 }
+               ],
+               message: "Some resource has been exhausted",
+               status: 8
+             } == reply
+    end)
+  end
+
   test "return errors for unknown errors" do
     logs =
       ExUnit.CaptureLog.capture_log(fn ->
@@ -344,7 +377,7 @@ defmodule GRPC.Integration.ServerTest do
           client_stream = Routeguide.RouteGuide.Stub.route_chat(channel)
           assert %GRPC.Client.Stream{} = client_stream
           {:ok, ex_stream} = GRPC.Stub.recv(client_stream, timeout: :infinity)
-          assert [{:error, %GRPC.RPCError{status: 13}}] = Enum.into(ex_stream, [])
+          assert [{:error, %GRPC.RPCError{status: 13}, %{}}] = Enum.into(ex_stream, [])
         end)
       end)
 

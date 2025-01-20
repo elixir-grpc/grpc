@@ -51,11 +51,11 @@ defmodule GRPC.RPCError do
   See `GRPC.Status` for more details on possible statuses.
   """
 
-  defexception [:status, :message]
+  defexception [:status, :message, :details]
 
   defguard is_rpc_error(e, status) when is_struct(e, __MODULE__) and e.status == status
 
-  @type t :: %__MODULE__{status: GRPC.Status.t(), message: String.t()}
+  @type t :: %__MODULE__{status: GRPC.Status.t(), message: String.t(), details: list()}
 
   alias GRPC.Status
 
@@ -67,7 +67,6 @@ defmodule GRPC.RPCError do
   @spec exception(args :: list()) :: t()
   def exception(args) when is_list(args) do
     error = parse_args(args, %__MODULE__{})
-
     %{error | message: error.message || Status.status_message(error.status)}
   end
 
@@ -88,6 +87,11 @@ defmodule GRPC.RPCError do
     parse_args(t, acc)
   end
 
+  defp parse_args([{:details, details} | t], acc) when is_list(details) do
+    acc = %{acc | details: details}
+    parse_args(t, acc)
+  end
+
   @spec exception(status :: Status.t() | atom(), message :: String.t()) :: t()
   def exception(status, message) when is_atom(status) do
     %GRPC.RPCError{status: apply(GRPC.Status, status, []), message: message}
@@ -95,5 +99,13 @@ defmodule GRPC.RPCError do
 
   def exception(status, message) when is_integer(status) do
     %GRPC.RPCError{status: status, message: message}
+  end
+
+  def exception(status, message, details) when is_atom(status) do
+    %GRPC.RPCError{status: apply(GRPC.Status, status, []), message: message, details: details}
+  end
+
+  def exception(status, message, details) when is_integer(status) do
+    %GRPC.RPCError{status: status, message: message, details: details}
   end
 end

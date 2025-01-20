@@ -21,12 +21,19 @@ defmodule GRPC.Transport.HTTP2 do
     %{"content-type" => "application/grpc+#{codec.name()}"}
   end
 
-  @spec server_trailers(integer, String.t()) :: map
-  def server_trailers(status \\ Status.ok(), message \\ "") do
-    %{
+  @spec server_trailers(integer, String.t(), String.t()) :: map
+  def server_trailers(status \\ Status.ok(), message \\ "", status_details \\ "") do
+    {_, status_details} = encode_metadata_pair({"grpc-status-details-bin", status_details})
+
+    trailers = %{
       "grpc-status" => Integer.to_string(status),
       "grpc-message" => URI.encode(message)
     }
+
+    case status_details do
+      "" -> trailers
+      status_details -> Map.put(trailers, "grpc-status-details-bin", status_details)
+    end
   end
 
   @doc """
@@ -138,13 +145,22 @@ defmodule GRPC.Transport.HTTP2 do
   end
 
   defp encode_metadata_pair({key, val}) do
-    val = if String.ends_with?(key, "-bin"), do: Base.encode64(val), else: val
-    {String.downcase(to_string(key)), val}
+    # Implementations ... should emit un-padded values
+    val = if String.ends_with?(key, "-bin"), do: Base.encode64(val, padding: false), else: val
+    {String.downcase(key), val}
   end
 
-  defp decode_metadata({key, val}) do
-    val = if String.ends_with?(key, "-bin"), do: Base.decode64!(val, padding: false), else: val
-    {key, val}
+  defp decode_metadata(kv = {key, val}) do
+    # Implementations MUST accept padded and un-padded values
+    if String.ends_with?(key, "-bin") do
+      if rem(IO.iodata_length(val), 4) == 0 do
+        {key, Base.decode64!(val)}
+      else
+        {key, Base.decode64!(val, padding: false)}
+      end
+    else
+      kv
+    end
   end
 
   defp decode_reserved({"grpc-message" = key, val}) do
@@ -154,6 +170,7 @@ defmodule GRPC.Transport.HTTP2 do
   defp decode_reserved(kv), do: kv
 
   defp is_reserved_header(":" <> _), do: true
+  defp is_reserved_header("grpc-status-details-bin"), do: false
   defp is_reserved_header("grpc-" <> _), do: true
   defp is_reserved_header("content-type"), do: true
   defp is_reserved_header("te"), do: true

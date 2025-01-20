@@ -74,4 +74,68 @@ defmodule GRPC.Transport.Utils do
   defp decode_timeout("H", timeout) do
     timeout * 3_600_000
   end
+
+  @doc """
+  Encode Google.Rpc.Status message with rich error details.
+  """
+  @spec encode_status_details(integer, list()) :: String.t()
+  def encode_status_details(_errorcode, nil), do: ""
+
+  def encode_status_details(errorcode, details) do
+    %Google.Rpc.Status{
+      code: errorcode,
+      details: Enum.map(details, &build_any/1)
+    }
+    |> Google.Rpc.Status.encode()
+  end
+
+  @doc """
+  Decode Google.Rpc.Status message with rich error details.
+  """
+  @spec decode_status_details(String.t()) :: Google.Rpc.Status.t()
+  def decode_status_details(details)
+      when is_binary(details) do
+    %Google.Rpc.Status{code: _code, message: _message, details: details} =
+      Google.Rpc.Status.decode(details)
+
+    Enum.map(details, &decode_any/1)
+  end
+
+  defp build_any(message = %{__struct__: type}) do
+    %Google.Protobuf.Any{
+      type_url: get_type_url(type),
+      value: Protobuf.encode(message)
+    }
+  end
+
+  def get_type_url(type) do
+    [_ | type] = type |> to_string |> String.split(".")
+
+    {type_name, package} = type |> List.pop_at(-1)
+
+    package_name = package |> Enum.map(&String.downcase(&1)) |> Enum.join(".")
+
+    "type.googleapis.com/#{package_name}.#{type_name}"
+  end
+
+  defp decode_any(%Google.Protobuf.Any{type_url: type_url, value: value}) do
+    [_, type] = String.split(type_url, "/")
+    msg_module = string_to_module(type)
+    msg_module.decode(value)
+  end
+
+  defp string_to_module(type) do
+    module =
+      type
+      |> String.split(".")
+      |> Enum.map(&Macro.camelize/1)
+      |> (&Enum.concat(["Elixir"], &1)).()
+      |> Enum.join(".")
+      |> String.to_atom()
+
+    case Code.ensure_loaded(module) do
+      {:module, module} -> module
+      {:error, reason} -> raise "Failed to load module. Reason: #{inspect(reason)}"
+    end
+  end
 end

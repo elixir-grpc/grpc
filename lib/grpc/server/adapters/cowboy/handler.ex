@@ -629,7 +629,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   defp send_error(req, error, state, reason) do
-    trailers = HTTP2.server_trailers(error.status, error.message)
+    proto_status = GRPC.Transport.Utils.encode_status_details(error.status, error.details)
+    trailers = HTTP2.server_trailers(error.status, error.message, proto_status)
 
     status = if transcode?(req), do: GRPC.Status.http_code(error.status), else: 200
 
