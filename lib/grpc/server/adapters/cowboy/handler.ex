@@ -513,6 +513,17 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         kind, e ->
           reason = Exception.normalize(kind, e, __STACKTRACE__)
 
+          crash_reason =
+            case kind do
+              :throw -> {{:nocatch, reason}, __STACKTRACE__}
+              _ -> {reason, __STACKTRACE__}
+            end
+
+          Logger.error(
+            Exception.format(kind, reason, __STACKTRACE__),
+            crash_reason: crash_reason
+          )
+
           {:error, %{kind: kind, reason: reason, stack: __STACKTRACE__}}
       end
 
