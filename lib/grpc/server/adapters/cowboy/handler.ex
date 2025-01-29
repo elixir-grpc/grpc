@@ -619,7 +619,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     {:ok, "proto"}
   end
 
-  defp transcode?(%{version: "HTTP/1.1"}), do: true
+  defp transcode?(%{version: :"HTTP/1.1"}), do: true
 
   defp transcode?(req) do
     case find_content_type_subtype(req) do
