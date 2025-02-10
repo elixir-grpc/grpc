@@ -78,4 +78,8 @@ defmodule GRPC.Factory do
   def hello_reply_rpc_factory do
     %Helloworld.HelloReply{message: "Hello Luis"}
   end
+
+  def bye_reply_rpc_factory do
+    %Helloworld.HelloReply{message: "Bye Luis"}
+  end
 end
