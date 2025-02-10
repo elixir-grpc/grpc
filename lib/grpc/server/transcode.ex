@@ -58,9 +58,8 @@ defmodule GRPC.Server.Transcode do
 
   defp map_request_body(%{body: "*"}, request_body), do: request_body
   defp map_request_body(%{body: ""}, request_body), do: request_body
-
-  defp map_request_body(%{body: field}, request_body),
-    do: %{field => request_body}
+  defp map_request_body(%{body: field}, request_body), do: %{field => request_body}
+  defp map_request_body(%{}, request_body), do: request_body
 
   @spec map_response_body(t() | map(), map()) :: map()
   def map_response_body(%{response_body: ""}, response_body), do: response_body
@@ -69,6 +68,8 @@ defmodule GRPC.Server.Transcode do
     key = String.to_existing_atom(field)
     Map.get(response_body, key)
   end
+
+  def map_response_body(%{}, response_body), do: response_body
 
   @spec map_path_bindings(map()) :: map()
   def map_path_bindings(bindings) when bindings == %{}, do: bindings
