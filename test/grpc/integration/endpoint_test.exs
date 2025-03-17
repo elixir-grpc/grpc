@@ -8,6 +8,10 @@ defmodule GRPC.Integration.EndpointTest do
     def say_hello(req, _stream) do
       %Helloworld.HelloReply{message: "Hello, #{req.name}"}
     end
+
+    def check_headers(req, _stream) do
+      %Helloworld.HeaderReply{authorization: "Bearer #{req.authorization}"}
+    end
   end
 
   defmodule HelloEndpoint do
@@ -18,11 +22,35 @@ defmodule GRPC.Integration.EndpointTest do
   end
 
   defmodule HelloHaltInterceptor do
-    def init(_), do: []
-
-    def call(_, stream, _next, _) do
-      {:ok, stream, %Helloworld.HelloReply{message: "Hello by interceptor"}}
+    def init(opts) do
+      opts[:message] || "Hello by interceptor"
     end
+
+    def call(_, stream, _next, message) do
+      if stream.method_name == "check_headers" do
+        {:ok, stream, %Helloworld.HeaderReply{authorization: message}}
+      else
+        {:ok, stream, %Helloworld.HelloReply{message: message}}
+      end
+    end
+  end
+
+  defmodule HelloEndpointWithFilters do
+    use GRPC.Endpoint
+
+    intercept(
+      {:only, [%{method_name: "SayHello"}]},
+      HelloHaltInterceptor,
+      message: "Hello by interceptor"
+    )
+
+    intercept(
+      {:except, [%{method_name: "SayHello"}]},
+      HelloHaltInterceptor,
+      message: "Goodbye by interceptor"
+    )
+
+    run HelloServer
   end
 
   defmodule FeatureServer do
@@ -121,5 +149,19 @@ defmodule GRPC.Integration.EndpointTest do
                assert reply.message == "Hello by interceptor"
              end)
            end) =~ "GRPC.Integration.EndpointTest.HelloServer.say_hello"
+  end
+
+  test "endpoint uses custom interceptor with filters" do
+    run_endpoint(HelloEndpointWithFilters, fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+
+      req = %Helloworld.HelloRequest{name: "Elixir"}
+      {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
+      assert reply.message == "Hello by interceptor"
+
+      req = %Helloworld.HeaderRequest{}
+      {:ok, reply} = channel |> Helloworld.Greeter.Stub.check_headers(req)
+      assert reply.authorization == "Goodbye by interceptor"
+    end)
   end
 end

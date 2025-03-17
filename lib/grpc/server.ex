@@ -351,8 +351,26 @@ defmodule GRPC.Server do
       interceptors = interceptors(endpoint, server)
 
       next =
-        Enum.reduce(interceptors, last, fn {interceptor, opts}, acc ->
-          fn r, s -> interceptor.call(r, s, acc, opts) end
+        Enum.reduce(interceptors, last, fn
+          {interceptor, opts, nil}, acc ->
+            fn r, s -> interceptor.call(r, s, acc, opts) end
+
+          {interceptor, opts, {only_except, filters}}, acc ->
+            fn r, s ->
+              has_match = Enum.any?(filters, fn filter ->
+                Enum.all?(filter, fn {key, value} ->
+                  Map.fetch!(s, key) == value
+                end)
+              end)
+
+              acceptance_value = only_except == :only
+
+              if acceptance_value == has_match do
+                interceptor.call(r, s, acc, opts)
+              else
+                acc.(r, s)
+              end
+            end
         end)
 
       next.(req, stream)

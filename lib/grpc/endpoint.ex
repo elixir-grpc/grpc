@@ -22,7 +22,7 @@ defmodule GRPC.Endpoint do
   @doc false
   defmacro __using__(_opts) do
     quote do
-      import GRPC.Endpoint, only: [intercept: 1, intercept: 2, run: 1, run: 2]
+      import GRPC.Endpoint, only: [intercept: 1, intercept: 2, intercept: 3, run: 1, run: 2]
 
       Module.register_attribute(__MODULE__, :interceptors, accumulate: true)
       Module.register_attribute(__MODULE__, :servers, accumulate: true)
@@ -34,9 +34,10 @@ defmodule GRPC.Endpoint do
   defmacro __before_compile__(env) do
     interceptors =
       Module.get_attribute(env.module, :interceptors)
-      |> Macro.escape()
+      # |> Macro.escape()
       |> Enum.reverse()
       |> init_interceptors()
+      |> Macro.escape()
 
     servers = Module.get_attribute(env.module, :servers)
     servers = Enum.map(servers, fn {ss, opts} -> {ss, parse_run_opts(opts, %{})} end)
@@ -52,7 +53,13 @@ defmodule GRPC.Endpoint do
 
   defmacro intercept(name) do
     quote do
-      @interceptors unquote(name)
+      @interceptors {unquote(name), [], nil}
+    end
+  end
+
+  defmacro intercept({only_except, filters}, name) do
+    quote do
+      @interceptors {unquote(name), [], unquote({only_except, filters})}
     end
   end
 
@@ -63,7 +70,22 @@ defmodule GRPC.Endpoint do
   """
   defmacro intercept(name, opts) do
     quote do
-      @interceptors {unquote(name), unquote(opts)}
+      @interceptors {unquote(name), unquote(opts), nil}
+    end
+  end
+
+  @doc """
+  Accepts filters that will determine which servers and methods the interceptor will be applied to.
+  Filters are of the form `{:only, [...]}` or `{:except, [...]}`, where the list contains maps for which
+  the keys will be matched against the GRPC.Server.Stream struct at execution time.
+
+  ## Options
+
+  `opts` keyword will be passed to Interceptor's init/1
+  """
+  defmacro intercept({only_except, filters}, name, opts) do
+    quote do
+      @interceptors {unquote(name), unquote(opts), unquote({only_except, filters})}
     end
   end
 
@@ -112,11 +134,14 @@ defmodule GRPC.Endpoint do
 
   defp init_interceptors(interceptors) do
     Enum.map(interceptors, fn
+      {interceptor, opts, filters} ->
+        {interceptor, interceptor.init(opts), filters}
+
       {interceptor, opts} ->
-        {interceptor, interceptor.init(opts)}
+        {interceptor, interceptor.init(opts), nil}
 
       interceptor ->
-        {interceptor, interceptor.init([])}
+        {interceptor, interceptor.init([]), nil}
     end)
   end
 end
