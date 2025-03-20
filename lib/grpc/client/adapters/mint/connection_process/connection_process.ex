@@ -81,12 +81,18 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
         {:ok, State.new(conn, opts[:parent])}
 
       {:error, reason} ->
-        Logger.error("unable to establish a connection. reason: #{inspect(reason)}")
+        Logger.error(
+          "unable to establish a connection to #{scheme}://#{host}:#{port}. reason: #{inspect(reason)}"
+        )
+
         {:stop, reason}
     end
   catch
     :exit, reason ->
-      Logger.error("unable to establish a connection. reason: #{inspect(reason)}")
+      Logger.error(
+        "unable to establish a connection to #{scheme}://#{host}:#{port}. reason: #{inspect(reason)}"
+      )
+
       {:stop, reason}
   end
 
