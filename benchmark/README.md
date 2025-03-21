@@ -5,7 +5,7 @@ Benchmark implementation followed by [official spec](https://grpc.io/docs/guides
 ## Usage
 
 ```
-$ git clone https://github.com/tony612/grpc.git
+$ git clone https://github.com/elixir-grpc/grpc.git
 $ cd grpc && git checkout -t origin/elixir-bench
 $ git submodule update --init
 $ export ELIXIR_GRPC_PATH= # elixir-grpc path
