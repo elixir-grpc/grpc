@@ -31,8 +31,8 @@ defmodule RouteGuide.Mixfile do
   defp deps do
     [
       {:grpc, path: "../../"},
-      {:protobuf, "~> 0.11"},
-      {:jason, "~> 1.2"},
+      {:protobuf, "~> 0.14"},
+      {:jason, "~> 1.2"}
     ]
   end
 end

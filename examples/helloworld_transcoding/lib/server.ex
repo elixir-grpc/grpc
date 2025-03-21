@@ -6,19 +6,19 @@ defmodule Helloworld.Greeter.Server do
   @spec say_hello(Helloworld.HelloRequest.t(), GRPC.Server.Stream.t()) ::
           Helloworld.HelloReply.t()
   def say_hello(request, _stream) do
-    Helloworld.HelloReply.new(
+    %Helloworld.HelloReply{
       message: "Hello #{request.name}",
       today: today()
-    )
+    }
   end
 
   @spec say_hello_from(Helloworld.HelloFromRequest.t(), GRPC.Server.Stream.t()) ::
           Helloworld.HelloReply.t()
   def say_hello_from(request, _stream) do
-    Helloworld.HelloReply.new(
+    %Helloworld.HelloReply{
       message: "Hello #{request.name}. From #{request.from}",
       today: today()
-    )
+    }
   end
 
   defp today do
