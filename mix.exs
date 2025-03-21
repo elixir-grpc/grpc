@@ -41,7 +41,6 @@ defmodule GRPC.Mixfile do
       {:cowlib, "~> 2.12"},
       {:castore, "~> 0.1 or ~> 1.0", optional: true},
       {:protobuf, "~> 0.14"},
-      {:protobuf_generate, "~> 0.1.1", only: [:dev, :test]},
       {:mint, "~> 1.5"},
       {:ex_doc, "~> 0.29", only: :dev},
       {:ex_parameterized, "~> 1.3.7", only: :test},
@@ -72,10 +71,10 @@ defmodule GRPC.Mixfile do
 
     cmd = ~s(protoc \
       -Itest/support \
-      --elixir_out="#{elixir_out}" \
+      --elixir_out=plugins=grpc:"#{elixir_out}" \
       test/support/transcode_messages.proto \
       test/support/proto/helloworld.proto \
-      test/support/proto/route_guide.proto
+      test/support/proto/route_guide.proto \
     )
 
     case Mix.shell().cmd(cmd) do

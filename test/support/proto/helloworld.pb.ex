@@ -28,3 +28,19 @@ defmodule Helloworld.HeaderReply do
 
   field :authorization, 1, type: :string
 end
+
+defmodule Helloworld.Greeter.Service do
+  @moduledoc false
+
+  use GRPC.Service, name: "helloworld.Greeter", protoc_gen_elixir_version: "0.14.1"
+
+  rpc :SayHello, Helloworld.HelloRequest, Helloworld.HelloReply
+
+  rpc :CheckHeaders, Helloworld.HeaderRequest, Helloworld.HeaderReply
+end
+
+defmodule Helloworld.Greeter.Stub do
+  @moduledoc false
+
+  use GRPC.Stub, service: Helloworld.Greeter.Service
+end

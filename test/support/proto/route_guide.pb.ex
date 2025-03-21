@@ -44,3 +44,23 @@ defmodule Routeguide.RouteSummary do
   field :distance, 3, type: :int32
   field :elapsed_time, 4, type: :int32, json_name: "elapsedTime"
 end
+
+defmodule Routeguide.RouteGuide.Service do
+  @moduledoc false
+
+  use GRPC.Service, name: "routeguide.RouteGuide", protoc_gen_elixir_version: "0.14.1"
+
+  rpc :GetFeature, Routeguide.Point, Routeguide.Feature
+
+  rpc :ListFeatures, Routeguide.Rectangle, stream(Routeguide.Feature)
+
+  rpc :RecordRoute, stream(Routeguide.Point), Routeguide.RouteSummary
+
+  rpc :RouteChat, stream(Routeguide.RouteNote), stream(Routeguide.RouteNote)
+end
+
+defmodule Routeguide.RouteGuide.Stub do
+  @moduledoc false
+
+  use GRPC.Stub, service: Routeguide.RouteGuide.Service
+end
