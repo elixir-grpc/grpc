@@ -60,8 +60,7 @@ defmodule GRPC.Mixfile do
 
   defp aliases do
     [
-      gen_bootstrap_protos: &gen_bootstrap_protos/1,
-      gen_test_protos: [&gen_bootstrap_protos/1, &gen_test_protos/1]
+      gen_test_protos: &gen_test_protos/1
     ]
   end
 
@@ -69,45 +68,17 @@ defmodule GRPC.Mixfile do
   defp elixirc_paths(_), do: ["lib"]
 
   defp gen_test_protos(_args) do
-    api_src = Mix.Project.deps_paths().googleapis
-    transcode_src = "test/support"
+    elixir_out = "test/support"
 
-    protoc!(
-      [
-        "--include-path=#{api_src}",
-        "--include-path=#{transcode_src}",
-        "--plugins=ProtobufGenerate.Plugins.GRPCWithOptions"
-      ],
-      "./#{transcode_src}",
-      ["test/support/transcode_messages.proto"]
+    cmd = ~s(protoc \
+      -Itest/support \
+      --elixir_out="#{elixir_out}" \
+      test/support/transcode_messages.proto \
+      test/support/proto/helloworld.proto \
+      test/support/proto/route_guide.proto
     )
-  end
 
-  # https://github.com/elixir-protobuf/protobuf/blob/cdf3acc53f619866b4921b8216d2531da52ceba7/mix.exs#L140
-  defp gen_bootstrap_protos(_args) do
-    proto_src = Mix.Project.deps_paths().googleapis
-
-    protoc!("--include-path=#{proto_src}", "./test/support", [
-      "google/protobuf/descriptor.proto",
-      "google/api/http.proto",
-      "google/api/annotations.proto"
-    ])
-  end
-
-  defp protoc!(args, elixir_out, files_to_generate) when is_list(args) do
-    protoc!(Enum.join(args, " "), elixir_out, files_to_generate)
-  end
-
-  defp protoc!(args, elixir_out, files_to_generate)
-       when is_binary(args) and is_binary(elixir_out) and is_list(files_to_generate) do
-    args =
-      [
-        ~s(mix protobuf.generate),
-        ~s(--output-path="#{elixir_out}"),
-        args
-      ] ++ files_to_generate
-
-    case Mix.shell().cmd(Enum.join(args, " ")) do
+    case Mix.shell().cmd(cmd) do
       0 -> Mix.Task.rerun("format", [Path.join([elixir_out, "**", "*.pb.ex"])])
       other -> Mix.raise("'protoc' exited with non-zero status: #{other}")
     end
