@@ -1,6 +1,5 @@
 defmodule Routeguide.Point do
   @moduledoc false
-
   use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :latitude, 1, type: :int32
@@ -9,7 +8,6 @@ end
 
 defmodule Routeguide.Rectangle do
   @moduledoc false
-
   use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :lo, 1, type: Routeguide.Point
@@ -18,7 +16,6 @@ end
 
 defmodule Routeguide.Feature do
   @moduledoc false
-
   use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :name, 1, type: :string
@@ -27,7 +24,6 @@ end
 
 defmodule Routeguide.RouteNote do
   @moduledoc false
-
   use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :location, 1, type: Routeguide.Point
@@ -36,7 +32,6 @@ end
 
 defmodule Routeguide.RouteSummary do
   @moduledoc false
-
   use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :point_count, 1, type: :int32, json_name: "pointCount"
@@ -50,13 +45,13 @@ defmodule Routeguide.RouteGuide.Service do
 
   use GRPC.Service, name: "routeguide.RouteGuide", protoc_gen_elixir_version: "0.14.1"
 
-  rpc :GetFeature, Routeguide.Point, Routeguide.Feature
+  rpc(:GetFeature, Routeguide.Point, Routeguide.Feature, %{})
 
-  rpc :ListFeatures, Routeguide.Rectangle, stream(Routeguide.Feature)
+  rpc(:ListFeatures, Routeguide.Rectangle, stream(Routeguide.Feature), %{})
 
-  rpc :RecordRoute, stream(Routeguide.Point), Routeguide.RouteSummary
+  rpc(:RecordRoute, stream(Routeguide.Point), Routeguide.RouteSummary, %{})
 
-  rpc :RouteChat, stream(Routeguide.RouteNote), stream(Routeguide.RouteNote)
+  rpc(:RouteChat, stream(Routeguide.RouteNote), stream(Routeguide.RouteNote), %{})
 end
 
 defmodule Routeguide.RouteGuide.Stub do

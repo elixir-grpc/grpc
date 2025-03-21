@@ -41,6 +41,7 @@ defmodule GRPC.Mixfile do
       {:cowlib, "~> 2.12"},
       {:castore, "~> 0.1 or ~> 1.0", optional: true},
       {:protobuf, "~> 0.14"},
+      {:protobuf_generate, "~> 0.1.1", only: [:dev, :test]},
       {:mint, "~> 1.5"},
       {:ex_doc, "~> 0.29", only: :dev},
       {:ex_parameterized, "~> 1.3.7", only: :test},
@@ -69,12 +70,13 @@ defmodule GRPC.Mixfile do
   defp gen_test_protos(_args) do
     elixir_out = "test/support"
 
-    cmd = ~s(protoc \
-      -Itest/support \
-      --elixir_out=plugins=grpc:"#{elixir_out}" \
+    cmd = ~s(mix protobuf.generate \
+      --include-path=test/support \
+      --output-path="#{elixir_out}" \
+      --plugin=ProtobufGenerate.Plugins.GRPCWithOptions\
       test/support/transcode_messages.proto \
       test/support/proto/helloworld.proto \
-      test/support/proto/route_guide.proto \
+      test/support/proto/route_guide.proto
     )
 
     case Mix.shell().cmd(cmd) do
