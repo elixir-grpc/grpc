@@ -70,6 +70,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         codec: codec,
         http_method: http_method,
         compressor: compressor,
+        is_preflight?: preflight?(req),
         http_transcode: transcode?(req)
       }
 
@@ -627,6 +628,9 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       _ -> false
     end
   end
+  defp preflight?(%{method: method}), do: method == "OPTIONS"
+  defp preflight?(%{method: "OPTIONS"}), do: true
+  defp preflight?(_), do: false
 
   defp send_error(req, error, state, reason) do
     trailers = HTTP2.server_trailers(error.status, error.message)

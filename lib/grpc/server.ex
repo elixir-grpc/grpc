@@ -152,7 +152,8 @@ defmodule GRPC.Server do
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
 
-        def __call_rpc__(unquote(path), :post, stream) do
+        def __call_rpc__(unquote(path), http_method, stream)
+            when http_method == :post or http_method == :options do
           GRPC.Server.call(
             unquote(service_mod),
             %{
@@ -271,6 +272,10 @@ defmodule GRPC.Server do
     end
   end
 
+  defp do_handle_request(false, res_stream, %{is_preflight?: true} = stream, func_name) do
+   call_with_interceptors(res_stream, func_name, stream, [])
+  end
+
   defp do_handle_request(
          false,
          res_stream,
@@ -339,7 +344,8 @@ defmodule GRPC.Server do
        ) do
     GRPC.Telemetry.server_span(server, endpoint, func_name, stream, fn ->
       last = fn r, s ->
-        reply = apply(server, func_name, [r, s])
+        # no response is rquired for preflight requests
+        reply = if stream.is_preflight?, do: [], else: apply(server, func_name, [r, s])
 
         if res_stream do
           {:ok, stream}

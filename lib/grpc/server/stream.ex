@@ -34,6 +34,8 @@ defmodule GRPC.Server.Stream do
           # compressor mainly is used in client decompressing, responses compressing should be set by
           # `GRPC.Server.set_compressor`
           compressor: module() | nil,
+          # notes that this is a preflight request, and not an actual request for data (e.g. in grpcweb)
+          is_preflight?: boolean(),
           # For http transcoding
           http_method: GRPC.Server.Router.http_method(),
           http_transcode: boolean(),
@@ -54,9 +56,14 @@ defmodule GRPC.Server.Stream do
             adapter: nil,
             local: nil,
             compressor: nil,
+            is_preflight?: false,
             http_method: :post,
             http_transcode: false,
             __interface__: %{send_reply: &__MODULE__.send_reply/3}
+
+  def send_reply(%{is_preflight?: true} = stream, _reply, opts) do
+    do_send_reply(stream, [], opts)
+  end
 
   def send_reply(
         %{grpc_type: :server_stream, codec: codec, http_transcode: true, rpc: rpc} = stream,
