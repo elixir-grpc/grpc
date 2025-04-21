@@ -29,7 +29,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           pid: server_rpc_pid :: pid,
           handling_timer: timeout_timer_ref :: reference,
           pending_reader: nil | pending_reader,
-          client_type: GRPC.Server.Stream.client_type
+          access_mode: GRPC.Server.Stream.access_mode
         }
   @type init_result ::
           {:cowboy_loop, :cowboy_req.req(), stream_state} | {:ok, :cowboy_req.req(), init_state}
@@ -57,7 +57,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       |> String.downcase()
       |> String.to_existing_atom()
 
-    with {:ok, client_type, sub_type, content_type} <- find_content_type_subtype(req),
+    with {:ok, access_mode, sub_type, content_type} <- find_content_type_subtype(req),
          {:ok, codec} <- find_codec(sub_type, content_type, server),
          {:ok, compressor} <- find_compressor(req, server) do
       stream_pid = self()
@@ -69,10 +69,10 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         local: opts[:local],
         codec: codec,
         http_method: http_method,
-        http_transcode: client_type == :web,
+        http_transcode: access_mode == :http_transcoding,
         compressor: compressor,
         is_preflight?: preflight?(req),
-        client_type: client_type
+        access_mode: access_mode
       }
 
       server_rpc_pid = :proc_lib.spawn_link(__MODULE__, :call_rpc, [server, route, stream])
@@ -98,7 +98,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           pid: server_rpc_pid,
           handling_timer: timer_ref,
           pending_reader: nil,
-          client_type: client_type
+          access_mode: access_mode
         }
       }
     else
@@ -132,9 +132,9 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           content_type
       end
 
-    {:ok, client_type, subtype} = extract_subtype(content_type)
-    client_type = resolve_client_type(req, client_type, subtype)
-    {:ok, client_type, subtype, content_type}
+    {:ok, access_mode, subtype} = extract_subtype(content_type)
+    access_mode = resolve_access_mode(req, access_mode, subtype)
+    {:ok, access_mode, subtype, content_type}
   end
 
   defp find_compressor(req, server) do
@@ -608,7 +608,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  defp extract_subtype("application/json"), do: {:ok, :web, "json"}
+  defp extract_subtype("application/json"), do: {:ok, :http_transcoding, "json"}
   defp extract_subtype("application/grpc"), do: {:ok, :grpc, "proto"}
   defp extract_subtype("application/grpc+"), do: {:ok, :grpc, "proto"}
   defp extract_subtype("application/grpc;"), do: {:ok, :grpc, "proto"}
@@ -627,9 +627,9 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     {:ok, :grpc, "proto"}
   end
 
-  defp resolve_client_type(%{version: "HTTP/1.1"}, _detected_client_type, _type_subtype), do: :web
-  defp resolve_client_type(%{method: "OPTIONS"}, _detected_client_type, _type_subtype), do: :grpcweb
-  defp resolve_client_type(_req, detected_client_type, _type_subtype), do: detected_client_type
+  defp resolve_access_mode(%{version: "HTTP/1.1"}, _detected_access_mode, _type_subtype), do: :http_transcoding
+  defp resolve_access_mode(%{method: "OPTIONS"}, _detected_access_mode, _type_subtype), do: :grpcweb
+  defp resolve_access_mode(_req, detected_access_mode, _type_subtype), do: detected_access_mode
 
   defp preflight?(%{method: "OPTIONS"}), do: true
   defp preflight?(_), do: false
@@ -637,7 +637,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   defp send_error(req, error, state, reason) do
     trailers = HTTP2.server_trailers(error.status, error.message)
 
-    status = if state.client_type == :web, do: GRPC.Status.http_code(error.status), else: 200
+    status = if state.access_mode == :http_transcoding, do: GRPC.Status.http_code(error.status), else: 200
 
     if pid = Map.get(state, :pid) do
       exit_handler(pid, reason)

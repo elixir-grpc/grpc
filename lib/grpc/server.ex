@@ -252,7 +252,7 @@ defmodule GRPC.Server do
            codec: codec,
            adapter: adapter,
            payload: payload,
-           client_type: :web
+           access_mode: :http_transcoding
          } = stream,
          func_name
        ) do
@@ -272,7 +272,7 @@ defmodule GRPC.Server do
   end
 
   defp do_handle_request(false, res_stream, %{is_preflight?: true} = stream, func_name) do
-   call_with_interceptors(res_stream, func_name, stream, [])
+    call_with_interceptors(res_stream, func_name, stream, [])
   end
 
   defp do_handle_request(
