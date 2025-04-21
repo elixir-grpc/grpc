@@ -179,8 +179,7 @@ defmodule GRPC.Server do
                 | service_name: unquote(service_name),
                   method_name: unquote(to_string(name)),
                   grpc_type: unquote(grpc_type),
-                  http_method: unquote(http_method),
-                  http_transcode: unquote(http_transcode)
+                  http_method: unquote(http_method)
               },
               unquote(Macro.escape(put_elem(rpc, 0, func_name))),
               unquote(func_name)
@@ -253,7 +252,7 @@ defmodule GRPC.Server do
            codec: codec,
            adapter: adapter,
            payload: payload,
-           http_transcode: true
+           client_type: :web
          } = stream,
          func_name
        ) do
