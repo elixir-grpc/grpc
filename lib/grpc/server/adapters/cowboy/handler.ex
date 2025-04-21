@@ -608,7 +608,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  defp extract_subtype("application/json"), do: {:ok, :grpc, "json"}
+  defp extract_subtype("application/json"), do: {:ok, :web, "json"}
   defp extract_subtype("application/grpc"), do: {:ok, :grpc, "proto"}
   defp extract_subtype("application/grpc+"), do: {:ok, :grpc, "proto"}
   defp extract_subtype("application/grpc;"), do: {:ok, :grpc, "proto"}
@@ -628,7 +628,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   defp resolve_client_type(%{version: "HTTP/1.1"}, _detected_client_type, _type_subtype), do: :web
-  defp resolve_client_type(_req, _detected_client_type, "json"), do: :web
   defp resolve_client_type(%{method: "OPTIONS"}, _detected_client_type, _type_subtype), do: :grpcweb
   defp resolve_client_type(_req, detected_client_type, _type_subtype), do: detected_client_type
 
