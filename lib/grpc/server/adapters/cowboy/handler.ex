@@ -69,6 +69,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         local: opts[:local],
         codec: codec,
         http_method: http_method,
+        http_transcode: client_type == :web,
         compressor: compressor,
         is_preflight?: preflight?(req),
         client_type: client_type
