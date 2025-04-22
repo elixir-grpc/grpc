@@ -61,6 +61,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
          {:ok, codec} <- find_codec(sub_type, content_type, server),
          {:ok, compressor} <- find_compressor(req, server) do
       stream_pid = self()
+      http_transcode = access_mode == :http_transcoding
+
       stream = %GRPC.Server.Stream{
         server: server,
         endpoint: endpoint,
@@ -69,7 +71,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         local: opts[:local],
         codec: codec,
         http_method: http_method,
-        http_transcode: access_mode == :http_transcoding,
+        http_transcode: http_transcode,
         compressor: compressor,
         is_preflight?: preflight?(req),
         access_mode: access_mode
