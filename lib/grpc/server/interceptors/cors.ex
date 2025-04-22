@@ -31,13 +31,13 @@ defmodule GRPC.Server.Interceptors.CORS do
 
   @behaviour GRPC.Server.Interceptor
   @impl true
-  def init(opts) do
+  def init(opts \\ []) do
     # the funky first clause matches a 2-arity remote is_function
     # note that this function is run in the context of a macro, which brings some limitations with it
     case Keyword.get(opts, :allow) do
       {:&, [], [{:/, [], [_signature, 2]}]} = fun -> fun
       static when is_binary(static) -> static
-      _ ->"*"
+      _ -> "*"
     end
   end
 
