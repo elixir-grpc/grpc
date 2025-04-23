@@ -2,7 +2,8 @@ defmodule GRPC.Server.Interceptors.CORSTest.Endpoint do
   use GRPC.Endpoint
 
   intercept(GRPC.Server.Interceptors.CORS,
-    allow: &GRPC.Server.Interceptors.CORSTest.allow_origin/2
+    allow_origin: &GRPC.Server.Interceptors.CORSTest.allow_origin/2,
+    allow_headers: &GRPC.Server.Interceptors.CORSTest.allow_headers/2
   )
 end
 
@@ -38,8 +39,11 @@ defmodule GRPC.Server.Interceptors.CORSTest do
     "x-grpc-web" => "1",
     "x-user-agent" => "grpc-web-javascript/0.1"
   }
+  @requested_allowed_headers "Authorized"
+  @custom_allowed_headers "MySpecialHeader,AndAnother"
 
   def allow_origin(_req, _stream), do: @function_header_value
+  def allow_headers(_req, _stream), do: @custom_allowed_headers
 
   def create_stream() do
     %Stream{
@@ -118,7 +122,7 @@ defmodule GRPC.Server.Interceptors.CORSTest do
         request,
         %{stream | access_mode: :grpcweb},
         fn _request, _stream -> {:ok, :ok} end,
-        CORSInterceptor.init(allow: domain)
+        CORSInterceptor.init(allow_origin: domain)
       )
 
     assert_received(
@@ -149,6 +153,81 @@ defmodule GRPC.Server.Interceptors.CORSTest do
     )
   end
 
+  test "CORS Access-Control-Allowed-Headers is included in response when clients request it" do
+    request = %FakeRequest{}
+
+    stream = %{
+      create_stream()
+      | access_mode: :grpcweb,
+        http_request_headers: Map.put(@default_http_headers, "access-control-request-headers", @requested_allowed_headers)
+    }
+
+    {:ok, :ok} =
+      CORSInterceptor.call(
+        request,
+        %{stream | access_mode: :grpcweb},
+        fn _request, _stream -> {:ok, :ok} end,
+        CORSInterceptor.init()
+      )
+
+    assert_received(
+      {:setting_headers, %{ "access-control-allow-headers" => @requested_allowed_headers }},
+      "Incorrect header when using function"
+    )
+  end
+
+  test "CORS Access-Control-Allowed-Headers is configurable with a static string" do
+    request = %FakeRequest{}
+
+    stream = %{
+      create_stream()
+      | access_mode: :grpcweb,
+        http_request_headers: Map.put(@default_http_headers, "access-control-request-headers", @requested_allowed_headers)
+    }
+
+    allowed_headers = "Test"
+
+    {:ok, :ok} =
+      CORSInterceptor.call(
+        request,
+        %{stream | access_mode: :grpcweb},
+        fn _request, _stream -> {:ok, :ok} end,
+        CORSInterceptor.init(allow_headers: allowed_headers)
+      )
+
+    assert_received(
+      {:setting_headers, %{ "access-control-allow-headers" => ^allowed_headers }},
+      "Incorrect header when using function"
+    )
+  end
+
+  test "CORS Access-Control-Allowed-Headers is configurable with a two-arity function" do
+    request = %FakeRequest{}
+
+    stream = %{
+      create_stream()
+      | access_mode: :grpcweb,
+        http_request_headers: Map.put(@default_http_headers, "access-control-request-headers", @requested_allowed_headers)
+    }
+    # fetch the interceptor state from the fake endpoint
+    [{_interceptor, interceptor_state}] =
+      GRPC.Server.Interceptors.CORSTest.Endpoint.__meta__(:interceptors)
+
+
+    {:ok, :ok} =
+      CORSInterceptor.call(
+        request,
+        %{stream | access_mode: :grpcweb},
+        fn _request, _stream -> {:ok, :ok} end,
+        interceptor_state
+      )
+
+    assert_received(
+      {:setting_headers, %{ "access-control-allow-headers" => @custom_allowed_headers }},
+      "Incorrect header when using function"
+    )
+  end
+
   test "CORS only on cors sec-fetch-mode" do
     request = %FakeRequest{}
 
@@ -163,7 +242,7 @@ defmodule GRPC.Server.Interceptors.CORSTest do
         request,
         %{stream | access_mode: :grpcweb},
         fn _request, _stream -> {:ok, :ok} end,
-        CORSInterceptor.init(allow: "*")
+        CORSInterceptor.init(allow_origin: "*")
       )
 
     refute_received({:setting_headers, _}, "Set CORS header")

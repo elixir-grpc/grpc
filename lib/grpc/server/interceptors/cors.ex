@@ -34,29 +34,64 @@ defmodule GRPC.Server.Interceptors.CORS do
   def init(opts \\ []) do
     # the funky first clause matches a 2-arity remote is_function
     # note that this function is run in the context of a macro, which brings some limitations with it
-    case Keyword.get(opts, :allow) do
-      {:&, [], [{:/, [], [_signature, 2]}]} = fun -> fun
-      static when is_binary(static) -> static
-      _ -> "*"
-    end
+    allowed_origin =
+      case Keyword.get(opts, :allow_origin) do
+        {:&, [], [{:/, [], [_signature, 2]}]} = fun -> fun
+        static when is_binary(static) -> static
+        _ -> "*"
+      end
+
+    allowed_headers =
+      case Keyword.get(opts, :allow_headers) do
+        {:&, [], [{:/, [], [_signature, 2]}]} = fun -> fun
+        static when is_binary(static) -> static
+        _ -> nil
+      end
+
+    {allowed_origin, allowed_headers}
   end
 
   @impl true
-  def call(req, stream, next, allowed) do
+  def call(req, stream, next, {allowed_origin, allowed_headers}) do
     if stream.access_mode != :grpc and
          Map.get(stream.http_request_headers, "sec-fetch-mode") == "cors" do
-      stream.adapter.set_headers(stream.payload, %{
-        "access-control-allow-origin" => resolve_allowed(req, stream, allowed),
-        "access-control-allow-headers" => "content-type, x-grpc-web, x-user-agent, x-api-key"
-      })
+      headers =
+        %{}
+        |> add_allowed_origins(req, stream, allowed_origin)
+        |> add_allowed_headers(req, stream, allowed_headers)
+
+      stream.adapter.set_headers(stream.payload, headers)
     end
 
     next.(req, stream)
   end
 
-  defp resolve_allowed(req, stream, allowed_fn) when is_function(allowed_fn, 2) do
-    allowed_fn.(req, stream)
+  defp add_allowed_origins(headers, req, stream, allowed) do
+    value =
+      case allowed do
+        allowed when is_function(allowed, 2) -> allowed.(req, stream)
+        allowed -> allowed
+      end
+
+    Map.put(headers, "access-control-allow-origin", value)
   end
 
-  defp resolve_allowed(_req, _stream, allowed), do: allowed
+  defp add_allowed_headers(
+         headers,
+         req,
+         %{http_request_headers: %{"access-control-request-headers" => requested}} = stream,
+         allowed
+       ) do
+    # include an access-control-allow-headers header only when a request headers is sent
+    value =
+      case allowed do
+        nil -> requested
+        allowed when is_function(allowed, 2) -> allowed.(req, stream)
+        allowed -> allowed
+      end
+
+    Map.put(headers, "access-control-allow-headers", value)
+  end
+
+  defp add_allowed_headers(headers, _req, _stream, _allowed), do: headers
 end
