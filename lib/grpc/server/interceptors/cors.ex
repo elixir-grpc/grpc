@@ -4,7 +4,8 @@ defmodule GRPC.Server.Interceptors.CORS do
 
   ## Options
 
-    * `allowed` - A string contianing the allowed origin(s), or a remote function (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string. Defaults to `"*"`, which will allow all origins to access this endpoint.
+    * `allow_origin` - A string containing the allowed origin(s), or a remote function (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string. Defaults to `"*"`, which will allow all origins to access this endpoint.
+    * `allow_headers` - A string containing the allowed headers, or a remote function (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string. Defaults to the value of the `"access-control-request-headers"` request header from the client.
 
   ## Usage
 
@@ -17,15 +18,15 @@ defmodule GRPC.Server.Interceptors.CORS do
       defmodule Your.Endpoint do
         use GRPC.Endpoint
 
-        intercept GRPC.Server.Interceptors.CORS, allowed: "some.origin"
+        intercept GRPC.Server.Interceptors.CORS, allow_origin: "some.origin"
       end
 
 
       defmodule Your.Endpoint do
         use GRPC.Endpoint
 
-        def allowed_origin(req, stream), do: "calculated.origin"
-        intercept GRPC.Server.Interceptors.CORS, allowed: &Your.Endpoint.allowed_origin/2
+        def allow_origin(req, stream), do: "calculated.origin"
+        intercept GRPC.Server.Interceptors.CORS, allow: &Your.Endpoint.allow_origin/2
       end
   """
 
@@ -34,31 +35,31 @@ defmodule GRPC.Server.Interceptors.CORS do
   def init(opts \\ []) do
     # the funky first clause matches a 2-arity remote is_function
     # note that this function is run in the context of a macro, which brings some limitations with it
-    allowed_origin =
+    allow_origin =
       case Keyword.get(opts, :allow_origin) do
         {:&, [], [{:/, [], [_signature, 2]}]} = fun -> fun
         static when is_binary(static) -> static
         _ -> "*"
       end
 
-    allowed_headers =
+    allow_headers =
       case Keyword.get(opts, :allow_headers) do
         {:&, [], [{:/, [], [_signature, 2]}]} = fun -> fun
         static when is_binary(static) -> static
         _ -> nil
       end
 
-    {allowed_origin, allowed_headers}
+    {allow_origin, allow_headers}
   end
 
   @impl true
-  def call(req, stream, next, {allowed_origin, allowed_headers}) do
+  def call(req, stream, next, {allow_origin, allow_headers}) do
     if stream.access_mode != :grpc and
          Map.get(stream.http_request_headers, "sec-fetch-mode") == "cors" do
       headers =
         %{}
-        |> add_allowed_origins(req, stream, allowed_origin)
-        |> add_allowed_headers(req, stream, allowed_headers)
+        |> add_allowed_origins(req, stream, allow_origin)
+        |> add_allowed_headers(req, stream, allow_headers)
 
       stream.adapter.set_headers(stream.payload, headers)
     end
@@ -66,11 +67,11 @@ defmodule GRPC.Server.Interceptors.CORS do
     next.(req, stream)
   end
 
-  defp add_allowed_origins(headers, req, stream, allowed) do
+  defp add_allowed_origins(headers, req, stream, allow) do
     value =
-      case allowed do
-        allowed when is_function(allowed, 2) -> allowed.(req, stream)
-        allowed -> allowed
+      case allow do
+        allow when is_function(allow, 2) -> allow.(req, stream)
+        allow -> allow
       end
 
     Map.put(headers, "access-control-allow-origin", value)
@@ -80,14 +81,14 @@ defmodule GRPC.Server.Interceptors.CORS do
          headers,
          req,
          %{http_request_headers: %{"access-control-request-headers" => requested}} = stream,
-         allowed
+         allow
        ) do
     # include an access-control-allow-headers header only when a request headers is sent
     value =
-      case allowed do
+      case allow do
         nil -> requested
-        allowed when is_function(allowed, 2) -> allowed.(req, stream)
-        allowed -> allowed
+        allow when is_function(allow, 2) -> allow.(req, stream)
+        allow -> allow
       end
 
     Map.put(headers, "access-control-allow-headers", value)
