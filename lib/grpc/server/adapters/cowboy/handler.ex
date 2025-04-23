@@ -29,7 +29,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           pid: server_rpc_pid :: pid,
           handling_timer: timeout_timer_ref :: reference,
           pending_reader: nil | pending_reader,
-          access_mode: GRPC.Server.Stream.access_mode
+          access_mode: GRPC.Server.Stream.access_mode()
         }
   @type init_result ::
           {:cowboy_loop, :cowboy_req.req(), stream_state} | {:ok, :cowboy_req.req(), init_state}
@@ -62,6 +62,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
          {:ok, compressor} <- find_compressor(req, server) do
       stream_pid = self()
       http_transcode = access_mode == :http_transcoding
+      request_headers = :cowboy_req.headers(req)
 
       stream = %GRPC.Server.Stream{
         server: server,
@@ -71,6 +72,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         local: opts[:local],
         codec: codec,
         http_method: http_method,
+        http_request_headers: request_headers,
         http_transcode: http_transcode,
         compressor: compressor,
         is_preflight?: preflight?(req),
@@ -82,7 +84,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
       req = :cowboy_req.set_resp_headers(HTTP2.server_headers(stream), req)
 
-      timeout = :cowboy_req.header("grpc-timeout", req)
+      timeout = Map.get(request_headers, "grpc-timeout")
 
       timer_ref =
         if is_binary(timeout) do
@@ -629,8 +631,12 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     {:ok, :grpc, "proto"}
   end
 
-  defp resolve_access_mode(%{version: "HTTP/1.1"}, _detected_access_mode, _type_subtype), do: :http_transcoding
-  defp resolve_access_mode(%{method: "OPTIONS"}, _detected_access_mode, _type_subtype), do: :grpcweb
+  defp resolve_access_mode(%{version: "HTTP/1.1"}, _detected_access_mode, _type_subtype),
+    do: :http_transcoding
+
+  defp resolve_access_mode(%{method: "OPTIONS"}, _detected_access_mode, _type_subtype),
+    do: :grpcweb
+
   defp resolve_access_mode(_req, detected_access_mode, _type_subtype), do: detected_access_mode
 
   defp preflight?(%{method: "OPTIONS"}), do: true
@@ -639,7 +645,10 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   defp send_error(req, error, state, reason) do
     trailers = HTTP2.server_trailers(error.status, error.message)
 
-    status = if state.access_mode == :http_transcoding, do: GRPC.Status.http_code(error.status), else: 200
+    status =
+      if state.access_mode == :http_transcoding,
+        do: GRPC.Status.http_code(error.status),
+        else: 200
 
     if pid = Map.get(state, :pid) do
       exit_handler(pid, reason)
