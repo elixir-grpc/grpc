@@ -159,7 +159,12 @@ defmodule GRPC.Server.Interceptors.CORSTest do
     stream = %{
       create_stream()
       | access_mode: :grpcweb,
-        http_request_headers: Map.put(@default_http_headers, "access-control-request-headers", @requested_allowed_headers)
+        http_request_headers:
+          Map.put(
+            @default_http_headers,
+            "access-control-request-headers",
+            @requested_allowed_headers
+          )
     }
 
     {:ok, :ok} =
@@ -171,7 +176,7 @@ defmodule GRPC.Server.Interceptors.CORSTest do
       )
 
     assert_received(
-      {:setting_headers, %{ "access-control-allow-headers" => @requested_allowed_headers }},
+      {:setting_headers, %{"access-control-allow-headers" => @requested_allowed_headers}},
       "Incorrect header when using function"
     )
   end
@@ -182,7 +187,12 @@ defmodule GRPC.Server.Interceptors.CORSTest do
     stream = %{
       create_stream()
       | access_mode: :grpcweb,
-        http_request_headers: Map.put(@default_http_headers, "access-control-request-headers", @requested_allowed_headers)
+        http_request_headers:
+          Map.put(
+            @default_http_headers,
+            "access-control-request-headers",
+            @requested_allowed_headers
+          )
     }
 
     allowed_headers = "Test"
@@ -196,7 +206,7 @@ defmodule GRPC.Server.Interceptors.CORSTest do
       )
 
     assert_received(
-      {:setting_headers, %{ "access-control-allow-headers" => ^allowed_headers }},
+      {:setting_headers, %{"access-control-allow-headers" => ^allowed_headers}},
       "Incorrect header when using function"
     )
   end
@@ -207,12 +217,17 @@ defmodule GRPC.Server.Interceptors.CORSTest do
     stream = %{
       create_stream()
       | access_mode: :grpcweb,
-        http_request_headers: Map.put(@default_http_headers, "access-control-request-headers", @requested_allowed_headers)
+        http_request_headers:
+          Map.put(
+            @default_http_headers,
+            "access-control-request-headers",
+            @requested_allowed_headers
+          )
     }
+
     # fetch the interceptor state from the fake endpoint
     [{_interceptor, interceptor_state}] =
       GRPC.Server.Interceptors.CORSTest.Endpoint.__meta__(:interceptors)
-
 
     {:ok, :ok} =
       CORSInterceptor.call(
@@ -223,7 +238,7 @@ defmodule GRPC.Server.Interceptors.CORSTest do
       )
 
     assert_received(
-      {:setting_headers, %{ "access-control-allow-headers" => @custom_allowed_headers }},
+      {:setting_headers, %{"access-control-allow-headers" => @custom_allowed_headers}},
       "Incorrect header when using function"
     )
   end
