@@ -40,7 +40,7 @@ defmodule GRPC.Server.Stream do
           is_preflight?: boolean(),
           # For http transcoding
           http_method: GRPC.Server.Router.http_method(),
-            http_request_headers: map(),
+          http_request_headers: map(),
           http_transcode: boolean(),
           __interface__: map()
         }
@@ -71,7 +71,8 @@ defmodule GRPC.Server.Stream do
   end
 
   def send_reply(
-        %{grpc_type: :server_stream, codec: codec, access_mode: :http_transcoding, rpc: rpc} = stream,
+        %{grpc_type: :server_stream, codec: codec, access_mode: :http_transcoding, rpc: rpc} =
+          stream,
         reply,
         opts
       ) do
@@ -81,7 +82,7 @@ defmodule GRPC.Server.Stream do
     do_send_reply(stream, [codec.encode(response), "\n"], opts)
   end
 
-  def send_reply(%{codec: codec, access_mode: :http_transcoding,  rpc: rpc} = stream, reply, opts) do
+  def send_reply(%{codec: codec, access_mode: :http_transcoding, rpc: rpc} = stream, reply, opts) do
     rule = GRPC.Service.rpc_options(rpc, :http) || %{value: %{}}
     response = GRPC.Server.Transcode.map_response_body(rule.value, reply)
 
