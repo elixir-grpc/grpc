@@ -158,9 +158,25 @@ defmodule GRPC.Server.Interceptors.CORSTest do
         http_request_headers: Map.put(@default_http_headers, "sec-fetch-mode", "same-origin")
     }
 
-    # fetch the interceptor state from the fake endpoint
-    [{_interceptor, interceptor_state}] =
-      GRPC.Server.Interceptors.CORSTest.Endpoint.__meta__(:interceptors)
+    {:ok, :ok} =
+      CORSInterceptor.call(
+        request,
+        %{stream | access_mode: :grpcweb},
+        fn _request, _stream -> {:ok, :ok} end,
+        CORSInterceptor.init(allow: "*")
+      )
+
+    refute_received({:setting_headers, _}, "Set CORS header")
+  end
+
+  test "No CORS if missing sec-fetch-mode header" do
+    request = %FakeRequest{}
+
+    stream = %{
+      create_stream()
+      | access_mode: :grpcweb,
+        http_request_headers: Map.delete(@default_http_headers, "sec-fetch-mode")
+    }
 
     {:ok, :ok} =
       CORSInterceptor.call(
