@@ -167,6 +167,39 @@ end
 
 See full application code in [helloworld_transcoding](examples/helloworld_transcoding) example.
 
+### **CORS**
+
+When accessing grpc from a browser via http transcoding or grpcweb, CORS headers may be required for the browser to allow access to the grpc endpoint. Adding CORS headers is can be done by using the included `Interceptor` in your `Endpoint` module:
+
+```elixir
+# Define your endpoint
+defmodule Helloworld.Endpoint do
+  use GRPC.Endpoint
+
+  intercept GRPC.Server.Interceptors.Logger
+  intercept GRPC.Server.Interceptors.CORS
+  run Helloworld.Greeter.Server
+end
+```
+
+By default, the CORS `Interceptor` responds to CORS requests with a permissive response that allows *all* points of origin to access the service. This may be undesirable, particularly in production environments. For this reason, both the allowed origin and headers are configurable:
+
+```elixir
+# Define your endpoint
+defmodule Helloworld.Endpoint do
+  use GRPC.Endpoint
+
+  intercept GRPC.Server.Interceptors.Logger
+  intercept GRPC.Server.Interceptors.CORS, allow_origin: "mydomain.com", allow_headers: "Authorization"
+  run Helloworld.Greeter.Server
+end
+```
+
+The set of configuration directives supported include:
+
+  * `allow_origin` - A string containing the allowed origin(s), or a remote function (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string. Defaults to `"*"`, which will allow all origins to access this endpoint.
+  * `allow_headers` - A string containing the allowed headers, or a remote function (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string. Defaults to the value of the `"access-control-request-headers"` request header from the client.
+
 ### **Start Application**
 
 1. Start gRPC Server in your supervisor tree or Application module:
