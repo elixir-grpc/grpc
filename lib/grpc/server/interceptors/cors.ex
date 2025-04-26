@@ -1,6 +1,6 @@
 defmodule GRPC.Server.Interceptors.CORS do
   @moduledoc """
-  Sends CORS headers when the client is calling the rpc via web transcoding or grpcweb.
+  Sends CORS headers when the client is using RPC via Web transcoding or gRPC-web.
 
   ## Options
 

@@ -169,7 +169,7 @@ See full application code in [helloworld_transcoding](examples/helloworld_transc
 
 ### **CORS**
 
-When accessing grpc from a browser via http transcoding or grpcweb, CORS headers may be required for the browser to allow access to the grpc endpoint. Adding CORS headers is can be done by using the included `Interceptor` in your `Endpoint` module:
+When accessing gRPC from a browser via HTTP transcoding or gRPC-Web, CORS headers may be required for the browser to allow access to the gRPC endpoint. Adding CORS headers can be done by using the included `Interceptor` in your `Endpoint` module:
 
 ```elixir
 # Define your endpoint
