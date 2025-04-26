@@ -4,8 +4,8 @@ defmodule GRPC.Server.Interceptors.CORS do
 
   ## Options
 
-    * `allow_origin` - A string containing the allowed origin(s), or a remote function (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string. Defaults to `"*"`, which will allow all origins to access this endpoint.
-    * `allow_headers` - A string containing the allowed headers, or a remote function (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string. Defaults to the value of the `"access-control-request-headers"` request header from the client.
+    * `allow_origin` - Required. A string containing the allowed origin, or a remote function (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string.
+    *`allow_headers` - A string containing the allowed headers, or a remote function (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string. If not defined, the value of the `"access-control-request-headers"` request header from the client will be used in the response.
 
   ## Usage
 
@@ -39,7 +39,6 @@ defmodule GRPC.Server.Interceptors.CORS do
       case Keyword.get(opts, :allow_origin) do
         {:&, [], [{:/, [], [_signature, 2]}]} = fun -> fun
         static when is_binary(static) -> static
-        _ -> "*"
       end
 
     allow_headers =

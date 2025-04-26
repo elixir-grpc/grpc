@@ -63,7 +63,7 @@ defmodule GRPC.Server.Interceptors.CORSTest do
         request,
         %{stream | access_mode: :http_transcode},
         fn _request, _stream -> {:ok, :ok} end,
-        CORSInterceptor.init()
+        CORSInterceptor.init(allow_origin: "*")
       )
 
     assert_received({:setting_headers, _headers}, "Failed to set CORS headers during grpcweb")
@@ -73,7 +73,7 @@ defmodule GRPC.Server.Interceptors.CORSTest do
         request,
         %{stream | access_mode: :grpcweb},
         fn _request, _stream -> {:ok, :ok} end,
-        CORSInterceptor.init()
+        CORSInterceptor.init(allow_origin: "*")
       )
 
     assert_received({:setting_headers, _headers}, "Failed to set CORS headers during grpcweb")
@@ -88,7 +88,7 @@ defmodule GRPC.Server.Interceptors.CORSTest do
         request,
         %{stream | access_mode: :grpc},
         fn _request, _stream -> {:ok, :ok} end,
-        CORSInterceptor.init()
+        CORSInterceptor.init(allow_origin: "*")
       )
 
     refute_received({:setting_headers, _headers}, "Set CORS headers during grpc")
@@ -103,7 +103,7 @@ defmodule GRPC.Server.Interceptors.CORSTest do
         request,
         stream,
         fn _request, _stream -> {:ok, :ok} end,
-        CORSInterceptor.init()
+        CORSInterceptor.init(allow_origin: "*")
       )
 
     assert_received(
@@ -172,7 +172,7 @@ defmodule GRPC.Server.Interceptors.CORSTest do
         request,
         %{stream | access_mode: :grpcweb},
         fn _request, _stream -> {:ok, :ok} end,
-        CORSInterceptor.init()
+        CORSInterceptor.init(allow_origin: "*")
       )
 
     assert_received(
@@ -202,7 +202,7 @@ defmodule GRPC.Server.Interceptors.CORSTest do
         request,
         %{stream | access_mode: :grpcweb},
         fn _request, _stream -> {:ok, :ok} end,
-        CORSInterceptor.init(allow_headers: allowed_headers)
+        CORSInterceptor.init(allow_origin: "*", allow_headers: allowed_headers)
       )
 
     assert_received(
@@ -277,7 +277,7 @@ defmodule GRPC.Server.Interceptors.CORSTest do
         request,
         %{stream | access_mode: :grpcweb},
         fn _request, _stream -> {:ok, :ok} end,
-        CORSInterceptor.init(allow: "*")
+        CORSInterceptor.init(allow_origin: "*")
       )
 
     refute_received({:setting_headers, _}, "Set CORS header")
