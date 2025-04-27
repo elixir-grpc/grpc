@@ -11,14 +11,14 @@ An Elixir implementation of [gRPC](http://www.grpc.io/).
 
 ## Table of contents
 
--   [Installation](#installation)
--   [Usage](#usage)
-    -   [Simple RPC](#simple-rpc)
-    -   [HTTP Transcoding](#http-transcoding)
-    -   [Start Application](#start-application)
--   [Features](#features)
--   [Benchmark](#benchmark)
--   [Contributing](#contributing)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Simple RPC](#simple-rpc)
+  - [HTTP Transcoding](#http-transcoding)
+  - [Start Application](#start-application)
+- [Features](#features)
+- [Benchmark](#benchmark)
+- [Contributing](#contributing)
 
 ## Installation
 
@@ -172,8 +172,8 @@ See full application code in [helloworld_transcoding](examples/helloworld_transc
 
 When accessing gRPC from a browser via HTTP transcoding or gRPC-Web, CORS headers may be required for the browser to allow access to the gRPC endpoint. Adding CORS headers can be done by using the included `Interceptor` in your `Endpoint` module, configuring it with an `allow_origin` and, optionally, `allow_headers`:
 
--   `allow_origin` - Required. A string containing the allowed origin, or a remote function (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string.
--   `allow_headers` - A string containing the allowed headers, or a remote function (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string. If not provided, the value of the `"access-control-request-headers"` request header from the client will be used in the response.
+- `allow_origin` - Required. A string containing the allowed origin, or a remote function (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string.
+- `allow_headers` - A string containing the allowed headers, or a remote function (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string. If not provided, the value of the `"access-control-request-headers"` request header from the client will be used in the response.
 
 Example:
 
@@ -244,18 +244,18 @@ The accepted options for configuration are the ones listed on [Mint.HTTP.connect
 
 ## Features
 
--   Various kinds of RPC:
-    -   [Unary](https://grpc.io/docs/what-is-grpc/core-concepts/#unary-rpc)
-    -   [Server-streaming](https://grpc.io/docs/what-is-grpc/core-concepts/#server-streaming-rpc)
-    -   [Client-streaming](https://grpc.io/docs/what-is-grpc/core-concepts/#client-streaming-rpc)
-    -   [Bidirectional-streaming](https://grpc.io/docs/what-is-grpc/core-concepts/#bidirectional-streaming-rpc)
--   [HTTP Transcoding](https://cloud.google.com/endpoints/docs/grpc/transcoding)
--   [TLS Authentication](https://grpc.io/docs/guides/auth/#supported-auth-mechanisms)
--   [Error handling](https://grpc.io/docs/guides/error/)
--   Interceptors (See [`GRPC.Endpoint`](https://github.com/elixir-grpc/grpc/blob/master/lib/grpc/endpoint.ex))
--   [Connection Backoff](https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md)
--   Data compression
--   [gRPC Reflection](https://github.com/elixir-grpc/grpc-reflection)
+- Various kinds of RPC:
+  - [Unary](https://grpc.io/docs/what-is-grpc/core-concepts/#unary-rpc)
+  - [Server-streaming](https://grpc.io/docs/what-is-grpc/core-concepts/#server-streaming-rpc)
+  - [Client-streaming](https://grpc.io/docs/what-is-grpc/core-concepts/#client-streaming-rpc)
+  - [Bidirectional-streaming](https://grpc.io/docs/what-is-grpc/core-concepts/#bidirectional-streaming-rpc)
+- [HTTP Transcoding](https://cloud.google.com/endpoints/docs/grpc/transcoding)
+- [TLS Authentication](https://grpc.io/docs/guides/auth/#supported-auth-mechanisms)
+- [Error handling](https://grpc.io/docs/guides/error/)
+- Interceptors (See [`GRPC.Endpoint`](https://github.com/elixir-grpc/grpc/blob/master/lib/grpc/endpoint.ex))
+- [Connection Backoff](https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md)
+- Data compression
+- [gRPC Reflection](https://github.com/elixir-grpc/grpc-reflection)
 
 ## Benchmark
 
