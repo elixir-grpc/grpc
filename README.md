@@ -15,6 +15,7 @@ An Elixir implementation of [gRPC](http://www.grpc.io/).
 - [Usage](#usage)
   - [Simple RPC](#simple-rpc)
   - [HTTP Transcoding](#http-transcoding)
+  - [CORS](#cors)
   - [Start Application](#start-application)
 - [Features](#features)
 - [Benchmark](#benchmark)
@@ -170,10 +171,7 @@ See full application code in [helloworld_transcoding](examples/helloworld_transc
 
 ### **CORS**
 
-When accessing gRPC from a browser via HTTP transcoding or gRPC-Web, CORS headers may be required for the browser to allow access to the gRPC endpoint. Adding CORS headers can be done by using the included `Interceptor` in your `Endpoint` module, configuring it with an `allow_origin` and, optionally, `allow_headers`:
-
-- `allow_origin` - Required. A string containing the allowed origin, or a remote function (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string.
-- `allow_headers` - A string containing the allowed headers, or a remote function (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string. If not provided, the value of the `"access-control-request-headers"` request header from the client will be used in the response.
+When accessing gRPC from a browser via HTTP transcoding or gRPC-Web, CORS headers may be required for the browser to allow access to the gRPC endpoint. Adding CORS headers can be done by using `GRPC.Server.Interceptors.CORS` as an interceptor in your `GRPC.Endpoint` module, configuring it as decribed in the module documentation:
 
 Example:
 
