@@ -60,6 +60,8 @@ defmodule GRPC.Server.Supervisor do
       through the :start_server option for the GRPC.Server.Supervisor"
     end
 
+    opts = Keyword.validate!(opts, [:endpoint, :servers, :start_server, :port])
+
     endpoint_or_servers =
       case {opts[:endpoint], opts[:servers]} do
         {endpoint, servers}

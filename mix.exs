@@ -1,13 +1,13 @@
 defmodule GRPC.Mixfile do
   use Mix.Project
 
-  @version "0.9.0"
+  @version "0.10.0"
 
   def project do
     [
       app: :grpc,
       version: @version,
-      elixir: "~> 1.12",
+      elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,

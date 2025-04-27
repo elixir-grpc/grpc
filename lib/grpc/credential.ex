@@ -23,6 +23,7 @@ defmodule GRPC.Credential do
   Creates credential.
   """
   def new(opts) do
-    %__MODULE__{ssl: Keyword.get(opts, :ssl) || []}
+    opts = Keyword.validate!(opts, [:ssl])
+    %__MODULE__{ssl: opts[:ssl] || []}
   end
 end

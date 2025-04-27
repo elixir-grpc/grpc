@@ -122,11 +122,19 @@ defmodule GRPC.Server do
 
   defmacro __using__(opts) do
     quote bind_quoted: [opts: opts], location: :keep do
+      opts =
+        Keyword.validate!(opts, [
+          :service,
+          codecs: [GRPC.Codec.Proto, GRPC.Codec.WebText, GRPC.Codec.JSON],
+          compressors: [],
+          http_transcode: false
+        ])
+
       service_mod = opts[:service]
       service_name = service_mod.__meta__(:name)
-      codecs = opts[:codecs] || [GRPC.Codec.Proto, GRPC.Codec.WebText, GRPC.Codec.JSON]
-      compressors = opts[:compressors] || []
-      http_transcode = opts[:http_transcode] || false
+      codecs = opts[:codecs]
+      compressors = opts[:compressors]
+      http_transcode = opts[:http_transcode]
 
       codecs = if http_transcode, do: [GRPC.Codec.JSON | codecs], else: codecs
 
@@ -404,9 +412,10 @@ defmodule GRPC.Server do
   @spec start_endpoint(atom(), non_neg_integer(), Keyword.t()) ::
           {atom(), any(), non_neg_integer()}
   def start_endpoint(endpoint, port, opts \\ []) do
+    opts = Keyword.validate!(opts, adapter: GRPC.Server.Adapters.Cowboy)
+    adapter = opts[:adapter]
     servers = endpoint.__meta__(:servers)
     servers = GRPC.Server.servers_to_map(servers)
-    adapter = Keyword.get(opts, :adapter) || GRPC.Server.Adapters.Cowboy
     adapter.start(endpoint, servers, port, opts)
   end
 
@@ -422,7 +431,8 @@ defmodule GRPC.Server do
   @doc false
   @spec stop(module() | [module()], Keyword.t()) :: any()
   def stop(servers, opts \\ []) do
-    adapter = Keyword.get(opts, :adapter) || GRPC.Server.Adapters.Cowboy
+    opts = Keyword.validate!(opts, adapter: GRPC.Server.Adapters.Cowboy)
+    adapter = opts[:adapter]
     servers = GRPC.Server.servers_to_map(servers)
     adapter.stop(nil, servers)
   end
@@ -430,7 +440,8 @@ defmodule GRPC.Server do
   @doc false
   @spec stop_endpoint(atom(), Keyword.t()) :: any()
   def stop_endpoint(endpoint, opts \\ []) do
-    adapter = Keyword.get(opts, :adapter) || GRPC.Server.Adapters.Cowboy
+    opts = Keyword.validate!(opts, adapter: GRPC.Server.Adapters.Cowboy)
+    adapter = opts[:adapter]
     servers = endpoint.__meta__(:servers)
     servers = GRPC.Server.servers_to_map(servers)
     adapter.stop(endpoint, servers)
