@@ -4,8 +4,10 @@ defmodule GRPC.Server.Interceptors.CORS do
 
   ## Options
 
-    * `allow_origin` - Required. A string containing the allowed origin, or a remote function (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string.
-    *`allow_headers` - A string containing the allowed headers, or a remote function (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string. If not defined, the value of the `"access-control-request-headers"` request header from the client will be used in the response.
+    * `:allow_origin` - Required. A string containing the allowed origin, or a function capture (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string.
+    * `:allow_headers` - A string containing the allowed headers, or a function capture
+      (e.g. `&MyApp.MyModule.function/2)`) which takes a `req` and a `stream` and returns a string. Defaults to `nil`.
+      If defined as `nil`, the value of the `"access-control-request-headers"` request header from the client will be used in the response.
 
   ## Usage
 
@@ -33,20 +35,41 @@ defmodule GRPC.Server.Interceptors.CORS do
   @behaviour GRPC.Server.Interceptor
   @impl true
   def init(opts \\ []) do
-    # the funky first clause matches a 2-arity remote is_function
-    # note that this function is run in the context of a macro, which brings some limitations with it
+    # Function captures are represented as their AST in this step
+    # because of a Macro.escape call in the __before_compile__ step
+    # in endpoint.ex.
+    # This is not a full-on Macro context, so binary concatenations and
+    # variables are handled before this step.
+
+    opts = Keyword.validate!(opts, [:allow_origin, allow_headers: nil])
+
     allow_origin =
       case Keyword.get(opts, :allow_origin) do
-        {:&, [], [{:/, [], [_signature, 2]}]} = fun -> fun
-        static when is_binary(static) -> static
-        _ -> raise ArgumentError, message: "allow_origin must be a string or a 2-arity remote function"
+        {:&, [], [{:/, [], [_signature, 2]}]} = fun ->
+          fun
+
+        binary when is_binary(binary) ->
+          binary
+
+        other ->
+          raise ArgumentError,
+                "allow_origin must be a string or a 2-arity remote function, got: #{inspect(other)}"
       end
 
     allow_headers =
       case Keyword.get(opts, :allow_headers) do
-        {:&, [], [{:/, [], [_signature, 2]}]} = fun -> fun
-        static when is_binary(static) -> static
-        _ -> nil
+        {:&, [], [{:/, [], [_signature, 2]}]} = fun ->
+          fun
+
+        binary when is_binary(binary) ->
+          binary
+
+        nil ->
+          nil
+
+        other ->
+          raise ArgumentError,
+                ":allow_headers must be a string, a 2-arity remote function, or nil, got: #{inspect(other)}"
       end
 
     {allow_origin, allow_headers}

@@ -1,9 +1,22 @@
-defmodule GRPC.Server.Interceptors.CORSTest.Endpoint do
+defmodule GRPC.Server.Interceptors.CORSTest.Endpoint.FunctionCapture do
   use GRPC.Endpoint
 
   intercept(GRPC.Server.Interceptors.CORS,
     allow_origin: &GRPC.Server.Interceptors.CORSTest.allow_origin/2,
     allow_headers: &GRPC.Server.Interceptors.CORSTest.allow_headers/2
+  )
+end
+
+defmodule GRPC.Server.Interceptors.CORSTest.Endpoint.BinaryConcatenation do
+  use GRPC.Endpoint
+
+  origin1 = "https://subdomain1.domain.com"
+  origin2 = "https://subdomain2.domain.com"
+
+  intercept(
+    GRPC.Server.Interceptors.CORS,
+    allow_origin: origin1 <> "," <> origin2,
+    allow_headers: "MySpecialHeader,AndAnother"
   )
 end
 
@@ -127,7 +140,7 @@ defmodule GRPC.Server.Interceptors.CORSTest do
 
     # fetch the interceptor state from the fake endpoint
     [{_interceptor, interceptor_state}] =
-      GRPC.Server.Interceptors.CORSTest.Endpoint.__meta__(:interceptors)
+      GRPC.Server.Interceptors.CORSTest.Endpoint.FunctionCapture.__meta__(:interceptors)
 
     {:ok, :ok} =
       CORSInterceptor.call(
@@ -139,6 +152,32 @@ defmodule GRPC.Server.Interceptors.CORSTest do
 
     assert_received(
       {:setting_headers, %{"access-control-allow-origin" => @function_header_value}},
+      "Incorrect header when using function"
+    )
+  end
+
+  test "CORS allow origin header value is configuraable with binary concatenation" do
+    request = %FakeRequest{}
+    stream = Map.put(create_stream(), :access_mode, :grpcweb)
+
+    # fetch the interceptor state from the fake endpoint
+    [{_interceptor, interceptor_state}] =
+      GRPC.Server.Interceptors.CORSTest.Endpoint.BinaryConcatenation.__meta__(:interceptors)
+
+    {:ok, :ok} =
+      CORSInterceptor.call(
+        request,
+        %{stream | access_mode: :grpcweb},
+        fn _request, _stream -> {:ok, :ok} end,
+        interceptor_state
+      )
+
+    assert_received(
+      {:setting_headers,
+       %{
+         "access-control-allow-origin" =>
+           "https://subdomain1.domain.com,https://subdomain2.domain.com"
+       }},
       "Incorrect header when using function"
     )
   end
@@ -217,7 +256,7 @@ defmodule GRPC.Server.Interceptors.CORSTest do
 
     # fetch the interceptor state from the fake endpoint
     [{_interceptor, interceptor_state}] =
-      GRPC.Server.Interceptors.CORSTest.Endpoint.__meta__(:interceptors)
+      GRPC.Server.Interceptors.CORSTest.Endpoint.FunctionCapture.__meta__(:interceptors)
 
     {:ok, :ok} =
       CORSInterceptor.call(
