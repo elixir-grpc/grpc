@@ -39,7 +39,21 @@ defmodule GRPC.Endpoint do
       |> init_interceptors()
 
     servers = Module.get_attribute(env.module, :servers)
-    servers = Enum.map(servers, fn {ss, opts} -> {ss, parse_run_opts(opts, %{})} end)
+
+    servers =
+      Enum.map(servers, fn {ss, opts} ->
+        opts = Keyword.validate!(opts, [:interceptors])
+
+        run_args =
+          if interceptors = opts[:interceptors] do
+            %{interceptors: interceptors}
+          else
+            %{}
+          end
+
+        {ss, run_args}
+      end)
+
     server_interceptors = server_interceptors(servers, %{})
     servers = parse_servers(servers)
 
@@ -98,16 +112,6 @@ defmodule GRPC.Endpoint do
     servers
     |> Enum.map(fn {server, _} -> server end)
     |> List.flatten()
-  end
-
-  defp parse_run_opts([], acc), do: acc
-
-  defp parse_run_opts([{:interceptors, interceptors} | tail], acc) do
-    parse_run_opts(tail, Map.put(acc, :interceptors, interceptors))
-  end
-
-  defp parse_run_opts([{k, _} | _], _) do
-    raise ArgumentError, message: "Unknown option for GRPC.Endpoint.run/2: #{k}"
   end
 
   defp init_interceptors(interceptors) do

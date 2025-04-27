@@ -24,8 +24,7 @@ defmodule GRPC.Server.Interceptors.Logger do
 
   @impl true
   def init(opts) do
-    level = Keyword.get(opts, :level) || :info
-    [level: level]
+    Keyword.validate!(opts, level: :info)
   end
 
   @impl true

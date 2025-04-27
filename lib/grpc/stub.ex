@@ -58,6 +58,8 @@ defmodule GRPC.Stub do
   require Logger
 
   defmacro __using__(opts) do
+    opts = Keyword.validate!(opts, [:service])
+
     quote bind_quoted: [opts: opts] do
       service_mod = opts[:service]
       service_name = service_mod.__meta__(:name)
@@ -198,15 +200,27 @@ defmodule GRPC.Stub do
       through the :adapter option for GRPC.Stub.connect/3"
     end
 
-    adapter = Keyword.get(opts, :adapter) || GRPC.Client.Adapters.Gun
+    opts =
+      Keyword.validate!(opts,
+        cred: nil,
+        adapter: GRPC.Client.Adapters.Gun,
+        adapter_opts: [],
+        interceptors: [],
+        codec: GRPC.Codec.Proto,
+        compressor: nil,
+        accepted_compressors: [],
+        headers: []
+      )
 
-    cred = Keyword.get(opts, :cred)
+    adapter = opts[:adapter]
+
+    cred = opts[:cred]
     scheme = if cred, do: @secure_scheme, else: @insecure_scheme
-    interceptors = (Keyword.get(opts, :interceptors) || []) |> init_interceptors
-    codec = Keyword.get(opts, :codec) || GRPC.Codec.Proto
-    compressor = Keyword.get(opts, :compressor)
-    accepted_compressors = Keyword.get(opts, :accepted_compressors) || []
-    headers = Keyword.get(opts, :headers) || []
+    interceptors = init_interceptors(opts[:interceptors])
+    codec = opts[:codec]
+    compressor = opts[:compressor]
+    accepted_compressors = opts[:accepted_compressors]
+    headers = opts[:headers]
 
     accepted_compressors =
       if compressor do
@@ -215,7 +229,7 @@ defmodule GRPC.Stub do
         accepted_compressors
       end
 
-    adapter_opts = opts[:adapter_opts] || []
+    adapter_opts = opts[:adapter_opts]
 
     unless is_list(adapter_opts) do
       raise ArgumentError, ":adapter_opts must be a keyword list if present"
