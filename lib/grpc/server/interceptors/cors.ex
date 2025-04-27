@@ -41,18 +41,10 @@ defmodule GRPC.Server.Interceptors.CORS do
     # This is not a full-on Macro context, so binary concatenations and
     # variables are handled before this step.
 
-    # TODO: use Keyword.validate! once we drop support for Elixir < 1.13
-
-    {allow_origin, opts} = Keyword.pop(opts, :allow_origin)
-    {allow_headers, opts} = Keyword.pop(opts, :allow_headers)
-
-    if opts != [] do
-      raise ArgumentError,
-            "valid keys are [:allow_origin, :allow_headers], got: #{inspect(opts)}"
-    end
+    opts = Keyword.validate!(opts, [:allow_origin, allow_headers: nil])
 
     allow_origin =
-      case allow_origin do
+      case opts[:allow_origin] do
         {:&, [], [{:/, [], [_signature, 2]}]} = fun ->
           fun
 
@@ -65,7 +57,7 @@ defmodule GRPC.Server.Interceptors.CORS do
       end
 
     allow_headers =
-      case allow_headers do
+      case opts[:allow_headers] do
         {:&, [], [{:/, [], [_signature, 2]}]} = fun ->
           fun
 
