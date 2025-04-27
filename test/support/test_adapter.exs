@@ -37,4 +37,9 @@ defmodule GRPC.Test.ServerAdapter do
   def has_sent_headers?(_stream) do
     false
   end
+
+  def set_headers(stream, headers) do
+    send(self(), {:setting_headers, headers})
+    stream
+  end
 end
