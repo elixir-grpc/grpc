@@ -41,7 +41,6 @@ defmodule GRPC.Server.Interceptors.CORS do
     # This is not a full-on Macro context, so binary concatenations and
     # variables are handled before this step.
 
-
     opts = Keyword.validate!(opts, [:allow_origin, allow_headers: nil])
 
     allow_origin =
