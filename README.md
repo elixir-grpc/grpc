@@ -250,7 +250,7 @@ The accepted options for configuration are the ones listed on [Mint.HTTP.connect
 - [HTTP Transcoding](https://cloud.google.com/endpoints/docs/grpc/transcoding)
 - [TLS Authentication](https://grpc.io/docs/guides/auth/#supported-auth-mechanisms)
 - [Error handling](https://grpc.io/docs/guides/error/)
-- Interceptors (See [`GRPC.Endpoint`](https://github.com/elixir-grpc/grpc/blob/master/lib/grpc/endpoint.ex))
+- [Interceptors](`GRPC.Endpoint`)
 - [Connection Backoff](https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md)
 - Data compression
 - [gRPC Reflection](https://github.com/elixir-grpc/grpc-reflection)
