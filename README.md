@@ -15,6 +15,7 @@ An Elixir implementation of [gRPC](http://www.grpc.io/).
 - [Usage](#usage)
   - [Simple RPC](#simple-rpc)
   - [HTTP Transcoding](#http-transcoding)
+  - [CORS](#cors)
   - [Start Application](#start-application)
 - [Features](#features)
 - [Benchmark](#benchmark)
@@ -24,13 +25,13 @@ An Elixir implementation of [gRPC](http://www.grpc.io/).
 
 The package can be installed as:
 
-  ```elixir
-  def deps do
-    [
-      {:grpc, "~> 0.9"}
-    ]
-  end
-  ```
+```elixir
+def deps do
+  [
+    {:grpc, "~> 0.9"}
+  ]
+end
+```
 
 ## Usage
 
@@ -59,10 +60,10 @@ service Greeter {
 
 ```
 
-2. Then generate Elixir code from proto file as [protobuf-elixir](https://github.com/tony612/protobuf-elixir#usage) shows (especially the `gRPC Support` section) or using [protobuf_generate](https://hex.pm/packages/protobuf_generate) hex package. Example using `protobuf_generate` lib:
+2. Then generate Elixir code from proto file as [protobuf-elixir](https://github.com/elixir-protobuf/protobuf#usage):
 
 ```shell
-mix protobuf.generate --output-path=./lib --include-path=./priv/protos helloworld.proto
+protoc --elixir_out=plugins=grpc:./lib -I./priv/protos helloworld.proto
 ```
 
 In the following sections you will see how to implement gRPC server logic.
@@ -96,7 +97,7 @@ end
 
 We will use this module [in the gRPC server startup section](#start-application).
 
-**__Note:__** For other types of RPC call like streams see [here](interop/lib/interop/server.ex).
+**Note:** For other types of RPC call like streams see [here](interop/lib/interop/server.ex).
 
 ### **HTTP Transcoding**
 
@@ -152,6 +153,7 @@ mix protobuf.generate \
 ```
 
 3. Enable http_transcode option in your Server module
+
 ```elixir
 defmodule Helloworld.Greeter.Server do
   use GRPC.Server,
@@ -166,6 +168,23 @@ end
 ```
 
 See full application code in [helloworld_transcoding](examples/helloworld_transcoding) example.
+
+### **CORS**
+
+When accessing gRPC from a browser via HTTP transcoding or gRPC-Web, CORS headers may be required for the browser to allow access to the gRPC endpoint. Adding CORS headers can be done by using `GRPC.Server.Interceptors.CORS` as an interceptor in your `GRPC.Endpoint` module, configuring it as decribed in the module documentation:
+
+Example:
+
+```elixir
+# Define your endpoint
+defmodule Helloworld.Endpoint do
+  use GRPC.Endpoint
+
+  intercept GRPC.Server.Interceptors.Logger
+  intercept GRPC.Server.Interceptors.CORS, allow_origin: "mydomain.io"
+  run Helloworld.Greeter.Server
+end
+```
 
 ### **Start Application**
 
@@ -231,7 +250,7 @@ The accepted options for configuration are the ones listed on [Mint.HTTP.connect
 - [HTTP Transcoding](https://cloud.google.com/endpoints/docs/grpc/transcoding)
 - [TLS Authentication](https://grpc.io/docs/guides/auth/#supported-auth-mechanisms)
 - [Error handling](https://grpc.io/docs/guides/error/)
-- Interceptors (See [`GRPC.Endpoint`](https://github.com/elixir-grpc/grpc/blob/master/lib/grpc/endpoint.ex))
+- [Interceptors](`GRPC.Endpoint`)
 - [Connection Backoff](https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md)
 - Data compression
 - [gRPC Reflection](https://github.com/elixir-grpc/grpc-reflection)

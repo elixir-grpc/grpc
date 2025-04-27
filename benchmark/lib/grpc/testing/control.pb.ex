@@ -1,6 +1,7 @@
 defmodule Grpc.Testing.ClientType do
   @moduledoc false
-  use Protobuf, enum: true, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, enum: true, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :SYNC_CLIENT, 0
   field :ASYNC_CLIENT, 1
@@ -9,7 +10,8 @@ end
 
 defmodule Grpc.Testing.ServerType do
   @moduledoc false
-  use Protobuf, enum: true, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, enum: true, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :SYNC_SERVER, 0
   field :ASYNC_SERVER, 1
@@ -19,7 +21,8 @@ end
 
 defmodule Grpc.Testing.RpcType do
   @moduledoc false
-  use Protobuf, enum: true, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, enum: true, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :UNARY, 0
   field :STREAMING, 1
@@ -30,19 +33,22 @@ end
 
 defmodule Grpc.Testing.PoissonParams do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :offered_load, 1, type: :double, json_name: "offeredLoad"
 end
 
 defmodule Grpc.Testing.ClosedLoopParams do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 end
 
 defmodule Grpc.Testing.LoadParams do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   oneof :load, 0
 
@@ -52,7 +58,8 @@ end
 
 defmodule Grpc.Testing.SecurityParams do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :use_test_ca, 1, type: :bool, json_name: "useTestCa"
   field :server_host_override, 2, type: :string, json_name: "serverHostOverride"
@@ -61,7 +68,8 @@ end
 
 defmodule Grpc.Testing.ChannelArg do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   oneof :value, 0
 
@@ -72,7 +80,8 @@ end
 
 defmodule Grpc.Testing.ClientConfig do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :server_targets, 1, repeated: true, type: :string, json_name: "serverTargets"
   field :client_type, 2, type: Grpc.Testing.ClientType, json_name: "clientType", enum: true
@@ -95,21 +104,24 @@ end
 
 defmodule Grpc.Testing.ClientStatus do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :stats, 1, type: Grpc.Testing.ClientStats
 end
 
 defmodule Grpc.Testing.Mark do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :reset, 1, type: :bool
 end
 
 defmodule Grpc.Testing.ClientArgs do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   oneof :argtype, 0
 
@@ -119,7 +131,8 @@ end
 
 defmodule Grpc.Testing.ServerConfig do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :server_type, 1, type: Grpc.Testing.ServerType, json_name: "serverType", enum: true
   field :security_params, 2, type: Grpc.Testing.SecurityParams, json_name: "securityParams"
@@ -140,7 +153,8 @@ end
 
 defmodule Grpc.Testing.ServerArgs do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   oneof :argtype, 0
 
@@ -150,7 +164,8 @@ end
 
 defmodule Grpc.Testing.ServerStatus do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :stats, 1, type: Grpc.Testing.ServerStats
   field :port, 2, type: :int32
@@ -159,24 +174,28 @@ end
 
 defmodule Grpc.Testing.CoreRequest do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 end
 
 defmodule Grpc.Testing.CoreResponse do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :cores, 1, type: :int32
 end
 
 defmodule Grpc.Testing.Void do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 end
 
 defmodule Grpc.Testing.Scenario do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :name, 1, type: :string
   field :client_config, 2, type: Grpc.Testing.ClientConfig, json_name: "clientConfig"
@@ -190,14 +209,16 @@ end
 
 defmodule Grpc.Testing.Scenarios do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :scenarios, 1, repeated: true, type: Grpc.Testing.Scenario
 end
 
 defmodule Grpc.Testing.ScenarioResultSummary do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :qps, 1, type: :double
   field :qps_per_server_core, 2, type: :double, json_name: "qpsPerServerCore"
@@ -225,7 +246,8 @@ end
 
 defmodule Grpc.Testing.ScenarioResult do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :scenario, 1, type: Grpc.Testing.Scenario
   field :latencies, 2, type: Grpc.Testing.HistogramData

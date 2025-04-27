@@ -1,6 +1,7 @@
 defmodule Grpc.Testing.ServerStats do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :time_elapsed, 1, type: :double, json_name: "timeElapsed"
   field :time_user, 2, type: :double, json_name: "timeUser"
@@ -13,7 +14,8 @@ end
 
 defmodule Grpc.Testing.HistogramParams do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :resolution, 1, type: :double
   field :max_possible, 2, type: :double, json_name: "maxPossible"
@@ -21,7 +23,8 @@ end
 
 defmodule Grpc.Testing.HistogramData do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :bucket, 1, repeated: true, type: :uint32
   field :min_seen, 2, type: :double, json_name: "minSeen"
@@ -33,7 +36,8 @@ end
 
 defmodule Grpc.Testing.RequestResultCount do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :status_code, 1, type: :int32, json_name: "statusCode"
   field :count, 2, type: :int64
@@ -41,7 +45,8 @@ end
 
 defmodule Grpc.Testing.ClientStats do
   @moduledoc false
-  use Protobuf, protoc_gen_elixir_version: "0.11.0", syntax: :proto3
+
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :latencies, 1, type: Grpc.Testing.HistogramData
   field :time_elapsed, 2, type: :double, json_name: "timeElapsed"
