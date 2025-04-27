@@ -94,24 +94,6 @@ defmodule GRPC.Server.Interceptors.CORSTest do
     refute_received({:setting_headers, _headers}, "Set CORS headers during grpc")
   end
 
-  test "Default CORS allow origin header allows all" do
-    request = %FakeRequest{}
-    stream = Map.put(create_stream(), :access_mode, :grpcweb)
-
-    {:ok, :ok} =
-      CORSInterceptor.call(
-        request,
-        stream,
-        fn _request, _stream -> {:ok, :ok} end,
-        CORSInterceptor.init(allow_origin: "*")
-      )
-
-    assert_received(
-      {:setting_headers, %{"access-control-allow-origin" => "*"}},
-      "Incorrect default header"
-    )
-  end
-
   test "CORS allow origin header value is configuraable with a static string" do
     request = %FakeRequest{}
     stream = Map.put(create_stream(), :access_mode, :grpcweb)
@@ -129,6 +111,14 @@ defmodule GRPC.Server.Interceptors.CORSTest do
       {:setting_headers, %{"access-control-allow-origin" => ^domain}},
       "Incorrect static header"
     )
+  end
+
+  test "CORS allow origin init does not accept non-string arguments" do
+    assert_raise(ArgumentError, fn -> CORSInterceptor.init(allow_origin: :atom) end)
+    assert_raise(ArgumentError, fn -> CORSInterceptor.init(allow_origin: 1) end)
+    assert_raise(ArgumentError, fn -> CORSInterceptor.init(allow_origin: 1.0) end)
+    assert_raise(ArgumentError, fn -> CORSInterceptor.init(allow_origin: []) end)
+    assert_raise(ArgumentError, fn -> CORSInterceptor.init(allow_origin: %{}) end)
   end
 
   test "CORS allow origin header value is configuraable with a two-arity function" do

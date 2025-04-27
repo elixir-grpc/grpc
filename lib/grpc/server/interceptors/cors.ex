@@ -39,6 +39,7 @@ defmodule GRPC.Server.Interceptors.CORS do
       case Keyword.get(opts, :allow_origin) do
         {:&, [], [{:/, [], [_signature, 2]}]} = fun -> fun
         static when is_binary(static) -> static
+        _ -> raise ArgumentError, message: "allow_header must be a string or a 2-arity remote function"
       end
 
     allow_headers =
