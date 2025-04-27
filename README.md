@@ -96,7 +96,7 @@ end
 
 We will use this module [in the gRPC server startup section](#start-application).
 
-****Note:**** For other types of RPC call like streams see [here](interop/lib/interop/server.ex).
+**Note:** For other types of RPC call like streams see [here](interop/lib/interop/server.ex).
 
 ### **HTTP Transcoding**
 
