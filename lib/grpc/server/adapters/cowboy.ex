@@ -293,6 +293,9 @@ defmodule GRPC.Server.Adapters.Cowboy do
         :undefined ->
           raise "undefined address for ranch server"
 
+        :local ->
+          "local"
+
         addr ->
           "#{:inet.ntoa(addr)}:#{port}"
       end
