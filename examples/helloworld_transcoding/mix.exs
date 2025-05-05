@@ -22,7 +22,7 @@ defmodule Helloworld.Mixfile do
       {:protobuf, "~> 0.14"},
       {:jason, "~> 1.3.0"},
       {:google_protos, "~> 0.3.0"},
-      {:protobuf_generate, "~> 0.1.1", only: [:dev, :test]}
+      {:protobuf_generate, "~> 0.1", only: [:dev, :test]}
     ]
   end
 end
