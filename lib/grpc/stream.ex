@@ -115,7 +115,7 @@ defmodule GRPC.Stream do
   """
   @spec from_as_ctx(any(), GRPC.Server.Stream.t(), Keyword.t()) :: t()
   def from_as_ctx(input, %GRPC.Server.Stream{} = materializer, opts \\ []) do
-    meta = __MODULE__.get_headers(materializer) || %{}
+    meta = get_headers(materializer) || %{}
     from(input, Keyword.merge(opts, metadata: meta))
   end
 
@@ -170,7 +170,7 @@ defmodule GRPC.Stream do
   @spec single_as_ctx(any(), GRPC.Server.Stream.t(), Keyword.t()) :: t()
   def single_as_ctx(input, %GRPC.Server.Stream{} = materializer, opts \\ [])
       when is_struct(input) do
-    meta = __MODULE__.get_headers(materializer) || %{}
+    meta = get_headers(materializer) || %{}
     single(input, Keyword.merge(opts, metadata: meta))
   end
 
