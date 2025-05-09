@@ -310,6 +310,11 @@ defmodule GRPC.Stream do
   @spec map(t(), (term -> term)) :: t()
   defdelegate map(stream, mapper), to: Operators
 
+  @doc """
+  Applies a transformation function to each stream item, passing the context as an additional argument.
+  This is useful for operations that require access to the stream's headers.
+  """
+  @spec map_with_ctx(t(), (map(), term -> term)) :: t()
   defdelegate map_with_ctx(stream, mapper), to: Operators
 
   @doc """
