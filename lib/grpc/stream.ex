@@ -50,9 +50,9 @@ defmodule GRPC.Stream do
   alias GRPC.Stream.Operators
   alias GRPC.Server.Stream, as: Materializer
 
-  defstruct flow: nil, options: []
+  defstruct flow: nil, options: [], metadata: %{}
 
-  @type t :: %__MODULE__{flow: Flow.t(), options: Keyword.t()}
+  @type t :: %__MODULE__{flow: Flow.t(), options: Keyword.t(), metadata: map()}
 
   @type item :: any()
 
@@ -89,6 +89,37 @@ defmodule GRPC.Stream do
   def from(input, opts) when not is_nil(input), do: from([input], opts)
 
   @doc """
+  Converts a gRPC request enumerable into a `Flow` pipeline while extracting and propagating context metadata from the `GRPC.Server.Stream` materializer.
+
+  This is useful for unary gRPC calls that require metadata propagation within a Flow-based pipeline.
+
+  ## Parameters
+
+    - `input`: The enumerable stream of incoming gRPC messages.
+    - `materializer`: A `%GRPC.Server.Stream{}` struct representing the current gRPC stream context.
+    - `opts`: Optional keyword list for configuring the Flow or GenStage producer.
+
+  ## Behavior
+
+    - Automatically extracts gRPC metadata from the stream headers and injects it into the options as `:metadata`.
+    - Sets `:unary` to `true` in the options to indicate unary processing.
+
+  ## Returns
+
+    - A `GRPC.Stream` that emits elements from the gRPC stream under demand.
+
+  ## Example
+
+      flow = GRPC.Stream.from_as_ctx(request, stream, max_demand: 10)
+
+  """
+  @spec from_as_ctx(any(), GRPC.Server.Stream.t(), Keyword.t()) :: t()
+  def from_as_ctx(input, %GRPC.Server.Stream{} = materializer, opts \\ []) do
+    meta = __MODULE__.get_headers(materializer) || %{}
+    from(input, Keyword.merge(opts, metadata: meta))
+  end
+
+  @doc """
   Converts a single gRPC request into a `Flow` pipeline with support for backpressure.
   This is useful for unary gRPC requests where you want to use the Flow API.
 
@@ -108,9 +139,40 @@ defmodule GRPC.Stream do
 
       flow = GRPCStream.single(request, max_demand: 5)
   """
-  @spec from(any(), Keyword.t()) :: t()
+  @spec single(any(), Keyword.t()) :: t()
   def single(input, opts \\ []) when is_struct(input),
     do: build_grpc_stream([input], Keyword.merge(opts, unary: true))
+
+  @doc """
+  Converts a single gRPC request into a `Flow` pipeline while extracting and propagating context metadata from the `GRPC.Server.Stream`.
+
+  This is useful for unary gRPC calls that require metadata propagation within a Flow-based pipeline.
+
+  ## Parameters
+
+    - `input`: The enumerable stream of incoming gRPC messages.
+    - `materializer`: A `%GRPC.Server.Stream{}` struct representing the current gRPC stream context.
+    - `opts`: Optional keyword list for configuring the Flow or GenStage producer.
+
+  ## Behavior
+
+    - Automatically extracts gRPC metadata from the stream headers and injects it into the options as `:metadata`.
+
+  ## Returns
+
+    - A `GRPC.Stream` that emits the single gRPC message under demand.
+
+  ## Example
+
+      flow = GRPC.Stream.single_as_ctx(request, stream, max_demand: 10)
+
+  """
+  @spec single_as_ctx(any(), GRPC.Server.Stream.t(), Keyword.t()) :: t()
+  def single_as_ctx(input, %GRPC.Server.Stream{} = materializer, opts \\ [])
+      when is_struct(input) do
+    meta = __MODULE__.get_headers(materializer) || %{}
+    single(input, Keyword.merge(opts, metadata: meta))
+  end
 
   @doc """
   Wraps an existing `Flow` into a `GRPC.Stream` struct.
@@ -247,6 +309,8 @@ defmodule GRPC.Stream do
   """
   @spec map(t(), (term -> term)) :: t()
   defdelegate map(stream, mapper), to: Operators
+
+  defdelegate map_with_ctx(stream, mapper), to: Operators
 
   @doc """
   Partitions the stream to allow grouping of items by key or condition.

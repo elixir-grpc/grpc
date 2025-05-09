@@ -116,6 +116,16 @@ defmodule GRPC.Stream.Operators do
     %GRPCStream{stream | flow: Flow.map(flow, mapper)}
   end
 
+  @spec map_with_ctx(GRPCStream.t(), (map(), term -> term)) :: GRPCStream.t()
+  def map_with_ctx(%GRPCStream{flow: flow, metadata: meta} = stream, mapper)
+      when is_function(mapper, 2) do
+    wrapper = fn item ->
+      mapper.(meta, item)
+    end
+
+    %GRPCStream{stream | flow: Flow.map(flow, wrapper)}
+  end
+
   @spec partition(GRPCStream.t(), keyword()) :: GRPCStream.t()
   def partition(%GRPCStream{flow: flow} = stream, options \\ []) do
     %GRPCStream{stream | flow: Flow.partition(flow, options)}

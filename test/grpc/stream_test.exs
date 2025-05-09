@@ -7,7 +7,11 @@ defmodule GRPC.StreamTest do
       defstruct [:message]
     end
 
-    test "from/2 creates a flow from a unary input" do
+    defmodule FakeAdapter do
+      def get_headers(_), do: %{"content-type" => "application/grpc"}
+    end
+
+    test "single/2 creates a flow from a unary input" do
       input = %TestInput{message: 1}
       materializer = %GRPC.Server.Stream{}
 
@@ -19,12 +23,44 @@ defmodule GRPC.StreamTest do
       assert result == input
     end
 
+    test "single_with_ctx/3 creates a flow with metadata" do
+      input = %TestInput{message: 1}
+      materializer = %GRPC.Server.Stream{adapter: FakeAdapter}
+
+      flow =
+        GRPC.Stream.single_as_ctx(input, materializer)
+        |> GRPC.Stream.map_with_ctx(fn meta, item ->
+          assert not is_nil(meta)
+          assert is_map(meta)
+          item
+        end)
+
+      result = Enum.to_list(GRPC.Stream.to_flow!(flow)) |> Enum.at(0)
+      assert result == input
+    end
+
     test "from/2 creates a flow from enumerable input" do
       input = [%{message: "a"}, %{message: "b"}]
 
       flow =
         GRPC.Stream.from(input, max_demand: 1)
         |> GRPC.Stream.map(& &1)
+
+      result = Enum.to_list(GRPC.Stream.to_flow!(flow))
+      assert result == input
+    end
+
+    test "from_as_ctx/3 creates a flow from enumerable input" do
+      input = [%{message: "a"}, %{message: "b"}]
+      materializer = %GRPC.Server.Stream{adapter: FakeAdapter}
+
+      flow =
+        GRPC.Stream.from_as_ctx(input, materializer)
+        |> GRPC.Stream.map_with_ctx(fn meta, item ->
+          assert not is_nil(meta)
+          assert is_map(meta)
+          item
+        end)
 
       result = Enum.to_list(GRPC.Stream.to_flow!(flow))
       assert result == input
