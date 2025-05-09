@@ -70,7 +70,6 @@ defmodule GRPC.Stream do
 
     - `:join_with` — An optional external `GenStage` producer to merge with the gRPC input.
     - `:dispatcher` — Specifies the `Flow` dispatcher (defaults to `GenStage.DemandDispatcher`).
-    - `:unary` — Boolean indicating if the input is from a unary gRPC request (defaults to `false`).
 
   ## Returns
 
@@ -88,6 +87,30 @@ defmodule GRPC.Stream do
   def from(input, opts) when is_list(input), do: build_grpc_stream(input, opts)
 
   def from(input, opts) when not is_nil(input), do: from([input], opts)
+
+  @doc """
+  Converts a single gRPC request into a `Flow` pipeline with support for backpressure.
+  This is useful for unary gRPC requests where you want to use the Flow API.
+
+  ## Parameters
+
+    - `input`: The single gRPC message to convert into a Flow.
+    - `opts`: Optional keyword list for configuring the Flow or GenStage producer.
+
+  ## Options
+    - `:join_with` - (optional) An additional producer stage PID to include in the Flow.
+    - `:dispatcher` - (optional) The dispatcher to use for the Flow. Default is `GenStage.DemandDispatcher`.
+
+  ## Returns
+    - A `GRPCStream` that emits the single gRPC message under demand.
+
+  ## Example
+
+      flow = GRPCStream.single(request, max_demand: 5)
+  """
+  @spec from(any(), Keyword.t()) :: t()
+  def single(input, opts \\ []) when is_struct(input),
+    do: build_grpc_stream([input], Keyword.merge(opts, unary: true))
 
   @doc """
   Wraps an existing `Flow` into a `GRPC.Stream` struct.

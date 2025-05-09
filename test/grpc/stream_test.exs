@@ -3,16 +3,20 @@ defmodule GRPC.StreamTest do
   doctest GRPC.Stream
 
   describe "simple test" do
+    defmodule TestInput do
+      defstruct [:message]
+    end
+
     test "from/2 creates a flow from a unary input" do
-      input = 1
+      input = %TestInput{message: 1}
       materializer = %GRPC.Server.Stream{}
 
       result =
-        GRPC.Stream.from(input, unary: true)
+        GRPC.Stream.single(input)
         |> GRPC.Stream.map(& &1)
         |> GRPC.Stream.run_with(materializer, dry_run: true)
 
-      assert result == 1
+      assert result == input
     end
 
     test "from/2 creates a flow from enumerable input" do
