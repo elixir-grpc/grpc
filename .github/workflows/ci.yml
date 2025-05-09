@@ -10,7 +10,7 @@ on:
 
 jobs:
   check_format:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     name: Check format
     steps:
       - uses: actions/checkout@v3
@@ -29,15 +29,13 @@ jobs:
       - name: Check format
         run: mix format --check-formatted
   tests:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
     strategy:
       matrix:
         otp: [24.x, 25.x, 26.1.x]
         elixir: [1.15.x]
-        include:
-          - otp: 24.x
-            elixir: 1.12.x
+
     needs: check_format
     steps:
       - uses: actions/checkout@v3
@@ -56,7 +54,7 @@ jobs:
       - name: Run Tests
         run: mix test
   interop-tests:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     name: Interop tests
     needs: check_format
     if: ${{ github.ref != 'refs/heads/master' }}
@@ -80,7 +78,7 @@ jobs:
         working-directory: ./interop
 
   interop-tests-all:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     name: Interop tests OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
     needs: check_format
     if: ${{ github.ref == 'refs/heads/master' }}
@@ -88,9 +86,7 @@ jobs:
       matrix:
         otp: [24.x, 25.x, 26.1.x]
         elixir: [1.15.x]
-        include:
-          - otp: 24.x
-            elixir: 1.12.x
+
     steps:
       - uses: actions/checkout@v3
       - uses: erlef/setup-beam@v1
@@ -111,7 +107,7 @@ jobs:
         working-directory: ./interop
 
   check_release:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     name: Check release
     needs: check_format
     steps:

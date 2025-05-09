@@ -35,6 +35,8 @@ defmodule GRPC.Service do
   """
 
   defmacro __using__(opts) do
+    opts = Keyword.validate!(opts, [:name, :protoc_gen_elixir_version])
+
     quote do
       import GRPC.Service, only: [rpc: 4, rpc: 3, stream: 1]
 
