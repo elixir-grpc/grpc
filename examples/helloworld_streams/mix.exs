@@ -20,8 +20,9 @@ defmodule HelloworldStreams.MixProject do
 
   defp deps do
     [
-      {:grpc, path: "../../"},
-      {:protobuf, "~> 0.14"}
+      {:grpc, path: "../../", override: true},
+      {:protobuf, "~> 0.14"},
+      {:grpc_reflection, "~> 0.1"}
     ]
   end
 end

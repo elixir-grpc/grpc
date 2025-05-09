@@ -6,6 +6,7 @@ defmodule HelloworldStreams.Application do
   def start(_type, _args) do
     children = [
       HelloworldStreams.Utils.Transformer,
+      GrpcReflection,
       {
         GRPC.Server.Supervisor,
         endpoint: HelloworldStreams.Endpoint, port: 50053, start_server: true
