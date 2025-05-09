@@ -22,6 +22,26 @@ defmodule HelloworldStreams.Server do
 
   @spec say_server_hello(HelloRequest.t(), GRPC.Server.Stream.t()) :: any()
   def say_server_hello(request, materializer) do
+    GRPCStream.single(request)
+    # Create new output stream from the request and drop the input
+    |> GRPCStream.replace(fn _metadata, %HelloRequest{} = msg ->
+      create_output_stream(msg)
+      |> GRPCStream.from()
+    end)
+    |> GRPCStream.run_with(materializer)
+  end
+
+  defp create_output_stream(msg) do
+    Stream.repeatedly(fn ->
+      index = :rand.uniform(10)
+      %HelloReply{message: "[#{index}] I'm the Server for #{msg.name}"}
+    end)
+    |> Stream.take(10)
+    |> Enum.to_list()
+  end
+
+  @spec say_bid_stream_hello(Enumerable.t(), GRPC.Server.Stream.t()) :: any()
+  def say_bid_stream_hello(request, materializer) do
     # simulate a infinite stream of data
     # this is a simple example, in a real world application
     # you would probably use a GenStage or similar
@@ -39,15 +59,6 @@ defmodule HelloworldStreams.Server do
 
       output_item ->
         output_item
-    end)
-    |> GRPCStream.run_with(materializer)
-  end
-
-  @spec say_bid_stream_hello(Enumerable.t(), GRPC.Server.Stream.t()) :: any()
-  def say_bid_stream_hello(request, materializer) do
-    GRPCStream.from(request, max_demand: 12500)
-    |> GRPCStream.map(fn %HelloRequest{} = hello ->
-      %HelloReply{message: "Welcome #{hello.name}"}
     end)
     |> GRPCStream.run_with(materializer)
   end
