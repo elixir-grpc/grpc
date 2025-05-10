@@ -264,7 +264,7 @@ defmodule GRPC.Stream do
   ## Caution
   This function materializes the current stream and replaces it with a new one.
   This can lead to performance issues if used excessively. In fact, it is more commonly used
-  in following the `single/2` of `single_as_ctx/3` functions. 
+  in following the `single/2` or `single_as_ctx/3` functions. 
 
   ## Parameters
 
