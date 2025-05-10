@@ -101,8 +101,8 @@ defmodule GRPC.Stream.Operators do
     %GRPCStream{stream | flow: Flow.map(flow, mapper)}
   end
 
-  @spec replace(GRPCStream.t(), (map(), term -> term)) :: GRPCStream.t()
-  def replace(%GRPCStream{flow: flow, metadata: metadata} = _stream, factory)
+  @spec via(GRPCStream.t(), (map(), term -> term)) :: GRPCStream.t()
+  def via(%GRPCStream{flow: flow, metadata: metadata} = _stream, factory)
       when is_function(factory, 2) do
     new =
       Flow.map(flow, fn item ->

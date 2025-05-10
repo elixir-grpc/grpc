@@ -24,7 +24,7 @@ defmodule HelloworldStreams.Server do
   def say_server_hello(request, materializer) do
     GRPCStream.single(request, propagate_context: true, materializer: materializer)
     # Create new output stream from the request and drop the input
-    |> GRPCStream.replace(fn _metadata, %HelloRequest{} = msg ->
+    |> GRPCStream.via(fn _metadata, %HelloRequest{} = msg ->
       create_output_stream(msg)
       |> GRPCStream.from()
     end)

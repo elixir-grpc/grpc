@@ -261,6 +261,9 @@ defmodule GRPC.Stream do
   The factory function receives the metadata and the current item as arguments.
   The factory function returns a new `GRPC.Stream` struct.
 
+  ## Behavior
+  Materializes the left stream by passing the first element to the right stream. Useful when used with single/2 to dynamically create a new output stream.
+
   ## Caution
 
   This function materializes the current stream and replaces it with a new one.
@@ -279,15 +282,15 @@ defmodule GRPC.Stream do
 
     GRPC.Stream.single(request)
     # Create new output stream from the request and drop the input
-    |> GRPC.Stream.replace(fn _metadata, msg ->
+    |> GRPC.Stream.via(fn _metadata, msg ->
       create_output_stream(msg) # returns some Enumerable
       |> GRPC.Stream.from()
     end)
     |> GRPC.Stream.run_with(materializer)
     
   """
-  @spec replace(t(), (map(), term -> term)) :: t()
-  defdelegate replace(stream, factory), to: Operators
+  @spec via(t(), (map(), term -> term)) :: t()
+  defdelegate via(stream, factory), to: Operators
 
   @doc """
   Filters the stream using the given predicate function.
@@ -327,6 +330,8 @@ defmodule GRPC.Stream do
 
   Excessive use of partitioning can impact performance and memory usage.
   Only partition when required for correctness or performance.
+  See https://hexdocs.pm/flow/Flow.html#module-partitioning for more details.
+
   """
   @spec partition(t(), keyword()) :: t()
   defdelegate partition(stream, options \\ []), to: Operators
@@ -338,8 +343,12 @@ defmodule GRPC.Stream do
 
     - `acc_fun` initializes the accumulator,
     - `reducer_fun` updates it for each input.
+
+  ## Note
+  See https://hexdocs.pm/flow/Flow.html#reduce/3 for more details.
+
   """
-  @spec reduce(t, (-> acc), (term, acc -> acc)) :: t when acc: term()
+  @spec reduce(t, (-> acc), (term(), acc -> acc)) :: t when acc: term()
   defdelegate reduce(stream, acc_fun, reducer_fun), to: Operators
 
   @doc """
