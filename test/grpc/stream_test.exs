@@ -11,23 +11,23 @@ defmodule GRPC.StreamTest do
       def get_headers(_), do: %{"content-type" => "application/grpc"}
     end
 
-    test "single/2 creates a flow from a unary input" do
+    test "unary/2 creates a flow from a unary input" do
       input = %TestInput{message: 1}
 
       result =
-        GRPC.Stream.single(input)
+        GRPC.Stream.unary(input)
         |> GRPC.Stream.map(& &1)
         |> GRPC.Stream.run()
 
       assert result == input
     end
 
-    test "single/2 creates a flow with metadata" do
+    test "unary/2 creates a flow with metadata" do
       input = %TestInput{message: 1}
       materializer = %GRPC.Server.Stream{adapter: FakeAdapter}
 
       flow =
-        GRPC.Stream.single(input, materializer: materializer, propagate_context: true)
+        GRPC.Stream.unary(input, materializer: materializer, propagate_context: true)
         |> GRPC.Stream.map_with_context(fn meta, item ->
           assert not is_nil(meta)
           assert is_map(meta)
