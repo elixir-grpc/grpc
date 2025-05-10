@@ -115,8 +115,8 @@ defmodule GRPC.Stream do
 
       flow = GRPCStream.single(request, max_demand: 5)
   """
-  @spec single(any(), Keyword.t()) :: t()
-  def single(input, opts \\ []) when is_struct(input),
+  @spec unary(any(), Keyword.t()) :: t()
+  def unary(input, opts \\ []) when is_struct(input),
     do: build_grpc_stream([input], Keyword.merge(opts, unary: true))
 
   @doc """
