@@ -22,12 +22,8 @@ defmodule HelloworldStreams.Server do
 
   @spec say_server_hello(HelloRequest.t(), GRPC.Server.Stream.t()) :: any()
   def say_server_hello(request, materializer) do
-    GRPCStream.unary(request, propagate_context: true, materializer: materializer)
-    # Create new output stream from the request and drop the input
-    |> GRPCStream.via(fn _metadata, %HelloRequest{} = msg ->
-      create_output_stream(msg)
-      |> GRPCStream.from()
-    end)
+    create_output_stream(request)
+    |> GRPCStream.from()
     |> GRPCStream.run_with(materializer)
   end
 

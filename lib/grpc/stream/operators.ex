@@ -51,25 +51,6 @@ defmodule GRPC.Stream.Operators do
     end
   end
 
-  @spec via(GRPCStream.t(), (map(), term -> term)) :: GRPCStream.t()
-  def via(%GRPCStream{flow: flow, metadata: metadata} = _stream, factory)
-      when is_function(factory, 2) do
-    new =
-      Flow.map(flow, fn item ->
-        case factory.(metadata, item) do
-          %GRPCStream{} = stream ->
-            %GRPCStream{stream | metadata: metadata}
-
-          _ ->
-            raise ArgumentError, "Expected factory to return a GRPC.Stream"
-        end
-      end)
-      |> Enum.to_list()
-      |> Enum.at(0)
-
-    %GRPCStream{new | flow: new.flow, metadata: new.metadata, options: new.options}
-  end
-
   @spec filter(GRPCStream.t(), (term -> term)) :: GRPCStream.t()
   def filter(%GRPCStream{flow: flow} = stream, filter) do
     %GRPCStream{stream | flow: Flow.filter(flow, filter)}
