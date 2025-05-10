@@ -64,14 +64,15 @@ defmodule GRPC.Stream do
   ## Parameters
 
     - `input`: A gRPC request stream (struct, enumerable, or Elixir `Stream`).
-    - `opts`: Optional keyword list to configure the Flow.
 
   ## Options
 
     - `:join_with` — An optional external `GenStage` producer to merge with the gRPC input.
     - `:dispatcher` — Specifies the `Flow` dispatcher (defaults to `GenStage.DemandDispatcher`).
-    - `propagate_context` - If `true`, the context from the `materializer` is propagated to the Flow.
-    - `materializer` - The `%GRPC.Server.Stream{}` struct representing the current gRPC stream context.
+    - `:propagate_context` - If `true`, the context from the `materializer` is propagated to the Flow.
+    - `:materializer` - The `%GRPC.Server.Stream{}` struct representing the current gRPC stream context.
+    
+  And any other options supported by `Flow`.
 
   ## Returns
 
@@ -97,13 +98,16 @@ defmodule GRPC.Stream do
   ## Parameters
 
     - `input`: The single gRPC message to convert into a Flow.
-    - `opts`: Optional keyword list for configuring the Flow or GenStage producer.
 
   ## Options
-    - `:join_with` - (optional) An additional producer stage PID to include in the Flow.
-    - `:dispatcher` - (optional) The dispatcher to use for the Flow. Default is `GenStage.DemandDispatcher`.
-    - `propagate_context` - If `true`, the context from the `materializer` is propagated to the Flow.
-    - `materializer` - The `%GRPC.Server.Stream{}` struct representing the current gRPC stream context.
+
+    - `:join_with` - An optional additional producer stage PID to include in the Flow.
+    - `:dispatcher` - An optional GenStage dispatcher to use for the Flow. Default is `GenStage.DemandDispatcher`.
+    - `:propagate_context` - If `true`, the context from the `materializer` is propagated to the Flow.
+    - `:materializer` - The `%GRPC.Server.Stream{}` struct representing the current gRPC stream context.
+  
+  And any other options supported by `Flow`.
+
   ## Returns
     - A `GRPCStream` that emits the single gRPC message under demand.
 
@@ -123,7 +127,6 @@ defmodule GRPC.Stream do
   ## Parameters
 
     - `flow`: A valid `Flow` pipeline.
-    - `opts`: Optional keyword options.
 
   ## Returns
 
@@ -154,18 +157,17 @@ defmodule GRPC.Stream do
 
   @doc """
   Executes the flow and emits responses into the provided gRPC server stream.
+  For unary mode, returns the first item in the stream instead of sending responses.
 
   ## Parameters
 
     - `flow`: A `GRPC.Stream` struct containing the flow to be executed.
     - `stream`: A `GRPC.Server.Stream` to which responses are sent.
-    - `opts`: Optional keyword list. Currently supported:
     - `:dry_run` — If `true`, responses are not sent (used for testing or inspection).
 
   ## Returns
 
     - `:ok` if the stream was processed successfully.
-    - For unary mode, returns the first item in the stream instead of sending responses.
 
   ## Example
 
