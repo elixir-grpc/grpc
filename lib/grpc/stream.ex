@@ -251,7 +251,7 @@ defmodule GRPC.Stream do
   ## Caution
 
   This version propagates errors via raised exceptions, which can crash the Flow worker and halt the pipeline.
-  Prefer `ask/3` for production use unless failure should abort the stream.
+  Prefer `ask/3` for production usage unless failure should abort the stream.
   """
   @spec ask!(t(), pid | atom, non_neg_integer) :: t()
   defdelegate ask!(stream, target, timeout \\ 5000), to: Operators
