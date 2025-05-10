@@ -262,9 +262,10 @@ defmodule GRPC.Stream do
   The factory function should return a new `GRPC.Stream` struct.
 
   ## Caution
+
   This function materializes the current stream and replaces it with a new one.
   This can lead to performance issues if used excessively. In fact, it is more commonly used
-  in following the `single/2` of `single_as_ctx/3` functions. 
+  in following the `single/2` function. 
 
   ## Parameters
 
@@ -338,12 +339,6 @@ defmodule GRPC.Stream do
   """
   @spec reduce(t, (-> acc), (term, acc -> acc)) :: t when acc: term()
   defdelegate reduce(stream, acc_fun, reducer_fun), to: Operators
-
-  @doc """
-  Applies the given function rejecting each input in parallel.
-  """
-  @spec reject(t, (term -> term)) :: t
-  defdelegate reject(stream, filter), to: Operators
 
   @doc """
   Emits only distinct items from the stream.

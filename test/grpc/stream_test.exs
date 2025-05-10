@@ -203,8 +203,7 @@ defmodule GRPC.StreamTest do
         |> GRPC.Stream.flat_map(&[&1, &1 * 2])
         # keep evens
         |> GRPC.Stream.filter(&(rem(&1, 2) == 0))
-        # remove >10
-        |> GRPC.Stream.reject(&(&1 > 10))
+
         # remove duplicates
         |> GRPC.Stream.uniq()
         # multiply by 10 via process
@@ -216,7 +215,7 @@ defmodule GRPC.StreamTest do
         |> List.flatten()
         |> Enum.sort()
 
-      assert result == [20, 40, 60, 80, 100]
+      assert result == [20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220]
     end
   end
 
