@@ -183,6 +183,7 @@ defmodule GRPC.Stream do
     unary? = Keyword.get(flow_opts, :unary, false)
 
     if unary? do
+      # We have to call `Enum.to_list` because we want to actually run and materialize the full stream. List.flatten and List.first are used so that we can obtain the first result of the materialized list.
       flow
       |> Enum.to_list()
       |> List.flatten()
