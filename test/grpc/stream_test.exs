@@ -28,7 +28,7 @@ defmodule GRPC.StreamTest do
       materializer = %GRPC.Server.Stream{adapter: FakeAdapter}
 
       flow =
-        GRPC.Stream.single_as_ctx(input, materializer)
+        GRPC.Stream.single(input, materializer: materializer, propagate_context: true)
         |> GRPC.Stream.map_with_ctx(fn meta, item ->
           assert not is_nil(meta)
           assert is_map(meta)
@@ -55,7 +55,7 @@ defmodule GRPC.StreamTest do
       materializer = %GRPC.Server.Stream{adapter: FakeAdapter}
 
       flow =
-        GRPC.Stream.from_as_ctx(input, materializer)
+        GRPC.Stream.from(input, propagate_context: true, materializer: materializer)
         |> GRPC.Stream.map_with_ctx(fn meta, item ->
           assert not is_nil(meta)
           assert is_map(meta)
