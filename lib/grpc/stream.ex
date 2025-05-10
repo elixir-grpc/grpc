@@ -105,7 +105,7 @@ defmodule GRPC.Stream do
     - `:dispatcher` - An optional GenStage dispatcher to use for the Flow. Default is `GenStage.DemandDispatcher`.
     - `:propagate_context` - If `true`, the context from the `materializer` is propagated to the Flow.
     - `:materializer` - The `%GRPC.Server.Stream{}` struct representing the current gRPC stream context.
-  
+
   And any other options supported by `Flow`.
 
   ## Returns
@@ -156,13 +156,42 @@ defmodule GRPC.Stream do
   def to_flow(%__MODULE__{flow: flow}), do: flow
 
   @doc """
-  Executes the flow and emits responses into the provided gRPC server stream.
-  For unary mode, returns the first item in the stream instead of sending responses.
+  Executes the flow for unary/single streams and emits responses into the provided gRPC server stream.
 
   ## Parameters
 
     - `flow`: A `GRPC.Stream` struct containing the flow to be executed.
     - `stream`: A `GRPC.Server.Stream` to which responses are sent.
+    - `:dry_run` — If `true`, responses are not sent (used for testing or inspection).
+
+  ## Example
+
+      GRPC.Stream.run(request)
+  """
+  @spec run(t()) :: any()
+  def run(%__MODULE__{flow: flow, options: opts}) do
+    unless Keyword.get(opts, :unary, false) do
+      raise ArgumentError, "run/2 is not supported for non-unary streams"
+    end
+
+    # We have to call `Enum.to_list` because we want to actually run and materialize the full stream. 
+    # List.flatten and List.first are used so that we can obtain the first result of the materialized list.
+    flow
+    |> Enum.to_list()
+    |> List.flatten()
+    |> List.first()
+  end
+
+  @doc """
+  Executes the flow and emits responses into the provided gRPC server stream.
+
+  ## Parameters
+
+    - `flow`: A `GRPC.Stream` struct containing the flow to be executed.
+    - `stream`: A `GRPC.Server.Stream` to which responses are sent.
+
+  ## Options
+
     - `:dry_run` — If `true`, responses are not sent (used for testing or inspection).
 
   ## Returns
@@ -173,29 +202,24 @@ defmodule GRPC.Stream do
 
       GRPC.Stream.run_with(request, mat)
   """
-  @spec run_with(t(), Stream.t(), Keyword.t()) :: :ok | any()
+  @spec run_with(t(), Stream.t(), Keyword.t()) :: :ok
   def run_with(
         %__MODULE__{flow: flow, options: flow_opts} = _stream,
         %Materializer{} = from,
         opts \\ []
       ) do
-    dry_run? = Keyword.get(opts, :dry_run, false)
-    unary? = Keyword.get(flow_opts, :unary, false)
-
-    if unary? do
-      # We have to call `Enum.to_list` because we want to actually run and materialize the full stream. List.flatten and List.first are used so that we can obtain the first result of the materialized list.
-      flow
-      |> Enum.to_list()
-      |> List.flatten()
-      |> List.first()
-    else
-      flow
-      |> Flow.map(fn msg ->
-        unless dry_run?, do: send_response(from, msg)
-        flow
-      end)
-      |> Flow.run()
+    unless Keyword.get(flow_opts, :unary, true) do
+      raise ArgumentError, "run_with/3 is not supported for unary streams"
     end
+
+    dry_run? = Keyword.get(opts, :dry_run, false)
+
+    flow
+    |> Flow.map(fn msg ->
+      unless dry_run?, do: send_response(from, msg)
+      flow
+    end)
+    |> Flow.run()
   end
 
   @doc """

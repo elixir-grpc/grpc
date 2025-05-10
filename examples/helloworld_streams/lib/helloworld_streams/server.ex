@@ -28,7 +28,7 @@ defmodule HelloworldStreams.Server do
       create_output_stream(msg)
       |> GRPCStream.from()
     end)
-    |> GRPCStream.run_with(materializer)
+    |> GRPCStream.run()
   end
 
   defp create_output_stream(msg) do

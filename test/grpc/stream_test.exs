@@ -13,17 +13,16 @@ defmodule GRPC.StreamTest do
 
     test "single/2 creates a flow from a unary input" do
       input = %TestInput{message: 1}
-      materializer = %GRPC.Server.Stream{}
 
       result =
         GRPC.Stream.single(input)
         |> GRPC.Stream.map(& &1)
-        |> GRPC.Stream.run_with(materializer, dry_run: true)
+        |> GRPC.Stream.run()
 
       assert result == input
     end
 
-    test "single_with_ctx/3 creates a flow with metadata" do
+    test "single/2 creates a flow with metadata" do
       input = %TestInput{message: 1}
       materializer = %GRPC.Server.Stream{adapter: FakeAdapter}
 
