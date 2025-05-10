@@ -291,7 +291,7 @@ defmodule GRPC.Stream do
 
   @doc """
   Filters the stream using the given predicate function.
-  
+
   The filter function is applied concurrently to the stream entries, so it shouldn't rely on execution order.
   """
   @spec filter(t(), (term -> term)) :: t
