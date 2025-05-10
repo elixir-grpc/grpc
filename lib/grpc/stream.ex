@@ -297,7 +297,7 @@ defmodule GRPC.Stream do
   defdelegate filter(stream, filter), to: Operators
 
   @doc """
-  Applies a mapping function and flattens the results (one level deep).
+  Applies a function to each entry and concatenates the resulting lists.
 
   Useful for emitting multiple messages for each input.
   """
