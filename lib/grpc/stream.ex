@@ -120,28 +120,6 @@ defmodule GRPC.Stream do
     do: build_grpc_stream([input], Keyword.merge(opts, unary: true))
 
   @doc """
-  Wraps an existing `Flow` into a `GRPC.Stream` struct.
-
-  > Note: `:join_with` is not supported in this mode and will raise an error if passed.
-
-  ## Parameters
-
-    - `flow`: A valid `Flow` pipeline.
-
-  ## Returns
-
-    A `%GRPC.Stream{}` struct wrapping the flow.
-  """
-  @spec from_flow!(Flow.t(), Keyword.t()) :: t()
-  def from_flow!(%Flow{} = flow, opts \\ []) do
-    if Keyword.has_key?(opts, :join_with) do
-      raise ArgumentError, "join_with option is not supported for Flow input"
-    end
-
-    %__MODULE__{flow: flow, options: opts}
-  end
-
-  @doc """
   Extracts the internal `Flow` pipeline from a `GRPC.Stream`.
 
   Raises an `ArgumentError` if the `flow` has not been initialized.

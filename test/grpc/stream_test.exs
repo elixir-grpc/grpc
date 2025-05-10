@@ -74,15 +74,6 @@ defmodule GRPC.StreamTest do
       result = stream |> GRPC.Stream.map(&(&1 * 2)) |> GRPC.Stream.to_flow() |> Enum.to_list()
       assert Enum.sort(result) == [2, 4, 6]
     end
-
-    test "converts from Flow to GRPC.Stream" do
-      flow = Flow.from_enumerable([1, 2, 3], max_demand: 1)
-      stream = GRPC.Stream.from_flow!(flow)
-      assert %GRPC.Stream{flow: ^flow} = stream
-
-      result = stream |> GRPC.Stream.map(&(&1 * 2)) |> GRPC.Stream.to_flow() |> Enum.to_list()
-      assert Enum.sort(result) == [2, 4, 6]
-    end
   end
 
   describe "ask/3 with pid" do
