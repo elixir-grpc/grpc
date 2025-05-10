@@ -289,7 +289,9 @@ defmodule GRPC.Stream do
   defdelegate replace(stream, factory), to: Operators
 
   @doc """
-  Filters the stream using the given predicate function in parallel.
+  Filters the stream using the given predicate function.
+  
+  The filter function is applied concurrently to the stream entries, so it shouldn't rely on execution order.
   """
   @spec filter(t(), (term -> term)) :: t
   defdelegate filter(stream, filter), to: Operators
