@@ -9,96 +9,46 @@ defmodule GRPC.Stream.Operators do
   @type reason :: any()
 
   @spec ask(GRPCStream.t(), pid | atom, non_neg_integer) ::
-          GRPCStream.t() | {:error, item(), reason()}
-  def ask(stream, target, timeout \\ 5000)
-
-  def ask(%GRPCStream{flow: flow} = stream, target, timeout) when is_pid(target) do
-    mapper = fn item ->
-      if Process.alive?(target) do
-        send(target, {:request, item, self()})
-
-        result =
-          receive do
-            {:response, res} -> res
-          after
-            timeout -> {:error, item, :timeout}
-          end
-
-        result
-      else
-        {:error, item, :not_alive}
-      end
-    end
-
-    %GRPCStream{stream | flow: Flow.map(flow, mapper)}
-  end
-
-  def ask(%GRPCStream{flow: flow} = stream, target, timeout) when is_atom(target) do
-    mapper = fn item ->
-      if function_exported?(target, :handle_call, 3) do
-        try do
-          case GenServer.call(target, {:request, item}, timeout) do
-            {:response, res} ->
-              res
-
-            other ->
-              {:error, item,
-               "Expected response from #{inspect(target)} to be in the format {:response, msg}. Found #{inspect(other)}"}
-          end
-        rescue
-          reason ->
-            {:error, item, reason}
-        end
-      else
-        {:error, item, "#{inspect(target)} must implement the GenServer behavior"}
-      end
-    end
-
+          GRPCStream.t() | {:error, any(), :timeout | :not_alive}
+  def ask(%GRPCStream{flow: flow} = stream, target, timeout \\ 5000) do
+    mapper = fn item -> do_ask(item, target, timeout, raise_on_error: false) end
     %GRPCStream{stream | flow: Flow.map(flow, mapper)}
   end
 
   @spec ask!(GRPCStream.t(), pid | atom, non_neg_integer) :: GRPCStream.t()
-  def ask!(stream, target, timeout \\ 5000)
-
-  def ask!(%GRPCStream{flow: flow} = stream, target, timeout) when is_pid(target) do
-    mapper = fn item ->
-      if Process.alive?(target) do
-        send(target, {:request, item, self()})
-
-        result =
-          receive do
-            {:response, res} -> res
-          after
-            timeout ->
-              raise "Timeout waiting for response from #{inspect(target)}"
-          end
-
-        result
-      else
-        raise "Target #{inspect(target)} is not alive. Cannot send request to it."
-      end
-    end
-
+  def ask!(%GRPCStream{flow: flow} = stream, target, timeout \\ 5000) do
+    mapper = fn item -> do_ask(item, target, timeout, raise_on_error: true) end
     %GRPCStream{stream | flow: Flow.map(flow, mapper)}
   end
 
-  def ask!(%GRPCStream{flow: flow} = stream, target, timeout) when is_atom(target) do
-    if not function_exported?(target, :handle_call, 3) do
-      raise ArgumentError, "#{inspect(target)} must implement the GenServer behavior"
-    end
-
-    mapper = fn item ->
-      case GenServer.call(target, {:request, item}, timeout) do
-        {:response, res} ->
-          res
-
-        _ ->
-          raise ArgumentError,
-                "Expected response from #{inspect(target)} to be in the format {:response, msg}"
+  defp do_ask(item, target, timeout, raise_on_error: raise?) do
+    resolved_target =
+      case target do
+        pid when is_pid(pid) -> if Process.alive?(pid), do: pid, else: nil
+        atom when is_atom(atom) -> Process.whereis(atom)
       end
-    end
 
-    %GRPCStream{stream | flow: Flow.map(flow, mapper)}
+    cond do
+      is_nil(resolved_target) and raise? ->
+        raise "Target #{inspect(target)} is not alive. Cannot send request to it."
+
+      is_nil(resolved_target) ->
+        {:error, item, :not_alive}
+
+      true ->
+        send(resolved_target, {:request, item, self()})
+
+        receive do
+          {:response, res} -> res
+        after
+          timeout ->
+            if raise? do
+              raise "Timeout waiting for response from #{inspect(target)}"
+            else
+              {:error, item, :timeout}
+            end
+        end
+    end
   end
 
   @spec via(GRPCStream.t(), (map(), term -> term)) :: GRPCStream.t()

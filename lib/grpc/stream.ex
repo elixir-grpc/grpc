@@ -228,13 +228,12 @@ defmodule GRPC.Stream do
   If `target` is a PID, a message in the format `{:request, item, from}` is sent, and a reply
   in the format `{:response, msg}` is expected.
 
-  If `target` is a GenServer module (atom), the message is `{:request, item}`, and a reply
-  in the format `{:response, msg}` is expected.
+  If `target` is an `atom` we will try to locate the process through `Process.whereis/1`.
 
   ## Parameters
 
     - `stream`: The `GRPC.Stream` pipeline.
-    - `target`: Target process PID or GenServer module name.
+    - `target`: Target process PID or atom name.
     - `timeout`: Timeout in milliseconds (defaults to `5000`).
 
   ## Returns
@@ -399,6 +398,19 @@ defmodule GRPC.Stream do
           input_flow = Flow.from_enumerable(input, opts)
           other_flow = Flow.from_stages([pid], opts)
           Flow.merge([input_flow, other_flow], dispatcher, opts)
+
+        name when not is_nil(name) and is_atom(name) ->
+          pid = Process.whereis(name)
+
+          if not is_nil(pid) do
+            opts = Keyword.drop(opts, [:join_with, :default_dispatcher])
+
+            input_flow = Flow.from_enumerable(input, opts)
+            other_flow = Flow.from_stages([pid], opts)
+            Flow.merge([input_flow, other_flow], dispatcher, opts)
+          else
+            raise ArgumentError, "No process found for the given name: #{inspect(name)}"
+          end
 
         # handle Elixir.Stream joining
         other when is_list(other) or is_function(other) ->

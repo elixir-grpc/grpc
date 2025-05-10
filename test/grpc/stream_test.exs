@@ -130,8 +130,9 @@ defmodule GRPC.StreamTest do
 
       def init(_), do: {:ok, %{}}
 
-      def handle_call({:request, value}, _from, state) do
-        {:reply, {:response, value}, state}
+      def handle_info({:request, value, from}, state) do
+        Process.send(from, {:response, value}, [])
+        {:noreply, state}
       end
     end
 
