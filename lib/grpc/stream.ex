@@ -352,13 +352,18 @@ defmodule GRPC.Stream do
   defdelegate reduce(stream, acc_fun, reducer_fun), to: Operators
 
   @doc """
-  Emits only distinct items from the stream.
+  Emits only distinct items from the stream. See `uniq_by/2` for more information.
+
   """
   @spec uniq(t) :: t
   defdelegate uniq(stream), to: Operators
 
   @doc """
   Emits only unique items as determined by the result of the given function.
+
+  ## Note
+  This function requires care when used for unbounded flows. For more information see https://hexdocs.pm/flow/Flow.html#uniq_by/2
+
   """
   @spec uniq_by(t, (term -> term)) :: t
   defdelegate uniq_by(stream, fun), to: Operators
