@@ -300,7 +300,7 @@ defmodule GRPC.Stream do
   defdelegate filter(stream, filter), to: Operators
 
   @doc """
-  Applies a mapping function and flattens the results (one level deep).
+  Applies a function to each entry and concatenates the resulting lists.
 
   Useful for emitting multiple messages for each input.
   """
@@ -308,7 +308,7 @@ defmodule GRPC.Stream do
   defdelegate flat_map(stream, flat_mapper), to: Operators
 
   @doc """
-  Applies a transformation function to each stream item.
+  Applies a function to each stream item.
   """
   @spec map(t(), (term -> term)) :: t()
   defdelegate map(stream, mapper), to: Operators
