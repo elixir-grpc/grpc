@@ -35,7 +35,7 @@ defmodule GRPC.StreamTest do
           item
         end)
 
-      result = Enum.to_list(GRPC.Stream.to_flow!(flow)) |> Enum.at(0)
+      result = Enum.to_list(GRPC.Stream.to_flow(flow)) |> Enum.at(0)
       assert result == input
     end
 
@@ -46,7 +46,7 @@ defmodule GRPC.StreamTest do
         GRPC.Stream.from(input, max_demand: 1)
         |> GRPC.Stream.map(& &1)
 
-      result = Enum.to_list(GRPC.Stream.to_flow!(flow))
+      result = Enum.to_list(GRPC.Stream.to_flow(flow))
       assert result == input
     end
 
@@ -62,7 +62,7 @@ defmodule GRPC.StreamTest do
           item
         end)
 
-      result = Enum.to_list(GRPC.Stream.to_flow!(flow))
+      result = Enum.to_list(GRPC.Stream.to_flow(flow))
       assert result == input
     end
   end
@@ -72,7 +72,7 @@ defmodule GRPC.StreamTest do
       stream = GRPC.Stream.from([1, 2, 3])
       assert %GRPC.Stream{} = stream
 
-      result = stream |> GRPC.Stream.map(&(&1 * 2)) |> GRPC.Stream.to_flow!() |> Enum.to_list()
+      result = stream |> GRPC.Stream.map(&(&1 * 2)) |> GRPC.Stream.to_flow() |> Enum.to_list()
       assert Enum.sort(result) == [2, 4, 6]
     end
 
@@ -81,7 +81,7 @@ defmodule GRPC.StreamTest do
       stream = GRPC.Stream.from_flow!(flow)
       assert %GRPC.Stream{flow: ^flow} = stream
 
-      result = stream |> GRPC.Stream.map(&(&1 * 2)) |> GRPC.Stream.to_flow!() |> Enum.to_list()
+      result = stream |> GRPC.Stream.map(&(&1 * 2)) |> GRPC.Stream.to_flow() |> Enum.to_list()
       assert Enum.sort(result) == [2, 4, 6]
     end
   end
@@ -99,7 +99,7 @@ defmodule GRPC.StreamTest do
       result =
         GRPC.Stream.from([:hello])
         |> GRPC.Stream.ask(pid)
-        |> GRPC.Stream.to_flow!()
+        |> GRPC.Stream.to_flow()
         |> Enum.to_list()
 
       assert result == [:world]
@@ -114,7 +114,7 @@ defmodule GRPC.StreamTest do
       result =
         GRPC.Stream.from(["msg"])
         |> GRPC.Stream.ask(pid)
-        |> GRPC.Stream.to_flow!()
+        |> GRPC.Stream.to_flow()
         |> Enum.to_list()
 
       assert result == [{:error, "msg", :not_alive}]
@@ -147,7 +147,7 @@ defmodule GRPC.StreamTest do
       result =
         stream
         |> GRPC.Stream.ask(TestServer)
-        |> GRPC.Stream.to_flow!()
+        |> GRPC.Stream.to_flow()
         |> Enum.to_list()
 
       assert result == ["abc"]
@@ -159,7 +159,7 @@ defmodule GRPC.StreamTest do
       result =
         GRPC.Stream.from([1, 2, 3])
         |> GRPC.Stream.map(&(&1 * 10))
-        |> GRPC.Stream.to_flow!()
+        |> GRPC.Stream.to_flow()
         |> Enum.to_list()
 
       assert Enum.sort(result) == [10, 20, 30]
@@ -169,7 +169,7 @@ defmodule GRPC.StreamTest do
       result =
         GRPC.Stream.from([1, 2])
         |> GRPC.Stream.flat_map(&[&1, &1])
-        |> GRPC.Stream.to_flow!()
+        |> GRPC.Stream.to_flow()
         |> Enum.to_list()
 
       assert Enum.sort(result) == [1, 1, 2, 2]
@@ -179,7 +179,7 @@ defmodule GRPC.StreamTest do
       result =
         GRPC.Stream.from([1, 2, 3, 4])
         |> GRPC.Stream.filter(&(rem(&1, 2) == 0))
-        |> GRPC.Stream.to_flow!()
+        |> GRPC.Stream.to_flow()
         |> Enum.to_list()
 
       assert result == [2, 4]
@@ -212,7 +212,7 @@ defmodule GRPC.StreamTest do
         |> GRPC.Stream.ask(target)
         |> GRPC.Stream.partition()
         |> GRPC.Stream.reduce(fn -> [] end, fn i, acc -> [i | acc] end)
-        |> GRPC.Stream.to_flow!()
+        |> GRPC.Stream.to_flow()
         |> Enum.to_list()
         |> List.flatten()
         |> Enum.sort()

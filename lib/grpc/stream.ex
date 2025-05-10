@@ -147,12 +147,10 @@ defmodule GRPC.Stream do
 
     The internal `Flow` struct.
   """
-  @spec to_flow!(t()) :: Flow.t()
-  def to_flow!(%__MODULE__{flow: nil}) do
-    raise ArgumentError, "GRPC.Stream has no flow, initialize it with from/2"
-  end
+  @spec to_flow(t()) :: Flow.t()
+  def to_flow(%__MODULE__{flow: flow}) when is_nil(flow), do: Flow.from_enumerable([])
 
-  def to_flow!(%__MODULE__{flow: flow}), do: flow
+  def to_flow(%__MODULE__{flow: flow}), do: flow
 
   @doc """
   Executes the flow and emits responses into the provided gRPC server stream.
