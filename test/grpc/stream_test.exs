@@ -29,7 +29,7 @@ defmodule GRPC.StreamTest do
 
       flow =
         GRPC.Stream.single(input, materializer: materializer, propagate_context: true)
-        |> GRPC.Stream.map_with_ctx(fn meta, item ->
+        |> GRPC.Stream.map_with_context(fn meta, item ->
           assert not is_nil(meta)
           assert is_map(meta)
           item
@@ -56,7 +56,7 @@ defmodule GRPC.StreamTest do
 
       flow =
         GRPC.Stream.from(input, propagate_context: true, materializer: materializer)
-        |> GRPC.Stream.map_with_ctx(fn meta, item ->
+        |> GRPC.Stream.map_with_context(fn meta, item ->
           assert not is_nil(meta)
           assert is_map(meta)
           item

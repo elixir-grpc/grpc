@@ -135,8 +135,8 @@ defmodule GRPC.Stream.Operators do
     %GRPCStream{stream | flow: Flow.map(flow, mapper)}
   end
 
-  @spec map_with_ctx(GRPCStream.t(), (map(), term -> term)) :: GRPCStream.t()
-  def map_with_ctx(%GRPCStream{flow: flow, metadata: meta} = stream, mapper)
+  @spec map_with_context(GRPCStream.t(), (map(), term -> term)) :: GRPCStream.t()
+  def map_with_context(%GRPCStream{flow: flow, metadata: meta} = stream, mapper)
       when is_function(mapper, 2) do
     wrapper = fn item ->
       mapper.(meta, item)

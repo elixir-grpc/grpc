@@ -287,8 +287,8 @@ defmodule GRPC.Stream do
   Applies a transformation function to each stream item, passing the context as an additional argument.
   This is useful for operations that require access to the stream's headers.
   """
-  @spec map_with_ctx(t(), (map(), term -> term)) :: t()
-  defdelegate map_with_ctx(stream, mapper), to: Operators
+  @spec map_with_context(t(), (map(), term -> term)) :: t()
+  defdelegate map_with_context(stream, mapper), to: Operators
 
   @doc """
   Partitions the stream to allow grouping of items by key or condition.
