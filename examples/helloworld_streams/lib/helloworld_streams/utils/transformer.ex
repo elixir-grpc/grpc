@@ -13,7 +13,8 @@ defmodule HelloworldStreams.Utils.Transformer do
 
   def init(_), do: {:ok, %{}}
 
-  def handle_call({:request, %HelloRequest{} = value}, _from, state) do
-    {:reply, {:response, %HelloReply{message: "Hello #{value.name}"}}, state}
+  def handle_info({:request, %HelloRequest{} = value, from}, state) do
+    Process.send(from, {:response, %HelloReply{message: "Hello #{value.name}"}}, [])
+    {:noreply, state}
   end
 end
