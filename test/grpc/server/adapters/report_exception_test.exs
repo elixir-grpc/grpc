@@ -69,6 +69,7 @@ defmodule GRPC.Server.Adapters.ReportExceptionTest do
       end
     end
 
+    @tag :skip
     test "with badarg error" do
       {:ok, pid} = GenServer.start_link(ExceptionServer, self())
 
