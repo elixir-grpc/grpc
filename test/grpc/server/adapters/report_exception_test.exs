@@ -64,7 +64,7 @@ defmodule GRPC.Server.Adapters.ReportExceptionTest do
                    kind: :error,
                    reason: %CaseClauseError{term: :ok},
                    stack: stack
-                 }  == ReportException.new([{:req, :ok}], err)
+                 } == ReportException.new([{:req, :ok}], err)
       end
     end
 
