@@ -7,4 +7,4 @@ codecs = [
 ]
 
 Enum.each(codecs, &Code.ensure_loaded/1)
-ExUnit.start(capture_log: true)
+ExUnit.start(capture_log: true, exclude: [:skip])

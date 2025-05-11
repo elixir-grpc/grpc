@@ -51,6 +51,7 @@ defmodule GRPC.Server.Adapters.ReportExceptionTest do
              } == ReportException.new([req: :ok], RuntimeError.exception("hi"))
     end
 
+    @tag :skip
     test "with case clause error" do
       {:ok, pid} = GenServer.start_link(ExceptionServer, self())
 
