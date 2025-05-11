@@ -36,6 +36,7 @@ defmodule GRPC.Mixfile do
   defp deps do
     [
       {:cowboy, "~> 2.10"},
+      {:flow, "~> 1.2"},
       {:gun, "~> 2.0"},
       {:jason, ">= 0.0.0", optional: true},
       {:cowlib, "~> 2.12"},

@@ -4,7 +4,7 @@ defmodule GRPC.Server.Interceptors.LoggerTest do
   import ExUnit.CaptureLog
 
   alias GRPC.Server.Interceptors.Logger, as: LoggerInterceptor
-  alias GRPC.Server.Stream
+  alias GRPC.Server.Materializer
 
   defmodule FakeRequest do
     defstruct []
@@ -23,7 +23,7 @@ defmodule GRPC.Server.Interceptors.LoggerTest do
 
     request_id = to_string(System.monotonic_time())
     request = %FakeRequest{}
-    stream = %Stream{server: @server_name, rpc: @rpc, request_id: request_id}
+    stream = %Materializer{server: @server_name, rpc: @rpc, request_id: request_id}
 
     LoggerInterceptor.call(
       request,
@@ -50,7 +50,7 @@ defmodule GRPC.Server.Interceptors.LoggerTest do
     Logger.configure(level: :all)
 
     request = %FakeRequest{}
-    stream = %Stream{server: @server_name, rpc: @rpc, request_id: nil}
+    stream = %Materializer{server: @server_name, rpc: @rpc, request_id: nil}
     next = fn _stream, _request -> {:ok, :ok} end
     opts = LoggerInterceptor.init([])
 
@@ -66,7 +66,7 @@ defmodule GRPC.Server.Interceptors.LoggerTest do
     Logger.configure(level: :all)
 
     request = %FakeRequest{}
-    stream = %Stream{server: @server_name, rpc: @rpc, request_id: nil}
+    stream = %Materializer{server: @server_name, rpc: @rpc, request_id: nil}
     next = fn _stream, _request -> {:ok, :ok} end
     opts = LoggerInterceptor.init(level: :warning)
 
@@ -83,7 +83,7 @@ defmodule GRPC.Server.Interceptors.LoggerTest do
     Logger.configure(level: :all)
 
     request = %FakeRequest{}
-    stream = %Stream{server: @server_name, rpc: @rpc, request_id: nil}
+    stream = %Materializer{server: @server_name, rpc: @rpc, request_id: nil}
     next = fn stream, req -> send(self(), {:next_called, stream, req}) end
     opts = LoggerInterceptor.init(level: :info)
 
@@ -96,7 +96,7 @@ defmodule GRPC.Server.Interceptors.LoggerTest do
     Logger.configure(level: :warning)
 
     request = %FakeRequest{}
-    stream = %Stream{server: @server_name, rpc: @rpc, request_id: nil}
+    stream = %Materializer{server: @server_name, rpc: @rpc, request_id: nil}
     next = fn stream, req -> send(self(), {:next_called, stream, req}) end
     opts = LoggerInterceptor.init(level: :info)
 

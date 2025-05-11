@@ -22,7 +22,7 @@ defmodule GRPC.Telemetry do
 
   ### Metadata
 
-    * `:stream` - the `%GRPC.Server.Stream{}` for the request
+    * `:stream` - the `%GRPC.Server.Materializer{}` for the request
     * `:function_name` - the name of the function called
     * `:server` - the server module name
     * `:endpoint` - the endpoint module name
@@ -56,7 +56,7 @@ defmodule GRPC.Telemetry do
 
   ### Metadata
 
-    * `:stream` - the `%GRPC.Server.Stream{}` for the request.
+    * `:stream` - the `%GRPC.Server.Materializer{}` for the request.
     * `:function_name` - the name of the function called.
     * `:server` - the server module name.
     * `:endpoint` - the endpoint module name.

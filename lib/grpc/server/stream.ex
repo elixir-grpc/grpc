@@ -1,4 +1,4 @@
-defmodule GRPC.Server.Stream do
+defmodule GRPC.Server.Materializer do
   @moduledoc """
   A struct as an argument that servers get in rpc function definitions and use to handle headers,
   send streaming replies.

@@ -3,7 +3,7 @@ defmodule Helloworld.Greeter.Server do
     service: Helloworld.Greeter.Service,
     http_transcode: true
 
-  @spec say_hello(Helloworld.HelloRequest.t(), GRPC.Server.Stream.t()) ::
+  @spec say_hello(Helloworld.HelloRequest.t(), GRPC.Server.Materializer.t()) ::
           Helloworld.HelloReply.t()
   def say_hello(request, _stream) do
     %Helloworld.HelloReply{
@@ -12,7 +12,7 @@ defmodule Helloworld.Greeter.Server do
     }
   end
 
-  @spec say_hello_from(Helloworld.HelloFromRequest.t(), GRPC.Server.Stream.t()) ::
+  @spec say_hello_from(Helloworld.HelloFromRequest.t(), GRPC.Server.Materializer.t()) ::
           Helloworld.HelloReply.t()
   def say_hello_from(request, _stream) do
     %Helloworld.HelloReply{
