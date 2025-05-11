@@ -5,6 +5,7 @@ defmodule ExceptionServer do
 
   @impl true
   def init(pid) do
+    Process.flag(:trap_exit, true)
     {:ok, pid}
   end
 
@@ -63,7 +64,7 @@ defmodule GRPC.Server.Adapters.ReportExceptionTest do
                    kind: :error,
                    reason: %CaseClauseError{term: :ok},
                    stack: stack
-                 } == ReportException.new([{:req, :ok}], err)
+                 }  == ReportException.new([{:req, :ok}], err)
       end
     end
 
