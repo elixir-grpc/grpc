@@ -10,7 +10,7 @@ defmodule HelloworldStreams.Server do
   alias Stream.HelloRequest
   alias Stream.HelloReply
 
-  @spec say_unary_hello(HelloRequest.t(), GRPC.Server.Stream.t()) :: any()
+  @spec say_unary_hello(HelloRequest.t(), GRPC.Server.Materializer.t()) :: any()
   def say_unary_hello(request, _materializer) do
     GRPCStream.unary(request)
     |> GRPCStream.ask(Transformer)
@@ -20,7 +20,7 @@ defmodule HelloworldStreams.Server do
     |> GRPCStream.run()
   end
 
-  @spec say_server_hello(HelloRequest.t(), GRPC.Server.Stream.t()) :: any()
+  @spec say_server_hello(HelloRequest.t(), GRPC.Server.Materializer.t()) :: any()
   def say_server_hello(request, materializer) do
     create_output_stream(request)
     |> GRPCStream.from()
@@ -36,7 +36,7 @@ defmodule HelloworldStreams.Server do
     |> Enum.to_list()
   end
 
-  @spec say_bid_stream_hello(Enumerable.t(), GRPC.Server.Stream.t()) :: any()
+  @spec say_bid_stream_hello(Enumerable.t(), GRPC.Server.Materializer.t()) :: any()
   def say_bid_stream_hello(request, materializer) do
     # simulate a infinite stream of data
     # this is a simple example, in a real world application

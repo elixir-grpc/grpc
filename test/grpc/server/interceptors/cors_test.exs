@@ -24,7 +24,7 @@ defmodule GRPC.Server.Interceptors.CORSTest do
   use ExUnit.Case, async: false
 
   alias GRPC.Server.Interceptors.CORS, as: CORSInterceptor
-  alias GRPC.Server.Stream
+  alias GRPC.Server.Materializer
 
   defmodule FakeRequest do
     defstruct []
@@ -59,7 +59,7 @@ defmodule GRPC.Server.Interceptors.CORSTest do
   def allow_headers(_req, _stream), do: @custom_allowed_headers
 
   def create_stream() do
-    %Stream{
+    %Materializer{
       adapter: @adaptor,
       server: @server_name,
       rpc: @rpc,

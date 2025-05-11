@@ -25,7 +25,7 @@ defmodule GRPC.Server do
         end
       end
 
-  Your functions should accept a client request and a `GRPC.Server.Stream`.
+  Your functions should accept a client request and a `GRPC.Server.Materializer`.
   The request will be a `Enumerable.t`(created by Elixir's `Stream`) of requests
   if it's streaming. If a reply is streaming, you need to call `send_reply/2` to send
   replies one by one instead of returning reply in the end.
@@ -118,7 +118,7 @@ defmodule GRPC.Server do
 
   @type rpc_req :: struct | Enumerable.t()
   @type rpc_return :: struct | any
-  @type rpc :: (GRPC.Server.rpc_req(), GRPC.Server.Stream.t() -> rpc_return)
+  @type rpc :: (GRPC.Server.rpc_req(), GRPC.Server.Materializer.t() -> rpc_return)
 
   defmacro __using__(opts) do
     quote bind_quoted: [opts: opts], location: :keep do
@@ -212,8 +212,8 @@ defmodule GRPC.Server do
   end
 
   @doc false
-  @spec call(atom(), GRPC.Server.Stream.t(), tuple(), atom()) ::
-          {:ok, GRPC.Server.Stream.t(), struct()} | {:ok, struct()}
+  @spec call(atom(), GRPC.Server.Materializer.t(), tuple(), atom()) ::
+          {:ok, GRPC.Server.Materializer.t(), struct()} | {:ok, struct()}
   def call(
         _service_mod,
         stream,
@@ -454,7 +454,7 @@ defmodule GRPC.Server do
 
       iex> GRPC.Server.send_reply(stream, reply)
   """
-  @spec send_reply(GRPC.Server.Stream.t(), struct()) :: GRPC.Server.Stream.t()
+  @spec send_reply(GRPC.Server.Materializer.t(), struct()) :: GRPC.Server.Materializer.t()
   def send_reply(
         %{__interface__: interface} = stream,
         reply,
@@ -468,7 +468,7 @@ defmodule GRPC.Server do
 
   You can send headers only once, before that you can set headers using `set_headers/2`.
   """
-  @spec send_headers(GRPC.Server.Stream.t(), map()) :: GRPC.Server.Stream.t()
+  @spec send_headers(GRPC.Server.Materializer.t(), map()) :: GRPC.Server.Materializer.t()
   def send_headers(%{adapter: adapter} = stream, headers) do
     adapter.send_headers(stream.payload, headers)
     stream
@@ -479,7 +479,7 @@ defmodule GRPC.Server do
 
   You can set headers more than once.
   """
-  @spec set_headers(GRPC.Server.Stream.t(), map()) :: GRPC.Server.Stream.t()
+  @spec set_headers(GRPC.Server.Materializer.t(), map()) :: GRPC.Server.Materializer.t()
   def set_headers(%{adapter: adapter} = stream, headers) do
     adapter.set_headers(stream.payload, headers)
     stream
@@ -488,7 +488,7 @@ defmodule GRPC.Server do
   @doc """
   Set custom trailers, which will be sent in the end.
   """
-  @spec set_trailers(GRPC.Server.Stream.t(), map()) :: GRPC.Server.Stream.t()
+  @spec set_trailers(GRPC.Server.Materializer.t(), map()) :: GRPC.Server.Materializer.t()
   def set_trailers(%{adapter: adapter} = stream, trailers) do
     adapter.set_resp_trailers(stream.payload, trailers)
     stream
@@ -498,7 +498,7 @@ defmodule GRPC.Server do
   Set compressor to compress responses. An accepted compressor will be set if clients use one,
   even if `set_compressor` is not called. But this can be called to override the chosen.
   """
-  @spec set_compressor(GRPC.Server.Stream.t(), module()) :: GRPC.Server.Stream.t()
+  @spec set_compressor(GRPC.Server.Materializer.t(), module()) :: GRPC.Server.Materializer.t()
   def set_compressor(%{adapter: adapter} = stream, compressor) do
     adapter.set_compressor(stream.payload, compressor)
     stream

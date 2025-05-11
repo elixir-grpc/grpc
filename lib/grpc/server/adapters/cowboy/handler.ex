@@ -29,7 +29,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           pid: server_rpc_pid :: pid,
           handling_timer: timeout_timer_ref :: reference,
           pending_reader: nil | pending_reader,
-          access_mode: GRPC.Server.Stream.access_mode()
+          access_mode: GRPC.Server.Materializer.access_mode()
         }
   @type init_result ::
           {:cowboy_loop, :cowboy_req.req(), stream_state} | {:ok, :cowboy_req.req(), init_state}
@@ -64,7 +64,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       http_transcode = access_mode == :http_transcoding
       request_headers = :cowboy_req.headers(req)
 
-      stream = %GRPC.Server.Stream{
+      stream = %GRPC.Server.Materializer{
         server: server,
         endpoint: endpoint,
         adapter: @adapter,

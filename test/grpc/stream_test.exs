@@ -24,7 +24,7 @@ defmodule GRPC.StreamTest do
 
     test "unary/2 creates a flow with metadata" do
       input = %TestInput{message: 1}
-      materializer = %GRPC.Server.Stream{adapter: FakeAdapter}
+      materializer = %GRPC.Server.Materializer{adapter: FakeAdapter}
 
       flow =
         GRPC.Stream.unary(input, materializer: materializer, propagate_context: true)
@@ -51,7 +51,7 @@ defmodule GRPC.StreamTest do
 
     test "from_as_ctx/3 creates a flow from enumerable input" do
       input = [%{message: "a"}, %{message: "b"}]
-      materializer = %GRPC.Server.Stream{adapter: FakeAdapter}
+      materializer = %GRPC.Server.Materializer{adapter: FakeAdapter}
 
       flow =
         GRPC.Stream.from(input, propagate_context: true, materializer: materializer)
@@ -240,7 +240,7 @@ defmodule GRPC.StreamTest do
         Task.async(fn ->
           GRPC.Stream.from(input, join_with: producer_pid, max_demand: 500)
           |> GRPC.Stream.map(fn it -> it end)
-          |> GRPC.Stream.run_with(%GRPC.Server.Stream{}, dry_run: true)
+          |> GRPC.Stream.run_with(%GRPC.Server.Materializer{}, dry_run: true)
         end)
 
       result =

@@ -4,7 +4,7 @@ defmodule GRPC.Transport.HTTP2Test do
   alias GRPC.Transport.HTTP2
 
   alias GRPC.Client.Stream
-  alias GRPC.Server.Stream, as: ServerStream
+  alias GRPC.Server.Materializer, as: ServerStream
 
   @channel %Channel{scheme: "http", host: "grpc.io"}
 

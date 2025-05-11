@@ -630,7 +630,7 @@ defmodule GRPC.Integration.ServerTest do
                server: HelloServer,
                endpoint: nil,
                function_name: :say_hello,
-               stream: %GRPC.Server.Stream{}
+               stream: %GRPC.Server.Materializer{}
              } = metadata
 
       assert_received {^stop_server_name, measurements, metadata}
@@ -641,7 +641,7 @@ defmodule GRPC.Integration.ServerTest do
                server: HelloServer,
                endpoint: nil,
                function_name: :say_hello,
-               stream: %GRPC.Server.Stream{}
+               stream: %GRPC.Server.Materializer{}
              } = metadata
 
       assert_received {:gun_down, _, _, _, _}
@@ -708,7 +708,7 @@ defmodule GRPC.Integration.ServerTest do
                server: HelloServer,
                endpoint: nil,
                function_name: :say_hello,
-               stream: %GRPC.Server.Stream{}
+               stream: %GRPC.Server.Materializer{}
              } = metadata
 
       assert_received {^exception_server_name, measurements, metadata}
@@ -719,7 +719,7 @@ defmodule GRPC.Integration.ServerTest do
                server: HelloServer,
                endpoint: nil,
                function_name: :say_hello,
-               stream: %GRPC.Server.Stream{},
+               stream: %GRPC.Server.Materializer{},
                kind: :error,
                reason: %ArgumentError{message: "exception raised"},
                stacktrace: stacktrace

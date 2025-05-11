@@ -76,8 +76,8 @@ In the following sections you will see how to implement gRPC server logic.
 defmodule Helloworld.Greeter.Server do
   use GRPC.Server, service: Helloworld.Greeter.Service
 
-  @spec say_hello(Helloworld.HelloRequest.t, GRPC.Server.Stream.t) :: Helloworld.HelloReply.t
-  def say_hello(request, _stream) do
+  @spec say_hello(Helloworld.HelloRequest.t, GRPC.Server.Materializer.t) :: Helloworld.HelloReply.t
+  def say_hello(request, _mat) do
     Helloworld.HelloReply.new(message: "Hello #{request.name}")
   end
 end
@@ -160,8 +160,8 @@ defmodule Helloworld.Greeter.Server do
     service: Helloworld.Greeter.Service,
     http_transcode: true
 
-  @spec say_hello(Helloworld.HelloRequest.t, GRPC.Server.Stream.t) :: Helloworld.HelloReply.t
-  def say_hello(request, _stream) do
+  @spec say_hello(Helloworld.HelloRequest.t, GRPC.Server.Materializer.t) :: Helloworld.HelloReply.t
+  def say_hello(request, _mat) do
     %Helloworld.HelloReply{message: "Hello #{request.name}"}
   end
 end

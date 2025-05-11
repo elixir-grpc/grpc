@@ -2,7 +2,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
   @moduledoc """
   A server (`b:GRPC.Server.Adapter`) adapter using `:cowboy`.
 
-  Cowboy requests will be stored in the `:payload` field of the `GRPC.Server.Stream`.
+  Cowboy requests will be stored in the `:payload` field of the `GRPC.Server.Materializer`.
   """
 
   @behaviour GRPC.Server.Adapter

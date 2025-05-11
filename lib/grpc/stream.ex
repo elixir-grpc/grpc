@@ -48,7 +48,7 @@ defmodule GRPC.Stream do
       end
   """
   alias GRPC.Stream.Operators
-  alias GRPC.Server.Stream, as: Materializer
+  alias GRPC.Server.Materializer, as: Materializer
 
   defstruct flow: nil, options: [], metadata: %{}
 
@@ -70,7 +70,7 @@ defmodule GRPC.Stream do
     - `:join_with` — An optional external `GenStage` producer to merge with the gRPC input.
     - `:dispatcher` — Specifies the `Flow` dispatcher (defaults to `GenStage.DemandDispatcher`).
     - `:propagate_context` - If `true`, the context from the `materializer` is propagated to the Flow.
-    - `:materializer` - The `%GRPC.Server.Stream{}` struct representing the current gRPC stream context.
+    - `:materializer` - The `%GRPC.Server.Materializer{}` struct representing the current gRPC stream context.
     
   And any other options supported by `Flow`.
 
@@ -104,7 +104,7 @@ defmodule GRPC.Stream do
     - `:join_with` - An optional additional producer stage PID to include in the Flow.
     - `:dispatcher` - An optional GenStage dispatcher to use for the Flow. Default is `GenStage.DemandDispatcher`.
     - `:propagate_context` - If `true`, the context from the `materializer` is propagated to the Flow.
-    - `:materializer` - The `%GRPC.Server.Stream{}` struct representing the current gRPC stream context.
+    - `:materializer` - The `%GRPC.Server.Materializer{}` struct representing the current gRPC stream context.
 
   And any other options supported by `Flow`.
 
@@ -139,7 +139,7 @@ defmodule GRPC.Stream do
   ## Parameters
 
     - `flow`: A `GRPC.Stream` struct containing the flow to be executed.
-    - `stream`: A `GRPC.Server.Stream` to which responses are sent.
+    - `stream`: A `GRPC.Server.Materializer` to which responses are sent.
     - `:dry_run` — If `true`, responses are not sent (used for testing or inspection).
 
   ## Example
@@ -166,7 +166,7 @@ defmodule GRPC.Stream do
   ## Parameters
 
     - `flow`: A `GRPC.Stream` struct containing the flow to be executed.
-    - `stream`: A `GRPC.Server.Stream` to which responses are sent.
+    - `stream`: A `GRPC.Server.Materializer` to which responses are sent.
 
   ## Options
 
@@ -180,7 +180,7 @@ defmodule GRPC.Stream do
 
       GRPC.Stream.run_with(request, mat)
   """
-  @spec run_with(t(), Stream.t(), Keyword.t()) :: :ok
+  @spec run_with(t(), Materializer.t(), Keyword.t()) :: :ok
   def run_with(
         %__MODULE__{flow: flow, options: flow_opts} = _stream,
         %Materializer{} = from,
@@ -310,14 +310,14 @@ defmodule GRPC.Stream do
   defdelegate uniq_by(stream, fun), to: Operators
 
   @doc """
-  Retrieves HTTP/2 headers from a `GRPC.Server.Stream`.
+  Retrieves HTTP/2 headers from a `GRPC.Server.Materializer`.
 
   ## Client Note
 
   To receive headers on the client side, use the `:return_headers` option. See `GRPC.Stub`.
   """
-  @spec get_headers(GRPC.Server.Stream.t()) :: map
-  def get_headers(%GRPC.Server.Stream{adapter: adapter} = stream) do
+  @spec get_headers(GRPC.Server.Materializer.t()) :: map
+  def get_headers(%GRPC.Server.Materializer{adapter: adapter} = stream) do
     headers = adapter.get_headers(stream.payload)
     GRPC.Transport.HTTP2.decode_headers(headers)
   end
@@ -325,7 +325,7 @@ defmodule GRPC.Stream do
   defp build_grpc_stream(input, opts) do
     metadata =
       if Keyword.has_key?(opts, :propagate_context) do
-        %GRPC.Server.Stream{} = mat = Keyword.fetch!(opts, :materializer)
+        %GRPC.Server.Materializer{} = mat = Keyword.fetch!(opts, :materializer)
         get_headers(mat) || %{}
       end
 
