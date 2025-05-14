@@ -186,7 +186,7 @@ defmodule GRPC.Stream do
         %Materializer{} = from,
         opts \\ []
       ) do
-    unless Keyword.get(flow_opts, :unary, true) do
+    if not Keyword.get(flow_opts, :unary, true) do
       raise ArgumentError, "run_with/3 is not supported for unary streams"
     end
 
