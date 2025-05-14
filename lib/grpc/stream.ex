@@ -194,9 +194,10 @@ defmodule GRPC.Stream do
 
     flow
     |> Flow.map(fn msg ->
-      if not dry_run? do 
+      if not dry_run? do
         send_response(from, msg)
       end
+
       flow
     end)
     |> Flow.run()
