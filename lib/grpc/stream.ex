@@ -126,7 +126,7 @@ defmodule GRPC.Stream do
 
   ## Returns
 
-    The internal `Flow` struct.
+    A `Flow` pipeline.
   """
   @spec to_flow(t()) :: Flow.t()
   def to_flow(%__MODULE__{flow: flow}) when is_nil(flow), do: Flow.from_enumerable([])
