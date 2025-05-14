@@ -122,7 +122,7 @@ defmodule GRPC.Stream do
   @doc """
   Extracts the underlying `Flow` pipeline from a `GRPC.Stream`.
 
-  Raises an `ArgumentError` if the `flow` has not been initialized.
+  Raises an `ArgumentError` if the `Flow` has not been initialized.
 
   ## Returns
 
