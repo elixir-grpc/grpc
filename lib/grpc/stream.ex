@@ -134,7 +134,7 @@ defmodule GRPC.Stream do
   def to_flow(%__MODULE__{flow: flow}), do: flow
 
   @doc """
-  Executes the flow for unary/single streams and emits responses into the provided gRPC server stream.
+  Executes the underlying `Flow` for unary streams and emits responses into the provided gRPC server stream.
 
   ## Parameters
 
