@@ -102,7 +102,7 @@ defmodule GRPC.Stream do
   ## Options
 
     - `:join_with` - An optional additional producer stage PID to include in the Flow.
-    - `:dispatcher` - An optional GenStage dispatcher to use for the Flow. Default is `GenStage.DemandDispatcher`.
+    - `:dispatcher` - An optional `GenStage` dispatcher to use in the underlying `Flow`. Defaults to `GenStage.DemandDispatcher`.
     - `:propagate_context` - If `true`, the context from the `materializer` is propagated to the Flow.
     - `:materializer` - The `%GRPC.Server.Stream{}` struct representing the current gRPC stream context.
 
