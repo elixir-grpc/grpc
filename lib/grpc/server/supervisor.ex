@@ -61,7 +61,15 @@ defmodule GRPC.Server.Supervisor do
       through the :start_server option for the GRPC.Server.Supervisor"
     end
 
-    opts = Keyword.validate!(opts, [:endpoint, :servers, :start_server, :port, :adapter_opts])
+    opts =
+      case Keyword.validate(opts, [:endpoint, :servers, :start_server, :port, :adapter_opts]) do
+        {:ok, _opts} ->
+          opts
+
+        {:error, _} ->
+          raise ArgumentError,
+                "just [:endpoint, :servers, :start_server, :port,] are accepted as arguments, and any other keys for adapters should be passed as adapter_opts!"
+      end
 
     endpoint_or_servers =
       case {opts[:endpoint], opts[:servers]} do
