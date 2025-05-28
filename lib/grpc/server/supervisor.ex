@@ -10,7 +10,7 @@ defmodule GRPC.Server.Supervisor do
 
         def start(_type, _args) do
           children = [
-            {GRPC.Server.Supervisor, endpoint: Your.Endpoint, port: 50051, start_server: true, ...}]
+            {GRPC.Server.Supervisor, endpoint: Your.Endpoint, port: 50051, start_server: true, adapter_opts: [ip: {0, 0, 0, 0}], ...}]
 
           Supervisor.start_link(children, strategy: :one_for_one, name: __MODULE__)
         end
@@ -41,6 +41,7 @@ defmodule GRPC.Server.Supervisor do
     * `:endpoint` - defines the endpoint module that will be started.
     * `:port` - the HTTP port for the endpoint.
     * `:servers` - the list of servers that will be be started.
+    * `:adapter_opts` - options for the adapter.
 
   Either `:endpoint` or `:servers` must be present, but not both.
   """
@@ -60,7 +61,7 @@ defmodule GRPC.Server.Supervisor do
       through the :start_server option for the GRPC.Server.Supervisor"
     end
 
-    opts = Keyword.validate!(opts, [:endpoint, :servers, :start_server, :port])
+    opts = Keyword.validate!(opts, [:endpoint, :servers, :start_server, :port, :adapter_opts])
 
     endpoint_or_servers =
       case {opts[:endpoint], opts[:servers]} do
