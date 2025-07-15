@@ -7,16 +7,20 @@
 [![Total Download](https://img.shields.io/hexpm/dt/grpc.svg)](https://hex.pm/packages/elixir-grpc/grpc)
 [![Last Updated](https://img.shields.io/github/last-commit/elixir-grpc/grpc.svg)](https://github.com/elixir-grpc/grpc/commits/master)
 
-An Elixir implementation of [gRPC](http://www.grpc.io/).
+**gRPC Elixir** is a full-featured Elixir implementation of the [gRPC](https://grpc.io) protocol, supporting unary and streaming RPCs, interceptors, HTTP transcoding, and TLS. This version adopts a unified stream-based model for all types of calls.
 
 ## Table of contents
 
 - [Installation](#installation)
-- [Usage](#usage)
-  - [Simple RPC](#simple-rpc)
-  - [HTTP Transcoding](#http-transcoding)
-  - [CORS](#cors)
-  - [Start Application](#start-application)
+- [Protobuf Code Generation](#protobuf-code-generation)
+- [Server Implementation](#server-implementation)
+  - [Unary RPC using Stream API](#unary-rpc-using-stream-api)
+  - [Server-Side Streaming](#server-side-streaming)
+  - [Bidirectional Streaming](#bidirectional-streaming)
+- [Application Startup](#application-startup)
+- [Client Usage](#client-usage)
+- [HTTP Transcoding](#http-transcoding)
+- [CORS](#cors)
 - [Features](#features)
 - [Benchmark](#benchmark)
 - [Contributing](#contributing)
@@ -28,12 +32,16 @@ The package can be installed as:
 ```elixir
 def deps do
   [
-    {:grpc, "~> 0.10"}
+    {:grpc, "~> 0.10"},
+    {:protobuf, "~> 0.14"}, # optional for import wellknown google types
+    {:grpc_reflection, "~> 0.1"} # optional enable grpc reflection
   ]
 end
 ```
 
-## Usage
+## Protobuf Code Generation
+
+Use `protoc` with [protobuf elixir plugin](https://github.com/elixir-protobuf/protobuf) or using [protobuf_generate](https://hexdocs.pm/protobuf_generate/readme.html) hex package to generate the necessary files.
 
 1. Write your protobuf file:
 
@@ -53,51 +61,143 @@ message HelloReply {
 }
 
 // The greeting service definition.
-service Greeter {
-  // Greeting function
-  rpc SayHello (HelloRequest) returns (HelloReply) {}
+service GreetingServer {
+  rpc SayUnaryHello (HelloRequest) returns (HelloReply) {}
+  rpc SayServerHello (HelloRequest) returns (stream HelloReply) {}
+  rpc SayBidStreamHello (stream HelloRequest) returns (stream HelloReply) {}
 }
-
 ```
 
-2. Then generate Elixir code from proto file as [protobuf-elixir](https://github.com/elixir-protobuf/protobuf#usage):
+2. Compile protos (protoc + elixir plugin):
 
-```shell
+```bash
 protoc --elixir_out=plugins=grpc:./lib -I./priv/protos helloworld.proto
 ```
 
-In the following sections you will see how to implement gRPC server logic.
+## Server Implementation
 
-### **Simple RPC**
+All RPC calls must be implemented using the stream-based API, even for unary requests.
 
-1. Implement the server side code like below and remember to return the expected message types.
+### Unary RPC using Stream API
 
 ```elixir
-defmodule Helloworld.Greeter.Server do
-  use GRPC.Server, service: Helloworld.Greeter.Service
+defmodule HelloworldStreams.Server do
+  use GRPC.Server, service: Helloworld.GreetingServer.Service
 
-  @spec say_hello(Helloworld.HelloRequest.t, GRPC.Server.Stream.t) :: Helloworld.HelloReply.t
-  def say_hello(request, _stream) do
-    Helloworld.HelloReply.new(message: "Hello #{request.name}")
+  alias GRPC.Stream
+
+  alias Helloworld.HelloRequest
+  alias Helloworld.HelloReply
+
+  @spec say_unary_hello(HelloRequest.t(), GRPC.Server.Stream.t()) :: any()
+  def say_unary_hello(request, _materializer) do
+    GRPC.Stream.unary(request)
+    |> GRPC.Stream.map(fn %HelloReply{} = reply ->
+      %HelloReply{message: "[Reply] #{reply.message}"}
+    end)
+    |> GRPC.Stream.run()
   end
 end
 ```
 
-2. Define gRPC endpoints
+### Server-Side Streaming
 
 ```elixir
-# Define your endpoint
-defmodule Helloworld.Endpoint do
-  use GRPC.Endpoint
-
-  intercept GRPC.Server.Interceptors.Logger
-  run Helloworld.Greeter.Server
+def say_server_hello(request, materializer) do
+  Stream.repeatedly(fn ->
+    index = :rand.uniform(10)
+    %HelloReply{message: "[#{index}] Hello #{request.name}"}
+  end)
+  |> Stream.take(10)
+  |> GRPC.Stream.from()
+  |> GRPC.Stream.run_with(materializer)
 end
 ```
 
-We will use this module [in the gRPC server startup section](#start-application).
+### Bidirectional Streaming
 
-**Note:** For other types of RPC call like streams see [here](interop/lib/interop/server.ex).
+```elixir
+@spec say_bid_stream_hello(Enumerable.t(), GRPC.Server.Stream.t()) :: any()
+def say_bid_stream_hello(request, materializer) do
+  output_stream =
+    Stream.repeatedly(fn ->
+      index = :rand.uniform(10)
+      %HelloReply{message: "[#{index}] Server response"}
+    end)
+
+  GRPC.Stream.from(request, join_with: output_stream)
+  |> GRPC.Stream.map(fn
+    %HelloRequest{name: name} -> %HelloReply{message: "Welcome #{name}"}
+    other -> other
+  end)
+  |> GRPC.Stream.run_with(materializer)
+end
+```
+__💡__ The Stream API supports composable stream transformations via `ask`, `map`, `run` and others functions, enabling clean and declarative stream pipelines. For a complete list of available operators see [here](lib/grpc/stream/operators.ex).
+
+## Application Startup
+
+Add the server supervisor to your application's supervision tree:
+
+```elixir
+defmodule Helloworld.Application do
+  @ false
+  use Application
+
+  @impl true
+  def start(_type, _args) do
+    children = [
+      GrpcReflection,
+      {
+        GRPC.Server.Supervisor, [
+          endpoint: Helloworld.Endpoint, 
+          port: 50051, 
+          start_server: true,
+          # adapter_opts: [# any adapter-specific options like tls configuration....]
+        ]
+      }
+    ]
+
+    opts = [strategy: :one_for_one, name: Helloworld.Supervisor]
+    Supervisor.start_link(children, opts)
+  end
+end
+``` 
+
+# Client Usage
+
+```elixir
+iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051")
+iex> request = Helloworld.HelloRequest.new(name: "grpc-elixir")
+iex> {:ok, reply} = channel |> Helloworld.GreetingServer.Stub.say_unary_hello(request)
+
+# With interceptors
+iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Client.Interceptors.Logger])
+...
+```
+
+Check the [examples](examples) and [interop](interop) directories in the project's source code for some examples.
+
+## Client Adapter and Configuration
+
+The default adapter used by `GRPC.Stub.connect/2` is `GRPC.Client.Adapter.Gun`. Another option is to use `GRPC.Client.Adapters.Mint` instead, like so:
+
+```elixir
+GRPC.Stub.connect("localhost:50051",
+  # Use Mint adapter instead of default Gun
+  adapter: GRPC.Client.Adapters.Mint
+)
+```
+
+The `GRPC.Client.Adapters.Mint` adapter accepts custom configuration. To do so, you can configure it from your mix application via:
+
+```elixir
+# File: your application's config file.
+config :grpc, GRPC.Client.Adapters.Mint, custom_opts
+```
+
+The accepted options for configuration are the ones listed on [Mint.HTTP.connect/4](https://hexdocs.pm/mint/Mint.HTTP.html#connect/4-options)
+
 
 ### **HTTP Transcoding**
 
@@ -160,10 +260,7 @@ defmodule Helloworld.Greeter.Server do
     service: Helloworld.Greeter.Service,
     http_transcode: true
 
-  @spec say_hello(Helloworld.HelloRequest.t, GRPC.Server.Stream.t) :: Helloworld.HelloReply.t
-  def say_hello(request, _stream) do
-    %Helloworld.HelloReply{message: "Hello #{request.name}"}
-  end
+  # callback implementations...
 end
 ```
 
@@ -185,60 +282,6 @@ defmodule Helloworld.Endpoint do
   run Helloworld.Greeter.Server
 end
 ```
-
-### **Start Application**
-
-1. Start gRPC Server in your supervisor tree or Application module:
-
-```elixir
-# In the start function of your Application
-defmodule HelloworldApp do
-  use Application
-  def start(_type, _args) do
-    children = [
-      # ...
-      {GRPC.Server.Supervisor, endpoint: Helloworld.Endpoint, port: 50051, start_server: true}
-    ]
-
-    opts = [strategy: :one_for_one, name: YourApp]
-    Supervisor.start_link(children, opts)
-  end
-end
-```
-
-2. Call rpc:
-
-```elixir
-iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051")
-iex> request = Helloworld.HelloRequest.new(name: "grpc-elixir")
-iex> {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(request)
-
-# With interceptors
-iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Client.Interceptors.Logger])
-...
-```
-
-Check the [examples](examples) and [interop](interop) directories in the project's source code for some examples.
-
-## Client Adapter and Configuration
-
-The default adapter used by `GRPC.Stub.connect/2` is `GRPC.Client.Adapter.Gun`. Another option is to use `GRPC.Client.Adapters.Mint` instead, like so:
-
-```elixir
-GRPC.Stub.connect("localhost:50051",
-  # Use Mint adapter instead of default Gun
-  adapter: GRPC.Client.Adapters.Mint
-)
-```
-
-The `GRPC.Client.Adapters.Mint` adapter accepts custom configuration. To do so, you can configure it from your mix application via:
-
-```elixir
-# File: your application's config file.
-config :grpc, GRPC.Client.Adapters.Mint, custom_opts
-```
-
-The accepted options for configuration are the ones listed on [Mint.HTTP.connect/4](https://hexdocs.pm/mint/Mint.HTTP.html#connect/4-options)
 
 ## Features
 
