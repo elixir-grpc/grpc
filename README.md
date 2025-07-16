@@ -133,7 +133,7 @@ def say_bid_stream_hello(request, materializer) do
   |> GRPC.Stream.run_with(materializer)
 end
 ```
-__💡__ The Stream API supports composable stream transformations via `ask`, `map`, `run` and others functions, enabling clean and declarative stream pipelines. For a complete list of available operators see [here](lib/grpc/stream/operators.ex).
+__💡__ The Stream API supports composable stream transformations via `ask`, `map`, `run` and others functions, enabling clean and declarative stream pipelines. For a complete list of available operators see [here](lib/grpc/stream.ex).
 
 ## Application Startup
 
