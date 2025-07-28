@@ -9,7 +9,7 @@ defmodule GRPC.Transport.HTTP2 do
   require Logger
 
   def server_headers(%{codec: codec}) do
-    %{"content-type" => "application/grpc+#{codec.name}"}
+    %{"content-type" => "application/grpc+#{codec.name()}"}
   end
 
   @spec server_trailers(integer, String.t(), String.t()) :: map
@@ -43,7 +43,7 @@ defmodule GRPC.Transport.HTTP2 do
   @spec client_headers_without_reserved(GRPC.Client.Stream.t(), map) :: [{String.t(), String.t()}]
   def client_headers_without_reserved(%{codec: codec} = stream, opts \\ %{}) do
     [
-      # It seems only gRPC implemenations only support "application/grpc", so we support :content_type now.
+      # It seems only gRPC implementations only support "application/grpc", so we support :content_type now.
       {"content-type", content_type(opts[:content_type], codec)},
       {"user-agent", "grpc-elixir/#{opts[:grpc_version] || GRPC.version()}"},
       {"te", "trailers"}
@@ -68,7 +68,7 @@ defmodule GRPC.Transport.HTTP2 do
     if codec == GRPC.Codec.Proto do
       "application/grpc"
     else
-      "application/grpc+#{codec.name}"
+      "application/grpc+#{codec.name()}"
     end
   end
 
