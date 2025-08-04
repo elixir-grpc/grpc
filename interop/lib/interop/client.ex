@@ -131,6 +131,7 @@ defmodule Interop.Client do
     Logger.info("Run ping_pong!")
     stream = Grpc.Testing.TestService.Stub.full_duplex_call(ch)
 
+    Logger.info("Run ping_pong! 2")
     req = fn size1, size2 ->
       Grpc.Testing.StreamingOutputCallRequest.new(
         response_parameters: [res_param(size1)],
@@ -138,11 +139,15 @@ defmodule Interop.Client do
       )
     end
 
+    Logger.info("Run ping_pong! 3")
     GRPC.Stub.send_request(stream, req.(31415, 27182))
+    Logger.info("Run ping_pong! 3.1")
     {:ok, res_enum} = GRPC.Stub.recv(stream)
+    Logger.info("Run ping_pong! 4")
     reply = String.duplicate(<<0>>, 31415)
 
     {:ok, %{payload: %{body: ^reply}}} = Enum.at(res_enum, 0)
+     Logger.info("Run ping_pong! 5")
 
     Enum.each([{9, 8}, {2653, 1828}, {58979, 45904}], fn {res, payload} ->
       GRPC.Stub.send_request(stream, req.(res, payload))
@@ -150,6 +155,8 @@ defmodule Interop.Client do
 
       {:ok, %{payload: %{body: ^reply}}} = Enum.at(res_enum, 0)
     end)
+
+    Logger.info("Run ping_pong! 6")
 
     GRPC.Stub.end_stream(stream)
   end
@@ -192,7 +199,9 @@ defmodule Interop.Client do
       ch
       |> Grpc.Testing.TestService.Stub.full_duplex_call(metadata: metadata)
       |> GRPC.Stub.send_request(req, end_stream: true)
+      # |> IO.inspect(label: :send_request_value)
       |> GRPC.Stub.recv(return_headers: true)
+      |> IO.inspect(label: :recv_value)
       |> process_full_duplex_response()
 
     reply = String.duplicate(<<0>>, 314_159)
@@ -269,10 +278,13 @@ defmodule Interop.Client do
 
     stream = Grpc.Testing.TestService.Stub.full_duplex_call(ch)
 
+    IO.inspect(:ok , label: :HGGGGGGGGGGGG)
     {:ok, res_enum} =
       stream
       |> GRPC.Stub.send_request(req)
       |> GRPC.Stub.recv()
+
+      IO.inspect(:next, label: :HGGGGGGGGGGGG)
 
     {:ok, _} = Enum.at(res_enum, 0)
     stream = GRPC.Stub.cancel(stream)

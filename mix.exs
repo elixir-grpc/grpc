@@ -43,10 +43,11 @@ defmodule GRPC.Mixfile do
       {:castore, "~> 0.1 or ~> 1.0", optional: true},
       {:protobuf, "~> 0.14"},
       {:protobuf_generate, "~> 0.1.1", only: [:dev, :test]},
-      {:mint, "~> 1.5"},
+      {:mint, "~> 1.7"},
       {:ex_doc, "~> 0.29", only: :dev},
       {:ex_parameterized, "~> 1.3.7", only: :test},
-      {:telemetry, "~> 1.0"}
+      {:telemetry, "~> 1.0"},
+      {:finch, "~> 0.20.0"}
     ]
   end
 
