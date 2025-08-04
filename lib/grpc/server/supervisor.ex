@@ -68,7 +68,7 @@ defmodule GRPC.Server.Supervisor do
 
         {:error, _} ->
           raise ArgumentError,
-                "just [:endpoint, :servers, :start_server, :port,] are accepted as arguments, and any other keys for adapters should be passed as adapter_opts!"
+                "just [:endpoint, :servers, :start_server, :port, :adapter_opts] are accepted as arguments, and any other keys for adapters should be passed as adapter_opts!"
       end
 
     endpoint_or_servers =
