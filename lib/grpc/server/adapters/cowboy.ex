@@ -30,8 +30,8 @@ defmodule GRPC.Server.Adapters.Cowboy do
   """
   @impl true
   def start(endpoint, servers, port, opts) do
-    start_args = cowboy_start_args(endpoint, servers, port, opts)
-    start_func = if cred_opts(opts), do: :start_tls, else: :start_clear
+    [_ref, _trans_opts, proto_opts] = start_args = cowboy_start_args(endpoint, servers, port, opts)
+    start_func = if cred_opts(proto_opts), do: :start_tls, else: :start_clear
 
     case apply(:cowboy, start_func, start_args) do
       {:ok, pid} ->
@@ -52,7 +52,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
     [ref, trans_opts, proto_opts] = cowboy_start_args(endpoint, servers, port, opts)
     trans_opts = Map.put(trans_opts, :connection_type, :supervisor)
 
-    cred_opts = cred_opts(opts)
+    cred_opts = cred_opts(proto_opts)
 
     {transport, protocol} =
       if cred_opts do
@@ -290,7 +290,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
   end
 
   defp cred_opts(opts) do
-    Kernel.get_in(opts, [:cred]) || Kernel.get_in(opts, [:adapter_opts, :cred])
+    Kernel.get_in(opts, [:cred])
   end
 
   defp running_info(scheme, endpoint, servers, ref) do
