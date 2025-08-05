@@ -71,6 +71,11 @@ defmodule GRPC.Server.Supervisor do
                 "just [:endpoint, :servers, :start_server, :port, :adapter_opts] are accepted as arguments, and any other keys for adapters should be passed as adapter_opts!"
       end
 
+    case validate_cred(opts) do
+      {:ok, _cred} -> :ok
+      {:error, err} -> raise ArgumentError, err
+    end
+
     endpoint_or_servers =
       case {opts[:endpoint], opts[:servers]} do
         {endpoint, servers}
@@ -135,5 +140,16 @@ defmodule GRPC.Server.Supervisor do
     adapter = Keyword.get(opts, :adapter) || @default_adapter
     servers = GRPC.Server.servers_to_map(servers)
     adapter.child_spec(nil, servers, port, opts)
+  end
+
+  defp validate_cred(opts) do
+    with cred <- Kernel.get_in(opts, [:adapter_opts, :cred]),
+         true <- cred == nil or (is_map(cred) and is_list(Map.get(cred, :ssl))) do
+      {:ok, cred}
+    else
+      _ ->
+        {:error,
+         "the :cred option must be a map with an :ssl key containing a list of SSL options"}
+    end
   end
 end
