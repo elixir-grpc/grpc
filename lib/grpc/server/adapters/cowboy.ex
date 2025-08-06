@@ -30,7 +30,9 @@ defmodule GRPC.Server.Adapters.Cowboy do
   """
   @impl true
   def start(endpoint, servers, port, opts) do
-    [_ref, _trans_opts, proto_opts] = start_args = cowboy_start_args(endpoint, servers, port, opts)
+    [_ref, _trans_opts, proto_opts] =
+      start_args = cowboy_start_args(endpoint, servers, port, opts)
+
     start_func = if cred_opts(proto_opts), do: :start_tls, else: :start_clear
 
     case apply(:cowboy, start_func, start_args) do
