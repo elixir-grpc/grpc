@@ -150,8 +150,8 @@ defmodule Helloworld.Application do
       GrpcReflection,
       {
         GRPC.Server.Supervisor, [
-          endpoint: Helloworld.Endpoint, 
-          port: 50051, 
+          endpoint: Helloworld.Endpoint,
+          port: 50051,
           start_server: true,
           # adapter_opts: [# any adapter-specific options like tls configuration....]
         ]
@@ -162,7 +162,7 @@ defmodule Helloworld.Application do
     Supervisor.start_link(children, opts)
   end
 end
-``` 
+```
 
 # Client Usage
 
@@ -268,7 +268,7 @@ See full application code in [helloworld_transcoding](examples/helloworld_transc
 
 ### **CORS**
 
-When accessing gRPC from a browser via HTTP transcoding or gRPC-Web, CORS headers may be required for the browser to allow access to the gRPC endpoint. Adding CORS headers can be done by using `GRPC.Server.Interceptors.CORS` as an interceptor in your `GRPC.Endpoint` module, configuring it as decribed in the module documentation:
+When accessing gRPC from a browser via HTTP transcoding or gRPC-Web, CORS headers may be required for the browser to allow access to the gRPC endpoint. Adding CORS headers can be done by using `GRPC.Server.Interceptors.CORS` as an interceptor in your `GRPC.Endpoint` module, configuring it as described in the module documentation:
 
 Example:
 
