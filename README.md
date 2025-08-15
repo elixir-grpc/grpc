@@ -3,8 +3,8 @@
 [![GitHub CI](https://github.com/elixir-grpc/grpc/actions/workflows/ci.yml/badge.svg)](https://github.com/elixir-grpc/grpc/actions/workflows/ci.yml)
 [![Hex.pm](https://img.shields.io/hexpm/v/grpc.svg)](https://hex.pm/packages/grpc)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/grpc/)
-[![License](https://img.shields.io/hexpm/l/grpc.svg)](https://github.com/elixir-grpc/grpc/blob/master/LICENSE.md)
-[![Total Download](https://img.shields.io/hexpm/dt/grpc.svg)](https://hex.pm/packages/elixir-grpc/grpc)
+[![License](https://img.shields.io/hexpm/l/grpc.svg)](https://github.com/elixir-grpc/grpc/blob/master/LICENSE)
+[![Total Downloads](https://img.shields.io/hexpm/dt/grpc.svg)](https://hex.pm/packages/grpc)
 [![Last Updated](https://img.shields.io/github/last-commit/elixir-grpc/grpc.svg)](https://github.com/elixir-grpc/grpc/commits/master)
 
 **gRPC Elixir** is a full-featured Elixir implementation of the [gRPC](https://grpc.io) protocol, supporting unary and streaming RPCs, interceptors, HTTP transcoding, and TLS. This version adopts a unified stream-based model for all types of calls.
@@ -292,10 +292,10 @@ end
   - [Bidirectional-streaming](https://grpc.io/docs/what-is-grpc/core-concepts/#bidirectional-streaming-rpc)
 - [HTTP Transcoding](https://cloud.google.com/endpoints/docs/grpc/transcoding)
 - [TLS Authentication](https://grpc.io/docs/guides/auth/#supported-auth-mechanisms)
-- [Error handling](https://grpc.io/docs/guides/error/)
-- [Interceptors](`GRPC.Endpoint`)
+- [Error Handling](https://grpc.io/docs/guides/error/)
+- [Interceptors](https://grpc.io/docs/guides/interceptors/)
 - [Connection Backoff](https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md)
-- Data compression
+- [Data Compression](https://grpc.io/docs/guides/compression/)
 - [gRPC Reflection](https://github.com/elixir-grpc/grpc-reflection)
 
 ## Benchmark
