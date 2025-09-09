@@ -18,7 +18,7 @@ defmodule GRPC.Integration.ConnectionTest do
     server = FeatureServer
     File.rm(socket_path)
 
-    {:ok, _, _} = GRPC.Server.start(server, 0, ip: {:local, socket_path})
+    {:ok, _, _} = GRPC.Server.start(server, 0, adapter_opts: [ip: {:local, socket_path}])
     {:ok, channel} = GRPC.Stub.connect(socket_path, adapter_opts: [retry_timeout: 10])
 
     point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
@@ -31,7 +31,7 @@ defmodule GRPC.Integration.ConnectionTest do
 
     cred = GRPC.Factory.build(:credential, verify: :verify_peer)
 
-    {:ok, _, port} = GRPC.Server.start(server, 0, cred: cred)
+    {:ok, _, port} = GRPC.Server.start(server, 0, adapter_opts: [cred: cred])
 
     try do
       point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}

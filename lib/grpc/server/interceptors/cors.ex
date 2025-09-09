@@ -77,8 +77,7 @@ defmodule GRPC.Server.Interceptors.CORS do
 
   @impl true
   def call(req, stream, next, {allow_origin, allow_headers}) do
-    if stream.access_mode != :grpc and
-         Map.get(stream.http_request_headers, "sec-fetch-mode") == "cors" do
+    if stream.access_mode != :grpc do
       headers =
         %{}
         |> add_allowed_origins(req, stream, allow_origin)

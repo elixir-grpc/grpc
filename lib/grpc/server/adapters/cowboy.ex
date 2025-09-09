@@ -30,8 +30,10 @@ defmodule GRPC.Server.Adapters.Cowboy do
   """
   @impl true
   def start(endpoint, servers, port, opts) do
-    start_args = cowboy_start_args(endpoint, servers, port, opts)
-    start_func = if opts[:cred], do: :start_tls, else: :start_clear
+    [_ref, _trans_opts, proto_opts] =
+      start_args = cowboy_start_args(endpoint, servers, port, opts)
+
+    start_func = if cred_opts(proto_opts), do: :start_tls, else: :start_clear
 
     case apply(:cowboy, start_func, start_args) do
       {:ok, pid} ->
@@ -52,8 +54,10 @@ defmodule GRPC.Server.Adapters.Cowboy do
     [ref, trans_opts, proto_opts] = cowboy_start_args(endpoint, servers, port, opts)
     trans_opts = Map.put(trans_opts, :connection_type, :supervisor)
 
+    cred_opts = cred_opts(proto_opts)
+
     {transport, protocol} =
-      if opts[:cred] do
+      if cred_opts do
         {:ranch_ssl, :cowboy_tls}
       else
         {:ranch_tcp, :cowboy_clear}
@@ -63,7 +67,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
     # So we just support both child spec versions here instead
     case :ranch.child_spec(ref, transport, trans_opts, protocol, proto_opts) do
       {ref, mfa, type, timeout, kind, modules} ->
-        scheme = if opts[:cred], do: :https, else: :http
+        scheme = if cred_opts, do: :https, else: :http
         # Wrap real mfa to print starting log
         wrapped_mfa = {__MODULE__, :start_link, [scheme, endpoint, servers, mfa]}
 
@@ -226,12 +230,12 @@ defmodule GRPC.Server.Adapters.Cowboy do
     dispatch_key = Module.concat(endpoint, Dispatch)
     :persistent_term.put(dispatch_key, dispatch)
 
-    idle_timeout = Keyword.get(opts, :idle_timeout) || :infinity
-    num_acceptors = Keyword.get(opts, :num_acceptors) || @default_num_acceptors
-    max_connections = Keyword.get(opts, :max_connections) || @default_max_connections
+    idle_timeout = Keyword.get(adapter_opts, :idle_timeout) || :infinity
+    num_acceptors = Keyword.get(adapter_opts, :num_acceptors) || @default_num_acceptors
+    max_connections = Keyword.get(adapter_opts, :max_connections) || @default_max_connections
 
     # https://ninenines.eu/docs/en/cowboy/2.7/manual/cowboy_http2/
-    opts =
+    merged_adapter_opts =
       Map.merge(
         %{
           env: %{dispatch: {:persistent_term, dispatch_key}},
@@ -245,7 +249,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
           max_received_frame_rate: {10_000_000, 10_000},
           max_reset_stream_rate: {10_000, 10_000}
         },
-        Enum.into(opts, %{})
+        Enum.into(adapter_opts, %{})
       )
 
     [
@@ -253,9 +257,9 @@ defmodule GRPC.Server.Adapters.Cowboy do
       %{
         num_acceptors: num_acceptors,
         max_connections: max_connections,
-        socket_opts: socket_opts(port, opts)
+        socket_opts: socket_opts(port, adapter_opts)
       },
-      opts
+      merged_adapter_opts
     ]
   end
 
@@ -270,8 +274,10 @@ defmodule GRPC.Server.Adapters.Cowboy do
         _, acc -> acc
       end)
 
-    if opts[:cred] do
-      opts[:cred].ssl ++
+    cred_opts = cred_opts(opts)
+
+    if cred_opts do
+      cred_opts.ssl ++
         [
           # These NPN/ALPN options are hardcoded in :cowboy.start_tls/3 (when calling start/3),
           # but not in :ranch.child_spec/5 (when calling child_spec/3). We must make sure they
@@ -283,6 +289,10 @@ defmodule GRPC.Server.Adapters.Cowboy do
     else
       socket_opts
     end
+  end
+
+  defp cred_opts(opts) do
+    Kernel.get_in(opts, [:cred])
   end
 
   defp running_info(scheme, endpoint, servers, ref) do
