@@ -1,7 +1,7 @@
 LOCAL_CLEAN=$(shell git diff-index --quiet HEAD -- && echo 1)
 
 test:
-	mix test
+	mix deps.get && mix test
 
 release:
 ifeq ($(LOCAL_CLEAN), 1)
