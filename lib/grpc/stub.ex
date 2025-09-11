@@ -231,7 +231,7 @@ defmodule GRPC.Stub do
 
     adapter_opts = opts[:adapter_opts]
 
-    unless is_list(adapter_opts) do
+    if not is_list(adapter_opts) do
       raise ArgumentError, ":adapter_opts must be a keyword list if present"
     end
 
