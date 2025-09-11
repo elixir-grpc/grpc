@@ -39,7 +39,7 @@ defmodule GRPC.Client.Resolver do
   Returns:
 
     * `{:ok, %{addresses: list(map()), service_config: GRPC.Client.ServiceConfig.t() | nil}}`
-      - `addresses` – list of endpoint maps
+      - `addresses` – list of endpoint maps containing the keys:
         - `:address` – host, IP, or socket path
         - `:port` – TCP port (if applicable)
         - may include additional scheme-specific fields, e.g., `:cid` for vsock
