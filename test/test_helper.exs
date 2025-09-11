@@ -7,4 +7,9 @@ codecs = [
 ]
 
 Enum.each(codecs, &Code.ensure_loaded/1)
+
+Mox.defmock(GRPC.Client.Resolver.DNS.MockAdapter,
+  for: GRPC.Client.Resolver.DNS.Adapter
+)
+
 ExUnit.start(capture_log: true)

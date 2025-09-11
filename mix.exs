@@ -38,7 +38,7 @@ defmodule GRPC.Mixfile do
       {:cowboy, "~> 2.10"},
       {:flow, "~> 1.2"},
       {:gun, "~> 2.0"},
-      {:jason, ">= 0.0.0", optional: true},
+      {:jason, ">= 0.0.0"},
       {:cowlib, "~> 2.12"},
       {:castore, "~> 0.1 or ~> 1.0", optional: true},
       {:protobuf, "~> 0.14"},
@@ -46,6 +46,7 @@ defmodule GRPC.Mixfile do
       {:mint, "~> 1.5"},
       {:ex_doc, "~> 0.29", only: :dev},
       {:ex_parameterized, "~> 1.3.7", only: :test},
+      {:mox, "~> 1.2", only: :test},
       {:telemetry, "~> 1.0"}
     ]
   end
