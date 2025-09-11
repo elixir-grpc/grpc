@@ -60,6 +60,12 @@ defmodule GRPC.Client.Resolver do
   [gRPC Naming Documentation](https://github.com/grpc/grpc/blob/master/doc/naming.md)
   """
 
+  alias GRPC.Client.Resolver.DNS
+  alias GRPC.Client.Resolver.IPv4
+  alias GRPC.Client.Resolver.IPv6
+  alias GRPC.Client.Resolver.Unix
+  alias GRPC.Client.Resolver.XDS
+
   @type service_config :: GRPC.Client.ServiceConfig.t() | nil
 
   @callback start(args :: term()) :: :ok | {:ok, pid()} | {:error, term()}
@@ -118,20 +124,26 @@ defmodule GRPC.Client.Resolver do
 
     case scheme do
       "dns" ->
-        GRPC.Client.Resolver.DNS.resolve(target)
+        DNS.resolve(target)
 
       "ipv4" ->
-        GRPC.Client.Resolver.IPv4.resolve(target)
+        IPv4.resolve(target)
 
       "ipv6" ->
-        GRPC.Client.Resolver.IPv6.resolve(target)
+        IPv6.resolve(target)
 
       "unix" ->
-        GRPC.Client.Resolver.Unix.resolve(target)
+        Unix.resolve(target)
 
       "xds" ->
-        GRPC.Client.Resolver.XDS.resolve(target)
+        XDS.resolve(target)
 
+      "localhost" ->
+        IPv4.resolve("ipv4:#{target}")
+
+      nil ->
+        IPv4.resolve("ipv4:#{target}")
+        
       _ ->
         {:error, {:unknown_scheme, scheme}}
     end

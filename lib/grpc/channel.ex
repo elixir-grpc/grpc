@@ -9,6 +9,9 @@ defmodule GRPC.Channel do
 
     * `:host` - server's host to connect
     * `:port` - server's port to connect
+    * `:lb_module` - load balancing module
+    * `:lb_state` - load balancing state
+    * `:service_config` - service config from DNS TXT record or xDS
     * `:scheme` - scheme of connection, like `http`
     * `:cred` - credentials used for authentication
     * `:adapter` - a client adapter module, like `GRPC.Client.Adapters.Gun`
@@ -19,6 +22,9 @@ defmodule GRPC.Channel do
   @type t :: %__MODULE__{
           host: String.t(),
           port: non_neg_integer(),
+          lb_module: lb,
+          lb_state: lb_state,
+          service_config: service_config,
           scheme: String.t(),
           cred: GRPC.Credential.t(),
           adapter: atom(),
@@ -31,6 +37,9 @@ defmodule GRPC.Channel do
         }
   defstruct host: nil,
             port: nil,
+            lb_module: GRPC.LB.RoundRobin,
+            lb_state: nil,
+            service_config: nil,
             scheme: nil,
             cred: nil,
             adapter: nil,
