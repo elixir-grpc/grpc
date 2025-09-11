@@ -51,11 +51,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   """
   @spec init(:cowboy_req.req(), state :: init_state) :: init_result
   def init(req, {endpoint, {_name, server}, route, opts} = state) do
-    http_method =
-      req
-      |> :cowboy_req.method()
-      |> String.downcase()
-      |> String.to_existing_atom()
+    http_method = extract_http_method(req) |> String.to_existing_atom()
 
     with {:ok, access_mode, sub_type, content_type} <- find_content_type_subtype(req),
          {:ok, codec} <- find_codec(sub_type, content_type, server),
@@ -136,9 +132,29 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           content_type
       end
 
-    {:ok, access_mode, subtype} = extract_subtype(content_type)
+    http_method = extract_http_method(req)
+
+    {:ok, access_mode, subtype} =
+      case extract_subtype(content_type) do
+        {:ok, :unknown, "unknown"} ->
+          if http_method == "post" do
+            {:ok, :grpc, "proto"}
+          else
+            {:ok, :http_transcoding, "json"}
+          end
+
+        resp ->
+          resp
+      end
+
     access_mode = resolve_access_mode(req, access_mode, subtype)
     {:ok, access_mode, subtype, content_type}
+  end
+
+  defp extract_http_method(req) do
+    req
+    |> :cowboy_req.method()
+    |> String.downcase()
   end
 
   defp find_compressor(req, server) do
@@ -627,8 +643,9 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   defp extract_subtype("application/grpc-web-text+" <> rest), do: {:ok, :grpcweb, rest}
 
   defp extract_subtype(type) do
-    Logger.warning("Got unknown content-type #{type}, please create an issue.")
-    {:ok, :grpc, "proto"}
+    Logger.warning("Got unknown content-type #{type}, please create an issue. ")
+
+    {:ok, :unknown, "unknown"}
   end
 
   defp resolve_access_mode(%{version: "HTTP/1.1"}, _detected_access_mode, _type_subtype),
