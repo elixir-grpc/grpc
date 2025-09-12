@@ -35,9 +35,6 @@ defmodule GRPC.Client.Resolver.Unix do
   @behaviour GRPC.Client.Resolver
 
   @impl GRPC.Client.Resolver
-  def start(_args), do: :ok
-
-  @impl GRPC.Client.Resolver
   def resolve(target) do
     # E.g.: "unix:///var/run/my.sock"
     uri = URI.parse(target)

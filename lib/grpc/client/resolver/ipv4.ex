@@ -39,9 +39,6 @@ defmodule GRPC.Client.Resolver.IPv4 do
   @behaviour GRPC.Client.Resolver
 
   @impl GRPC.Client.Resolver
-  def start(_args), do: :ok
-
-  @impl GRPC.Client.Resolver
   def resolve(target) do
     uri = URI.parse(target)
     addrs_str = uri.path

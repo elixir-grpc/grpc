@@ -41,9 +41,6 @@ defmodule GRPC.Client.Resolver.IPv6 do
   @behaviour GRPC.Client.Resolver
 
   @impl GRPC.Client.Resolver
-  def start(_args), do: :ok
-
-  @impl GRPC.Client.Resolver
   def resolve(target) do
     uri = URI.parse(target)
     addresses_str = uri.path

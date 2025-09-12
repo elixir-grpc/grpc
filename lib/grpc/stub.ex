@@ -296,10 +296,11 @@ defmodule GRPC.Stub do
   #    * `:return_headers` - default is false. When it's true, a three elem tuple will be returned
   #      with the last elem being a map of headers `%{headers: headers, trailers: trailers}`(unary) or
   #      `%{headers: headers}`(server streaming)
-  def call(_service_mod, rpc, %{channel: channel} = stream, request, opts) do
+  def call(_service_mod, rpc, %{channel: _channel} = stream, request, opts) do
     {_, {req_mod, req_stream}, {res_mod, response_stream}, _rpc_options} = rpc
 
-    stream = %{stream | request_mod: req_mod, response_mod: res_mod}
+    {:ok, ch} = GRPC.Client.Conn.pick(opts)
+    stream = %{stream | channel: ch, request_mod: req_mod, response_mod: res_mod}
 
     opts =
       if req_stream || response_stream do
@@ -308,7 +309,7 @@ defmodule GRPC.Stub do
         parse_req_opts([{:timeout, @default_timeout} | opts])
       end
 
-    compressor = Keyword.get(opts, :compressor, channel.compressor)
+    compressor = Keyword.get(opts, :compressor, ch.compressor)
     accepted_compressors = Keyword.get(opts, :accepted_compressors, [])
 
     accepted_compressors =
@@ -320,8 +321,8 @@ defmodule GRPC.Stub do
 
     stream = %{
       stream
-      | codec: Keyword.get(opts, :codec, channel.codec),
-        compressor: Keyword.get(opts, :compressor, channel.compressor),
+      | codec: Keyword.get(opts, :codec, ch.codec),
+        compressor: Keyword.get(opts, :compressor, ch.compressor),
         accepted_compressors: accepted_compressors
     }
 

@@ -8,58 +8,12 @@ defmodule GRPC.Client.Resolver.DNS do
   This implementation maintains an internal cache of addresses and service config,
   and refreshes them periodically.
   """
-  use GenServer
   @behaviour GRPC.Client.Resolver
-
-  @refresh_interval 5_000
 
   alias GRPC.Client.ServiceConfig
 
   @impl GRPC.Client.Resolver
-  def start(args) do
-    GenServer.start_link(__MODULE__, args, name: __MODULE__)
-  end
-
-  @impl GRPC.Client.Resolver
   def resolve(target) do
-    case GenServer.call(__MODULE__, {:resolve, target}) do
-      {:ok, result} -> result
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  def start_link(_) do
-    GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
-  end
-
-  @impl GenServer
-  def init(state) do
-    {:ok, state}
-  end
-
-  @impl GenServer
-  def handle_call({:resolve, target}, _from, state) do
-    key = target
-
-    case Map.get(state, key) do
-      nil ->
-        value = fetch(target)
-        Process.send_after(self(), {:refresh, target}, @refresh_interval)
-        {:reply, {:ok, value}, Map.put(state, key, value)}
-
-      cached ->
-        {:reply, {:ok, cached}, state}
-    end
-  end
-
-  @impl GenServer
-  def handle_info({:refresh, target}, state) do
-    value = fetch(target)
-    Process.send_after(self(), {:refresh, target}, @refresh_interval)
-    {:noreply, Map.put(state, target, value)}
-  end
-
-  def fetch(target) do
     uri = URI.parse(target)
     host = uri.host || target
     port = uri.port || 50051

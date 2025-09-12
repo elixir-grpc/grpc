@@ -68,21 +68,9 @@ defmodule GRPC.Client.Resolver do
 
   @type service_config :: GRPC.Client.ServiceConfig.t() | nil
 
-  @callback start(args :: term()) :: :ok | {:ok, pid()} | {:error, term()}
-
   @callback resolve(String.t()) ::
               {:ok, %{addresses: list(map()), service_config: service_config()}}
               | {:error, term()}
-
-  @doc """
-  Initialization for resolvers.
-
-  Calls `resolver_module.start(args)` and returns its result.
-  """
-  @spec start_resolver(module(), args :: term()) :: :ok | {:ok, pid()} | {:error, term()}
-  def start_resolver(resolver, args \\ nil) when is_atom(resolver) do
-    resolver.start(args)
-  end
 
   @doc """
   Resolves a gRPC target string into a list of connection endpoints and an optional ServiceConfig.
@@ -143,7 +131,7 @@ defmodule GRPC.Client.Resolver do
 
       nil ->
         IPv4.resolve("ipv4:#{target}")
-        
+
       _ ->
         {:error, {:unknown_scheme, scheme}}
     end
