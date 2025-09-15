@@ -105,6 +105,32 @@ defmodule GRPC.Stub do
     end
   end
 
+  @spec connect(
+          String.t() | {:local, String.t()},
+          binary() | non_neg_integer(),
+          keyword()
+        ) :: {:ok, Channel.t()} | {:error, any()}
+  def connect(host, port, opts) when is_binary(port) do
+    connect(host, String.to_integer(port), opts)
+  end
+
+  def connect(host, port, opts) when is_integer(port) do
+    if Application.get_env(:grpc, :http2_client_adapter) do
+      raise "the :http2_client_adapter config key has been deprecated.\
+      The currently supported way is to configure it\
+      through the :adapter option for GRPC.Stub.connect/3"
+    end
+
+    ip_type =
+      case :inet.parse_address(to_charlist(host)) do
+        {:ok, {_, _, _, _}} -> "ipv4"
+        {:ok, {_, _, _, _, _, _, _, _}} -> "ipv6"
+        {:error, _} -> "ipv4"
+      end
+
+    connect("#{ip_type}:#{host}:#{port}", opts)
+  end
+
   @doc """
   Establish a connection with gRPC server and return `GRPC.Channel` needed for
   sending requests.
@@ -139,6 +165,8 @@ defmodule GRPC.Stub do
     # the base case. Accepting only `http/https` is a trait of `connect/3`.
     Conn.connect(addr, opts)
   end
+
+  
 
   def retry_timeout(curr) when curr < 11 do
     timeout =
