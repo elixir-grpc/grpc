@@ -40,6 +40,6 @@ defmodule GRPC.Client.Resolver.Unix do
     uri = URI.parse(target)
     path = uri.path
 
-    {:ok, %{addresses: [%{address: path, port: nil, socket: :unix}], service_config: nil}}
+    {:ok, %{addresses: [%{address: {:local, path}, port: 0, socket: :unix}], service_config: nil}}
   end
 end

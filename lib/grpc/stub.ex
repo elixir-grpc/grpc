@@ -38,11 +38,10 @@ defmodule GRPC.Stub do
   You can refer to `call/6` for doc of your RPC functions.
   """
   alias GRPC.Channel
-  @insecure_scheme "http"
-  @secure_scheme "https"
+
+  @default_timeout 10_000
+
   @canceled_error GRPC.RPCError.exception(GRPC.Status.cancelled(), "The operation was cancelled")
-  # 10 seconds
-  @default_timeout 10000
 
   @type receive_data_return ::
           {:ok, struct()}
@@ -56,6 +55,8 @@ defmodule GRPC.Stub do
           | receive_data_return
 
   require Logger
+
+  alias GRPC.Client.Conn
 
   defmacro __using__(opts) do
     opts = Keyword.validate!(opts, [:service])
@@ -136,118 +137,7 @@ defmodule GRPC.Stub do
     # This works because we only accept `http` and `https` schemes (allowlisted below explicitly)
     # addresses like "localhost:1234" parse as if `localhost` is the scheme for URI, and this falls through to
     # the base case. Accepting only `http/https` is a trait of `connect/3`.
-
-    case URI.parse(addr) do
-      %URI{scheme: @secure_scheme, host: host, port: port} ->
-        opts = Keyword.put_new_lazy(opts, :cred, &default_ssl_option/0)
-        connect(host, port, opts)
-
-      %URI{scheme: @insecure_scheme, host: host, port: port} ->
-        if opts[:cred] do
-          raise ArgumentError, "invalid option for insecure (http) address: :cred"
-        end
-
-        connect(host, port, opts)
-
-      # For compatibility with previous versions, we accept URIs in
-      # the "#{address}:#{port}" format
-      _ ->
-        case String.split(addr, ":") do
-          [socket_path] ->
-            connect({:local, socket_path}, 0, opts)
-
-          [address, port] ->
-            port = String.to_integer(port)
-            connect(address, port, opts)
-        end
-    end
-  end
-
-  if {:module, CAStore} == Code.ensure_loaded(CAStore) do
-    defp default_ssl_option do
-      %GRPC.Credential{
-        ssl: [
-          verify: :verify_peer,
-          depth: 99,
-          cacert_file: CAStore.file_path()
-        ]
-      }
-    end
-  else
-    defp default_ssl_option do
-      raise """
-      no GRPC credentials provided. Please either:
-
-      - Pass the `:cred` option to `GRPC.Stub.connect/2,3`
-      - Add `:castore` to your list of dependencies in `mix.exs`
-      """
-    end
-  end
-
-  @spec connect(
-          String.t() | {:local, String.t()},
-          binary() | non_neg_integer(),
-          keyword()
-        ) :: {:ok, Channel.t()} | {:error, any()}
-  def connect(host, port, opts) when is_binary(port) do
-    connect(host, String.to_integer(port), opts)
-  end
-
-  def connect(host, port, opts) when is_integer(port) do
-    if Application.get_env(:grpc, :http2_client_adapter) do
-      raise "the :http2_client_adapter config key has been deprecated.\
-      The currently supported way is to configure it\
-      through the :adapter option for GRPC.Stub.connect/3"
-    end
-
-    opts =
-      Keyword.validate!(opts,
-        cred: nil,
-        adapter: GRPC.Client.Adapters.Gun,
-        adapter_opts: [],
-        interceptors: [],
-        codec: GRPC.Codec.Proto,
-        compressor: nil,
-        accepted_compressors: [],
-        headers: []
-      )
-
-    adapter = opts[:adapter]
-
-    cred = opts[:cred]
-    scheme = if cred, do: @secure_scheme, else: @insecure_scheme
-    interceptors = init_interceptors(opts[:interceptors])
-    codec = opts[:codec]
-    compressor = opts[:compressor]
-    accepted_compressors = opts[:accepted_compressors]
-    headers = opts[:headers]
-
-    accepted_compressors =
-      if compressor do
-        Enum.uniq([compressor | accepted_compressors])
-      else
-        accepted_compressors
-      end
-
-    adapter_opts = opts[:adapter_opts]
-
-    if not is_list(adapter_opts) do
-      raise ArgumentError, ":adapter_opts must be a keyword list if present"
-    end
-
-    %Channel{
-      host: host,
-      port: port,
-      scheme: scheme,
-      cred: cred,
-      adapter: adapter,
-      interceptors: interceptors,
-      codec: codec,
-      compressor: compressor,
-      accepted_compressors: accepted_compressors,
-      headers: headers
-    }
-    |> adapter.connect(adapter_opts)
+    Conn.connect(addr, opts)
   end
 
   def retry_timeout(curr) when curr < 11 do
@@ -263,19 +153,12 @@ defmodule GRPC.Stub do
     round(timeout + jitter * timeout)
   end
 
-  defp init_interceptors(interceptors) do
-    Enum.map(interceptors, fn
-      {interceptor, opts} -> {interceptor, interceptor.init(opts)}
-      interceptor -> {interceptor, interceptor.init([])}
-    end)
-  end
-
   @doc """
   Disconnects the adapter and frees any resources the adapter is consuming
   """
   @spec disconnect(Channel.t()) :: {:ok, Channel.t()} | {:error, any()}
-  def disconnect(%Channel{adapter: adapter} = channel) do
-    adapter.disconnect(channel)
+  def disconnect(%Channel{} = channel) do
+    Conn.disconnect(channel)
   end
 
   @doc false
@@ -299,7 +182,7 @@ defmodule GRPC.Stub do
   def call(_service_mod, rpc, %{channel: _channel} = stream, request, opts) do
     {_, {req_mod, req_stream}, {res_mod, response_stream}, _rpc_options} = rpc
 
-    {:ok, ch} = GRPC.Client.Conn.pick(opts)
+    {:ok, ch} = Conn.pick(opts)
     stream = %{stream | channel: ch, request_mod: req_mod, response_mod: res_mod}
 
     opts =
