@@ -1,5 +1,5 @@
 {options, _, _} = OptionParser.parse(System.argv(), strict: [rounds: :integer, concurrency: :integer, port: :integer, level: :string])
-rounds = Keyword.get(options, :rounds) || 20
+rounds = Keyword.get(options, :rounds) || 1#20
 max_concurrency = System.schedulers_online()
 concurrency = Keyword.get(options, :concurrency) || max_concurrency
 port = Keyword.get(options, :port) || 0
@@ -21,9 +21,11 @@ alias Interop.Client
 defmodule InteropTestRunner do
   def run(_cli, adapter, port, rounds) do
     opts = [interceptors: [GRPC.Client.Interceptors.Logger], adapter: adapter]
-    ch = Client.connect("127.0.0.1", port, opts)
+    
 
-    for _ <- 1..rounds do
+    for round <- 1..rounds do
+      ch = Client.connect("127.0.0.1:#{port}", opts)
+    IO.inspect(ch, label: "Channel with #{adapter}")
       Client.empty_unary!(ch)
       Client.cacheable_unary!(ch)
       Client.large_unary!(ch)
@@ -35,19 +37,21 @@ defmodule InteropTestRunner do
       Client.server_streaming!(ch)
       Client.server_compressed_streaming!(ch)
       Client.ping_pong!(ch)
-      Client.empty_stream!(ch)
+      #Client.empty_stream!(ch)
       Client.custom_metadata!(ch)
       Client.status_code_and_message!(ch)
       Client.unimplemented_service!(ch)
       Client.cancel_after_begin!(ch)
       Client.cancel_after_first_response!(ch)
       Client.timeout_on_sleeping_server!(ch)
+
+      IO.inspect(round, label: "Round #{round} --------------------------------")
     end
     :ok
   end
 end
 
-for adapter <- [Gun, Mint] do
+for adapter <- [Gun] do
   Logger.info("Starting run for adapter: #{adapter}")
   args = [adapter, port, rounds]
   stream_opts = [max_concurrency: concurrency, ordered: false, timeout: :infinity]

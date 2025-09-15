@@ -8,8 +8,8 @@ defmodule Interop.Client do
   # we suggest you to check the documentation for `GRPC.Stub.recv/2`
   # there is some unusual behavior that can be observed.
 
-  def connect(host, port, opts \\ []) do
-    {:ok, ch} = GRPC.Stub.connect(host, port, opts)
+  def connect(host, opts \\ []) do
+    {:ok, ch} = GRPC.Stub.connect(host, opts)
     ch
   end
 
@@ -72,17 +72,21 @@ defmodule Interop.Client do
       |> GRPC.Stub.send_request(
         %Grpc.Testing.StreamingInputCallRequest{payload: payload(27182)}
       )
+      |> IO.inspect(label: "Sent 1")
       |> GRPC.Stub.send_request(%Grpc.Testing.StreamingInputCallRequest{payload: payload(8)})
+      |> IO.inspect(label: "Sent 2")
       |> GRPC.Stub.send_request(
         %Grpc.Testing.StreamingInputCallRequest{payload: payload(1828)}
       )
+      |> IO.inspect(label: "Sent 3")
       |> GRPC.Stub.send_request(
         %Grpc.Testing.StreamingInputCallRequest{payload: payload(45904)},
         end_stream: true
       )
+      |> IO.inspect(label: "Sent 4")
 
     reply = %Grpc.Testing.StreamingInputCallResponse{aggregated_payload_size: 74922}
-    {:ok, ^reply} = GRPC.Stub.recv(stream)
+    {:ok, ^reply} = GRPC.Stub.recv(stream) |> IO.inspect(label: "Received")
   end
 
   def client_compressed_streaming!(ch) do
