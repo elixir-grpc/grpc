@@ -9,7 +9,7 @@ defmodule GRPC.Client.Resolver.UnixTest do
     assert {:ok, %{addresses: addresses, service_config: nil}} = Unix.resolve(target)
 
     assert addresses == [
-             %{address: "/var/run/my.sock", port: nil, socket: :unix}
+             %{address: {:local, "/var/run/my.sock"}, port: 0, socket: :unix}
            ]
   end
 
@@ -19,7 +19,7 @@ defmodule GRPC.Client.Resolver.UnixTest do
     assert {:ok, %{addresses: addresses, service_config: nil}} = Unix.resolve(target)
 
     assert addresses == [
-             %{address: "/tmp/test.sock", port: nil, socket: :unix}
+             %{address: {:local, "/tmp/test.sock"}, port: 0, socket: :unix}
            ]
   end
 end
