@@ -32,7 +32,7 @@ defmodule Interop.Server do
     end
 
     payload = %Grpc.Testing.Payload{body: String.duplicate(<<0>>, req.response_size)}
-    %Grpc.Testing.SimpleResponse{payload: payload} |> IO.inspect(label: "Response")
+    %Grpc.Testing.SimpleResponse{payload: payload}
   end
 
   def streaming_input_call(req_enum, _stream) do

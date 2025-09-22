@@ -8,8 +8,12 @@ defmodule GRPC.Client.Conn do
   use GenServer
   alias GRPC.Channel
 
+  require Logger
+
   @insecure_scheme "http"
   @secure_scheme "https"
+
+  @lb_state_key {__MODULE__, :lb_state}
 
   @type t :: %__MODULE__{
           virtual_channel: Channel.t(),
@@ -35,46 +39,64 @@ defmodule GRPC.Client.Conn do
   """
   @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(target, opts \\ []) do
-    case GenServer.whereis(__MODULE__) do
-      nil ->
-        initial_state = build_initial_state(target, opts)
+    ref = make_ref()
+    initial_state = build_initial_state(target, Keyword.merge(opts, ref: ref))
+    ch = initial_state.virtual_channel
 
-        case GenServer.start_link(__MODULE__, initial_state, name: __MODULE__) do
+    case GenServer.whereis(via(ref)) do
+      nil ->
+        # start the orchestration server, register by name
+        case GenServer.start_link(__MODULE__, initial_state, name: via(ref)) do
           {:ok, _pid} ->
-            {:ok, initial_state.virtual_channel}
+            # only now persist the chosen channel (which should already have adapter_payload
+            # because build_initial_state connected real channels and set virtual_channel)
+            :persistent_term.put({__MODULE__, :lb_state, ref}, ch)
+            {:ok, ch}
 
           {:error, {:already_started, pid}} ->
-            # Race condition between whereis and start_link
-            {:ok, GenServer.call(pid, :get_channel)}
+            # race: someone else started it first, ask the running process for its current channel
+            if is_pid(pid) do
+              {:ok, ch}
+            end
 
           {:error, reason} ->
             {:error, reason}
         end
 
-      pid ->
-        {:ok, GenServer.call(pid, :get_channel)}
+      pid when is_pid(pid) ->
+        case pick(opts) do
+          {:ok, %Channel{} = channel} ->
+            {:ok, channel}
+
+          _ ->
+            {:error, :no_connection}
+        end
     end
   end
 
   @spec disconnect(Channel.t()) :: {:ok, Channel.t()} | {:error, any()}
-  def disconnect(%Channel{} = channel) do
-    GenServer.call(__MODULE__, {:disconnect, channel})
+  def disconnect(%Channel{ref: ref} = channel) do
+    GenServer.call(via(ref), {:disconnect, channel})
   end
 
   @doc """
   Pick a connection channel according to the current LB policy.
   """
-  @spec pick(keyword()) :: {:ok, Channel.t()} | {:error, term()}
-  def pick(opts \\ []) do
-    GenServer.call(__MODULE__, {:pick, opts})
+  @spec pick(Channel.t(), keyword()) :: {:ok, Channel.t()} | {:error, term()}
+  def pick(%Channel{ref: ref} = _channel, _opts \\ []) do
+    case :persistent_term.get({__MODULE__, :lb_state, ref}, nil) do
+      nil ->
+        {:error, :no_connection}
+
+      %Channel{} = channel ->
+        {:ok, channel}
+    end
   end
 
   @impl true
-  def init(%__MODULE__{} = state), do: {:ok, state}
-
-  @impl true
-  def handle_call(:get_channel, _from, %{virtual_channel: ch} = state) do
-    {:reply, ch, state}
+  def init(%__MODULE__{} = state) do
+    Process.flag(:trap_exit, true)
+    {:ok, state}
   end
 
   @impl true
@@ -100,23 +122,54 @@ defmodule GRPC.Client.Conn do
   end
 
   @impl true
-  def handle_call(
-        {:pick, _opts},
-        _from,
+  def handle_info(
+        {:refresh, opts},
         %{lb_mod: lb_mod, lb_state: lb_state, real_channels: channels} = state
       ) do
+    # TODO: Real logic need to be implemented
+    Logger.info("Picking a channel. Caller process: #{inspect(self())}")
+
     {:ok, {prefer_host, prefer_port}, new_lb_state} = lb_mod.pick(lb_state)
 
     channel_key = "#{inspect(prefer_host)}:#{prefer_port}"
     channel = Map.get(channels, channel_key)
+    :persistent_term.put(@lb_state_key, {:ok, channel})
 
-    {:reply, {:ok, channel}, %{state | lb_state: new_lb_state}}
+    Process.send_after(self(), {:refresh, opts}, 5000)
+    {:noreply, %{state | lb_state: new_lb_state, virtual_channel: channel}}
+  end
+
+  def handle_info(:stop, state) do
+    Logger.info("#{inspect(__MODULE__)} stopping as requested")
+    {:stop, :normal, state}
+  end
+
+  def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
+    Logger.warning(
+      "#{inspect(__MODULE__)} received :DOWN from #{inspect(pid)} with reason: #{inspect(reason)}"
+    )
+
+    {:noreply, state}
+  end
+
+  def handle_info(msg, state) do
+    Logger.warning("#{inspect(__MODULE__)} received unexpected message: #{inspect(msg)}")
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def terminate(_reason, _state), do: :ok
+
+  defp via(ref) do
+    {:global, {__MODULE__, ref}}
   end
 
   defp build_initial_state(target, opts) do
     opts =
       Keyword.validate!(opts,
         cred: nil,
+        ref: nil,
         adapter: GRPC.Client.Adapters.Gun,
         adapter_opts: [],
         interceptors: [],
@@ -165,6 +218,7 @@ defmodule GRPC.Client.Conn do
     virtual_channel = %Channel{
       scheme: scheme,
       cred: cred,
+      ref: opts[:ref],
       adapter: adapter,
       interceptors: intialized_interceptors,
       codec: codec,

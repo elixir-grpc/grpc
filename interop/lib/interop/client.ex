@@ -72,21 +72,17 @@ defmodule Interop.Client do
       |> GRPC.Stub.send_request(
         %Grpc.Testing.StreamingInputCallRequest{payload: payload(27182)}
       )
-      |> IO.inspect(label: "Sent 1")
       |> GRPC.Stub.send_request(%Grpc.Testing.StreamingInputCallRequest{payload: payload(8)})
-      |> IO.inspect(label: "Sent 2")
       |> GRPC.Stub.send_request(
         %Grpc.Testing.StreamingInputCallRequest{payload: payload(1828)}
       )
-      |> IO.inspect(label: "Sent 3")
       |> GRPC.Stub.send_request(
         %Grpc.Testing.StreamingInputCallRequest{payload: payload(45904)},
         end_stream: true
       )
-      |> IO.inspect(label: "Sent 4")
 
     reply = %Grpc.Testing.StreamingInputCallResponse{aggregated_payload_size: 74922}
-    {:ok, ^reply} = GRPC.Stub.recv(stream) |> IO.inspect(label: "Received")
+    {:ok, ^reply} = GRPC.Stub.recv(stream)
   end
 
   def client_compressed_streaming!(ch) do

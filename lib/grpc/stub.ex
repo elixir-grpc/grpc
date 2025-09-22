@@ -203,10 +203,28 @@ defmodule GRPC.Stub do
   #    * `:return_headers` - default is false. When it's true, a three elem tuple will be returned
   #      with the last elem being a map of headers `%{headers: headers, trailers: trailers}`(unary) or
   #      `%{headers: headers}`(server streaming)
-  def call(_service_mod, rpc, %{channel: _channel} = stream, request, opts) do
+  def call(_service_mod, rpc, %{channel: channel} = stream, request, opts) do
     {_, {req_mod, req_stream}, {res_mod, response_stream}, _rpc_options} = rpc
 
-    {:ok, ch} = Conn.pick(opts)
+    ch =
+      case Conn.pick(channel, opts) do
+        {:ok, ch} ->
+          if Process.alive?(ch.adapter_payload.conn_pid) do
+            ch
+          else
+            Logger.warning(
+              "The connection process #{inspect(ch.adapter_payload.conn_pid)} is not alive, " <>
+                "please create a new channel via GRPC.Stub.connect/2"
+            )
+
+            channel
+          end
+
+        _ ->
+          # fallback to the channel in the stream
+          channel
+      end
+
     stream = %{stream | channel: ch, request_mod: req_mod, response_mod: res_mod}
 
     opts =
