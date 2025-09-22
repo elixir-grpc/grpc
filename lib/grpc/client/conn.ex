@@ -1,9 +1,76 @@
 defmodule GRPC.Client.Conn do
   @moduledoc """
-  Connection manager for gRPC client with optional load balancing support.
+  Connection manager for gRPC client channels, with optional **load balancing**
+  and **name resolution** support.
 
-  This process is registered globally under its module name (`__MODULE__`),
-  so only one connection orchestrator exists per BEAM node.
+  A `Conn` process manages one or more underlying gRPC connections
+  (`GRPC.Channel` structs) and exposes a **virtual channel** to be used by
+  client stubs. The orchestration process runs as a `GenServer` registered
+  globally (via `:global`), so only one orchestrator exists **per connection**
+  in a BEAM node.
+
+  ## Overview
+
+  * `connect/2` – establishes a client connection (single or multi-channel).
+  * `pick/2` – chooses a channel according to the active load-balancing policy.
+  * `disconnect/1` – gracefully closes a connection and frees resources.
+
+  Under the hood:
+
+  * The target string is resolved using a [Resolver](GRPC.Client.Resolver).
+  * Depending on the target and service config, a load-balancing module is chosen
+    (e.g. `PickFirst`, `RoundRobin`).
+  * The orchestrator periodically refreshes the LB decision to adapt to changes.
+
+  ## Target syntax
+
+  The `target` argument to `connect/2` accepts URI-like strings that are resolved
+  via the configured `Resolver` (default `GRPC.Client.Resolver`).
+
+  Examples of supported formats:
+
+    * `"dns://example.com:50051"`
+    * `"ipv4:10.0.0.5:50051"`
+    * `"unix:/tmp/my.sock"`
+    * `"xds:///my-service"`
+    * `"127.0.0.1:50051"` (implicit DNS / fallback to IPv4)
+
+  See [`GRPC.Client.Resolver`](GRPC.Client.Resolver) for the full specification.
+
+  ## Examples
+
+  ### Basic connect and RPC
+
+      iex> opts = [adapter: GRPC.Client.Adapters.Gun]
+      iex> {:ok, ch} = GRPC.Client.Conn.connect("127.0.0.1:50051", opts)
+      iex> req = %Grpc.Testing.SimpleRequest{response_size: 42}
+      iex> {:ok, resp} = Grpc.Testing.TestService.Stub.unary_call(ch, req)
+      iex> resp.response_size
+      42
+
+  ### Using interceptors and custom adapter
+
+      iex> opts = [interceptors: [GRPC.Client.Interceptors.Logger],
+      ...>         adapter: GRPC.Client.Adapters.Mint]
+      iex> {:ok, ch} = GRPC.Client.Conn.connect("dns://my-service.local:50051", opts)
+      iex> {:ok, channel} = GRPC.Client.Conn.pick(ch)
+      iex> channel.host
+      "127.0.0.1"
+
+  ### Unix socket target
+
+      iex> {:ok, ch} = GRPC.Client.Conn.connect("unix:/tmp/service.sock")
+      iex> Grpc.Testing.TestService.Stub.empty_call(ch, %{})
+
+  ### Disconnect
+
+      iex> {:ok, ch} = GRPC.Client.Conn.connect("127.0.0.1:50051")
+      iex> GRPC.Client.Conn.disconnect(ch)
+      {:ok, %GRPC.Channel{...}}
+
+  ## Notes
+
+    * The orchestrator refreshes the LB pick every 15 seconds.
   """
   use GenServer
   alias GRPC.Channel
@@ -31,10 +98,31 @@ defmodule GRPC.Client.Conn do
             adapter: GRPC.Client.Adapters.Gun
 
   @doc """
-  Connect to a server or set of servers.
+  Establishes a new client connection to a gRPC server or set of servers.
 
-  If a load balancing policy is configured (via resolver or `:lb_policy`),
-  the connection orchestrator will manage multiple channels internally.
+  The `target` string determines how the endpoints are resolved
+  (see [Resolver](GRPC.Client.Resolver)).
+
+  Options:
+
+    * `:adapter` – transport adapter module (default: `GRPC.Client.Adapters.Gun`)
+    * `:adapter_opts` – options passed to the adapter
+    * `:resolver` – resolver module (default: `GRPC.Client.Resolver`)
+    * `:lb_policy` – load-balancing policy (`:pick_first`, `:round_robin`)
+    * `:interceptors` – list of client interceptors
+    * `:codec` – request/response codec (default: `GRPC.Codec.Proto`)
+    * `:compressor` / `:accepted_compressors` – message compression
+    * `:headers` – default metadata headers
+
+  Returns:
+
+    * `{:ok, channel}` – a `GRPC.Channel` usable with stubs
+    * `{:error, reason}` – if connection fails
+
+  ## Examples
+
+      iex> {:ok, ch} = GRPC.Client.Conn.connect("127.0.0.1:50051")
+      iex> Grpc.Testing.TestService.Stub.empty_call(ch, %{})
   """
   @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(target, opts \\ []) do
@@ -73,13 +161,42 @@ defmodule GRPC.Client.Conn do
     end
   end
 
+  @doc """
+  Disconnects a channel previously returned by `connect/2`.
+
+  This will close all underlying real connections for the orchestrator
+  and stop its process.
+
+  Returns `{:ok, channel}` on success.
+
+  ## Example
+
+      iex> {:ok, ch} = GRPC.Client.Conn.connect("127.0.0.1:50051")
+      iex> GRPC.Client.Conn.disconnect(ch)
+      {:ok, %GRPC.Channel{}}
+  """
   @spec disconnect(Channel.t()) :: {:ok, Channel.t()} | {:error, any()}
   def disconnect(%Channel{ref: ref} = channel) do
     GenServer.call(via(ref), {:disconnect, channel})
   end
 
   @doc """
-  Pick a connection channel according to the current LB policy.
+  Picks a channel from the orchestrator according to the active
+  load-balancing policy.
+
+  Normally, you don’t need to call `pick/2` directly – client stubs do this
+  automatically – but it can be useful when debugging or testing.
+
+  Returns:
+
+    * `{:ok, channel}` – the chosen `GRPC.Channel`
+    * `{:error, :no_connection}` – if the orchestrator is not available
+
+  ## Example
+
+      iex> {:ok, ch} = GRPC.Client.Conn.connect("dns://my-service.local:50051")
+      iex> GRPC.Client.Conn.pick(ch)
+      {:ok, %GRPC.Channel{host: "192.168.1.1", port: 50051}}
   """
   @spec pick(Channel.t(), keyword()) :: {:ok, Channel.t()} | {:error, term()}
   def pick(%Channel{ref: ref} = _channel, _opts \\ []) do
