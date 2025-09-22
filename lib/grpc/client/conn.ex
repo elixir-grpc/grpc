@@ -12,8 +12,7 @@ defmodule GRPC.Client.Conn do
 
   @insecure_scheme "http"
   @secure_scheme "https"
-
-  @lb_state_key {__MODULE__, :lb_state}
+  @refresh_interval 15_000
 
   @type t :: %__MODULE__{
           virtual_channel: Channel.t(),
@@ -96,6 +95,7 @@ defmodule GRPC.Client.Conn do
   @impl true
   def init(%__MODULE__{} = state) do
     Process.flag(:trap_exit, true)
+    Process.send_after(self(), :refresh, @refresh_interval)
     {:ok, state}
   end
 
@@ -123,20 +123,30 @@ defmodule GRPC.Client.Conn do
 
   @impl true
   def handle_info(
-        {:refresh, opts},
-        %{lb_mod: lb_mod, lb_state: lb_state, real_channels: channels} = state
+        :refresh,
+        %{lb_mod: lb_mod, lb_state: lb_state, real_channels: channels, virtual_channel: vc} =
+          state
       ) do
-    # TODO: Real logic need to be implemented
-    Logger.info("Picking a channel. Caller process: #{inspect(self())}")
+    Logger.debug("refreshing LB pick, caller=#{inspect(self())}")
 
     {:ok, {prefer_host, prefer_port}, new_lb_state} = lb_mod.pick(lb_state)
 
     channel_key = "#{inspect(prefer_host)}:#{prefer_port}"
-    channel = Map.get(channels, channel_key)
-    :persistent_term.put(@lb_state_key, {:ok, channel})
 
-    Process.send_after(self(), {:refresh, opts}, 5000)
-    {:noreply, %{state | lb_state: new_lb_state, virtual_channel: channel}}
+    case Map.get(channels, channel_key) do
+      nil ->
+        Logger.warning("LB picked #{channel_key}, but no channel found in pool")
+
+        Process.send_after(self(), :refresh, @refresh_interval)
+        {:noreply, %{state | lb_state: new_lb_state}}
+
+      %Channel{} = picked_channel ->
+        :persistent_term.put({__MODULE__, :lb_state, vc.ref}, picked_channel)
+
+        Process.send_after(self(), :refresh, @refresh_interval)
+
+        {:noreply, %{state | lb_state: new_lb_state, virtual_channel: picked_channel}}
+    end
   end
 
   def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
