@@ -115,9 +115,9 @@ defmodule GRPC.Client.Conn do
           if Map.has_key?(acc, key), do: Map.delete(acc, key), else: acc
         end)
 
-      {:reply, resp, new_state}
+      {:reply, resp, new_state, {:continue, :stop}}
     else
-      {:reply, resp, state}
+      {:reply, resp, state, {:continue, :stop}}
     end
   end
 
@@ -139,11 +139,6 @@ defmodule GRPC.Client.Conn do
     {:noreply, %{state | lb_state: new_lb_state, virtual_channel: channel}}
   end
 
-  def handle_info(:stop, state) do
-    Logger.info("#{inspect(__MODULE__)} stopping as requested")
-    {:stop, :normal, state}
-  end
-
   def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
     Logger.warning(
       "#{inspect(__MODULE__)} received :DOWN from #{inspect(pid)} with reason: #{inspect(reason)}"
@@ -156,6 +151,12 @@ defmodule GRPC.Client.Conn do
     Logger.warning("#{inspect(__MODULE__)} received unexpected message: #{inspect(msg)}")
 
     {:noreply, state}
+  end
+
+  @impl true
+  def handle_continue(:stop, state) do
+    Logger.info("#{inspect(__MODULE__)} stopping as requested")
+    {:stop, :normal, state}
   end
 
   @impl true
