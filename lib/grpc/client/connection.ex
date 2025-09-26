@@ -226,11 +226,7 @@ defmodule GRPC.Client.Connection do
       end)
 
       keys_to_delete = [:real_channels, :virtual_channel]
-
-      new_state =
-        Enum.reduce(keys_to_delete, state, fn key, acc ->
-          if Map.has_key?(acc, key), do: Map.delete(acc, key), else: acc
-        end)
+      new_state = Map.drop(state, keys_to_delete)
 
       {:reply, resp, new_state, {:continue, :stop}}
     else
@@ -365,7 +361,7 @@ defmodule GRPC.Client.Connection do
       {:ok, %{addresses: addresses, service_config: config}} ->
         lb_policy =
           cond do
-            is_map(config) && Map.has_key?(config, :load_balancing_policy) ->
+            is_map(config) and Map.has_key?(config, :load_balancing_policy) ->
               config.load_balancing_policy
 
             lb_policy_opt ->
@@ -469,7 +465,7 @@ defmodule GRPC.Client.Connection do
   end
 
   defp split_host_port(target) do
-    case String.split(target, ":") do
+    case String.split(target, ":", trim: true) do
       [h, p] -> {h, String.to_integer(p)}
       [h] -> {h, default_port()}
     end
