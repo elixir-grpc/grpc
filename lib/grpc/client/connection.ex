@@ -156,7 +156,7 @@ defmodule GRPC.Client.Connection do
         end
 
       pid ->
-        case pick(opts) do
+        case pick_channel(opts) do
           {:ok, %Channel{} = channel} ->
             {:ok, channel}
 

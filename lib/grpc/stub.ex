@@ -133,7 +133,7 @@ defmodule GRPC.Stub do
   """
   @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(addr, opts \\ []) when is_binary(addr) and is_list(opts) do
-    Conn.connect(addr, opts)
+    Connection.connect(addr, opts)
   end
 
   @deprecated "Use connect/2 instead"
@@ -181,7 +181,7 @@ defmodule GRPC.Stub do
   """
   @spec disconnect(Channel.t()) :: {:ok, Channel.t()} | {:error, any()}
   def disconnect(%Channel{} = channel) do
-    Conn.disconnect(channel)
+    Connection.disconnect(channel)
   end
 
   @doc false
