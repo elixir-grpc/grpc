@@ -1,4 +1,4 @@
-defmodule GRPC.Client.Connectionection do
+defmodule GRPC.Client.Connection do
   @moduledoc """
   Connection manager for gRPC client channels, with optional **load balancing**
   and **name resolution** support.
@@ -199,7 +199,7 @@ defmodule GRPC.Client.Connectionection do
       {:ok, %GRPC.Channel{host: "192.168.1.1", port: 50051}}
   """
   @spec pick(Channel.t(), keyword()) :: {:ok, Channel.t()} | {:error, term()}
-  def pick(%Channel{ref: ref} = _channel, _opts \\ []) do
+  def pick_channel(%Channel{ref: ref} = _channel, _opts \\ []) do
     case :persistent_term.get({__MODULE__, :lb_state, ref}, nil) do
       nil ->
         {:error, :no_connection}
