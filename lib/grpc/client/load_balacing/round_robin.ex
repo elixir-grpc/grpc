@@ -8,7 +8,7 @@ defmodule GRPC.Client.LoadBalancing.RoundRobin do
     if addresses == [] do
       {:error, :no_addresses}
     else
-      {:ok, %{addresses: addresses, index: 0}}
+      {:ok, %{addresses: addresses, index: 0, n: length(addresses)}}
     end
   end
 
