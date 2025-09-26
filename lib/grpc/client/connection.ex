@@ -361,7 +361,7 @@ defmodule GRPC.Client.Connection do
       {:ok, %{addresses: addresses, service_config: config}} ->
         lb_policy =
           cond do
-            is_map(config) && Map.has_key?(config, :load_balancing_policy) ->
+            is_map(config) and Map.has_key?(config, :load_balancing_policy) ->
               config.load_balancing_policy
 
             lb_policy_opt ->
