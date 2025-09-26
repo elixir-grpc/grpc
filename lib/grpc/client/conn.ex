@@ -199,7 +199,7 @@ defmodule GRPC.Client.Connection do
       {:ok, %GRPC.Channel{host: "192.168.1.1", port: 50051}}
   """
   @spec pick(Channel.t(), keyword()) :: {:ok, Channel.t()} | {:error, term()}
-  def pick(%Channel{ref: ref} = _channel, _opts \\ []) do
+  def pick_channel(%Channel{ref: ref} = _channel, _opts \\ []) do
     case :persistent_term.get({__MODULE__, :lb_state, ref}, nil) do
       nil ->
         {:error, :no_connection}
