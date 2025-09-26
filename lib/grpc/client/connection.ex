@@ -226,11 +226,7 @@ defmodule GRPC.Client.Connection do
       end)
 
       keys_to_delete = [:real_channels, :virtual_channel]
-
-      new_state =
-        Enum.reduce(keys_to_delete, state, fn key, acc ->
-          if Map.has_key?(acc, key), do: Map.delete(acc, key), else: acc
-        end)
+      new_state = Map.drop(state, keys_to_delete)
 
       {:reply, resp, new_state, {:continue, :stop}}
     else
