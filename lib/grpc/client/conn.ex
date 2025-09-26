@@ -1,4 +1,4 @@
-defmodule GRPC.Client.Conn do
+defmodule GRPC.Client.Connection do
   @moduledoc """
   Connection manager for gRPC client channels, with optional **load balancing**
   and **name resolution** support.
