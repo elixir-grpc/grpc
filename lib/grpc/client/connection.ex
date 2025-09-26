@@ -97,6 +97,13 @@ defmodule GRPC.Client.Connection do
             resolver: nil,
             adapter: GRPC.Client.Adapters.Gun
 
+  @impl GenServer
+  def init(%__MODULE__{} = state) do
+    Process.flag(:trap_exit, true)
+    Process.send_after(self(), :refresh, @refresh_interval)
+    {:ok, state}
+  end
+
   @doc """
   Establishes a new client connection to a gRPC server or set of servers.
 
@@ -209,14 +216,7 @@ defmodule GRPC.Client.Connection do
     end
   end
 
-  @impl true
-  def init(%__MODULE__{} = state) do
-    Process.flag(:trap_exit, true)
-    Process.send_after(self(), :refresh, @refresh_interval)
-    {:ok, state}
-  end
-
-  @impl true
+  @impl GenServer
   def handle_call({:disconnect, %Channel{adapter: adapter} = channel}, _from, state) do
     resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
 
@@ -238,7 +238,7 @@ defmodule GRPC.Client.Connection do
     end
   end
 
-  @impl true
+  @impl GenServer
   def handle_info(
         :refresh,
         %{lb_mod: lb_mod, lb_state: lb_state, real_channels: channels, virtual_channel: vc} =
@@ -280,13 +280,13 @@ defmodule GRPC.Client.Connection do
     {:noreply, state}
   end
 
-  @impl true
+  @impl GenServer
   def handle_continue(:stop, state) do
     Logger.info("#{inspect(__MODULE__)} stopping as requested")
     {:stop, :normal, state}
   end
 
-  @impl true
+  @impl GenServer
   def terminate(_reason, _state), do: :ok
 
   defp via(ref) do
