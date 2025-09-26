@@ -48,11 +48,11 @@ defmodule GRPC.Client.Resolver.IPv6 do
     addresses =
       String.split(addresses_str, ",")
       |> Enum.map(fn entry ->
-        case Regex.run(~r/\[(?<ip>.*?)\](?::(?<port>\d+))?/, entry) do
-          [_, ip, port] ->
+        case Regex.run(~r/\[([^\])+)\](?:(\d+))?/, entry, capture: :all_but_first) do
+          [ip, port] ->
             %{address: ip, port: String.to_integer(port)}
 
-          [_, ip] ->
+          [ip] ->
             %{address: ip, port: 443}
 
           _ ->
