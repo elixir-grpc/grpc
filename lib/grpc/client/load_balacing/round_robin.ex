@@ -13,12 +13,10 @@ defmodule GRPC.Client.LoadBalancing.RoundRobin do
   end
 
   @impl true
-  def pick(%{addresses: addresses, index: idx} = state) do
-    count = length(addresses)
-    next_idx = rem(idx, count)
-    %{address: host, port: port} = Enum.at(addresses, next_idx)
+  def pick(%{addresses: addresses, index: idx, n: n} = state) do
+    %{address: host, port: port} = Enum.fetch!(addresses, idx)
 
-    new_state = %{state | index: idx + 1}
+    new_state = %{state | index: rem(idx + 1, n)}
     {:ok, {host, port}, new_state}
   end
 end
