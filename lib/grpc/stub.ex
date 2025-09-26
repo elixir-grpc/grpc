@@ -56,7 +56,7 @@ defmodule GRPC.Stub do
 
   require Logger
 
-  alias GRPC.Client.Conn
+  alias GRPC.Client.Connection
 
   defmacro __using__(opts) do
     opts = Keyword.validate!(opts, [:service])

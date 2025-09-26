@@ -1,4 +1,4 @@
-defmodule GRPC.Client.Conn do
+defmodule GRPC.Client.Connectionection do
   @moduledoc """
   Connection manager for gRPC client channels, with optional **load balancing**
   and **name resolution** support.
@@ -42,7 +42,7 @@ defmodule GRPC.Client.Conn do
   ### Basic connect and RPC
 
       iex> opts = [adapter: GRPC.Client.Adapters.Gun]
-      iex> {:ok, ch} = GRPC.Client.Conn.connect("127.0.0.1:50051", opts)
+      iex> {:ok, ch} = GRPC.Client.Connection.connect("127.0.0.1:50051", opts)
       iex> req = %Grpc.Testing.SimpleRequest{response_size: 42}
       iex> {:ok, resp} = Grpc.Testing.TestService.Stub.unary_call(ch, req)
       iex> resp.response_size
@@ -52,20 +52,20 @@ defmodule GRPC.Client.Conn do
 
       iex> opts = [interceptors: [GRPC.Client.Interceptors.Logger],
       ...>         adapter: GRPC.Client.Adapters.Mint]
-      iex> {:ok, ch} = GRPC.Client.Conn.connect("dns://my-service.local:50051", opts)
-      iex> {:ok, channel} = GRPC.Client.Conn.pick(ch)
+      iex> {:ok, ch} = GRPC.Client.Connection.connect("dns://my-service.local:50051", opts)
+      iex> {:ok, channel} = GRPC.Client.Connection.pick(ch)
       iex> channel.host
       "127.0.0.1"
 
   ### Unix socket target
 
-      iex> {:ok, ch} = GRPC.Client.Conn.connect("unix:/tmp/service.sock")
+      iex> {:ok, ch} = GRPC.Client.Connection.connect("unix:/tmp/service.sock")
       iex> Grpc.Testing.TestService.Stub.empty_call(ch, %{})
 
   ### Disconnect
 
-      iex> {:ok, ch} = GRPC.Client.Conn.connect("127.0.0.1:50051")
-      iex> GRPC.Client.Conn.disconnect(ch)
+      iex> {:ok, ch} = GRPC.Client.Connection.connect("127.0.0.1:50051")
+      iex> GRPC.Client.Connection.disconnect(ch)
       {:ok, %GRPC.Channel{...}}
 
   ## Notes
@@ -121,7 +121,7 @@ defmodule GRPC.Client.Conn do
 
   ## Examples
 
-      iex> {:ok, ch} = GRPC.Client.Conn.connect("127.0.0.1:50051")
+      iex> {:ok, ch} = GRPC.Client.Connection.connect("127.0.0.1:50051")
       iex> Grpc.Testing.TestService.Stub.empty_call(ch, %{})
   """
   @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
@@ -150,7 +150,7 @@ defmodule GRPC.Client.Conn do
             {:error, reason}
         end
 
-      pid when is_pid(pid) ->
+      pid ->
         case pick(opts) do
           {:ok, %Channel{} = channel} ->
             {:ok, channel}
@@ -171,8 +171,8 @@ defmodule GRPC.Client.Conn do
 
   ## Example
 
-      iex> {:ok, ch} = GRPC.Client.Conn.connect("127.0.0.1:50051")
-      iex> GRPC.Client.Conn.disconnect(ch)
+      iex> {:ok, ch} = GRPC.Client.Connection.connect("127.0.0.1:50051")
+      iex> GRPC.Client.Connection.disconnect(ch)
       {:ok, %GRPC.Channel{}}
   """
   @spec disconnect(Channel.t()) :: {:ok, Channel.t()} | {:error, any()}
@@ -194,8 +194,8 @@ defmodule GRPC.Client.Conn do
 
   ## Example
 
-      iex> {:ok, ch} = GRPC.Client.Conn.connect("dns://my-service.local:50051")
-      iex> GRPC.Client.Conn.pick(ch)
+      iex> {:ok, ch} = GRPC.Client.Connection.connect("dns://my-service.local:50051")
+      iex> GRPC.Client.Connection.pick(ch)
       {:ok, %GRPC.Channel{host: "192.168.1.1", port: 50051}}
   """
   @spec pick(Channel.t(), keyword()) :: {:ok, Channel.t()} | {:error, term()}
