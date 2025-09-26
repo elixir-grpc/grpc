@@ -18,34 +18,45 @@ defmodule GRPC.Client.Resolver.DNS do
     host = uri.host || target
     port = uri.port || 50051
 
-    case adapter().lookup(host, :a) do
-      {:ok, addresses} ->
-        addrs =
-          Enum.map(addresses, fn ip ->
-            %{address: ip |> :inet.ntoa() |> to_string(), port: port}
-          end)
+    with {:ok, addresses} <- lookup_addresses(host),
+         {:ok, txt_records} <- lookup_service_config(host) do
+      addrs = Enum.map(addresses, &%{address: :inet.ntoa(&1) |> to_string(), port: port})
+      service_config_json = extract_service_config(txt_records)
 
-        case adapter().lookup(~c"_grpc_config." ++ host, :txt) do
-          {:ok, txt_records} ->
-            service_config_json =
-              txt_records
-              |> Enum.map(&List.to_string/1)
-              |> Enum.find_value(fn str ->
-                case String.split(str, "grpc_config=") do
-                  [_, json] -> json
-                  _ -> nil
-                end
-              end)
-
-            {:ok, %{addresses: addrs, service_config: ServiceConfig.parse(service_config_json)}}
-
-          _ ->
-            {:ok, %{addresses: addrs, service_config: nil}}
-        end
-
+      {:ok, %{addresses: addrs, service_config: ServiceConfig.parse(service_config_json)}}
+    else
       {:error, reason} ->
         {:error, {:dns_error, reason}}
+
+      :no_config ->
+        {:ok,
+         %{
+           addresses: Enum.map(addresses, &%{address: :inet.ntoa(&1) |> to_string(), port: port}),
+           service_config: nil
+         }}
     end
+  end
+
+  defp lookup_addresses(host) do
+    adapter().lookup(host, :a)
+  end
+
+  defp lookup_service_config(host) do
+    case adapter().lookup(~c"_grpc_config." ++ host, :txt) do
+      {:ok, txt_records} -> {:ok, txt_records}
+      _ -> :no_config
+    end
+  end
+
+  defp extract_service_config(txt_records) do
+    Enum.find_value(txt_records, fn txt ->
+      str = List.to_string(txt)
+
+      case String.split(str, "grpc_config=") do
+        [_, json] -> json
+        _ -> nil
+      end
+    end)
   end
 
   defp adapter() do
