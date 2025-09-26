@@ -50,8 +50,13 @@ defmodule InteropTestRunner do
   end
 end
 
+{:ok, _pid} =
+  DynamicSupervisor.start_link(
+    strategy: :one_for_one,
+    name: GRPC.Client.Supervisor
+  )
+
 for adapter <- [Gun, Mint] do
-  opts = [interceptors: [GRPC.Client.Interceptors.Logger], adapter: adapter]
   Logger.info("Starting run for adapter: #{adapter}")
   args = [adapter, port, rounds]
   stream_opts = [max_concurrency: concurrency, ordered: false, timeout: :infinity]

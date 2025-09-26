@@ -97,9 +97,29 @@ defmodule GRPC.Client.Connection do
             resolver: nil,
             adapter: GRPC.Client.Adapters.Gun
 
+  def child_spec(initial_state) do
+    %{
+      id: {__MODULE__, initial_state.virtual_channel.ref},
+      start:
+        {GenServer, :start_link,
+         [__MODULE__, initial_state, [name: via(initial_state.virtual_channel.ref)]]},
+      restart: :transient,
+      type: :worker,
+      shutdown: 5000
+    }
+  end
+
   @impl GenServer
   def init(%__MODULE__{} = state) do
     Process.flag(:trap_exit, true)
+
+    # only now persist the chosen channel (which should already have adapter_payload
+    # because build_initial_state connected real channels and set virtual_channel)
+    :persistent_term.put(
+      {__MODULE__, :lb_state, state.virtual_channel.ref},
+      state.virtual_channel
+    )
+
     Process.send_after(self(), :refresh, @refresh_interval)
     {:ok, state}
   end
@@ -137,25 +157,12 @@ defmodule GRPC.Client.Connection do
     initial_state = build_initial_state(target, Keyword.merge(opts, ref: ref))
     ch = initial_state.virtual_channel
 
-    case GenServer.whereis(via(ref)) do
-      nil ->
-        # start the orchestration server, register by name
-        case GenServer.start_link(__MODULE__, initial_state, name: via(ref)) do
-          {:ok, _pid} ->
-            # only now persist the chosen channel (which should already have adapter_payload
-            # because build_initial_state connected real channels and set virtual_channel)
-            :persistent_term.put({__MODULE__, :lb_state, ref}, ch)
-            {:ok, ch}
+    case DynamicSupervisor.start_child(GRPC.Client.Supervisor, child_spec(initial_state)) do
+      {:ok, _pid} ->
+        {:ok, ch}
 
-          {:error, {:already_started, _pid}} ->
-            # race: someone else started it first, ask the running process for its current channel
-            {:ok, ch}
-
-          {:error, reason} ->
-            {:error, reason}
-        end
-
-      _pid ->
+      {:error, {:already_started, _pid}} ->
+        # race: someone else started it first, ask the running process for its current channel
         case pick_channel(opts) do
           {:ok, %Channel{} = channel} ->
             {:ok, channel}
@@ -163,6 +170,9 @@ defmodule GRPC.Client.Connection do
           _ ->
             {:error, :no_connection}
         end
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
