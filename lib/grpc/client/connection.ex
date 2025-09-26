@@ -147,11 +147,9 @@ defmodule GRPC.Client.Connection do
             :persistent_term.put({__MODULE__, :lb_state, ref}, ch)
             {:ok, ch}
 
-          {:error, {:already_started, pid}} ->
+          {:error, {:already_started, _pid}} ->
             # race: someone else started it first, ask the running process for its current channel
-            if is_pid(pid) do
-              {:ok, ch}
-            end
+            {:ok, ch}
 
           {:error, reason} ->
             {:error, reason}
