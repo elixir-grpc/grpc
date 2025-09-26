@@ -44,9 +44,9 @@ defmodule GRPC.Client.Resolver.IPv4 do
     addrs_str = uri.path
 
     addresses =
-      String.split(addrs_str, ",")
+      String.split(addrs_str, ",", trim: true)
       |> Enum.map(fn addr ->
-        [ip, port] = String.split(addr, ":")
+        [ip, port] = String.split(addr, ":", trim: true, parts: 2)
         %{address: ip, port: String.to_integer(port)}
       end)
 
