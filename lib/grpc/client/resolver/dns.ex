@@ -17,16 +17,15 @@ defmodule GRPC.Client.Resolver.DNS do
     uri = URI.parse(target)
     host = uri.host || target
     port = uri.port || 50051
-    host_charlist = String.to_charlist(host)
 
-    case adapter().lookup(host_charlist, :a) do
+    case adapter().lookup(host, :a) do
       {:ok, addresses} ->
         addrs =
           Enum.map(addresses, fn ip ->
             %{address: ip |> :inet.ntoa() |> to_string(), port: port}
           end)
 
-        case adapter().lookup(~c"_grpc_config." ++ host_charlist, :txt) do
+        case adapter().lookup(~c"_grpc_config." ++ host, :txt) do
           {:ok, txt_records} ->
             service_config_json =
               txt_records
