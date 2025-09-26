@@ -13,53 +13,66 @@ defmodule GRPC.Client.Resolver.IPv6 do
   - The port is optional; if not provided, the default port is `443`.
   - Multiple addresses can be comma-separated.
   - `service_config` is always `nil` as IPv6 literals do not support DNS TXT or xDS.
-
-  ## Examples
-
-      # Single IPv6 with explicit port
-      target = "ipv6:[2607:f8b0:400e:c00::ef]:443"
-      {:ok, %{addresses: addresses, service_config: nil}} =
-        GRPC.Client.Resolver.IPv6.resolve(target)
-      addresses
-      # => [%{address: "2607:f8b0:400e:c00::ef", port: 443}]
-
-      # Multiple IPv6 addresses, some with default port
-      target = "ipv6:[2607:f8b0:400e:c00::ef]:443,[::1]:50051,[::2]"
-      {:ok, %{addresses: addresses, service_config: nil}} =
-        GRPC.Client.Resolver.IPv6.resolve(target)
-      addresses
-      # => [
-      #   %{address: "2607:f8b0:400e:c00::ef", port: 443},
-      #   %{address: "::1", port: 50051},
-      #   %{address: "::2", port: 443}
-      # ]
-
-  See the gRPC naming documentation for more information: 
-  https://github.com/grpc/grpc/blob/master/doc/naming.md
   """
 
   @behaviour GRPC.Client.Resolver
 
+  @default_port 443
+
   @impl GRPC.Client.Resolver
   def resolve(target) do
     uri = URI.parse(target)
-    addresses_str = uri.path
+    addresses_str = uri.path || ""
 
-    addresses =
-      String.split(addresses_str, ",")
-      |> Enum.map(fn entry ->
-        case Regex.run(~r/\[([^\])+)\](?:(\d+))?/, entry, capture: :all_but_first) do
-          [ip, port] ->
-            %{address: ip, port: String.to_integer(port)}
+    with {:ok, addresses} <- parse_entries(addresses_str) do
+      {:ok, %{addresses: addresses, service_config: nil}}
+    end
+  end
 
-          [ip] ->
-            %{address: ip, port: 443}
+  ## Helpers
+
+  defp parse_entries(entries_str) do
+    entries =
+      String.split(entries_str, ",", trim: true)
+      |> Enum.map(&parse_entry/1)
+
+    case Enum.find(entries, &match?({:error, _}, &1)) do
+      {:error, reason} -> {:error, reason}
+      _ -> {:ok, entries}
+    end
+  end
+
+  defp parse_entry("[" <> rest) do
+    case String.split(rest, "]", parts: 2) do
+      [addr, port_str] ->
+        case :inet.parse_address(String.to_charlist(addr)) do
+          {:ok, _tuple} ->
+            port =
+              port_str
+              |> String.trim_leading(":")
+              |> case do
+                "" ->
+                  @default_port
+
+                s ->
+                  case Integer.parse(s) do
+                    {int, ""} -> int
+                    _ -> return_error(:invalid_port)
+                  end
+              end
+
+            %{address: addr, port: port}
 
           _ ->
-            {:error, :invalid_ipv6}
+            return_error(:invalid_ipv6)
         end
-      end)
 
-    {:ok, %{addresses: addresses, service_config: nil}}
+      _ ->
+        return_error(:invalid_format)
+    end
   end
+
+  defp parse_entry(_), do: return_error(:invalid_format)
+
+  defp return_error(reason), do: {:error, reason}
 end

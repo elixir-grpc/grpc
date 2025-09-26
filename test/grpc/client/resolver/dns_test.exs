@@ -13,13 +13,12 @@ defmodule GRPC.Client.Resolver.DNSTest do
 
   test "resolves A record and parses service config from TXT via GenServer" do
     host = "my-service.local"
-    host_charlist = String.to_charlist(host)
 
     DNS.MockAdapter
-    |> expect(:lookup, fn ^host_charlist, :a ->
+    |> expect(:lookup, fn ^host, :a ->
       {:ok, [{127, 0, 0, 1}]}
     end)
-    |> expect(:lookup, fn ~c"_grpc_config." ++ ^host_charlist, :txt ->
+    |> expect(:lookup, fn ~c"_grpc_config." ++ ^host, :txt ->
       {:ok,
        [
          ~c'grpc_config={
