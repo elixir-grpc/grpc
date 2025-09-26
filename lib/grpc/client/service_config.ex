@@ -84,7 +84,7 @@ defmodule GRPC.Client.ServiceConfig do
   end
 
   defp from_map(map) do
-    # Extrai a primeira política de load balancing do array loadBalancingConfig
+    # Extracts the first load balancing policy from the Load Balancing Config array
     lb_policy =
       map
       |> Map.get("loadBalancingConfig", [%{"pick_first" => %{}}])
