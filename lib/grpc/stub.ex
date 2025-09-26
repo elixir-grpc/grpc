@@ -37,7 +37,10 @@ defmodule GRPC.Stub do
 
   You can refer to `call/6` for doc of your RPC functions.
   """
+  require Logger
+
   alias GRPC.Channel
+  alias GRPC.Client.Connection
 
   @default_timeout 10_000
 
@@ -53,10 +56,6 @@ defmodule GRPC.Stub do
           GRPC.Client.Stream.t()
           | {:error, GRPC.RPCError.t()}
           | receive_data_return
-
-  require Logger
-
-  alias GRPC.Client.Connection
 
   defmacro __using__(opts) do
     opts = Keyword.validate!(opts, [:service])
@@ -207,7 +206,7 @@ defmodule GRPC.Stub do
     {_, {req_mod, req_stream}, {res_mod, response_stream}, _rpc_options} = rpc
 
     ch =
-      case Conn.pick(channel, opts) do
+      case Connection.pick_channel(channel, opts) do
         {:ok, ch} ->
           if Process.alive?(ch.adapter_payload.conn_pid) do
             ch
