@@ -465,7 +465,7 @@ defmodule GRPC.Client.Connection do
   end
 
   defp split_host_port(target) do
-    case String.split(target, ":") do
+    case String.split(target, ":", trim: true) do
       [h, p] -> {h, String.to_integer(p)}
       [h] -> {h, default_port()}
     end
