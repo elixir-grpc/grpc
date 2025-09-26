@@ -155,7 +155,7 @@ defmodule GRPC.Client.Connection do
             {:error, reason}
         end
 
-      pid ->
+      _pid ->
         case pick_channel(opts) do
           {:ok, %Channel{} = channel} ->
             {:ok, channel}
