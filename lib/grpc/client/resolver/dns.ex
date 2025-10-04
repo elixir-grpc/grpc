@@ -46,11 +46,17 @@ defmodule GRPC.Client.Resolver.DNS do
   end
 
   defp lookup_addresses(host) do
-    adapter().lookup(host, :a)
+    case adapter().lookup(host, :a) do
+      {:ok, addrs} when is_list(addrs) -> {:ok, addrs}
+      addrs when is_list(addrs) -> {:ok, addrs}
+      other -> other
+    end
   end
 
   defp lookup_service_config(host) do
-    case adapter().lookup(~c"_grpc_config." ++ host, :txt) do
+    name = "_grpc_config." <> host
+
+    case adapter().lookup(name, :txt) do
       {:ok, txt_records} -> {:ok, txt_records}
       {:error, reason} -> {:error, reason}
       _ -> :no_config
