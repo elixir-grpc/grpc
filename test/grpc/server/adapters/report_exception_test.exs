@@ -10,18 +10,16 @@ defmodule ExceptionServer do
 
   @impl true
   def handle_cast(:case_boom, state) do
-    a = fn -> :ok end
-
-    case a.() do
-      :error -> :boom
-    end
+    raise CaseClauseError, term: :ok
 
     {:noreply, state}
   end
 
   @impl true
   def handle_cast(:bad_arg_boom, state) do
-    ets = :ets.new(:foo, [])
+    # Create a unique ETS table name to avoid conflicts in parallel tests
+    table_name = :"ets_#{System.unique_integer([:positive])}"
+    ets = :ets.new(table_name, [])
     :ets.delete(ets)
     :ets.insert(ets, 1)
 
