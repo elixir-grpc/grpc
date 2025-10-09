@@ -8,6 +8,10 @@ defmodule ExceptionServer do
     {:ok, pid}
   end
 
+  def start_link(pid) do
+    GenServer.start_link(__MODULE__, pid)
+  end
+
   @impl true
   def handle_cast(:case_boom, state) do
     a = fn -> :ok end
@@ -51,24 +55,9 @@ defmodule GRPC.Server.Adapters.ReportExceptionTest do
     end
 
     test "with case clause error" do
-      test_pid = self()
-
-
-      %Task{ref: task_ref, pid: task_pid} = Task.async(fn ->
-        {:ok, pid} = GenServer.start_link(ExceptionServer, test_pid)
-        send(test_pid, {:server_pid, pid})
-        # receive to block the task until the genserver crashes
-        # and propagates the exit signal to the task
-        receive do
-          _ -> :ok
-        end
-      end)
-
-      assert_receive {:server_pid, pid}
-      Process.unlink(task_pid)
+      # no link to avoid the genserver crashing and propagating the exit signal to the test
+      assert {:ok, pid} = start_supervised({ExceptionServer, self()})
       GenServer.cast(pid, :case_boom)
-
-      assert_receive {:DOWN, ^task_ref, :process, _, _}
 
       assert_receive {:boom, {_reason, stack} = err}
       assert %GRPC.Server.Adapters.ReportException{
@@ -81,24 +70,9 @@ defmodule GRPC.Server.Adapters.ReportExceptionTest do
     end
 
     test "with badarg error" do
-      test_pid = self()
-
-      %Task{ref: task_ref, pid: task_pid} = Task.async(fn ->
-        Process.flag(:trap_exit, true)
-        {:ok, pid} = GenServer.start_link(ExceptionServer, test_pid)
-        send(test_pid, {:server_pid, pid})
-        # receive to block the task until the genserver crashes
-        # and propagates the exit signal to the task
-        receive do
-          _ -> :ok
-        end
-      end)
-
-      assert_receive {:server_pid, pid}
-      Process.unlink(task_pid)
+      # no link to avoid the genserver crashing and propagating the exit signal to the test
+      assert {:ok, pid} = start_supervised({ExceptionServer, self()})
       GenServer.cast(pid, :bad_arg_boom)
-
-      assert_receive {:DOWN, ^task_ref, :process, _, _}
 
       assert_receive {:boom, {_reason, stack} = err}
 
