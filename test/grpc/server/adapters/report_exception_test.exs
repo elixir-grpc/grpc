@@ -53,18 +53,19 @@ defmodule GRPC.Server.Adapters.ReportExceptionTest do
     test "with case clause error" do
       test_pid = self()
 
-      %Task{ref: task_ref} = Task.async(fn ->
-        Process.flag(:trap_exit, true)
+
+      %Task{ref: task_ref, pid: task_pid} = Task.async(fn ->
         {:ok, pid} = GenServer.start_link(ExceptionServer, test_pid)
         send(test_pid, {:server_pid, pid})
-
         # receive to block the task until the genserver crashes
+        # and propagates the exit signal to the task
         receive do
-          {:EXIT, ^pid, _} -> :ok
+          _ -> :ok
         end
       end)
 
       assert_receive {:server_pid, pid}
+      Process.unlink(task_pid)
       GenServer.cast(pid, :case_boom)
 
       assert_receive {:DOWN, ^task_ref, :process, _, _}
@@ -82,17 +83,19 @@ defmodule GRPC.Server.Adapters.ReportExceptionTest do
     test "with badarg error" do
       test_pid = self()
 
-      %Task{ref: task_ref} = Task.async(fn ->
+      %Task{ref: task_ref, pid: task_pid} = Task.async(fn ->
         Process.flag(:trap_exit, true)
         {:ok, pid} = GenServer.start_link(ExceptionServer, test_pid)
         send(test_pid, {:server_pid, pid})
         # receive to block the task until the genserver crashes
+        # and propagates the exit signal to the task
         receive do
-          {:EXIT, ^pid, _} -> :ok
+          _ -> :ok
         end
       end)
 
       assert_receive {:server_pid, pid}
+      Process.unlink(task_pid)
       GenServer.cast(pid, :bad_arg_boom)
 
       assert_receive {:DOWN, ^task_ref, :process, _, _}
