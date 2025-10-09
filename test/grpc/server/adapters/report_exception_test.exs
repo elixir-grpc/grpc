@@ -51,41 +51,65 @@ defmodule GRPC.Server.Adapters.ReportExceptionTest do
     end
 
     test "with case clause error" do
-      {:ok, pid} = GenServer.start_link(ExceptionServer, self())
+      test_pid = self()
 
+      %Task{ref: task_ref} = Task.async(fn ->
+        Process.flag(:trap_exit, true)
+        {:ok, pid} = GenServer.start_link(ExceptionServer, test_pid)
+        send(test_pid, {:server_pid, pid})
+
+        # receive to block the task until the genserver crashes
+        receive do
+          {:EXIT, ^pid, _} -> :ok
+        end
+      end)
+
+      assert_receive {:server_pid, pid}
       GenServer.cast(pid, :case_boom)
 
-      receive do
-        {:boom, {_reason, stack} = err} ->
-          assert %GRPC.Server.Adapters.ReportException{
-                   __exception__: true,
-                   adapter_extra: [req: :ok],
-                   kind: :error,
-                   reason: %CaseClauseError{term: :ok},
-                   stack: stack
-                 } == ReportException.new([{:req, :ok}], err)
-      end
+      assert_receive {:DOWN, ^task_ref, :process, _, _}
+
+      assert_receive {:boom, {_reason, stack} = err}
+      assert %GRPC.Server.Adapters.ReportException{
+              __exception__: true,
+              adapter_extra: [req: :ok],
+              kind: :error,
+              reason: %CaseClauseError{term: :ok},
+              stack: stack
+            } == ReportException.new([{:req, :ok}], err)
     end
 
     test "with badarg error" do
-      {:ok, pid} = GenServer.start_link(ExceptionServer, self())
+      test_pid = self()
 
+      %Task{ref: task_ref} = Task.async(fn ->
+        Process.flag(:trap_exit, true)
+        {:ok, pid} = GenServer.start_link(ExceptionServer, test_pid)
+        send(test_pid, {:server_pid, pid})
+        # receive to block the task until the genserver crashes
+        receive do
+          {:EXIT, ^pid, _} -> :ok
+        end
+      end)
+
+      assert_receive {:server_pid, pid}
       GenServer.cast(pid, :bad_arg_boom)
 
-      receive do
-        {:boom, {_reason, stack} = err} ->
-          assert %GRPC.Server.Adapters.ReportException{
-                   __exception__: true,
-                   adapter_extra: [req: :ok],
-                   kind: :error,
-                   reason: %ArgumentError{
-                     __exception__: true,
-                     message:
-                       "errors were found at the given arguments:\n\n  * 1st argument: the table identifier does not refer to an existing ETS table\n  * 2nd argument: not a tuple\n"
-                   },
-                   stack: stack
-                 } == ReportException.new([{:req, :ok}], err)
-      end
+      assert_receive {:DOWN, ^task_ref, :process, _, _}
+
+      assert_receive {:boom, {_reason, stack} = err}
+
+      assert %GRPC.Server.Adapters.ReportException{
+              __exception__: true,
+              adapter_extra: [req: :ok],
+              kind: :error,
+              reason: %ArgumentError{
+                __exception__: true,
+                message:
+                  "errors were found at the given arguments:\n\n  * 1st argument: the table identifier does not refer to an existing ETS table\n  * 2nd argument: not a tuple\n"
+              },
+              stack: stack
+            } == ReportException.new([{:req, :ok}], err)
     end
   end
 end
