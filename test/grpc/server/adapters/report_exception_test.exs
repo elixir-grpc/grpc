@@ -8,6 +8,10 @@ defmodule ExceptionServer do
     {:ok, pid}
   end
 
+  def start_link(pid) do
+    GenServer.start_link(__MODULE__, pid)
+  end
+
   @impl true
   def handle_cast(:case_boom, state) do
     a = fn -> :ok end
@@ -51,41 +55,39 @@ defmodule GRPC.Server.Adapters.ReportExceptionTest do
     end
 
     test "with case clause error" do
-      {:ok, pid} = GenServer.start_link(ExceptionServer, self())
-
+      # no link to avoid the genserver crashing and propagating the exit signal to the test
+      assert {:ok, pid} = start_supervised({ExceptionServer, self()})
       GenServer.cast(pid, :case_boom)
 
-      receive do
-        {:boom, {_reason, stack} = err} ->
-          assert %GRPC.Server.Adapters.ReportException{
-                   __exception__: true,
-                   adapter_extra: [req: :ok],
-                   kind: :error,
-                   reason: %CaseClauseError{term: :ok},
-                   stack: stack
-                 } == ReportException.new([{:req, :ok}], err)
-      end
+      assert_receive {:boom, {_reason, stack} = err}
+
+      assert %GRPC.Server.Adapters.ReportException{
+               __exception__: true,
+               adapter_extra: [req: :ok],
+               kind: :error,
+               reason: %CaseClauseError{term: :ok},
+               stack: stack
+             } == ReportException.new([{:req, :ok}], err)
     end
 
     test "with badarg error" do
-      {:ok, pid} = GenServer.start_link(ExceptionServer, self())
-
+      # no link to avoid the genserver crashing and propagating the exit signal to the test
+      assert {:ok, pid} = start_supervised({ExceptionServer, self()})
       GenServer.cast(pid, :bad_arg_boom)
 
-      receive do
-        {:boom, {_reason, stack} = err} ->
-          assert %GRPC.Server.Adapters.ReportException{
-                   __exception__: true,
-                   adapter_extra: [req: :ok],
-                   kind: :error,
-                   reason: %ArgumentError{
-                     __exception__: true,
-                     message:
-                       "errors were found at the given arguments:\n\n  * 1st argument: the table identifier does not refer to an existing ETS table\n  * 2nd argument: not a tuple\n"
-                   },
-                   stack: stack
-                 } == ReportException.new([{:req, :ok}], err)
-      end
+      assert_receive {:boom, {_reason, stack} = err}
+
+      assert %GRPC.Server.Adapters.ReportException{
+               __exception__: true,
+               adapter_extra: [req: :ok],
+               kind: :error,
+               reason: %ArgumentError{
+                 __exception__: true,
+                 message:
+                   "errors were found at the given arguments:\n\n  * 1st argument: the table identifier does not refer to an existing ETS table\n  * 2nd argument: not a tuple\n"
+               },
+               stack: stack
+             } == ReportException.new([{:req, :ok}], err)
     end
   end
 end
