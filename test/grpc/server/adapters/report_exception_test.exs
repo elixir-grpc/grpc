@@ -60,13 +60,14 @@ defmodule GRPC.Server.Adapters.ReportExceptionTest do
       GenServer.cast(pid, :case_boom)
 
       assert_receive {:boom, {_reason, stack} = err}
+
       assert %GRPC.Server.Adapters.ReportException{
-              __exception__: true,
-              adapter_extra: [req: :ok],
-              kind: :error,
-              reason: %CaseClauseError{term: :ok},
-              stack: stack
-            } == ReportException.new([{:req, :ok}], err)
+               __exception__: true,
+               adapter_extra: [req: :ok],
+               kind: :error,
+               reason: %CaseClauseError{term: :ok},
+               stack: stack
+             } == ReportException.new([{:req, :ok}], err)
     end
 
     test "with badarg error" do
@@ -77,16 +78,16 @@ defmodule GRPC.Server.Adapters.ReportExceptionTest do
       assert_receive {:boom, {_reason, stack} = err}
 
       assert %GRPC.Server.Adapters.ReportException{
-              __exception__: true,
-              adapter_extra: [req: :ok],
-              kind: :error,
-              reason: %ArgumentError{
-                __exception__: true,
-                message:
-                  "errors were found at the given arguments:\n\n  * 1st argument: the table identifier does not refer to an existing ETS table\n  * 2nd argument: not a tuple\n"
-              },
-              stack: stack
-            } == ReportException.new([{:req, :ok}], err)
+               __exception__: true,
+               adapter_extra: [req: :ok],
+               kind: :error,
+               reason: %ArgumentError{
+                 __exception__: true,
+                 message:
+                   "errors were found at the given arguments:\n\n  * 1st argument: the table identifier does not refer to an existing ETS table\n  * 2nd argument: not a tuple\n"
+               },
+               stack: stack
+             } == ReportException.new([{:req, :ok}], err)
     end
   end
 end
