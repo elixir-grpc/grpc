@@ -15,7 +15,7 @@ defmodule GRPC.Server do
         use GRPC.Server, service: Greeter.Service
 
         def say_hello(request, _stream) do
-          Reply.new(message: "Hello")
+          %Reply{message: "Hello"}
         end
 
         def say_goodbye(request_enum, stream) do
@@ -29,6 +29,86 @@ defmodule GRPC.Server do
   The request will be a `Enumerable.t`(created by Elixir's `Stream`) of requests
   if it's streaming. If a reply is streaming, you need to call `send_reply/2` to send
   replies one by one instead of returning reply in the end.
+
+  ## Unary Response Return Formats
+
+  For unary (non-streaming) responses, handlers can return values in multiple formats:
+
+  > #### Deprecation Notice {: .warning}
+  >
+  > Returning bare structs (without `{:ok, ...}` tuple) is deprecated and will emit
+  > a warning. This behavior will be removed in a future major version.
+  > Please migrate to tuple-based returns.
+
+      defmodule Greeter.Server do
+        use GRPC.Server, service: Greeter.Service
+
+        # Option 1: Return bare struct (existing behavior - DEPRECATED)
+        def say_hello(request, _stream) do
+          %Reply{message: "Hello"}
+        end
+
+        # Option 2: Return {:ok, struct} tuple (new)
+        def say_hello_v2(request, _stream) do
+          {:ok, %Reply{message: "Hello"}}
+        end
+
+        # Option 3: Return {:error, %GRPC.RPCError{}} tuple (new)
+        def say_hello_v3(request, _stream) do
+          if authorized?(request) do
+            {:ok, %Reply{message: "Hello"}}
+          else
+            {:error, GRPC.RPCError.exception(:permission_denied, "Access denied")}
+          end
+        end
+
+        # Option 4: Raise error (existing behavior)
+        def say_hello_v4(request, _stream) do
+          raise GRPC.RPCError, status: :unauthenticated, message: "Please authenticate"
+        end
+      end
+
+  The tuple-based returns allow for more explicit error handling without using exceptions.
+
+  ## Streaming Response Error Handling
+
+  For streaming responses, handlers can return `{:error, %GRPC.RPCError{}}` to abort the stream.
+  The handler can send zero or more messages via `send_reply/2` before returning the error:
+
+      defmodule Greeter.Server do
+        use GRPC.Server, service: Greeter.Service
+
+        # Server streaming: validate before sending messages
+        def say_goodbye(request, stream) do
+          if valid_request?(request) do
+            # Send multiple replies
+            GRPC.Server.send_reply(stream, %Reply{message: "Goodbye"})
+            GRPC.Server.send_reply(stream, %Reply{message: "See you later!"})
+            # Implicit success - can return nil, :ok, or {:ok, response}
+            # Recommended: explicitly return :ok for clarity
+            :ok
+          else
+            # Abort stream with error before sending any messages
+            {:error, GRPC.RPCError.exception(:invalid_argument, "Invalid request")}
+          end
+        end
+
+        # Server streaming: abort after sending some messages
+        def say_multiple(request, stream) do
+          request.names
+          |> Enum.reduce_while(:ok, fn name, _acc ->
+            if String.length(name) > 0 do
+              GRPC.Server.send_reply(stream, %Reply{message: "Hello"})
+              {:cont, :ok}
+            else
+              # Abort stream after sending some messages
+              {:halt, {:error, GRPC.RPCError.exception(:invalid_argument, "Empty name")}}
+            end
+          end)
+        end
+      end
+
+  Streaming handlers can also raise `GRPC.RPCError` exceptions as with unary handlers.
 
   ## gRPC HTTP/JSON transcoding
 
@@ -45,7 +125,7 @@ defmodule GRPC.Server do
         use GRPC.Server, service: Greeter.Service, http_transcode: true
 
         def say_hello(request, _stream) do
-          Reply.new(message: "Hello" <> request.name)
+          %Reply{message: "Hello" <> request.name}
         end
 
         def say_goodbye(request_enum, stream) do
@@ -351,13 +431,33 @@ defmodule GRPC.Server do
        ) do
     GRPC.Telemetry.server_span(server, endpoint, func_name, stream, fn ->
       last = fn r, s ->
-        # no response is rquired for preflight requests
+        # Preflight requests don't call the handler
         reply = if stream.is_preflight?, do: [], else: apply(server, func_name, [r, s])
 
-        if res_stream do
-          {:ok, stream}
-        else
-          {:ok, stream, reply}
+        case {res_stream, reply} do
+          {_, {:error, %GRPC.RPCError{}} = reply} ->
+            reply
+
+          {true, _} ->
+            # Streaming handlers may return nil, :ok, or any value for success
+            {:ok, stream}
+
+          {false, {:ok, response}} ->
+            {:ok, stream, response}
+
+          {false, response} ->
+            # TODO: In v+2, hard deprecate and remove support for bare struct returns
+            # This should become an error instead of a warning
+            # Backward compatibility: support bare struct returns
+            Logger.warning("""
+            Returning a bare struct from a gRPC handler is deprecated.
+            Please return {:ok, struct} instead.
+            This will be removed in a future version.
+
+            Handler: #{inspect(stream.server)}.#{func_name}/2
+            """)
+
+            {:ok, stream, response}
         end
       end
 

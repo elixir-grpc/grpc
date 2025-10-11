@@ -139,6 +139,76 @@ defmodule GRPC.Integration.ServerTest do
     end
   end
 
+  defmodule HelloTupleReturnServer do
+    use GRPC.Server, service: Helloworld.Greeter.Service
+
+    def say_hello(%{name: "ok_tuple"}, _stream) do
+      {:ok, %Helloworld.HelloReply{message: "Hello from ok tuple"}}
+    end
+
+    def say_hello(%{name: "error_tuple"}, _stream) do
+      {:error, GRPC.RPCError.exception(:permission_denied, "Access denied")}
+    end
+
+    def say_hello(%{name: "bare_struct"}, _stream) do
+      %Helloworld.HelloReply{message: "Hello from bare struct"}
+    end
+  end
+
+  defmodule StreamingTupleReturnServer do
+    use GRPC.Server, service: Routeguide.RouteGuide.Service
+
+    # Server streaming that returns error before sending any messages
+    def list_features(%{lo: %{latitude: -1}}, _stream) do
+      {:error, GRPC.RPCError.exception(:invalid_argument, "Invalid rectangle")}
+    end
+
+    # Server streaming that sends messages then returns error
+    def list_features(%{hi: %{latitude: lat}}, stream) when lat > 500_000_000 do
+      GRPC.Server.send_reply(stream, %Routeguide.Feature{
+        location: %Routeguide.Point{latitude: 400_000_000, longitude: 0},
+        name: "First feature"
+      })
+
+      {:error, GRPC.RPCError.exception(:out_of_range, "Latitude too high")}
+    end
+
+    # Normal case: send replies and implicitly succeed
+    def list_features(rect, stream) do
+      GRPC.Server.send_reply(stream, %Routeguide.Feature{
+        location: rect.lo,
+        name: "Feature 1"
+      })
+
+      GRPC.Server.send_reply(stream, %Routeguide.Feature{
+        location: rect.hi,
+        name: "Feature 2"
+      })
+    end
+
+    def route_chat(request_enum, stream) do
+      Enum.reduce_while(request_enum, :ok, fn note, _acc ->
+        if note.message =~ "bad" do
+          {:halt, {:error, GRPC.RPCError.exception(:invalid_argument, "Bad message")}}
+        else
+          GRPC.Server.send_reply(stream, note)
+          {:cont, :ok}
+        end
+      end)
+    end
+
+    # Client streaming (returns like unary)
+    def record_route(request_enum, _stream) do
+      count = Enum.count(request_enum)
+
+      if count > 100 do
+        {:error, GRPC.RPCError.exception(:out_of_range, "Too many points")}
+      else
+        {:ok, %Routeguide.RouteSummary{point_count: count}}
+      end
+    end
+  end
+
   defmodule FeatureErrorServer do
     use GRPC.Server, service: Routeguide.RouteGuide.Service
     alias GRPC.Server
@@ -255,6 +325,136 @@ defmodule GRPC.Integration.ServerTest do
       end)
 
     assert logs =~ "Exception raised while handling /helloworld.Greeter/SayHello"
+  end
+
+  test "handler can return {:ok, reply} tuple" do
+    run_server([HelloTupleReturnServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      req = %Helloworld.HelloRequest{name: "ok_tuple"}
+      {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
+      assert reply.message == "Hello from ok tuple"
+    end)
+  end
+
+  test "handler can return {:error, %GRPC.RPCError{}} tuple" do
+    run_server([HelloTupleReturnServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      req = %Helloworld.HelloRequest{name: "error_tuple"}
+      {:error, error} = channel |> Helloworld.Greeter.Stub.say_hello(req)
+      assert error.status == GRPC.Status.permission_denied()
+      assert error.message == "Access denied"
+    end)
+  end
+
+  test "handler can still return bare struct (backward compatibility)" do
+    run_server([HelloTupleReturnServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      req = %Helloworld.HelloRequest{name: "bare_struct"}
+      {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
+      assert reply.message == "Hello from bare struct"
+    end)
+  end
+
+  test "server streaming can return error before sending any messages" do
+    run_server([StreamingTupleReturnServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      low = %Routeguide.Point{latitude: -1, longitude: 0}
+      high = %Routeguide.Point{latitude: 0, longitude: 0}
+      rect = %Routeguide.Rectangle{lo: low, hi: high}
+
+      assert {:error, error} = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
+      assert error.status == GRPC.Status.invalid_argument()
+      assert error.message == "Invalid rectangle"
+    end)
+  end
+
+  test "server streaming can return error after sending messages" do
+    run_server([StreamingTupleReturnServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      low = %Routeguide.Point{latitude: 400_000_000, longitude: 0}
+      high = %Routeguide.Point{latitude: 600_000_000, longitude: 0}
+      rect = %Routeguide.Rectangle{lo: low, hi: high}
+
+      {:ok, stream} = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
+      results = Enum.to_list(stream)
+
+      assert [{:ok, feature}, {:error, error}] = results
+      assert feature.name == "First feature"
+      assert error.status == GRPC.Status.out_of_range()
+      assert error.message == "Latitude too high"
+    end)
+  end
+
+  test "server streaming succeeds when no error returned" do
+    run_server([StreamingTupleReturnServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      low = %Routeguide.Point{latitude: 100_000_000, longitude: 0}
+      high = %Routeguide.Point{latitude: 200_000_000, longitude: 0}
+      rect = %Routeguide.Rectangle{lo: low, hi: high}
+
+      {:ok, stream} = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
+      results = Enum.to_list(stream)
+
+      assert [{:ok, f1}, {:ok, f2}] = results
+      assert f1.name == "Feature 1"
+      assert f2.name == "Feature 2"
+    end)
+  end
+
+  test "bidirectional streaming can return error" do
+    run_server([StreamingTupleReturnServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      stream = channel |> Routeguide.RouteGuide.Stub.route_chat()
+
+      point = %Routeguide.Point{latitude: 0, longitude: 0}
+
+      GRPC.Stub.send_request(
+        stream,
+        %Routeguide.RouteNote{
+          location: point,
+          message: "bad message"
+        },
+        end_stream: true
+      )
+
+      assert {:error, error} = GRPC.Stub.recv(stream)
+      assert error.status == GRPC.Status.invalid_argument()
+      assert error.message == "Bad message"
+    end)
+  end
+
+  test "client streaming can return error tuple" do
+    run_server([StreamingTupleReturnServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      stream = channel |> Routeguide.RouteGuide.Stub.record_route()
+
+      # Send more than 100 points
+      Enum.each(1..101, fn i ->
+        point = %Routeguide.Point{latitude: i, longitude: i}
+        opts = if i == 101, do: [end_stream: true], else: []
+        GRPC.Stub.send_request(stream, point, opts)
+      end)
+
+      assert {:error, error} = GRPC.Stub.recv(stream)
+      assert error.status == GRPC.Status.out_of_range()
+      assert error.message == "Too many points"
+    end)
+  end
+
+  test "client streaming can return ok tuple" do
+    run_server([StreamingTupleReturnServer], fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      stream = channel |> Routeguide.RouteGuide.Stub.record_route()
+
+      Enum.each(1..5, fn i ->
+        point = %Routeguide.Point{latitude: i, longitude: i}
+        opts = if i == 5, do: [end_stream: true], else: []
+        GRPC.Stub.send_request(stream, point, opts)
+      end)
+
+      assert {:ok, summary} = GRPC.Stub.recv(stream)
+      assert summary.point_count == 5
+    end)
   end
 
   test "returns appropriate error for stream requests" do
