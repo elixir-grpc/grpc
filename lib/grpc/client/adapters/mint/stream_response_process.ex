@@ -182,7 +182,13 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
     if status == GRPC.Status.ok() do
       {type, decoded_trailers}
     else
-      rpc_error = %GRPC.RPCError{status: status, message: decoded_trailers["grpc-message"]}
+      rpc_error =
+        GRPC.RPCError.from_grpc_status_details_bin(%{
+          status: status,
+          message: decoded_trailers["grpc-message"],
+          encoded_details_bin: decoded_trailers["grpc-status-details-bin"]
+        })
+
       {:error, rpc_error}
     end
   end
