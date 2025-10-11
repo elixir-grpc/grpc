@@ -79,6 +79,23 @@ defmodule GRPC.RPCError do
     }
   end
 
+  def from_http_status(401), do: exception(Status.unauthenticated(), status_message(401))
+  def from_http_status(403), do: exception(Status.permission_denied(), status_message(403))
+  def from_http_status(404), do: exception(Status.unimplemented(), status_message(404))
+  def from_http_status(429), do: exception(Status.unavailable(), status_message(429))
+
+  def from_http_status(status) when status in [502, 503, 504] do
+    exception(Status.unavailable(), status_message(status))
+  end
+
+  def from_http_status(status) do
+    exception(Status.internal(), status_message(status))
+  end
+
+  defp status_message(status) do
+    "got http status #{status} instead of 200"
+  end
+
   defp parse_args([], acc), do: acc
 
   defp parse_args([{:status, status} | t], acc) when is_integer(status) do
