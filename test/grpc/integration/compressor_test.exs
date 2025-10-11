@@ -36,6 +36,16 @@ defmodule GRPC.Integration.CompressorTest do
     end
   end
 
+  defmodule AcceptCompressServer do
+    use GRPC.Server,
+      service: Helloworld.Greeter.Service
+
+    def say_hello(_, stream) do
+      GRPC.Server.set_compressor(stream, GRPC.Compressor.Gzip)
+      %Helloworld.HelloReply{message: "Hola, Mundo! Olá, Mundo!"}
+    end
+  end
+
   defmodule HelloStub do
     use GRPC.Stub, service: Helloworld.Greeter.Service
   end
@@ -106,6 +116,30 @@ defmodule GRPC.Integration.CompressorTest do
       assert {:error, %GRPC.RPCError{message: _, status: 12}} =
                channel
                |> HelloStub.say_hello(req, compressor: GRPC.Compressor.Gzip, return_headers: true)
+    end)
+  end
+
+  test "error when accepted_compressors is not a list" do
+    run_server(AcceptCompressServer, fn port ->
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+
+      assert_raise ArgumentError, "accepted_compressors is not a list", fn ->
+        HelloStub.say_hello(channel, %Helloworld.HelloRequest{name: ""},
+          accepted_compressors: nil
+        )
+      end
+    end)
+  end
+
+  test "fallback to channel's accepted_compressors" do
+    run_server(AcceptCompressServer, fn port ->
+      {:ok, channel} =
+        GRPC.Stub.connect("localhost:#{port}", accepted_compressors: [GRPC.Compressor.Gzip])
+
+      req = %Helloworld.HelloRequest{name: ""}
+
+      {:ok, _reply, headers} = HelloStub.say_hello(channel, req, return_headers: true)
+      assert headers[:headers]["grpc-encoding"]
     end)
   end
 end
