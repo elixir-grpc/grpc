@@ -105,19 +105,27 @@ defmodule GRPC.Stub do
   end
 
   @doc """
-  Establish a connection with gRPC server and return `GRPC.Channel` needed for
-  sending requests.
+  Establishes a connection with a gRPC server and returns a `GRPC.Channel` required
+  for sending requests. Supports advanced connection resolution via the gRPC `Resolver`
+  and various target schemes (`dns`, `unix`, `xds`, `host:port`, etc).
 
-  ## Examples
+  This function is part of the **connection orchestration layer**, which manages
+  connection setup, name resolution, and optional load balancing.
 
-      iex> GRPC.Stub.connect("localhost:50051")
-      {:ok, channel}
+  ## Target Syntax
 
-      iex> GRPC.Stub.connect("localhost:50051", accepted_compressors: [GRPC.Compressor.Gzip])
-      {:ok, channel}
+  The `target` argument to `connect/2` accepts URI-like strings that are resolved
+  using the configured [Resolver](GRPC.Client.Resolver).
 
-      iex> GRPC.Stub.connect("/paht/to/unix.sock")
-      {:ok, channel}
+  Supported formats:
+
+    * `"dns://example.com:50051"` — resolves via DNS (A/AAAA records and `_grpc_config` TXT)
+    * `"ipv4:10.0.0.5:50051"` — fixed IPv4 address
+    * `"unix:/tmp/my.sock"` — Unix domain socket
+    * `"xds:///my-service"` — resolves via xDS control plane (Envoy/Istio/Traffic Director)
+    * `"127.0.0.1:50051"` — implicit DNS (default port 50051)
+
+  If no scheme is provided, the resolver assumes `dns` by default.
 
   ## Options
 
@@ -126,10 +134,35 @@ defmodule GRPC.Stub do
     * `:adapter` - custom client adapter
     * `:interceptors` - client interceptors
     * `:codec` - client will use this to encode and decode binary message
-    * `:compressor` - the client will use this to compress requests and decompress responses. If this is set, accepted_compressors
-        will be appended also, so this can be used safely without `:accepted_compressors`.
+    * `:compressor` - the client will use this to compress requests and decompress responses.
+      If this is set, accepted_compressors will be appended also, so this can be used safely
+      without `:accepted_compressors`.
     * `:accepted_compressors` - tell servers accepted compressors, this can be used without `:compressor`
     * `:headers` - headers to attach to each request
+
+  ## Examples
+
+  ### Basic Connection
+
+      iex> GRPC.Stub.connect("localhost:50051")
+      {:ok, channel}
+
+      iex> GRPC.Stub.connect("localhost:50051", accepted_compressors: [GRPC.Compressor.Gzip])
+      {:ok, channel}
+
+  ### DNS Target
+
+      iex> {:ok, ch} = GRPC.Client.Connection.connect("dns://my-service.local:50051")
+
+  ### Unix Socket
+
+      iex> GRPC.Stub.connect("/path/to/unix.sock")
+      {:ok, channel}
+
+
+  ## Notes
+
+  * When using DNS or xDS targets, the connection layer periodically refreshes endpoints.
   """
   @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(addr, opts \\ []) when is_binary(addr) and is_list(opts) do
