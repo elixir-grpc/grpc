@@ -21,12 +21,27 @@ defmodule GRPC.Transport.HTTP2 do
     %{"content-type" => "application/grpc+#{codec_name(codec)}"}
   end
 
-  @spec server_trailers(integer, String.t()) :: map
-  def server_trailers(status \\ Status.ok(), message \\ "") do
+  @spec server_trailers(integer, String.t(), [Google.Protobuf.Any.t()] | nil) :: map
+  def server_trailers(status \\ Status.ok(), message \\ "", details \\ nil) do
     %{
       "grpc-status" => Integer.to_string(status),
       "grpc-message" => URI.encode(message)
     }
+    |> put_details_bin_grpc_status(status, message, details)
+  end
+
+  defp put_details_bin_grpc_status(trailers, _status, _message, nil), do: trailers
+  defp put_details_bin_grpc_status(trailers, _status, _message, []), do: trailers
+
+  defp put_details_bin_grpc_status(trailers, status, message, details) when is_list(details) do
+    encoded_details =
+      GRPC.Google.RPC.encode_status(%Google.Rpc.Status{
+        code: status,
+        message: message,
+        details: details
+      })
+
+    Map.put(trailers, "grpc-status-details-bin", encoded_details)
   end
 
   @doc """
@@ -141,7 +156,7 @@ defmodule GRPC.Transport.HTTP2 do
   end
 
   defp encode_metadata_pair({key, val}) do
-    val = if String.ends_with?(key, "-bin"), do: Base.encode64(val), else: val
+    val = if String.ends_with?(key, "-bin"), do: Base.encode64(val, padding: true), else: val
     {String.downcase(to_string(key)), val}
   end
 

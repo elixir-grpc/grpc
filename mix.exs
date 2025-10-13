@@ -35,6 +35,7 @@ defmodule GRPC.Mixfile do
 
   defp deps do
     [
+      {:googleapis, "~> 0.1.0"},
       {:cowboy, "~> 2.10"},
       {:flow, "~> 1.2"},
       {:gun, "~> 2.0"},

@@ -267,7 +267,11 @@ defmodule GRPC.Stub do
       end
 
     compressor = Keyword.get(opts, :compressor, ch.compressor)
-    accepted_compressors = Keyword.get(opts, :accepted_compressors, [])
+    accepted_compressors = Keyword.get(opts, :accepted_compressors, ch.accepted_compressors)
+
+    if not is_list(accepted_compressors) do
+      raise ArgumentError, "accepted_compressors is not a list"
+    end
 
     accepted_compressors =
       if compressor do
@@ -279,7 +283,7 @@ defmodule GRPC.Stub do
     stream = %{
       stream
       | codec: Keyword.get(opts, :codec, ch.codec),
-        compressor: Keyword.get(opts, :compressor, ch.compressor),
+        compressor: compressor,
         accepted_compressors: accepted_compressors
     }
 

@@ -66,4 +66,207 @@ defmodule GRPC.RPCErrorTest do
       end
     end
   end
+
+  describe "exception/1" do
+    test "creates RPC error with status atom" do
+      error = GRPC.RPCError.exception(status: :invalid_argument)
+
+      assert error.status == GRPC.Status.invalid_argument()
+      assert error.message == GRPC.Status.status_message(GRPC.Status.invalid_argument())
+      assert error.details == nil
+    end
+
+    test "creates RPC error with status integer" do
+      error = GRPC.RPCError.exception(status: 3)
+
+      assert error.status == 3
+      assert error.message == GRPC.Status.status_message(3)
+      assert error.details == nil
+    end
+
+    test "creates RPC error with custom message" do
+      error = GRPC.RPCError.exception(status: :invalid_argument, message: "Custom error message")
+
+      assert error.status == GRPC.Status.invalid_argument()
+      assert error.message == "Custom error message"
+      assert error.details == nil
+    end
+
+    test "creates RPC error with details" do
+      details = [
+        %Google.Protobuf.Any{
+          type_url: "type.googleapis.com/google.rpc.ErrorInfo",
+          value: Google.Rpc.ErrorInfo.encode(%Google.Rpc.ErrorInfo{reason: "TEST"})
+        }
+      ]
+
+      error = GRPC.RPCError.exception(status: :invalid_argument, details: details)
+
+      assert error.status == GRPC.Status.invalid_argument()
+      assert error.message == GRPC.Status.status_message(GRPC.Status.invalid_argument())
+      assert error.details == details
+    end
+
+    test "creates RPC error with all parameters" do
+      details = [
+        %Google.Protobuf.Any{
+          type_url: "type.googleapis.com/google.rpc.ErrorInfo",
+          value: Google.Rpc.ErrorInfo.encode(%Google.Rpc.ErrorInfo{reason: "TEST"})
+        }
+      ]
+
+      error =
+        GRPC.RPCError.exception(
+          status: :invalid_argument,
+          message: "Custom message",
+          details: details
+        )
+
+      assert error.status == GRPC.Status.invalid_argument()
+      assert error.message == "Custom message"
+      assert error.details == details
+    end
+  end
+
+  describe "exception/2" do
+    test "creates RPC error with atom status and message" do
+      error = GRPC.RPCError.exception(:invalid_argument, "Custom message")
+
+      assert error.status == GRPC.Status.invalid_argument()
+      assert error.message == "Custom message"
+      assert error.details == nil
+    end
+
+    test "creates RPC error with integer status and message" do
+      error = GRPC.RPCError.exception(3, "Custom message")
+
+      assert error.status == 3
+      assert error.message == "Custom message"
+      assert error.details == nil
+    end
+  end
+
+  describe "from_grpc_status_details_bin/1" do
+    test "handles corrupted error details gracefully" do
+      status = GRPC.Status.internal()
+      message = "Test error"
+      invalid_details = "!!!invalid!!!"
+
+      error =
+        GRPC.RPCError.from_grpc_status_details_bin(%{
+          status: status,
+          message: message,
+          encoded_details_bin: invalid_details
+        })
+
+      assert error.status == 13
+      assert error.message == "Test error"
+      refute error.details
+    end
+
+    test "handles corrupted protobuf in details" do
+      status = GRPC.Status.internal()
+      message = "Test error"
+      corrupted_protobuf = Base.encode64("not a valid protobuf message", padding: false)
+
+      error =
+        GRPC.RPCError.from_grpc_status_details_bin(%{
+          status: status,
+          message: message,
+          encoded_details_bin: corrupted_protobuf
+        })
+
+      assert error.status == 13
+      assert error.message == "Test error"
+      refute error.details
+    end
+
+    test "handles nil encoded_details_bin" do
+      status = GRPC.Status.internal()
+      message = "Test error"
+
+      error =
+        GRPC.RPCError.from_grpc_status_details_bin(%{
+          status: status,
+          message: message,
+          encoded_details_bin: nil
+        })
+
+      assert error.status == 13
+      assert error.message == "Test error"
+      refute error.details
+    end
+
+    test "handles nil message" do
+      status = GRPC.Status.internal()
+
+      encoded_details =
+        GRPC.Google.RPC.encode_status(%Google.Rpc.Status{
+          code: status,
+          message: "Status message",
+          details: []
+        })
+
+      error =
+        GRPC.RPCError.from_grpc_status_details_bin(%{
+          status: status,
+          message: nil,
+          encoded_details_bin: encoded_details
+        })
+
+      assert error.status == 13
+      assert error.message == "Status message"
+      assert error.details == []
+    end
+
+    test "handles valid encoded details" do
+      status = GRPC.Status.internal()
+      message = "Test error"
+
+      error_info = %Google.Rpc.ErrorInfo{
+        reason: "TEST_REASON",
+        domain: "example.com",
+        metadata: %{"key" => "value"}
+      }
+
+      detail = %Google.Protobuf.Any{
+        type_url: "type.googleapis.com/google.rpc.ErrorInfo",
+        value: Google.Rpc.ErrorInfo.encode(error_info)
+      }
+
+      encoded_details =
+        GRPC.Google.RPC.encode_status(%Google.Rpc.Status{
+          code: status,
+          message: "Status message",
+          details: [detail]
+        })
+
+      error =
+        GRPC.RPCError.from_grpc_status_details_bin(%{
+          status: status,
+          message: message,
+          encoded_details_bin: encoded_details
+        })
+
+      assert error.status == 13
+      assert error.message == "Status message"
+      assert error.details == [detail]
+    end
+
+    test "handles empty encoded details" do
+      status = GRPC.Status.internal()
+      message = "Test error"
+
+      error =
+        GRPC.RPCError.from_grpc_status_details_bin(%{
+          status: status,
+          message: message,
+          encoded_details_bin: ""
+        })
+
+      assert error.status == 13
+      assert error.message == ""
+      assert error.details == []
+    end
+  end
 end
