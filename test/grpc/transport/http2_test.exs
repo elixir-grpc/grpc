@@ -125,4 +125,88 @@ defmodule GRPC.Transport.HTTP2Test do
     assert %{"grpc-message" => "Unknown%20error"} =
              HTTP2.server_trailers(Status.unknown(), "Unknown error")
   end
+
+  describe "server_trailers/3 with error details" do
+    test "does not include grpc-status-details-bin when details is nil" do
+      trailers = HTTP2.server_trailers(Status.unknown(), "Unknown error", nil)
+
+      assert trailers == %{
+               "grpc-status" => "2",
+               "grpc-message" => "Unknown%20error"
+             }
+    end
+
+    test "does not include grpc-status-details-bin when details is empty list" do
+      trailers = HTTP2.server_trailers(Status.unknown(), "Unknown error", [])
+
+      assert trailers == %{
+               "grpc-status" => "2",
+               "grpc-message" => "Unknown%20error"
+             }
+    end
+
+    test "includes base64-encoded grpc-status-details-bin when details provided" do
+      detail = %Google.Protobuf.Any{
+        type_url: "type.googleapis.com/google.rpc.ErrorInfo",
+        value:
+          Google.Rpc.ErrorInfo.encode(%Google.Rpc.ErrorInfo{
+            reason: "INVALID_ARGUMENT",
+            domain: "example.com"
+          })
+      }
+
+      status = Status.invalid_argument()
+      message = "Invalid request"
+      trailers = HTTP2.server_trailers(status, message, [detail])
+
+      assert trailers["grpc-status"] == "3"
+      assert trailers["grpc-message"] == "Invalid%20request"
+
+      assert {:ok, decoded_status} =
+               GRPC.Google.RPC.decode_status(trailers["grpc-status-details-bin"])
+
+      assert decoded_status == %Google.Rpc.Status{
+               code: status,
+               message: message,
+               details: [detail]
+             }
+    end
+
+    test "includes multiple details in grpc-status-details-bin" do
+      detail1 = %Google.Protobuf.Any{
+        type_url: "type.googleapis.com/google.rpc.ErrorInfo",
+        value:
+          Google.Rpc.ErrorInfo.encode(%Google.Rpc.ErrorInfo{
+            reason: "PRECONDITION_FAILED",
+            domain: "example.com"
+          })
+      }
+
+      detail2 = %Google.Protobuf.Any{
+        type_url: "type.googleapis.com/google.rpc.ErrorInfo",
+        value:
+          Google.Rpc.ErrorInfo.encode(%Google.Rpc.ErrorInfo{
+            reason: "RESOURCE_NOT_READY",
+            domain: "api.example.com",
+            metadata: %{"resource_id" => "123"}
+          })
+      }
+
+      status = Status.failed_precondition()
+      message = "Precondition failed"
+      trailers = HTTP2.server_trailers(status, message, [detail1, detail2])
+
+      assert trailers["grpc-status"] == "9"
+      assert trailers["grpc-message"] == "Precondition%20failed"
+
+      assert {:ok, decoded_status} =
+               GRPC.Google.RPC.decode_status(trailers["grpc-status-details-bin"])
+
+      assert decoded_status == %Google.Rpc.Status{
+               code: status,
+               message: message,
+               details: [detail1, detail2]
+             }
+    end
+  end
 end

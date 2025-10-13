@@ -464,6 +464,10 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     error = %RPCError{status: GRPC.Status.deadline_exceeded(), message: "Deadline expired"}
     req = send_error(req, error, state, :timeout)
 
+    [req: req]
+    |> ReportException.new(error)
+    |> log_error()
+
     {:stop, req, state}
   end
 
@@ -660,7 +664,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   defp preflight?(_), do: false
 
   defp send_error(req, error, state, reason) do
-    trailers = HTTP2.server_trailers(error.status, error.message)
+    trailers = HTTP2.server_trailers(error.status, error.message, error.details)
 
     status =
       if state.access_mode == :http_transcoding,
@@ -694,7 +698,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     {:wait, ref}
   end
 
-  defp log_error(%ReportException{kind: kind} = exception, stacktrace) do
+  defp log_error(%ReportException{kind: kind} = exception, stacktrace \\ []) do
     crash_reason = GRPC.Logger.crash_reason(kind, exception, stacktrace)
 
     kind

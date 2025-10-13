@@ -51,11 +51,15 @@ defmodule GRPC.RPCError do
   See `GRPC.Status` for more details on possible statuses.
   """
 
-  defexception [:status, :message]
+  defexception [:status, :message, :details]
 
   defguard is_rpc_error(e, status) when is_struct(e, __MODULE__) and e.status == status
 
-  @type t :: %__MODULE__{status: GRPC.Status.t(), message: String.t()}
+  @type t :: %__MODULE__{
+          status: GRPC.Status.t(),
+          message: String.t(),
+          details: [Google.Protobuf.Any.t()]
+        }
 
   alias GRPC.Status
 
@@ -68,7 +72,11 @@ defmodule GRPC.RPCError do
   def exception(args) when is_list(args) do
     error = parse_args(args, %__MODULE__{})
 
-    %{error | message: error.message || Status.status_message(error.status)}
+    %{
+      error
+      | message: error.message || Status.status_message(error.status),
+        details: error.details
+    }
   end
 
   defp parse_args([], acc), do: acc
@@ -88,6 +96,11 @@ defmodule GRPC.RPCError do
     parse_args(t, acc)
   end
 
+  defp parse_args([{:details, details} | t], acc) when is_list(details) do
+    acc = %{acc | details: details}
+    parse_args(t, acc)
+  end
+
   @spec exception(status :: Status.t() | atom(), message :: String.t()) :: t()
   def exception(status, message) when is_atom(status) do
     %GRPC.RPCError{status: apply(GRPC.Status, status, []), message: message}
@@ -95,5 +108,29 @@ defmodule GRPC.RPCError do
 
   def exception(status, message) when is_integer(status) do
     %GRPC.RPCError{status: status, message: message}
+  end
+
+  @doc false
+  def from_grpc_status_details_bin(%{
+        status: status,
+        message: message,
+        encoded_details_bin: encoded_details_bin
+      })
+      when is_binary(encoded_details_bin) do
+    case GRPC.Google.RPC.decode_status(encoded_details_bin) do
+      {:ok, rpc_status} ->
+        %__MODULE__{
+          status: status,
+          message: rpc_status.message,
+          details: rpc_status.details
+        }
+
+      {:error, _} ->
+        %__MODULE__{status: status, message: message}
+    end
+  end
+
+  def from_grpc_status_details_bin(%{status: status, message: message}) do
+    %__MODULE__{status: status, message: message}
   end
 end

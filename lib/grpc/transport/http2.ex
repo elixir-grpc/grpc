@@ -9,7 +9,7 @@ defmodule GRPC.Transport.HTTP2 do
   require Logger
 
   def server_headers(%{codec: GRPC.Codec.WebText = codec}) do
-    %{"content-type" => "application/grpc-web-#{codec.name()}"}
+    %{"content-type" => "application/grpc-web-#{codec_name(codec)}"}
   end
 
   # TO-DO: refactor when we add a GRPC.Codec.content_type callback
@@ -18,15 +18,30 @@ defmodule GRPC.Transport.HTTP2 do
   end
 
   def server_headers(%{codec: codec}) do
-    %{"content-type" => "application/grpc+#{codec.name()}"}
+    %{"content-type" => "application/grpc+#{codec_name(codec)}"}
   end
 
-  @spec server_trailers(integer, String.t()) :: map
-  def server_trailers(status \\ Status.ok(), message \\ "") do
+  @spec server_trailers(integer, String.t(), [Google.Protobuf.Any.t()] | nil) :: map
+  def server_trailers(status \\ Status.ok(), message \\ "", details \\ nil) do
     %{
       "grpc-status" => Integer.to_string(status),
       "grpc-message" => URI.encode(message)
     }
+    |> put_details_bin_grpc_status(status, message, details)
+  end
+
+  defp put_details_bin_grpc_status(trailers, _status, _message, nil), do: trailers
+  defp put_details_bin_grpc_status(trailers, _status, _message, []), do: trailers
+
+  defp put_details_bin_grpc_status(trailers, status, message, details) when is_list(details) do
+    encoded_details =
+      GRPC.Google.RPC.encode_status(%Google.Rpc.Status{
+        code: status,
+        message: message,
+        details: details
+      })
+
+    Map.put(trailers, "grpc-status-details-bin", encoded_details)
   end
 
   @doc """
@@ -69,8 +84,11 @@ defmodule GRPC.Transport.HTTP2 do
   # Some gRPC implementations don't support application/grpc+xyz,
   # to avoid this kind of trouble, use application/grpc by default
   defp content_type(_, GRPC.Codec.Proto), do: "application/grpc"
-  defp content_type(_, codec = GRPC.Codec.WebText), do: "application/grpc-web-#{codec.name()}"
-  defp content_type(_, codec), do: "application/grpc+#{codec.name()}"
+
+  defp content_type(_, codec = GRPC.Codec.WebText),
+    do: "application/grpc-web-#{codec_name(codec)}"
+
+  defp content_type(_, codec), do: "application/grpc+#{codec_name(codec)}"
 
   def extract_metadata(headers) do
     headers
@@ -105,13 +123,13 @@ defmodule GRPC.Transport.HTTP2 do
   defp append_encoding(headers, _), do: headers
 
   defp append_compressor(headers, compressor) when not is_nil(compressor) do
-    [{"grpc-encoding", compressor.name()} | headers]
+    [{"grpc-encoding", compressor_name(compressor)} | headers]
   end
 
   defp append_compressor(headers, _), do: headers
 
   defp append_accepted_compressors(headers, [_] = compressors) do
-    encoding = Enum.map_join(compressors, ",", & &1.name())
+    encoding = Enum.map_join(compressors, ",", &compressor_name/1)
     [{"grpc-accept-encoding", encoding} | headers]
   end
 
@@ -138,7 +156,7 @@ defmodule GRPC.Transport.HTTP2 do
   end
 
   defp encode_metadata_pair({key, val}) do
-    val = if String.ends_with?(key, "-bin"), do: Base.encode64(val), else: val
+    val = if String.ends_with?(key, "-bin"), do: Base.encode64(val, padding: true), else: val
     {String.downcase(to_string(key)), val}
   end
 
@@ -165,4 +183,10 @@ defmodule GRPC.Transport.HTTP2 do
   defp is_metadata(key) do
     !is_reserved_header(key)
   end
+
+  defp codec_name(codec) when is_atom(codec), do: apply(codec, :name, [])
+  defp codec_name(%{name: name}), do: name
+
+  defp compressor_name(compressor) when is_atom(compressor), do: apply(compressor, :name, [])
+  defp compressor_name(%{name: name}), do: name
 end
