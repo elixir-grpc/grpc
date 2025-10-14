@@ -55,7 +55,7 @@ defmodule GRPC.Server.Supervisor do
   end
 
   def init(opts) when is_list(opts) do
-    if not is_nil(Application.get_env(:grpc, :start_server)) do
+    unless is_nil(Application.get_env(:grpc, :start_server)) do
       raise "the :start_server config key has been deprecated.\
       The currently supported way is to configure it\
       through the :start_server option for the GRPC.Server.Supervisor"

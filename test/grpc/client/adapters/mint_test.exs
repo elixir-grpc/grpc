@@ -1,5 +1,5 @@
 defmodule GRPC.Client.Adapters.MintTest do
-  use GRPC.DataCase, async: false
+  use GRPC.DataCase
 
   alias GRPC.Client.Adapters.Mint
 

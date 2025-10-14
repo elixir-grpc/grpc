@@ -1,7 +1,7 @@
 defmodule Grpc.Testing.PayloadType do
   @moduledoc false
 
-  use Protobuf, enum: true, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
+  use Protobuf, enum: true, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :COMPRESSABLE, 0
 end
@@ -9,7 +9,7 @@ end
 defmodule Grpc.Testing.BoolValue do
   @moduledoc false
 
-  use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :value, 1, type: :bool
 end
@@ -17,7 +17,7 @@ end
 defmodule Grpc.Testing.Payload do
   @moduledoc false
 
-  use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :type, 1, type: Grpc.Testing.PayloadType, enum: true
   field :body, 2, type: :bytes
@@ -26,7 +26,7 @@ end
 defmodule Grpc.Testing.EchoStatus do
   @moduledoc false
 
-  use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :code, 1, type: :int32
   field :message, 2, type: :string
@@ -35,7 +35,7 @@ end
 defmodule Grpc.Testing.SimpleRequest do
   @moduledoc false
 
-  use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :response_type, 1, type: Grpc.Testing.PayloadType, json_name: "responseType", enum: true
   field :response_size, 2, type: :int32, json_name: "responseSize"
@@ -50,7 +50,7 @@ end
 defmodule Grpc.Testing.SimpleResponse do
   @moduledoc false
 
-  use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :payload, 1, type: Grpc.Testing.Payload
   field :username, 2, type: :string
@@ -60,7 +60,7 @@ end
 defmodule Grpc.Testing.StreamingInputCallRequest do
   @moduledoc false
 
-  use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :payload, 1, type: Grpc.Testing.Payload
   field :expect_compressed, 2, type: Grpc.Testing.BoolValue, json_name: "expectCompressed"
@@ -69,7 +69,7 @@ end
 defmodule Grpc.Testing.StreamingInputCallResponse do
   @moduledoc false
 
-  use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :aggregated_payload_size, 1, type: :int32, json_name: "aggregatedPayloadSize"
 end
@@ -77,7 +77,7 @@ end
 defmodule Grpc.Testing.ResponseParameters do
   @moduledoc false
 
-  use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :size, 1, type: :int32
   field :interval_us, 2, type: :int32, json_name: "intervalUs"
@@ -87,7 +87,7 @@ end
 defmodule Grpc.Testing.StreamingOutputCallRequest do
   @moduledoc false
 
-  use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :response_type, 1, type: Grpc.Testing.PayloadType, json_name: "responseType", enum: true
 
@@ -103,7 +103,7 @@ end
 defmodule Grpc.Testing.StreamingOutputCallResponse do
   @moduledoc false
 
-  use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :payload, 1, type: Grpc.Testing.Payload
 end
@@ -111,7 +111,7 @@ end
 defmodule Grpc.Testing.ReconnectParams do
   @moduledoc false
 
-  use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :max_reconnect_backoff_ms, 1, type: :int32, json_name: "maxReconnectBackoffMs"
 end
@@ -119,7 +119,7 @@ end
 defmodule Grpc.Testing.ReconnectInfo do
   @moduledoc false
 
-  use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :passed, 1, type: :bool
   field :backoff_ms, 2, repeated: true, type: :int32, json_name: "backoffMs"

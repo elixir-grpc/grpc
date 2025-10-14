@@ -8,14 +8,14 @@ defmodule Interop.Client do
   # we suggest you to check the documentation for `GRPC.Stub.recv/2`
   # there is some unusual behavior that can be observed.
 
-  def connect(host, opts \\ []) do
-    {:ok, ch} = GRPC.Stub.connect(host, opts)
+  def connect(host, port, opts \\ []) do
+    {:ok, ch} = GRPC.Stub.connect(host, port, opts)
     ch
   end
 
   def empty_unary!(ch) do
     Logger.info("Run empty_unary!")
-    empty = %Grpc.Testing.Empty{}
+    empty = Grpc.Testing.Empty.new()
     {:ok, ^empty} = Grpc.Testing.TestService.Stub.empty_call(ch, empty)
   end
 
@@ -25,15 +25,15 @@ defmodule Interop.Client do
 
   def large_unary!(ch) do
     Logger.info("Run large_unary!")
-    req = %Grpc.Testing.SimpleRequest{response_size: 314_159, payload: payload(271_828)}
-    reply = %Grpc.Testing.SimpleResponse{payload: payload(314_159)}
+    req = Grpc.Testing.SimpleRequest.new(response_size: 314_159, payload: payload(271_828))
+    reply = Grpc.Testing.SimpleResponse.new(payload: payload(314_159))
     {:ok, ^reply} = Grpc.Testing.TestService.Stub.unary_call(ch, req)
   end
 
   def large_unary2!(ch) do
     Logger.info("Run large_unary2!")
-    req = %Grpc.Testing.SimpleRequest{response_size: 1024*1024*8, payload: payload(1024*1024*8)}
-    reply = %Grpc.Testing.SimpleResponse{payload: payload(1024*1024*8)}
+    req = Grpc.Testing.SimpleRequest.new(response_size: 1024*1024*8, payload: payload(1024*1024*8))
+    reply = Grpc.Testing.SimpleResponse.new(payload: payload(1024*1024*8))
     {:ok, ^reply} = Grpc.Testing.TestService.Stub.unary_call(ch, req)
   end
 
@@ -41,24 +41,24 @@ defmodule Interop.Client do
     Logger.info("Run client_compressed_unary!")
     # "Client calls UnaryCall with the feature probe, an uncompressed message" is not supported
 
-    req = %Grpc.Testing.SimpleRequest{expect_compressed: %{value: true}, response_size: 314_159, payload: payload(271_828)}
-    reply = %Grpc.Testing.SimpleResponse{payload: payload(314_159)}
+    req = Grpc.Testing.SimpleRequest.new(expect_compressed: %{value: true}, response_size: 314_159, payload: payload(271_828))
+    reply = Grpc.Testing.SimpleResponse.new(payload: payload(314_159))
     {:ok, ^reply} = Grpc.Testing.TestService.Stub.unary_call(ch, req, compressor: GRPC.Compressor.Gzip)
 
-    req = %Grpc.Testing.SimpleRequest{expect_compressed: %{value: false}, response_size: 314_159, payload: payload(271_828)}
-    reply = %Grpc.Testing.SimpleResponse{payload: payload(314_159)}
+    req = Grpc.Testing.SimpleRequest.new(expect_compressed: %{value: false}, response_size: 314_159, payload: payload(271_828))
+    reply = Grpc.Testing.SimpleResponse.new(payload: payload(314_159))
     {:ok, ^reply} = Grpc.Testing.TestService.Stub.unary_call(ch, req)
   end
 
   def server_compressed_unary!(ch) do
     Logger.info("Run server_compressed_unary!")
 
-    req = %Grpc.Testing.SimpleRequest{response_compressed: %{value: true}, response_size: 314_159, payload: payload(271_828)}
-    reply = %Grpc.Testing.SimpleResponse{payload: payload(314_159)}
+    req = Grpc.Testing.SimpleRequest.new(response_compressed: %{value: true}, response_size: 314_159, payload: payload(271_828))
+    reply = Grpc.Testing.SimpleResponse.new(payload: payload(314_159))
     {:ok, ^reply, %{headers: %{"grpc-encoding" => "gzip"}}} = Grpc.Testing.TestService.Stub.unary_call(ch, req, compressor: GRPC.Compressor.Gzip, return_headers: true)
 
-    req = %Grpc.Testing.SimpleRequest{response_compressed: %{value: false}, response_size: 314_159, payload: payload(271_828)}
-    reply = %Grpc.Testing.SimpleResponse{payload: payload(314_159)}
+    req = Grpc.Testing.SimpleRequest.new(response_compressed: %{value: false}, response_size: 314_159, payload: payload(271_828))
+    reply = Grpc.Testing.SimpleResponse.new(payload: payload(314_159))
     {:ok, ^reply, headers} = Grpc.Testing.TestService.Stub.unary_call(ch, req, return_headers: true)
     refute headers[:headers]["grpc-encoding"]
   end
@@ -70,18 +70,18 @@ defmodule Interop.Client do
       ch
       |> Grpc.Testing.TestService.Stub.streaming_input_call()
       |> GRPC.Stub.send_request(
-        %Grpc.Testing.StreamingInputCallRequest{payload: payload(27182)}
+        Grpc.Testing.StreamingInputCallRequest.new(payload: payload(27182))
       )
-      |> GRPC.Stub.send_request(%Grpc.Testing.StreamingInputCallRequest{payload: payload(8)})
+      |> GRPC.Stub.send_request(Grpc.Testing.StreamingInputCallRequest.new(payload: payload(8)))
       |> GRPC.Stub.send_request(
-        %Grpc.Testing.StreamingInputCallRequest{payload: payload(1828)}
+        Grpc.Testing.StreamingInputCallRequest.new(payload: payload(1828))
       )
       |> GRPC.Stub.send_request(
-        %Grpc.Testing.StreamingInputCallRequest{payload: payload(45904)},
+        Grpc.Testing.StreamingInputCallRequest.new(payload: payload(45904)),
         end_stream: true
       )
 
-    reply = %Grpc.Testing.StreamingInputCallResponse{aggregated_payload_size: 74922}
+    reply = Grpc.Testing.StreamingInputCallResponse.new(aggregated_payload_size: 74922)
     {:ok, ^reply} = GRPC.Stub.recv(stream)
   end
 
@@ -93,20 +93,20 @@ defmodule Interop.Client do
     stream =
       ch
       |> Grpc.Testing.TestService.Stub.streaming_input_call(compressor: GRPC.Compressor.Gzip)
-      |> GRPC.Stub.send_request(%Grpc.Testing.StreamingInputCallRequest{payload: payload(27182), expect_compressed: %{value: true}})
+      |> GRPC.Stub.send_request(Grpc.Testing.StreamingInputCallRequest.new(payload: payload(27182), expect_compressed: %{value: true}))
       |> GRPC.Stub.send_request(
-        %Grpc.Testing.StreamingInputCallRequest{payload: payload(45904), expect_compressed: %{value: false}},
+        Grpc.Testing.StreamingInputCallRequest.new(payload: payload(45904), expect_compressed: %{value: false}),
         end_stream: true, compress: false
       )
 
-    reply = %Grpc.Testing.StreamingInputCallResponse{aggregated_payload_size: 73086}
+    reply = Grpc.Testing.StreamingInputCallResponse.new(aggregated_payload_size: 73086)
     {:ok, ^reply} = GRPC.Stub.recv(stream)
   end
 
   def server_streaming!(ch) do
     Logger.info("Run server_streaming!")
     params = Enum.map([31415, 9, 2653, 58979], &res_param(&1))
-    req = %Grpc.Testing.StreamingOutputCallRequest{response_parameters: params}
+    req = Grpc.Testing.StreamingOutputCallRequest.new(response_parameters: params)
     {:ok, res_enum} = ch |> Grpc.Testing.TestService.Stub.streaming_output_call(req)
     result = Enum.map([9, 2653, 31415, 58979], &String.duplicate(<<0>>, &1))
 
@@ -115,12 +115,12 @@ defmodule Interop.Client do
 
   def server_compressed_streaming!(ch) do
     Logger.info("Run server_compressed_streaming!")
-    req = %Grpc.Testing.StreamingOutputCallRequest{response_parameters: [
+    req = Grpc.Testing.StreamingOutputCallRequest.new(response_parameters: [
       %{compressed: %{value: true},
         size: 31415},
       %{compressed: %{value: false},
         size: 92653}
-    ]}
+    ])
     {:ok, res_enum} = ch |> Grpc.Testing.TestService.Stub.streaming_output_call(req)
     result = Enum.map([31415, 92653], &String.duplicate(<<0>>, &1))
 
@@ -132,10 +132,10 @@ defmodule Interop.Client do
     stream = Grpc.Testing.TestService.Stub.full_duplex_call(ch)
 
     req = fn size1, size2 ->
-      %Grpc.Testing.StreamingOutputCallRequest{
+      Grpc.Testing.StreamingOutputCallRequest.new(
         response_parameters: [res_param(size1)],
         payload: payload(size2)
-      }
+      )
     end
 
     GRPC.Stub.send_request(stream, req.(31415, 27182))
@@ -169,8 +169,8 @@ defmodule Interop.Client do
   def custom_metadata!(ch) do
     Logger.info("Run custom_metadata!")
     # UnaryCall
-    req = %Grpc.Testing.SimpleRequest{response_size: 314_159, payload: payload(271_828)}
-    reply = %Grpc.Testing.SimpleResponse{payload: payload(314_159)}
+    req = Grpc.Testing.SimpleRequest.new(response_size: 314_159, payload: payload(271_828))
+    reply = Grpc.Testing.SimpleResponse.new(payload: payload(314_159))
     headers = %{"x-grpc-test-echo-initial" => "test_initial_metadata_value"}
     # 11250603
     trailers = %{"x-grpc-test-echo-trailing-bin" => 0xABABAB}
@@ -183,10 +183,10 @@ defmodule Interop.Client do
 
     # FullDuplexCall
     req =
-      %Grpc.Testing.StreamingOutputCallRequest{
+      Grpc.Testing.StreamingOutputCallRequest.new(
         response_parameters: [res_param(314_159)],
         payload: payload(271_828)
-      }
+      )
 
     {headers, data, trailers} =
       ch
@@ -221,15 +221,15 @@ defmodule Interop.Client do
 
     code = 2
     msg = "test status message"
-    status = %Grpc.Testing.EchoStatus{code: code, message: msg}
+    status = Grpc.Testing.EchoStatus.new(code: code, message: msg)
     error = GRPC.RPCError.exception(code, msg)
 
     # UnaryCall
-    req = %Grpc.Testing.SimpleRequest{response_status: status}
+    req = Grpc.Testing.SimpleRequest.new(response_status: status)
     {:error, ^error} = Grpc.Testing.TestService.Stub.unary_call(ch, req)
 
     # FullDuplexCall
-    req = %Grpc.Testing.StreamingOutputCallRequest{response_status: status}
+    req = Grpc.Testing.StreamingOutputCallRequest.new(response_status: status)
 
     {:error, ^error} =
       ch
@@ -244,7 +244,7 @@ defmodule Interop.Client do
 
   def unimplemented_service!(ch) do
     Logger.info("Run unimplemented_service!")
-    req = %Grpc.Testing.Empty{}
+    req = Grpc.Testing.Empty.new()
 
     {:error, %GRPC.RPCError{status: 12}} =
       Grpc.Testing.TestService.Stub.unimplemented_call(ch, req)
@@ -262,10 +262,10 @@ defmodule Interop.Client do
     Logger.info("Run cancel_after_first_response!")
 
     req =
-      %Grpc.Testing.StreamingOutputCallRequest{
+      Grpc.Testing.StreamingOutputCallRequest.new(
         response_parameters: [res_param(31415)],
         payload: payload(27182)
-      }
+      )
 
     stream = Grpc.Testing.TestService.Stub.full_duplex_call(ch)
 
@@ -283,10 +283,10 @@ defmodule Interop.Client do
     Logger.info("Run timeout_on_sleeping_server!")
 
     req =
-      %Grpc.Testing.StreamingOutputCallRequest{
+      Grpc.Testing.StreamingOutputCallRequest.new(
         payload: payload(27182),
         response_parameters: [res_param(31415)]
-      }
+      )
 
     stream = Grpc.Testing.TestService.Stub.full_duplex_call(ch, timeout: 1)
     resp = stream |> GRPC.Stub.send_request(req) |> GRPC.Stub.recv()
@@ -312,10 +312,10 @@ defmodule Interop.Client do
   end
 
   defp res_param(size) do
-    %Grpc.Testing.ResponseParameters{size: size}
+    Grpc.Testing.ResponseParameters.new(size: size)
   end
 
   defp payload(n) do
-    %Grpc.Testing.Payload{body: String.duplicate(<<0>>, n)}
+    Grpc.Testing.Payload.new(body: String.duplicate(<<0>>, n))
   end
 end

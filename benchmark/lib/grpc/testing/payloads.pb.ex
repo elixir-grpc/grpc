@@ -1,7 +1,7 @@
 defmodule Grpc.Testing.ByteBufferParams do
   @moduledoc false
 
-  use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :req_size, 1, type: :int32, json_name: "reqSize"
   field :resp_size, 2, type: :int32, json_name: "respSize"
@@ -10,7 +10,7 @@ end
 defmodule Grpc.Testing.SimpleProtoParams do
   @moduledoc false
 
-  use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   field :req_size, 1, type: :int32, json_name: "reqSize"
   field :resp_size, 2, type: :int32, json_name: "respSize"
@@ -19,13 +19,13 @@ end
 defmodule Grpc.Testing.ComplexProtoParams do
   @moduledoc false
 
-  use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 end
 
 defmodule Grpc.Testing.PayloadConfig do
   @moduledoc false
 
-  use Protobuf, protoc_gen_elixir_version: "0.14.0", syntax: :proto3
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
   oneof :payload, 0
 

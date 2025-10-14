@@ -13,11 +13,7 @@ defmodule GRPC.Stream do
   - Supports joining with external producers (e.g., RabbitMQ, Kafka) for unbounded or fan-in stream sources.
   - Offers composable functional operators (`map/2`, `filter/2`, `flat_map/2`, etc.) on the stream.
 
-  See the [API section](#api) for more information.
-
-  ## Examples
-
-  ### Bidirectional Streaming
+  ## Example: Bidirectional Streaming
 
       defmodule MyGRPCService do
         use GRPC.Server, service: MyService.Service
@@ -31,7 +27,7 @@ defmodule GRPC.Stream do
         defp process_note(note), do: %Response{message: "Received"}
       end
 
-  ### Joining with an External Producer
+  ## Example: Joining with an External Producer
 
   When integrating with external unbounded sources (e.g., message queues),
   you can pass a running `GenStage` producer using the `:join_with` option:
@@ -75,7 +71,7 @@ defmodule GRPC.Stream do
     - `:dispatcher` — Specifies the `Flow` dispatcher (defaults to `GenStage.DemandDispatcher`).
     - `:propagate_context` - If `true`, the context from the `materializer` is propagated to the `Flow`.
     - `:materializer` - The `%GRPC.Server.Stream{}` struct representing the current gRPC stream context.
-
+    
   And any other options supported by `Flow`.
 
   ## Returns
@@ -152,11 +148,11 @@ defmodule GRPC.Stream do
   """
   @spec run(t()) :: any()
   def run(%__MODULE__{flow: flow, options: opts}) do
-    if !Keyword.get(opts, :unary, false) do
+    unless Keyword.get(opts, :unary, false) do
       raise ArgumentError, "run/2 is not supported for non-unary streams"
     end
 
-    # We have to call `Enum.to_list` because we want to actually run and materialize the full stream.
+    # We have to call `Enum.to_list` because we want to actually run and materialize the full stream. 
     # List.flatten and List.first are used so that we can obtain the first result of the materialized list.
     flow
     |> Enum.to_list()
@@ -184,7 +180,7 @@ defmodule GRPC.Stream do
 
       GRPC.Stream.run_with(request, mat)
   """
-  @spec run_with(t(), stream :: Materializer.t(), Keyword.t()) :: :ok
+  @spec run_with(t(), Stream.t(), Keyword.t()) :: :ok
   def run_with(
         %__MODULE__{flow: flow, options: flow_opts} = _stream,
         %Materializer{} = from,
