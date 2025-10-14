@@ -252,7 +252,7 @@ defmodule GRPC.Client.Connection do
 
     {:ok, {prefer_host, prefer_port}, new_lb_state} = lb_mod.pick(lb_state)
 
-    channel_key = "#{inspect(prefer_host)}:#{prefer_port}"
+    channel_key = "#{prefer_host}:#{prefer_port}"
 
     case Map.get(channels, channel_key) do
       nil ->
@@ -405,7 +405,7 @@ defmodule GRPC.Client.Connection do
           end)
 
         virtual_channel =
-          Map.get(real_channels, "#{inspect(prefer_host)}:#{prefer_port}")
+          Map.get(real_channels, "#{prefer_host}:#{prefer_port}")
 
         %__MODULE__{
           base_state
