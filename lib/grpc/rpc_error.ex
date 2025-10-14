@@ -58,7 +58,7 @@ defmodule GRPC.RPCError do
   @type t :: %__MODULE__{
           status: GRPC.Status.t(),
           message: String.t(),
-          details: [Google.Protobuf.Any.t()]
+          details: [%Google.Protobuf.Any{}]
         }
 
   alias GRPC.Status
