@@ -206,6 +206,25 @@ This section demonstrates how to establish client connections and perform RPC ca
 
 ## Basic Connection and RPC
 
+
+Typically, you start this client supervisor as part of your application's supervision tree:
+
+```elixir
+children = [
+  {GRPC.Client.Supervisor, []}
+]
+
+opts = [strategy: :one_for_one, name: MyApp.Supervisor]
+Supervisor.start_link(children, opts)
+``` 
+
+You can also start it manually in scripts or test environments:
+```elixir
+{:ok, _pid} = DynamicSupervisor.start_link(strategy: :one_for_one, name: GRPC.Client.Supervisor)
+``` 
+
+Then connect with gRPC server:
+
 ```elixir
 iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051")
 iex> request = Helloworld.HelloRequest.new(name: "grpc-elixir")
