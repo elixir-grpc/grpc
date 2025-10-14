@@ -107,7 +107,7 @@ defmodule GRPC.Stub do
   @doc """
   Establishes a connection with a gRPC server and returns a `GRPC.Channel` required
   for sending requests. 
-  
+
   Supports advanced connection resolution via the gRPC `Resolver`
   and various target schemes (`dns`, `unix`, `xds`, `host:port`, etc).
 
