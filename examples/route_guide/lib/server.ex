@@ -1,5 +1,20 @@
+defmodule CustomErrorInterceptor do
+  @behaviour GRPC.Server.Interceptor
+
+  def init(opts), do: opts
+
+  def call(req, stream, next, opts) do
+    try do
+      next.(req, stream)
+    rescue
+      CustomError ->
+        Server.send_reply(stream, ...)
+    end
+  end
+end
+
 defmodule Routeguide.RouteGuide.Server do
-  use GRPC.Server, service: Routeguide.RouteGuide.Service
+  use GRPC.Server, service: Routeguide.RouteGuide.Service, interceptors: [CustomErrorInterceptor]
   alias GRPC.Server
   alias RouteGuide.Data
 

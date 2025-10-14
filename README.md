@@ -19,6 +19,15 @@
   - [Bidirectional Streaming](#bidirectional-streaming)
 - [Application Startup](#application-startup)
 - [Client Usage](#client-usage)
+  - [Basic Connection and RPC](#basic-connection-and-rpc)
+  - [Using Interceptors](#using-interceptors)
+  - [Target Schemes and Resolvers](#target-schemes-and-resolvers)
+    - [Supported formats](#supported-formats)
+    - [Example (DNS)](#example-dns)
+    - [Example (Unix socket)](#example-unix-socket)
+  - [Compression and Metadata](#compression-and-metadata)
+  - [Client Adapters](#client-adapters)
+    - [Using Mint Adapter](#using-mint-adapter)
 - [HTTP Transcoding](#http-transcoding)
 - [CORS](#cors)
 - [Features](#features)
@@ -78,6 +87,8 @@ protoc --elixir_out=plugins=grpc:./lib -I./priv/protos helloworld.proto
 
 All RPC calls must be implemented using the stream-based API, even for unary requests.
 
+>__NOTE__: The old API was deprecated based on `GRPC.Server.send_reply/2` and direct `struct` returns was deprecated as of version `0.10.x`.
+
 ### Unary RPC using Stream API
 
 ```elixir
@@ -133,7 +144,10 @@ def say_bid_stream_hello(request, materializer) do
   |> GRPC.Stream.run_with(materializer)
 end
 ```
-__💡__ The Stream API supports composable stream transformations via `ask`, `map`, `run` and others functions, enabling clean and declarative stream pipelines. For a complete list of available operators see [here](lib/grpc/stream.ex).
+
+The Stream API supports composable stream transformations via `ask`, `map`, `run` and other functions, enabling clean and declarative stream pipelines. For a complete list of available operators and detailed documentation, see [`GRPC.Stream`](lib/grpc/stream.ex).
+
+---
 
 ## Application Startup
 
@@ -166,38 +180,106 @@ end
 
 # Client Usage
 
+This section demonstrates how to establish client connections and perform RPC calls using the Elixir gRPC client.
+
+---
+
+## Basic Connection and RPC
+
 ```elixir
 iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051")
 iex> request = Helloworld.HelloRequest.new(name: "grpc-elixir")
 iex> {:ok, reply} = channel |> Helloworld.GreetingServer.Stub.say_unary_hello(request)
-
-# With interceptors
-iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Client.Interceptors.Logger])
-...
 ```
 
-Check the [examples](examples) and [interop](interop) directories in the project's source code for some examples.
+---
 
-## Client Adapter and Configuration
+## Using Interceptors
 
-The default adapter used by `GRPC.Stub.connect/2` is `GRPC.Client.Adapter.Gun`. Another option is to use `GRPC.Client.Adapters.Mint` instead, like so:
+Client interceptors allow you to add logic to the request/response lifecycle, such as logging, tracing, or authentication.
 
 ```elixir
-GRPC.Stub.connect("localhost:50051",
-  # Use Mint adapter instead of default Gun
-  adapter: GRPC.Client.Adapters.Mint
-)
+iex> {:ok, channel} =
+...>   GRPC.Stub.connect("localhost:50051",
+...>     interceptors: [GRPC.Client.Interceptors.Logger]
+...>   )
+iex> request = Helloworld.HelloRequest.new(name: "Alice")
+iex> {:ok, reply} = channel |> Helloworld.GreetingServer.Stub.say_unary_hello(request)
 ```
 
-The `GRPC.Client.Adapters.Mint` adapter accepts custom configuration. To do so, you can configure it from your mix application via:
+---
+
+## Target Schemes and Resolvers
+
+The `connect/2` function supports URI-like targets that are resolved via the internal **gRPC** [Resolver](lib/grpc/client/resolver.ex).
+You can connect using `DNS`, `Unix Domain sockets`, `IPv4/IPv6`, or even `xDS-based endpoints`.
+
+### Supported formats:
+
+| Scheme    | Example                     | Description                                  |
+|:----------|:----------------------------|:---------------------------------------------|
+| `dns://`  | `"dns://example.com:50051"` | Resolves via DNS `A/AAAA` records            |
+| `ipv4:`   | `"ipv4:10.0.0.5:50051"`     | Connects directly to an IPv4 address         |
+| `unix:`   | `"unix:/tmp/service.sock"`  | Connects via a Unix domain socket            |
+| `xds:///` | `"xds:///my-service"`       | Resolves via xDS control plane (Envoy/Istio) |
+| none      | `"127.0.0.1:50051"`         | Implicit DNS (default port `50051`)          |
+
+### Example (DNS):
 
 ```elixir
-# File: your application's config file.
-config :grpc, GRPC.Client.Adapters.Mint, custom_opts
+iex> {:ok, channel} = GRPC.Stub.connect("dns://orders.prod.svc.cluster.local:50051")
+iex> request = Orders.GetOrderRequest.new(id: "123")
+iex> {:ok, reply} = channel |> Orders.OrderService.Stub.get_order(request)
 ```
 
-The accepted options for configuration are the ones listed on [Mint.HTTP.connect/4](https://hexdocs.pm/mint/Mint.HTTP.html#connect/4-options)
+### Example (Unix socket):
 
+```elixir
+iex> {:ok, channel} = GRPC.Stub.connect("unix:/tmp/my.sock")
+```
+
+>__NOTE__: When using `DNS` or `xDS` targets, the connection layer periodically refreshes endpoints.
+---
+
+## Compression and Metadata
+
+You can specify message compression and attach default headers to all requests.
+
+```elixir
+iex> {:ok, channel} =
+...>   GRPC.Stub.connect("localhost:50051",
+...>     compressor: GRPC.Compressor.Gzip,
+...>     headers: [{"authorization", "Bearer my-token"}]
+...>   )
+```
+
+---
+
+## Client Adapters
+
+By default, `GRPC.Stub.connect/2` uses the **Gun** adapter.
+You can switch to **Mint** (pure Elixir HTTP/2) or other adapters as needed.
+
+### Using Mint Adapter
+
+```elixir
+iex> GRPC.Stub.connect("localhost:50051",
+...>   adapter: GRPC.Client.Adapters.Mint
+...> )
+```
+
+You can configure adapter options globally via your application’s config:
+
+```elixir
+# File: config/config.exs
+config :grpc, GRPC.Client.Adapters.Mint,
+  timeout: 10_000,
+  transport_opts: [cacertfile: "/etc/ssl/certs/ca-certificates.crt"]
+```
+
+The accepted options are the same as [`Mint.HTTP.connect/4`](https://hexdocs.pm/mint/Mint.HTTP.html#connect/4-options).
+
+---
 
 ### **HTTP Transcoding**
 
@@ -264,7 +346,7 @@ defmodule Helloworld.Greeter.Server do
 end
 ```
 
-See full application code in [helloworld_transcoding](examples/helloworld_transcoding) example.
+See full application code in [helloworld_transcoding](https://github.com/elixir-grpc/tree/master/examples/helloworld_transcoding) example.
 
 ### **CORS**
 
@@ -300,9 +382,9 @@ end
 
 ## Benchmark
 
-1. [Simple benchmark](examples/helloworld/README.md#Benchmark) by using [ghz](https://ghz.sh/)
+1. [Simple benchmark](https://github.com/elixir-grpc/tree/master/examples/helloworld/README.md#Benchmark) by using [ghz](https://ghz.sh/)
 
-2. [Benchmark](benchmark) followed by official spec
+2. [Benchmark](https://github.com/elixir-grpc/tree/master/benchmark) followed by official spec
 
 ## Contributing
 
