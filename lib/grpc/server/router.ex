@@ -4,9 +4,7 @@ defmodule GRPC.Server.Router do
   alias __MODULE__.Template
 
   @type http_method :: :get | :put | :post | :patch | :delete
-  @type segment_match :: String.t() | {atom(), [segment_match]}
-  @type matchers :: [segment_match]
-  @type route :: {http_method(), String.t(), matchers()}
+  @type route :: {http_method(), String.t(), Template.matchers()}
 
   @wildcards [:_, :__]
 
@@ -65,12 +63,12 @@ defmodule GRPC.Server.Router do
       false = GRPC.Server.Router.match("/v1/shelves/example-shelf/something-els/books/book", match)
 
   """
-  @spec match(String.t() | [String.t()], matchers()) :: {true, map()} | false
+  @spec match(String.t() | [String.t()], Template.matchers()) :: {true, map()} | false
   def match(path, match) do
     match(path, match, %{})
   end
 
-  @spec match(String.t() | [String.t()], matchers(), map()) :: {true, map()} | false
+  @spec match(String.t() | [String.t()], Template.matchers(), map()) :: {true, map()} | false
   def match(path, match, bindings) when is_binary(path) do
     path
     |> split_path()
