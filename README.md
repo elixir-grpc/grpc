@@ -144,28 +144,8 @@ def say_bid_stream_hello(request, materializer) do
   |> GRPC.Stream.run_with(materializer)
 end
 ```
-The Stream API supports composable stream transformations via `ask`, `map`, `run` and others functions, enabling clean and declarative stream pipelines. See the table below:
 
-| Function                         | Description  | Parameters / Options  |
-|:---------------------------------|:-------------|:----------------------|
-| **`from(input, opts \\\\ [])`**  | Converts a gRPC stream (or list) into a `Flow` with backpressure support. Allows joining with external `GenStage` producers. | **Parameters:**<br>• `input` — stream, list, or gRPC struct.<br>**Options:**<br>• `:join_with` — PID or name of an external `GenStage` producer.<br>• `:dispatcher` — dispatcher module (default: `GenStage.DemandDispatcher`).<br>• `:propagate_context` — if `true`, propagates the materializer context.<br>• `:materializer` — the current `%GRPC.Server.Stream{}`.<br>• Other options supported by `Flow`. |
-| **`unary(input, opts \\\\ [])`** | Creates a `Flow` from a single gRPC request (unary). Useful for non-streaming calls that still leverage the Flow API. | **Parameters:**<br>• `input` — single gRPC message.<br>**Options:** same as `from/2`. |
-| **`to_flow(stream)`**            | Returns the underlying `Flow` from a `GRPC.Stream`. If uninitialized, returns `Flow.from_enumerable([])`. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}` struct. |
-| **`run(stream)`**                | Executes the `Flow` for a unary stream and returns the first materialized result. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}` with `unary: true` option. |
-| **`run_with(stream, materializer, opts \\\\ [])`** | Executes the `Flow` and sends responses into the gRPC server stream. Supports `:dry_run` for test mode without sending messages. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`.<br>• `materializer` — `%GRPC.Server.Stream{}`.<br>**Options:**<br>• `:dry_run` — if `true`, responses are not sent. |
-| **`ask(stream, target, timeout \\\\ 5000)`** | Sends a request to an external process (`PID` or named process) and waits for a response (`{:response, msg}`). Returns an updated stream or an error. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`.<br>• `target` — PID or atom.<br>• `timeout` — in milliseconds. |
-| **`ask!(stream, target, timeout \\\\ 5000)`** | Same as `ask/3`, but raises an exception on failure (aborts the Flow). | Same parameters as `ask/3`. |
-| **`filter(stream, fun)`** | Filters items in the stream by applying a concurrent predicate function. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`.<br>• `fun` — function `(item -> boolean)`. |
-| **`flat_map(stream, fun)`** | Applies a function returning a list or enumerable, flattening the results. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`.<br>• `fun` — `(item -> Enumerable.t())`. |
-| **`map(stream, fun)`** | Applies a transformation function to each item in the stream. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`.<br>• `fun` — `(item -> term)`. |
-| **`map_with_context(stream, fun)`** | Applies a function to each item, passing the stream context (e.g., headers) as an additional argument. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`.<br>• `fun` — `(context, item -> term)`. |
-| **`partition(stream, opts \\\\ [])`** | Partitions the stream to group items by key or condition before stateful operations like `reduce/3`. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`.<br>• `opts` — partitioning options (`Flow.partition/2`). |
-| **`reduce(stream, acc_fun, reducer_fun)`** | Reduces the stream using an accumulator, useful for aggregations. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`.<br>• `acc_fun` — initializer function `() -> acc`.<br>• `reducer_fun` — `(item, acc -> acc)`. |
-| **`uniq(stream)`** | Emits only distinct items from the stream (no custom uniqueness criteria). | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`. |
-| **`uniq_by(stream, fun)`** | Emits only unique items based on the return value of the provided function. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`.<br>• `fun` — `(item -> term)` for uniqueness determination. |
-| **`get_headers(stream)`** | Retrieves HTTP/2 headers from a `%GRPC.Server.Stream{}`. | **Parameters:**<br>• `stream` — `%GRPC.Server.Stream{}`.<br>**Returns:** `map` containing decoded headers. |
-
-For a complete list of available operators see [here](lib/grpc/stream.ex).
+The Stream API supports composable stream transformations via `ask`, `map`, `run` and other functions, enabling clean and declarative stream pipelines. For a complete list of available operators and detailed documentation, see [`GRPC.Stream`](lib/grpc/stream.ex).
 
 ---
 
@@ -231,7 +211,7 @@ iex> {:ok, reply} = channel |> Helloworld.GreetingServer.Stub.say_unary_hello(re
 
 ## Target Schemes and Resolvers
 
-The `connect/2` function supports URI-like targets that are resolved via the internal **gRPC** [Resolver](lib/grpc/client/resolver.ex).  
+The `connect/2` function supports URI-like targets that are resolved via the internal **gRPC** [Resolver](lib/grpc/client/resolver.ex).
 You can connect using `DNS`, `Unix Domain sockets`, `IPv4/IPv6`, or even `xDS-based endpoints`.
 
 ### Supported formats:
@@ -277,7 +257,7 @@ iex> {:ok, channel} =
 
 ## Client Adapters
 
-By default, `GRPC.Stub.connect/2` uses the **Gun** adapter.  
+By default, `GRPC.Stub.connect/2` uses the **Gun** adapter.
 You can switch to **Mint** (pure Elixir HTTP/2) or other adapters as needed.
 
 ### Using Mint Adapter
@@ -366,7 +346,7 @@ defmodule Helloworld.Greeter.Server do
 end
 ```
 
-See full application code in [helloworld_transcoding](examples/helloworld_transcoding) example.
+See full application code in [helloworld_transcoding](https://github.com/elixir-grpc/tree/master/examples/helloworld_transcoding) example.
 
 ### **CORS**
 
@@ -402,9 +382,9 @@ end
 
 ## Benchmark
 
-1. [Simple benchmark](examples/helloworld/README.md#Benchmark) by using [ghz](https://ghz.sh/)
+1. [Simple benchmark](https://github.com/elixir-grpc/tree/master/examples/helloworld/README.md#Benchmark) by using [ghz](https://ghz.sh/)
 
-2. [Benchmark](benchmark) followed by official spec
+2. [Benchmark](https://github.com/elixir-grpc/tree/master/benchmark) followed by official spec
 
 ## Contributing
 
