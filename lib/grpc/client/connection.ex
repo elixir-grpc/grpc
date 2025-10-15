@@ -153,22 +153,48 @@ defmodule GRPC.Client.Connection do
   """
   @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(target, opts \\ []) do
+    supervisor_pid = Process.whereis(GRPC.Client.Supervisor)
+
+    if is_nil(supervisor_pid) or !Process.alive?(supervisor_pid) do
+      raise ArgumentError, """
+      GRPC.Client.Supervisor is not running. Please ensure it is started as part of your
+      application's supervision tree:
+
+          children = [
+            {GRPC.Client.Supervisor, []}
+          ]
+
+          opts = [strategy: :one_for_one, name: MyApp.Supervisor]
+          Supervisor.start_link(children, opts)
+
+      You can also start it manually in scripts or test environments:
+
+          {:ok, _pid} = DynamicSupervisor.start_link(strategy: :one_for_one, name: GRPC.Client.Supervisor)
+      """
+    end
+
     ref = make_ref()
-    initial_state = build_initial_state(target, Keyword.merge(opts, ref: ref))
-    ch = initial_state.virtual_channel
 
-    case DynamicSupervisor.start_child(GRPC.Client.Supervisor, child_spec(initial_state)) do
-      {:ok, _pid} ->
-        {:ok, ch}
+    case build_initial_state(target, Keyword.merge(opts, ref: ref)) do
+      {:ok, initial_state} ->
+        ch = initial_state.virtual_channel
 
-      {:error, {:already_started, _pid}} ->
-        # race: someone else started it first, ask the running process for its current channel
-        case pick_channel(opts) do
-          {:ok, %Channel{} = channel} ->
-            {:ok, channel}
+        case DynamicSupervisor.start_child(GRPC.Client.Supervisor, child_spec(initial_state)) do
+          {:ok, _pid} ->
+            {:ok, ch}
 
-          _ ->
-            {:error, :no_connection}
+          {:error, {:already_started, _pid}} ->
+            # race: someone else started it first, ask the running process for its current channel
+            case pick_channel(opts) do
+              {:ok, %Channel{} = channel} ->
+                {:ok, channel}
+
+              _ ->
+                {:error, :no_connection}
+            end
+
+          {:error, reason} ->
+            {:error, reason}
         end
 
       {:error, reason} ->
@@ -229,7 +255,7 @@ defmodule GRPC.Client.Connection do
     resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
 
     if Map.has_key?(state, :real_channels) do
-      Enum.map(state.real_channels, fn {_key, ch} ->
+      Enum.map(state.real_channels, fn {_key, {:ok, ch}} ->
         adapter.disconnect(ch)
       end)
 
@@ -316,47 +342,24 @@ defmodule GRPC.Client.Connection do
     lb_policy_opt = Keyword.get(opts, :lb_policy)
 
     {norm_target, norm_opts, scheme} = normalize_target_and_opts(target, opts)
-
-    cred =
-      case norm_opts[:cred] do
-        nil when scheme == @secure_scheme ->
-          default_ssl_option()
-
-        %GRPC.Credential{} = c ->
-          c
-
-        nil ->
-          nil
-
-        other ->
-          other
-      end
-
-    intialized_interceptors = init_interceptors(norm_opts[:interceptors])
-    codec = norm_opts[:codec]
-    compressor = norm_opts[:compressor]
-    headers = norm_opts[:headers]
+    cred = resolve_credential(norm_opts[:cred], scheme)
+    interceptors = init_interceptors(norm_opts[:interceptors])
 
     accepted_compressors =
-      [compressor | norm_opts[:accepted_compressors]]
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq()
+      build_compressor_list(norm_opts[:compressor], norm_opts[:accepted_compressors])
 
-    adapter_opts = opts[:adapter_opts]
-
-    unless is_list(adapter_opts),
-      do: raise(ArgumentError, ":adapter_opts must be a keyword list if present")
+    validate_adapter_opts!(opts[:adapter_opts])
 
     virtual_channel = %Channel{
       scheme: scheme,
       cred: cred,
       ref: opts[:ref],
       adapter: adapter,
-      interceptors: intialized_interceptors,
-      codec: codec,
-      compressor: compressor,
+      interceptors: interceptors,
+      codec: norm_opts[:codec],
+      compressor: norm_opts[:compressor],
       accepted_compressors: accepted_compressors,
-      headers: headers
+      headers: norm_opts[:headers]
     }
 
     base_state = %__MODULE__{
@@ -367,63 +370,106 @@ defmodule GRPC.Client.Connection do
 
     case resolver.resolve(norm_target) do
       {:ok, %{addresses: addresses, service_config: config}} ->
-        lb_policy =
-          cond do
-            is_map(config) and Map.has_key?(config, :load_balancing_policy) ->
-              config.load_balancing_policy
-
-            lb_policy_opt ->
-              lb_policy_opt
-
-            true ->
-              nil
-          end
-
-        lb_mod = choose_lb(lb_policy)
-        {:ok, lb_state} = lb_mod.init(addresses: addresses)
-
-        {:ok, {prefer_host, prefer_port}, new_lb_state} = lb_mod.pick(lb_state)
-
-        real_channels =
-          Enum.into(addresses, %{}, fn %{port: port, address: host} ->
-            case connect_real_channel(
-                   %Channel{virtual_channel | host: host, port: port},
-                   host,
-                   port,
-                   norm_opts,
-                   adapter
-                 ) do
-              {:ok, ch} ->
-                {"#{inspect(host)}:#{port}", ch}
-
-              {:error, :timeout} ->
-                {"#{host}:#{port}", %Channel{virtual_channel | host: host, port: port}}
-
-              {:error, reason} ->
-                raise "Failed to connect to #{inspect(host)}:#{port} - #{inspect(reason)}"
-            end
-          end)
-
-        virtual_channel =
-          Map.get(real_channels, "#{prefer_host}:#{prefer_port}")
-
-        %__MODULE__{
-          base_state
-          | lb_mod: lb_mod,
-            lb_state: new_lb_state,
-            virtual_channel: virtual_channel,
-            real_channels: real_channels
-        }
+        build_balanced_state(base_state, addresses, config, lb_policy_opt, norm_opts, adapter)
 
       {:error, _reason} ->
-        {host, port} = split_host_port(norm_target)
-        {:ok, ch} = connect_real_channel(virtual_channel, host, port, norm_opts, adapter)
+        build_direct_state(base_state, norm_target, norm_opts, adapter)
+    end
+  end
 
-        %__MODULE__{
-          base_state
-          | virtual_channel: ch,
-            real_channels: %{"#{host}:#{port}" => ch}
-        }
+  defp resolve_credential(nil, @secure_scheme), do: default_ssl_option()
+  defp resolve_credential(%GRPC.Credential{} = cred, _scheme), do: cred
+  defp resolve_credential(nil, _scheme), do: nil
+  defp resolve_credential(other, _scheme), do: other
+
+  defp validate_adapter_opts!(opts) when is_list(opts), do: :ok
+
+  defp validate_adapter_opts!(_),
+    do: raise(ArgumentError, ":adapter_opts must be a keyword list if present")
+
+  defp build_compressor_list(compressor, accepted) do
+    [compressor | accepted]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+  end
+
+  defp build_balanced_state(base_state, addresses, config, lb_policy_opt, norm_opts, adapter) do
+    lb_policy =
+      cond do
+        is_map(config) and Map.has_key?(config, :load_balancing_policy) ->
+          config.load_balancing_policy
+
+        lb_policy_opt ->
+          lb_policy_opt
+
+        true ->
+          nil
+      end
+
+    lb_mod = choose_lb(lb_policy)
+    {:ok, lb_state} = lb_mod.init(addresses: addresses)
+    {:ok, {prefer_host, prefer_port}, new_lb_state} = lb_mod.pick(lb_state)
+
+    real_channels = build_real_channels(addresses, base_state.virtual_channel, norm_opts, adapter)
+    key = build_address_key(prefer_host, prefer_port)
+
+    with {:ok, ch} <- Map.get(real_channels, key, {:error, :no_channel}) do
+      {:ok,
+       %__MODULE__{
+         base_state
+         | lb_mod: lb_mod,
+           lb_state: new_lb_state,
+           virtual_channel: ch,
+           real_channels: real_channels
+       }}
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp build_direct_state(base_state, norm_target, norm_opts, adapter) do
+    {host, port} = split_host_port(norm_target)
+    vc = base_state.virtual_channel
+
+    case connect_real_channel(vc, host, port, norm_opts, adapter) do
+      {:ok, ch} ->
+        {:ok,
+         %__MODULE__{
+           base_state
+           | virtual_channel: ch,
+             real_channels: %{"#{host}:#{port}" => ch}
+         }}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp build_real_channels(addresses, virtual_channel, norm_opts, adapter) do
+    Enum.into(addresses, %{}, fn %{port: port, address: host} ->
+      case connect_real_channel(
+             %Channel{virtual_channel | host: host, port: port},
+             host,
+             port,
+             norm_opts,
+             adapter
+           ) do
+        {:ok, ch} ->
+          {build_address_key(host, port), {:ok, ch}}
+
+        {:error, reason} ->
+          {build_address_key(host, port), {:error, reason}}
+      end
+    end)
+  end
+
+  defp build_address_key(host, port) do
+    case host do
+      {:local, _} ->
+        "#{inspect(host)}:#{port}"
+
+      _ ->
+        "#{host}:#{port}"
     end
   end
 
