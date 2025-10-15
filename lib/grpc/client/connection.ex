@@ -156,7 +156,7 @@ defmodule GRPC.Client.Connection do
     supervisor_pid = Process.whereis(GRPC.Client.Supervisor)
 
     if is_nil(supervisor_pid) or !Process.alive?(supervisor_pid) do
-      raise ArgumentError, """
+      raise """
       GRPC.Client.Supervisor is not running. Please ensure it is started as part of your
       application's supervision tree:
 
