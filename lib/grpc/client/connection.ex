@@ -287,7 +287,7 @@ defmodule GRPC.Client.Connection do
         Process.send_after(self(), :refresh, @refresh_interval)
         {:noreply, %{state | lb_state: new_lb_state}}
 
-      %Channel{} = picked_channel ->
+      {:ok, %Channel{} = picked_channel} ->
         :persistent_term.put({__MODULE__, :lb_state, vc.ref}, picked_channel)
 
         Process.send_after(self(), :refresh, @refresh_interval)
