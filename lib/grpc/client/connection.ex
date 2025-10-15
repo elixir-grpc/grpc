@@ -407,23 +407,31 @@ defmodule GRPC.Client.Connection do
       end
 
     lb_mod = choose_lb(lb_policy)
-    {:ok, lb_state} = lb_mod.init(addresses: addresses)
-    {:ok, {prefer_host, prefer_port}, new_lb_state} = lb_mod.pick(lb_state)
 
-    real_channels = build_real_channels(addresses, base_state.virtual_channel, norm_opts, adapter)
-    key = build_address_key(prefer_host, prefer_port)
+    case lb_mod.init(addresses: addresses) do
+      {:ok, lb_state} ->
+        {:ok, {prefer_host, prefer_port}, new_lb_state} = lb_mod.pick(lb_state)
 
-    with {:ok, ch} <- Map.get(real_channels, key, {:error, :no_channel}) do
-      {:ok,
-       %__MODULE__{
-         base_state
-         | lb_mod: lb_mod,
-           lb_state: new_lb_state,
-           virtual_channel: ch,
-           real_channels: real_channels
-       }}
-    else
-      {:error, reason} -> {:error, reason}
+        real_channels =
+          build_real_channels(addresses, base_state.virtual_channel, norm_opts, adapter)
+
+        key = build_address_key(prefer_host, prefer_port)
+
+        with {:ok, ch} <- Map.get(real_channels, key, {:error, :no_channel}) do
+          {:ok,
+           %__MODULE__{
+             base_state
+             | lb_mod: lb_mod,
+               lb_state: new_lb_state,
+               virtual_channel: ch,
+               real_channels: real_channels
+           }}
+        else
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, :no_addresses} ->
+        {:error, :no_addresses}
     end
   end
 
