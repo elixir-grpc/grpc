@@ -454,7 +454,7 @@ defmodule GRPC.Client.Connection do
   end
 
   defp build_real_channels(addresses, virtual_channel, norm_opts, adapter) do
-    Enum.into(addresses, %{}, fn %{port: port, address: host} ->
+    Map.new(addresses, fn %{port: port, address: host} ->
       case connect_real_channel(
              %Channel{virtual_channel | host: host, port: port},
              host,
