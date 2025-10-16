@@ -19,6 +19,15 @@
   - [Bidirectional Streaming](#bidirectional-streaming)
 - [Application Startup](#application-startup)
 - [Client Usage](#client-usage)
+  - [Basic Connection and RPC](#basic-connection-and-rpc)
+  - [Using Interceptors](#using-interceptors)
+  - [Target Schemes and Resolvers](#target-schemes-and-resolvers)
+    - [Supported formats](#supported-formats)
+    - [Example (DNS)](#example-dns)
+    - [Example (Unix socket)](#example-unix-socket)
+  - [Compression and Metadata](#compression-and-metadata)
+  - [Client Adapters](#client-adapters)
+    - [Using Mint Adapter](#using-mint-adapter)
 - [HTTP Transcoding](#http-transcoding)
 - [CORS](#cors)
 - [Features](#features)
@@ -78,6 +87,8 @@ protoc --elixir_out=plugins=grpc:./lib -I./priv/protos helloworld.proto
 
 All RPC calls must be implemented using the stream-based API, even for unary requests.
 
+>__NOTE__: The old API was deprecated based on `GRPC.Server.send_reply/2` and direct `struct` returns was deprecated as of version `0.10.x`.
+
 ### Unary RPC using Stream API
 
 ```elixir
@@ -133,7 +144,30 @@ def say_bid_stream_hello(request, materializer) do
   |> GRPC.Stream.run_with(materializer)
 end
 ```
-__💡__ The Stream API supports composable stream transformations via `ask`, `map`, `run` and others functions, enabling clean and declarative stream pipelines. For a complete list of available operators see [here](lib/grpc/stream.ex).
+The Stream API supports composable stream transformations via `ask`, `map`, `run` and others functions, enabling clean and declarative stream pipelines. See the table below:
+
+| Function                         | Description  | Parameters / Options  |
+|:---------------------------------|:-------------|:----------------------|
+| **`from(input, opts \\\\ [])`**  | Converts a gRPC stream (or list) into a `Flow` with backpressure support. Allows joining with external `GenStage` producers. | **Parameters:**<br>• `input` — stream, list, or gRPC struct.<br>**Options:**<br>• `:join_with` — PID or name of an external `GenStage` producer.<br>• `:dispatcher` — dispatcher module (default: `GenStage.DemandDispatcher`).<br>• `:propagate_context` — if `true`, propagates the materializer context.<br>• `:materializer` — the current `%GRPC.Server.Stream{}`.<br>• Other options supported by `Flow`. |
+| **`unary(input, opts \\\\ [])`** | Creates a `Flow` from a single gRPC request (unary). Useful for non-streaming calls that still leverage the Flow API. | **Parameters:**<br>• `input` — single gRPC message.<br>**Options:** same as `from/2`. |
+| **`to_flow(stream)`**            | Returns the underlying `Flow` from a `GRPC.Stream`. If uninitialized, returns `Flow.from_enumerable([])`. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}` struct. |
+| **`run(stream)`**                | Executes the `Flow` for a unary stream and returns the first materialized result. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}` with `unary: true` option. |
+| **`run_with(stream, materializer, opts \\\\ [])`** | Executes the `Flow` and sends responses into the gRPC server stream. Supports `:dry_run` for test mode without sending messages. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`.<br>• `materializer` — `%GRPC.Server.Stream{}`.<br>**Options:**<br>• `:dry_run` — if `true`, responses are not sent. |
+| **`ask(stream, target, timeout \\\\ 5000)`** | Sends a request to an external process (`PID` or named process) and waits for a response (`{:response, msg}`). Returns an updated stream or an error. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`.<br>• `target` — PID or atom.<br>• `timeout` — in milliseconds. |
+| **`ask!(stream, target, timeout \\\\ 5000)`** | Same as `ask/3`, but raises an exception on failure (aborts the Flow). | Same parameters as `ask/3`. |
+| **`filter(stream, fun)`** | Filters items in the stream by applying a concurrent predicate function. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`.<br>• `fun` — function `(item -> boolean)`. |
+| **`flat_map(stream, fun)`** | Applies a function returning a list or enumerable, flattening the results. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`.<br>• `fun` — `(item -> Enumerable.t())`. |
+| **`map(stream, fun)`** | Applies a transformation function to each item in the stream. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`.<br>• `fun` — `(item -> term)`. |
+| **`map_with_context(stream, fun)`** | Applies a function to each item, passing the stream context (e.g., headers) as an additional argument. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`.<br>• `fun` — `(context, item -> term)`. |
+| **`partition(stream, opts \\\\ [])`** | Partitions the stream to group items by key or condition before stateful operations like `reduce/3`. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`.<br>• `opts` — partitioning options (`Flow.partition/2`). |
+| **`reduce(stream, acc_fun, reducer_fun)`** | Reduces the stream using an accumulator, useful for aggregations. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`.<br>• `acc_fun` — initializer function `() -> acc`.<br>• `reducer_fun` — `(item, acc -> acc)`. |
+| **`uniq(stream)`** | Emits only distinct items from the stream (no custom uniqueness criteria). | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`. |
+| **`uniq_by(stream, fun)`** | Emits only unique items based on the return value of the provided function. | **Parameters:**<br>• `stream` — `%GRPC.Stream{}`.<br>• `fun` — `(item -> term)` for uniqueness determination. |
+| **`get_headers(stream)`** | Retrieves HTTP/2 headers from a `%GRPC.Server.Stream{}`. | **Parameters:**<br>• `stream` — `%GRPC.Server.Stream{}`.<br>**Returns:** `map` containing decoded headers. |
+
+For a complete list of available operators see [here](lib/grpc/stream.ex).
+
+---
 
 ## Application Startup
 
@@ -166,38 +200,125 @@ end
 
 # Client Usage
 
+This section demonstrates how to establish client connections and perform RPC calls using the Elixir gRPC client.
+
+---
+
+## Basic Connection and RPC
+
+
+Typically, you start this client supervisor as part of your application's supervision tree:
+
+```elixir
+children = [
+  {GRPC.Client.Supervisor, []}
+]
+
+opts = [strategy: :one_for_one, name: MyApp.Supervisor]
+Supervisor.start_link(children, opts)
+``` 
+
+You can also start it manually in scripts or test environments:
+```elixir
+{:ok, _pid} = DynamicSupervisor.start_link(strategy: :one_for_one, name: GRPC.Client.Supervisor)
+``` 
+
+Then connect with gRPC server:
+
 ```elixir
 iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051")
 iex> request = Helloworld.HelloRequest.new(name: "grpc-elixir")
 iex> {:ok, reply} = channel |> Helloworld.GreetingServer.Stub.say_unary_hello(request)
-
-# With interceptors
-iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Client.Interceptors.Logger])
-...
 ```
 
-Check the [examples](examples) and [interop](interop) directories in the project's source code for some examples.
+---
 
-## Client Adapter and Configuration
+## Using Interceptors
 
-The default adapter used by `GRPC.Stub.connect/2` is `GRPC.Client.Adapter.Gun`. Another option is to use `GRPC.Client.Adapters.Mint` instead, like so:
+Client interceptors allow you to add logic to the request/response lifecycle, such as logging, tracing, or authentication.
 
 ```elixir
-GRPC.Stub.connect("localhost:50051",
-  # Use Mint adapter instead of default Gun
-  adapter: GRPC.Client.Adapters.Mint
-)
+iex> {:ok, channel} =
+...>   GRPC.Stub.connect("localhost:50051",
+...>     interceptors: [GRPC.Client.Interceptors.Logger]
+...>   )
+iex> request = Helloworld.HelloRequest.new(name: "Alice")
+iex> {:ok, reply} = channel |> Helloworld.GreetingServer.Stub.say_unary_hello(request)
 ```
 
-The `GRPC.Client.Adapters.Mint` adapter accepts custom configuration. To do so, you can configure it from your mix application via:
+---
+
+## Target Schemes and Resolvers
+
+The `connect/2` function supports URI-like targets that are resolved via the internal **gRPC** [Resolver](lib/grpc/client/resolver.ex).  
+You can connect using `DNS`, `Unix Domain sockets`, `IPv4/IPv6`, or even `xDS-based endpoints`.
+
+### Supported formats:
+
+| Scheme    | Example                     | Description                                  |
+|:----------|:----------------------------|:---------------------------------------------|
+| `dns://`  | `"dns://example.com:50051"` | Resolves via DNS `A/AAAA` records            |
+| `ipv4:`   | `"ipv4:10.0.0.5:50051"`     | Connects directly to an IPv4 address         |
+| `unix:`   | `"unix:/tmp/service.sock"`  | Connects via a Unix domain socket            |
+| `xds:///` | `"xds:///my-service"`       | Resolves via xDS control plane (Envoy/Istio) |
+| none      | `"127.0.0.1:50051"`         | Implicit DNS (default port `50051`)          |
+
+### Example (DNS):
 
 ```elixir
-# File: your application's config file.
-config :grpc, GRPC.Client.Adapters.Mint, custom_opts
+iex> {:ok, channel} = GRPC.Stub.connect("dns://orders.prod.svc.cluster.local:50051")
+iex> request = Orders.GetOrderRequest.new(id: "123")
+iex> {:ok, reply} = channel |> Orders.OrderService.Stub.get_order(request)
 ```
 
-The accepted options for configuration are the ones listed on [Mint.HTTP.connect/4](https://hexdocs.pm/mint/Mint.HTTP.html#connect/4-options)
+### Example (Unix socket):
 
+```elixir
+iex> {:ok, channel} = GRPC.Stub.connect("unix:/tmp/my.sock")
+```
+
+>__NOTE__: When using `DNS` or `xDS` targets, the connection layer periodically refreshes endpoints.
+---
+
+## Compression and Metadata
+
+You can specify message compression and attach default headers to all requests.
+
+```elixir
+iex> {:ok, channel} =
+...>   GRPC.Stub.connect("localhost:50051",
+...>     compressor: GRPC.Compressor.Gzip,
+...>     headers: [{"authorization", "Bearer my-token"}]
+...>   )
+```
+
+---
+
+## Client Adapters
+
+By default, `GRPC.Stub.connect/2` uses the **Gun** adapter.  
+You can switch to **Mint** (pure Elixir HTTP/2) or other adapters as needed.
+
+### Using Mint Adapter
+
+```elixir
+iex> GRPC.Stub.connect("localhost:50051",
+...>   adapter: GRPC.Client.Adapters.Mint
+...> )
+```
+
+You can configure adapter options globally via your application’s config:
+
+```elixir
+# File: config/config.exs
+config :grpc, GRPC.Client.Adapters.Mint,
+  timeout: 10_000,
+  transport_opts: [cacertfile: "/etc/ssl/certs/ca-certificates.crt"]
+```
+
+The accepted options are the same as [`Mint.HTTP.connect/4`](https://hexdocs.pm/mint/Mint.HTTP.html#connect/4-options).
+
+---
 
 ### **HTTP Transcoding**
 

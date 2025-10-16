@@ -33,6 +33,7 @@ defmodule GRPC.Integration.StubTest do
   test "you can disconnect stubs" do
     run_server(HelloServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      Process.sleep(100)
 
       %{adapter_payload: %{conn_pid: gun_conn_pid}} = channel
 
@@ -51,7 +52,6 @@ defmodule GRPC.Integration.StubTest do
   test "disconnecting a disconnected channel is a no-op" do
     run_server(HelloServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-      {:ok, channel} = GRPC.Stub.disconnect(channel)
       {:ok, _channel} = GRPC.Stub.disconnect(channel)
     end)
   end

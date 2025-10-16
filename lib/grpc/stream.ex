@@ -148,7 +148,7 @@ defmodule GRPC.Stream do
   """
   @spec run(t()) :: any()
   def run(%__MODULE__{flow: flow, options: opts}) do
-    unless Keyword.get(opts, :unary, false) do
+    if !Keyword.get(opts, :unary, false) do
       raise ArgumentError, "run/2 is not supported for non-unary streams"
     end
 

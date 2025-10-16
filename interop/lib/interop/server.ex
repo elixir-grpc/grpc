@@ -5,7 +5,7 @@ defmodule Interop.Server do
   import ExUnit.Assertions, only: [assert: 1, refute: 1]
 
   def empty_call(_, _stream) do
-    Grpc.Testing.Empty.new()
+    %Grpc.Testing.Empty{}
   end
 
   def unary_call(req, stream) do
@@ -31,21 +31,21 @@ defmodule Interop.Server do
       raise GRPC.RPCError, status: status.code, message: status.message
     end
 
-    payload = Grpc.Testing.Payload.new(body: String.duplicate(<<0>>, req.response_size))
-    Grpc.Testing.SimpleResponse.new(payload: payload)
+    payload = %Grpc.Testing.Payload{body: String.duplicate(<<0>>, req.response_size)}
+    %Grpc.Testing.SimpleResponse{payload: payload}
   end
 
   def streaming_input_call(req_enum, _stream) do
     size = Enum.reduce(req_enum, 0, fn req, acc ->
       acc + byte_size(req.payload.body)
     end)
-    Grpc.Testing.StreamingInputCallResponse.new(aggregated_payload_size: size)
+    %Grpc.Testing.StreamingInputCallResponse{aggregated_payload_size: size}
   end
 
   def streaming_output_call(req, stream) do
     GRPC.Server.set_compressor(stream, GRPC.Compressor.Gzip)
     Enum.map(req.response_parameters, fn params ->
-      resp = Grpc.Testing.StreamingOutputCallResponse.new(payload: %{body: String.duplicate(<<0>>, params.size)})
+      resp = %Grpc.Testing.StreamingOutputCallResponse{payload: %{body: String.duplicate(<<0>>, params.size)}}
       opts = if params.compressed == false do
         [compress: false]
       else
@@ -73,8 +73,8 @@ defmodule Interop.Server do
 
       if resp_param do
         size = resp_param.size
-        payload = Grpc.Testing.Payload.new(body: String.duplicate(<<0>>, size))
-        res = Grpc.Testing.StreamingOutputCallResponse.new(payload: payload)
+        payload = %Grpc.Testing.Payload{body: String.duplicate(<<0>>, size)}
+        res = %Grpc.Testing.StreamingOutputCallResponse{payload: payload}
         GRPC.Server.send_reply(stream, res)
       end
     end)
