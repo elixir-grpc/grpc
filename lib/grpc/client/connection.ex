@@ -387,7 +387,7 @@ defmodule GRPC.Client.Connection do
   defp validate_adapter_opts!(_),
     do: raise(ArgumentError, ":adapter_opts must be a keyword list if present")
 
-  defp build_compressor_list(compressor, accepted) do
+  defp build_compressor_list(compressor, accepted) when is_list(accepted) do
     [compressor | accepted]
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq()
