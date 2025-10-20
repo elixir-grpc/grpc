@@ -187,10 +187,8 @@ defmodule GRPC.StreamTest do
         |> GRPC.Stream.to_flow()
         |> Enum.to_list()
 
-      # Verifica se os valores do stream permanecem os mesmos
       assert Enum.sort(result) == [1, 2, 3]
 
-      # Verifica se o efeito colateral foi realmente chamado para cada item
       assert_receive {:effect_called, 1}
       assert_receive {:effect_called, 2}
       assert_receive {:effect_called, 3}

@@ -52,7 +52,7 @@ defmodule GRPC.Stream.Operators do
   end
 
   @spec effect(GRPCStream.t(), (term -> term())) :: GRPCStream.t()
-  def effect(%GRPCStream{flow: flow} = stream, effect_fun) do
+  def effect(%GRPCStream{flow: flow} = stream, effect_fun) when is_function(effect_fun, 1) do
     wrap = Flow.map(flow, fn item -> tap(item, effect_fun) end)
     %GRPCStream{stream | flow: wrap}
   end
