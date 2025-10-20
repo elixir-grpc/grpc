@@ -9,7 +9,7 @@ defmodule GRPC.Stream.Operators do
   @type reason :: any()
 
   @spec ask(GRPCStream.t(), pid | atom, non_neg_integer) ::
-          GRPCStream.t() | {:error, any(), :timeout | :not_alive}
+          GRPCStream.t() | {:error, :timeout | :process_not_alive}
   def ask(%GRPCStream{flow: flow} = stream, target, timeout \\ 5000) do
     mapper = fn item -> do_ask(item, target, timeout, raise_on_error: false) end
     %GRPCStream{stream | flow: Flow.map(flow, mapper)}
@@ -33,7 +33,7 @@ defmodule GRPC.Stream.Operators do
         raise "Target #{inspect(target)} is not alive. Cannot send request to it."
 
       is_nil(resolved_target) ->
-        {:error, item, :not_alive}
+        {:error, :process_not_alive}
 
       true ->
         send(resolved_target, {:request, item, self()})
@@ -45,10 +45,16 @@ defmodule GRPC.Stream.Operators do
             if raise? do
               raise "Timeout waiting for response from #{inspect(target)}"
             else
-              {:error, item, :timeout}
+              {:error, :timeout}
             end
         end
     end
+  end
+
+  @spec effect(GRPCStream.t(), (term -> term())) :: GRPCStream.t()
+  def effect(%GRPCStream{flow: flow} = stream, effect_fun) do
+    wrap = Flow.map(flow, fn item -> tap(item, effect_fun) end)
+    %GRPCStream{stream | flow: wrap}
   end
 
   @spec filter(GRPCStream.t(), (term -> term)) :: GRPCStream.t()

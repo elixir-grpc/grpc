@@ -107,7 +107,7 @@ defmodule GRPC.StreamTest do
         |> GRPC.Stream.to_flow()
         |> Enum.to_list()
 
-      assert result == [{:error, "msg", :not_alive}]
+      assert result == [{:error, :process_not_alive}]
     end
   end
 
@@ -174,6 +174,26 @@ defmodule GRPC.StreamTest do
         |> Enum.to_list()
 
       assert result == [2, 4]
+    end
+  end
+
+  describe "effect/2" do
+    test "applies side effects without altering values" do
+      parent = self()
+
+      result =
+        GRPC.Stream.from([1, 2, 3])
+        |> GRPC.Stream.effect(fn x -> send(parent, {:effect_called, x}) end)
+        |> GRPC.Stream.to_flow()
+        |> Enum.to_list()
+
+      # Verifica se os valores do stream permanecem os mesmos
+      assert Enum.sort(result) == [1, 2, 3]
+
+      # Verifica se o efeito colateral foi realmente chamado para cada item
+      assert_receive {:effect_called, 1}
+      assert_receive {:effect_called, 2}
+      assert_receive {:effect_called, 3}
     end
   end
 

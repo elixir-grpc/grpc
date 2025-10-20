@@ -204,6 +204,48 @@ defmodule GRPC.Stream do
   end
 
   @doc """
+  Applies a **side-effecting function** to each element of the stream **without altering** its values.
+
+  The `effect/2` function is useful for performing **imperative or external actions** 
+  (such as logging, sending messages, collecting metrics, or debugging) 
+  while preserving the original stream data.
+
+  It behaves like `Enum.each/2`, but returns the stream itself so it can continue in the pipeline.
+
+  ## Examples
+
+  ```elixir
+  iex> parent = self()
+  iex> stream =
+  ...>   GRPC.Stream.from([1, 2, 3])
+  ...>   |> GRPC.Stream.effect(fn x -> send(parent, {:seen, x}) end)
+  ...>   |> GRPC.Stream.to_flow()
+  ...>   |> Enum.to_list()
+  iex> assert_receive {:seen, 1}
+  iex> assert_receive {:seen, 2}
+  iex> assert_receive {:seen, 3}
+  iex> stream
+  [1, 2, 3]
+  ``` 
+  In this example, the effect/2 function sends a message to the current process
+  for each element in the stream, but the resulting stream values remain unchanged.
+
+  ## Parameters
+
+  - `stream` — The input `GRPC.Stream`.
+  - `effect_fun` — A function that receives each item and performs a side effect
+  (e.g. IO.inspect/1, Logger.info/1, send/2, etc.).
+
+  ### Notes
+
+  - This function is **lazy** — the `effect_fun` will only run once the stream is materialized
+  (e.g. via `GRPC.Stream.run/1` or `GRPC.Stream.run_with/3`).
+  - The use of `effect/2` ensures that the original item is returned unchanged,
+  enabling seamless continuation of the pipeline.
+  """
+  defdelegate effect(stream, effect_fun), to: Operators
+
+  @doc """
   Sends a request to an external process and awaits a response.
 
   If `target` is a PID, a message in the format `{:request, item, from}` is sent, and a reply
@@ -220,9 +262,9 @@ defmodule GRPC.Stream do
   ## Returns
 
     - Updated stream if successful.
-    - `{:error, item, reason}` if the request fails or times out.
+    - `{:error, reason}` if the request fails or times out.
   """
-  @spec ask(t(), pid | atom, non_neg_integer) :: t() | {:error, item(), reason()}
+  @spec ask(t(), pid | atom, non_neg_integer) :: t() | {:error, reason()}
   defdelegate ask(stream, target, timeout \\ 5000), to: Operators
 
   @doc """
