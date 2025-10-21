@@ -155,6 +155,19 @@ defmodule GRPC.Stream do
     # We have to call `Enum.to_list` because we want to actually run and materialize the full stream. 
     # List.flatten and List.first are used so that we can obtain the first result of the materialized list.
     flow
+    |> Flow.map(fn
+      {:ok, msg} ->
+        msg
+
+      {:error, %GRPC.RPCError{} = reason} ->
+        reason
+
+      {:error, reason} ->
+        GRPC.RPCError.exception(message: "[Error] #{inspect(reason)}")
+
+      msg ->
+        msg
+    end)
     |> Enum.to_list()
     |> List.flatten()
     |> List.first()
@@ -190,18 +203,82 @@ defmodule GRPC.Stream do
       raise ArgumentError, "run_with/3 is not supported for unary streams"
     end
 
-    dry_run? = Keyword.get(opts, :dry_run, false)
-
     flow
-    |> Flow.map(fn msg ->
-      if not dry_run? do
-        send_response(from, msg)
-      end
+    |> Flow.map(fn
+      {:ok, msg} ->
+        send_response(from, msg, opts)
 
-      flow
+        flow
+
+      {:error, %GRPC.RPCError{} = reason} ->
+        send_response(from, reason, opts)
+        flow
+
+      {:error, reason} ->
+        msg = GRPC.RPCError.exception(message: "[Error] #{inspect(reason)}")
+        send_response(from, msg, opts)
+        flow
+
+      msg ->
+        send_response(from, msg, opts)
+        flow
     end)
     |> Flow.run()
   end
+
+  @doc """
+  Intercepts and transforms **error tuples** or **unexpected exceptions** that occur
+  within a gRPC stream pipeline.
+
+  `map_error/3` allows graceful handling or recovery from errors produced by previous
+  operators (e.g. `map/2`, `flat_map/2`) or from validation logic applied to incoming data.
+
+  The provided `handler/1` function receives the error reason (or the exception struct)
+  and can either:
+
+    * Return a new error tuple — e.g. `{:error, new_reason}` — to re-emit a modified error.
+    * Return any other value to recover from the failure and continue the pipeline.
+
+  This makes it suitable for both **input validation** and **capturing unexpected runtime errors**
+  in stream transformations.
+
+  ## Parameters
+
+    - `stream` — The input stream or `Flow` pipeline.
+    - `func` — A function that takes an error reason or exception and returns either a new value or an error tuple.
+
+  ## Returns
+
+    - A new stream where all error tuples and raised exceptions are processed by `func/1`.
+
+  ## Examples
+
+      iex> GRPC.Stream.from([1, 2])
+      ...> |> GRPC.Stream.map(fn
+      ...>   2 -> raise "boom"
+      ...>   x -> x
+      ...> end)
+      ...> |> GRPC.Stream.map_error(fn
+      ...>   {:error, _reason} ->
+      ...>     GRPC.RPCError.exception(message: "Validation or runtime error")
+      ...>   msg -> msg
+      ...> end)
+
+  In this example:
+
+  * The call to `GRPC.Stream.map/2` raises an exception for value `2`.
+  * `map_error/3` catches the error and wraps it in a `GRPC.RPCError` struct with a custom message.
+  * The pipeline continues execution, transforming errors into structured responses.
+
+  ## Notes
+
+  - `map_error/3` is **lazy** and only executes when the stream is materialized
+    (via `GRPC.Stream.run/1` or `GRPC.Stream.run_with/3`).
+
+  - Use this operator to implement **robust error recovery**, **input validation**, or
+    to normalize exceptions from downstream Flow stages into well-defined gRPC errors.
+  """
+  defdelegate map_error(stream, func), to: Operators
 
   @doc """
   Applies a **side-effecting function** to each element of the stream **without altering** its values.
@@ -218,12 +295,12 @@ defmodule GRPC.Stream do
   iex> parent = self()
   iex> stream =
   ...>   GRPC.Stream.from([1, 2, 3])
-  ...>   |> GRPC.Stream.effect(fn x -> send(parent, {:seen, x}) end)
+  ...>   |> GRPC.Stream.effect(fn x -> send(parent, {:seen, x*2}) end)
   ...>   |> GRPC.Stream.to_flow()
   ...>   |> Enum.to_list()
-  iex> assert_receive {:seen, 1}
   iex> assert_receive {:seen, 2}
-  iex> assert_receive {:seen, 3}
+  iex> assert_receive {:seen, 4}
+  iex> assert_receive {:seen, 6}
   iex> stream
   [1, 2, 3]
   ``` 
@@ -411,7 +488,11 @@ defmodule GRPC.Stream do
     %__MODULE__{flow: flow, options: opts}
   end
 
-  defp send_response(from, msg) do
-    GRPC.Server.send_reply(from, msg)
+  defp send_response(from, msg, opts) do
+    dry_run? = Keyword.get(opts, :dry_run, false)
+
+    if not dry_run? do
+      GRPC.Server.send_reply(from, msg)
+    end
   end
 end
