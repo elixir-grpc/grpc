@@ -162,6 +162,8 @@ defmodule GRPC.Stream.Operators do
   # Returns:
   #   value -> successful value
   #   {:error, reason} -> failure
+  #   {:error, {:exception, exception}} -> failure due to exception
+  #   {:error, {kind, reason}} -> failure due to throw or exit
   defp safe_invoke(fun, arg) do
     res = fun.(arg)
 
@@ -170,10 +172,9 @@ defmodule GRPC.Stream.Operators do
       {:error, reason} -> {:error, reason}
       other -> other
     end
-    
   rescue
     e ->
-      {:error, e}
+      {:error, {:exception, e}}
   catch
     kind, reason ->
       {:error, {kind, reason}}

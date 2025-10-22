@@ -358,7 +358,7 @@ defmodule GRPC.StreamTest do
         end)
 
       results = stream |> GRPC.Stream.to_flow() |> Enum.to_list()
-      assert match?([1, {:error, %RuntimeError{message: "boom", __exception__: true}}], results)
+      assert match?([1, {:error, {:exception, %RuntimeError{message: "boom"}}}], results)
     end
 
     test "flat_map/2 catches thrown values" do
@@ -379,8 +379,8 @@ defmodule GRPC.StreamTest do
       stream =
         GRPC.Stream.from([{:error, :invalid_input}, {:ok, 42}, 100])
         |> GRPC.Stream.map_error(fn
-          {:error, :invalid_input} -> {:error, :mapped_error}
-          msg -> msg
+          {:error, :invalid_input} ->
+            {:error, :mapped_error}
         end)
 
       result = stream |> GRPC.Stream.to_flow() |> Enum.to_list()
@@ -406,11 +406,8 @@ defmodule GRPC.StreamTest do
           x -> x
         end)
         |> GRPC.Stream.map_error(fn
-          {:error, %RuntimeError{message: "boom"}} ->
-            GRPC.RPCError.exception(message: "Validation or runtime error")
-
-          msg ->
-            msg
+          {:error, {:exception, %RuntimeError{message: "boom"}}} ->
+            {:error, GRPC.RPCError.exception(message: "Validation or runtime error")}
         end)
 
       result = stream |> GRPC.Stream.to_flow() |> Enum.to_list()
@@ -418,12 +415,12 @@ defmodule GRPC.StreamTest do
       assert match?(
                [
                  1,
-                 %GRPC.RPCError{
-                   message: "Validation or runtime error",
-                   status: nil,
-                   __exception__: true,
-                   details: nil
-                 }
+                 {:error,
+                  %GRPC.RPCError{
+                    status: nil,
+                    message: "Validation or runtime error",
+                    details: nil
+                  }}
                ],
                result
              )

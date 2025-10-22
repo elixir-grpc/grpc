@@ -260,7 +260,6 @@ defmodule GRPC.Stream do
       ...> |> GRPC.Stream.map_error(fn
       ...>   {:error, _reason} ->
       ...>     {:error, GRPC.RPCError.exception(message: "Validation or runtime error")}
-      ...>   msg -> msg
       ...> end)
 
   In this example:
