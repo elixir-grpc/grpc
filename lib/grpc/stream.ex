@@ -232,8 +232,13 @@ defmodule GRPC.Stream do
   `map_error/3` allows graceful handling or recovery from errors produced by previous
   operators (e.g. `map/2`, `flat_map/2`) or from validation logic applied to incoming data.
 
-  The provided `handler/1` function receives the error reason (or the exception struct)
-  and can either:
+  The provided `handler/1` function receives the error reason (or the exception struct) like:
+
+      {:error, reason} -> failure
+      {:error, {:exception, exception}} -> failure due to exception
+      {:error, {kind, reason}} -> failure due to throw or exit
+  
+  And can either:
 
     * Return a new error tuple — e.g. `{:error, new_reason}` — to re-emit a modified error.
     * Return any other value to recover from the failure and continue the pipeline.
@@ -258,7 +263,7 @@ defmodule GRPC.Stream do
       ...>   x -> x
       ...> end)
       ...> |> GRPC.Stream.map_error(fn
-      ...>   {:error, _reason} ->
+      ...>   {:error, {:exception, _reason}} ->
       ...>     {:error, GRPC.RPCError.exception(message: "Validation or runtime error")}
       ...> end)
 
