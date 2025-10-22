@@ -237,7 +237,7 @@ defmodule GRPC.Stream do
       {:error, reason} -> failure
       {:error, {:exception, exception}} -> failure due to exception
       {:error, {kind, reason}} -> failure due to throw or exit
-  
+
   And can either:
 
     * Return a new error tuple — e.g. `{:error, new_reason}` — to re-emit a modified error.
