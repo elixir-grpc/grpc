@@ -274,8 +274,6 @@ defmodule GRPC.Client.Connection do
         %{lb_mod: lb_mod, lb_state: lb_state, real_channels: channels, virtual_channel: vc} =
           state
       ) do
-    Logger.debug("refreshing LB pick, caller=#{inspect(self())}")
-
     {:ok, {prefer_host, prefer_port}, new_lb_state} = lb_mod.pick(lb_state)
 
     channel_key = "#{prefer_host}:#{prefer_port}"
