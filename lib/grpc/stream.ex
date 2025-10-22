@@ -207,7 +207,6 @@ defmodule GRPC.Stream do
     |> Flow.map(fn
       {:ok, msg} ->
         send_response(from, msg, opts)
-
         flow
 
       {:error, %GRPC.RPCError{} = reason} ->
