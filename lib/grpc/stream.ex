@@ -238,7 +238,7 @@ defmodule GRPC.Stream do
     * Return a new error tuple — e.g. `{:error, new_reason}` — to re-emit a modified error.
     * Return any other value to recover from the failure and continue the pipeline.
 
-  This makes it suitable for both **input validation** and **capturing unexpected runtime errors**
+  This makes it suitable for both input validation and capturing unexpected runtime errors
   in stream transformations.
 
   ## Parameters
@@ -259,7 +259,7 @@ defmodule GRPC.Stream do
       ...> end)
       ...> |> GRPC.Stream.map_error(fn
       ...>   {:error, _reason} ->
-      ...>     GRPC.RPCError.exception(message: "Validation or runtime error")
+      ...>     {:error, GRPC.RPCError.exception(message: "Validation or runtime error")}
       ...>   msg -> msg
       ...> end)
 
