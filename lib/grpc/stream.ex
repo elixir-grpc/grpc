@@ -143,9 +143,8 @@ defmodule GRPC.Stream do
   The `stream` argument must be initialized as a `:unary` stream with
   a `:materializer` set.
   """
-  @spec run(stream :: t()) :: :ok
+  @spec run(stream :: t()) :: :noreply
   def run(%__MODULE__{flow: flow, options: opts}) do
-    Process.put(__MODULE__, :unary)
     opts = Keyword.take(opts, [:unary, :materializer])
 
     if opts[:unary] != true do
@@ -155,13 +154,13 @@ defmodule GRPC.Stream do
     materializer = opts[:materializer]
 
     if is_nil(materializer) do
-      raise ArgumentError, "GRPC.Stream.run/1 requires a materializer to be set in the GRPC.Stream"
+      raise ArgumentError,
+            "GRPC.Stream.run/1 requires a materializer to be set in the GRPC.Stream"
     end
 
     send_response(materializer, Enum.at(flow, 0))
-    |> GRPC.Server.send_trailers(GRPC.Transport.HTTP2.server_trailers())
 
-    :ok
+    :noreply
   end
 
   @doc """
@@ -345,7 +344,8 @@ defmodule GRPC.Stream do
           :ok
 
         %GRPC.Server.Stream{} ->
-          raise ArgumentError, "materializer must be set to a unary GRPC.Server.Stream when unary: true is passed"
+          raise ArgumentError,
+                "materializer must be set to a unary GRPC.Server.Stream when unary: true is passed"
 
         _ ->
           raise ArgumentError, "materializer is required when unary: true is passed"

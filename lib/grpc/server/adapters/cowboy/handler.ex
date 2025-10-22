@@ -561,33 +561,24 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   defp do_call_rpc(server, path, %{http_method: http_method} = stream) do
+    case server.__call_rpc__(path, http_method, stream) do
+      {:ok, stream, :noreply} ->
+        GRPC.Server.send_trailers(stream, @default_trailers)
+        {:ok, stream}
 
-    Process.put(GRPC.Stream, false)
-    result = server.__call_rpc__(path, http_method, stream)
-   case Process.get(GRPC.Stream) do
-    :unary ->
-      case result do
-        :ok ->
-          {:ok, stream}
-        error ->
-          error
-      end
-    _ ->
-      case result do
-        {:ok, stream, response} ->
-          stream
-          |> GRPC.Server.send_reply(response)
-          |> GRPC.Server.send_trailers(@default_trailers)
+      {:ok, stream, response} ->
+        stream
+        |> GRPC.Server.send_reply(response)
+        |> GRPC.Server.send_trailers(@default_trailers)
 
-          {:ok, stream}
+        {:ok, stream}
 
-        {:ok, stream} ->
-          GRPC.Server.send_trailers(stream, @default_trailers)
-          {:ok, stream}
+      {:ok, stream} ->
+        GRPC.Server.send_trailers(stream, @default_trailers)
+        {:ok, stream}
 
-        error ->
-          error
-      end
+      error ->
+        error
     end
   end
 

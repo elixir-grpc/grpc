@@ -24,20 +24,22 @@ defmodule GRPC.StreamTest do
       ref = make_ref()
 
       input = %Routeguide.Point{latitude: 1, longitude: 2}
-      materializer = %GRPC.Server.Stream{adapter: FakeAdapter, payload: %{test_pid: test_pid, ref: ref}, grpc_type: :unary}
 
-      assert :ok ==
-        GRPC.Stream.unary(input, materializer: materializer)
-        |> GRPC.Stream.map(fn item ->
-          item
-        end)
-        |> GRPC.Stream.run()
+      materializer = %GRPC.Server.Stream{
+        adapter: FakeAdapter,
+        payload: %{test_pid: test_pid, ref: ref},
+        grpc_type: :unary
+      }
 
-        assert_receive {:send_reply, ^ref, response}
-        assert IO.iodata_to_binary(response) == Protobuf.encode(input)
+      assert :noreply =
+               GRPC.Stream.unary(input, materializer: materializer)
+               |> GRPC.Stream.map(fn item ->
+                 item
+               end)
+               |> GRPC.Stream.run()
 
-        assert_receive {:send_trailers, ^ref, trailers}
-        assert trailers == GRPC.Transport.HTTP2.server_trailers()
+      assert_receive {:send_reply, ^ref, response}
+      assert IO.iodata_to_binary(response) == Protobuf.encode(input)
     end
 
     test "unary/2 creates a flow with metadata" do
@@ -292,8 +294,17 @@ defmodule GRPC.StreamTest do
       run_server([MyGRPCService], fn port ->
         point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
         {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", adapter_opts: [retry_timeout: 10])
-        response =  %Routeguide.Feature{location: point, name: "#{point.latitude},#{point.longitude}"}
-        assert {:ok, response} == Routeguide.RouteGuide.Stub.get_feature(channel, point)
+
+        expected_response = %Routeguide.Feature{
+          location: point,
+          name: "#{point.latitude},#{point.longitude}"
+        }
+
+        assert {:ok, response, %{trailers: trailers}} =
+                 Routeguide.RouteGuide.Stub.get_feature(channel, point, return_headers: true)
+
+        assert response == expected_response
+        assert trailers == GRPC.Transport.HTTP2.server_trailers()
       end)
     end
   end

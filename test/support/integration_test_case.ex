@@ -16,7 +16,7 @@ defmodule GRPC.Integration.TestCase do
         start: {GRPC.Server, :start, [servers, port, opts]},
         type: :worker,
         restart: :permanent,
-        shutdown: 500,
+        shutdown: 500
       })
 
     try do
@@ -33,7 +33,7 @@ defmodule GRPC.Integration.TestCase do
         start: {GRPC.Server, :start_endpoint, [endpoint, port]},
         type: :worker,
         restart: :permanent,
-        shutdown: 500,
+        shutdown: 500
       })
 
     try do
