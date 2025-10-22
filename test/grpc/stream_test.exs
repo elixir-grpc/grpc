@@ -1,5 +1,5 @@
 defmodule GRPC.StreamTest do
-  use ExUnit.Case
+  use GRPC.Integration.TestCase
   doctest GRPC.Stream
 
   describe "simple test" do
@@ -9,22 +9,40 @@ defmodule GRPC.StreamTest do
 
     defmodule FakeAdapter do
       def get_headers(_), do: %{"content-type" => "application/grpc"}
+
+      def send_reply(%{test_pid: test_pid, ref: ref}, item, _opts) do
+        send(test_pid, {:send_reply, ref, item})
+      end
+
+      def send_trailers(%{test_pid: test_pid, ref: ref}, trailers) do
+        send(test_pid, {:send_trailers, ref, trailers})
+      end
     end
 
     test "unary/2 creates a flow from a unary input" do
-      input = %TestInput{message: 1}
+      test_pid = self()
+      ref = make_ref()
 
-      result =
-        GRPC.Stream.unary(input)
-        |> GRPC.Stream.map(& &1)
+      input = %Routeguide.Point{latitude: 1, longitude: 2}
+      materializer = %GRPC.Server.Stream{adapter: FakeAdapter, payload: %{test_pid: test_pid, ref: ref}, grpc_type: :unary}
+
+      assert :ok ==
+        GRPC.Stream.unary(input, materializer: materializer)
+        |> GRPC.Stream.map(fn item ->
+          item
+        end)
         |> GRPC.Stream.run()
 
-      assert result == input
+        assert_receive {:send_reply, ^ref, response}
+        assert IO.iodata_to_binary(response) == Protobuf.encode(input)
+
+        assert_receive {:send_trailers, ^ref, trailers}
+        assert trailers == GRPC.Transport.HTTP2.server_trailers()
     end
 
     test "unary/2 creates a flow with metadata" do
       input = %TestInput{message: 1}
-      materializer = %GRPC.Server.Stream{adapter: FakeAdapter}
+      materializer = %GRPC.Server.Stream{adapter: FakeAdapter, grpc_type: :unary}
 
       flow =
         GRPC.Stream.unary(input, materializer: materializer, propagate_context: true)
@@ -51,7 +69,7 @@ defmodule GRPC.StreamTest do
 
     test "from_as_ctx/3 creates a flow from enumerable input" do
       input = [%{message: "a"}, %{message: "b"}]
-      materializer = %GRPC.Server.Stream{adapter: FakeAdapter}
+      materializer = %GRPC.Server.Stream{adapter: FakeAdapter, grpc_type: :unary}
 
       flow =
         GRPC.Stream.from(input, propagate_context: true, materializer: materializer)
@@ -254,6 +272,29 @@ defmodule GRPC.StreamTest do
       end
 
       assert result == :ok
+    end
+  end
+
+  defmodule MyGRPCService do
+    use GRPC.Server, service: Routeguide.RouteGuide.Service
+
+    def get_feature(input, materializer) do
+      GRPC.Stream.unary(input, materializer: materializer)
+      |> GRPC.Stream.map(fn point ->
+        %Routeguide.Feature{location: point, name: "#{point.latitude},#{point.longitude}"}
+      end)
+      |> GRPC.Stream.run()
+    end
+  end
+
+  describe "run/1" do
+    test "runs a unary stream" do
+      run_server([MyGRPCService], fn port ->
+        point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
+        {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", adapter_opts: [retry_timeout: 10])
+        response =  %Routeguide.Feature{location: point, name: "#{point.latitude},#{point.longitude}"}
+        assert {:ok, response} == Routeguide.RouteGuide.Stub.get_feature(channel, point)
+      end)
     end
   end
 

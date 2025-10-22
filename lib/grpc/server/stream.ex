@@ -89,9 +89,14 @@ defmodule GRPC.Server.Stream do
     do_send_reply(stream, codec.encode(response), opts)
   end
 
+  def send_reply(stream, :grpc_stream_noop, _opts) do
+    stream
+  end
+
   def send_reply(%{codec: codec} = stream, reply, opts) do
     do_send_reply(stream, codec.encode(reply), opts)
   end
+
 
   defp do_send_reply(
          %{adapter: adapter, codec: codec, access_mode: access_mode} = stream,

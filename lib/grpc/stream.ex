@@ -71,7 +71,7 @@ defmodule GRPC.Stream do
     - `:dispatcher` — Specifies the `Flow` dispatcher (defaults to `GenStage.DemandDispatcher`).
     - `:propagate_context` - If `true`, the context from the `materializer` is propagated to the `Flow`.
     - `:materializer` - The `%GRPC.Server.Stream{}` struct representing the current gRPC stream context.
-    
+
   And any other options supported by `Flow`.
 
   ## Returns
@@ -134,30 +134,34 @@ defmodule GRPC.Stream do
   def to_flow(%__MODULE__{flow: flow}), do: flow
 
   @doc """
-  Executes the underlying `Flow` for unary streams and emits responses into the provided gRPC server stream.
+  Executes the underlying `Flow` for a unary stream.
 
-  ## Parameters
+  The response will be emitted automatically to the provided
+  `:materializer` (set to a `GRPC.Server.Stream`) for the single resulting
+  item in the materialized enumerable.
 
-    - `flow`: A `GRPC.Stream` struct containing the flow to be executed.
-    - `stream`: A `GRPC.Server.Stream` to which responses are sent.
-    - `:dry_run` — If `true`, responses are not sent (used for testing or inspection).
-
-  ## Example
-
-      GRPC.Stream.run(request)
+  The `stream` argument must be initialized as a `:unary` stream with
+  a `:materializer` set.
   """
-  @spec run(t()) :: any()
+  @spec run(stream :: t()) :: :ok
   def run(%__MODULE__{flow: flow, options: opts}) do
-    if !Keyword.get(opts, :unary, false) do
-      raise ArgumentError, "run/2 is not supported for non-unary streams"
+    Process.put(__MODULE__, :unary)
+    opts = Keyword.take(opts, [:unary, :materializer])
+
+    if opts[:unary] != true do
+      raise ArgumentError, "GRPC.Stream.run/1 only supports unary streams"
     end
 
-    # We have to call `Enum.to_list` because we want to actually run and materialize the full stream. 
-    # List.flatten and List.first are used so that we can obtain the first result of the materialized list.
-    flow
-    |> Enum.to_list()
-    |> List.flatten()
-    |> List.first()
+    materializer = opts[:materializer]
+
+    if is_nil(materializer) do
+      raise ArgumentError, "GRPC.Stream.run/1 requires a materializer to be set in the GRPC.Stream"
+    end
+
+    send_response(materializer, Enum.at(flow, 0))
+    |> GRPC.Server.send_trailers(GRPC.Transport.HTTP2.server_trailers())
+
+    :ok
   end
 
   @doc """
@@ -334,6 +338,19 @@ defmodule GRPC.Stream do
 
     opts = Keyword.merge(opts, metadata: metadata)
     dispatcher = Keyword.get(opts, :default_dispatcher, GenStage.DemandDispatcher)
+
+    if opts[:unary] do
+      case opts[:materializer] do
+        %GRPC.Server.Stream{grpc_type: :unary} ->
+          :ok
+
+        %GRPC.Server.Stream{} ->
+          raise ArgumentError, "materializer must be set to a unary GRPC.Server.Stream when unary: true is passed"
+
+        _ ->
+          raise ArgumentError, "materializer is required when unary: true is passed"
+      end
+    end
 
     flow =
       case Keyword.get(opts, :join_with) do
