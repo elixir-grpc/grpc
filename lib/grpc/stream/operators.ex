@@ -112,7 +112,7 @@ defmodule GRPC.Stream.Operators do
               {:error, new_reason}
 
             {:error, new_reason} ->
-              msg = "[Error] #{inspect(new_reason)}"
+              msg = "#{inspect(new_reason)}"
               {:error, GRPC.RPCError.exception(message: msg)}
 
             {:ok, other} ->

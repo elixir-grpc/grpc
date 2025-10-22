@@ -71,7 +71,7 @@ defmodule GRPC.Stream do
     - `:dispatcher` — Specifies the `Flow` dispatcher (defaults to `GenStage.DemandDispatcher`).
     - `:propagate_context` - If `true`, the context from the `materializer` is propagated to the `Flow`.
     - `:materializer` - The `%GRPC.Server.Stream{}` struct representing the current gRPC stream context.
-    
+
   And any other options supported by `Flow`.
 
   ## Returns
@@ -134,43 +134,33 @@ defmodule GRPC.Stream do
   def to_flow(%__MODULE__{flow: flow}), do: flow
 
   @doc """
-  Executes the underlying `Flow` for unary streams and emits responses into the provided gRPC server stream.
+  Executes the underlying `Flow` for a unary stream.
 
-  ## Parameters
+  The response will be emitted automatically to the provided
+  `:materializer` (set to a `GRPC.Server.Stream`) for the single resulting
+  item in the materialized enumerable.
 
-    - `flow`: A `GRPC.Stream` struct containing the flow to be executed.
-    - `stream`: A `GRPC.Server.Stream` to which responses are sent.
-    - `:dry_run` — If `true`, responses are not sent (used for testing or inspection).
-
-  ## Example
-
-      GRPC.Stream.run(request)
+  The `stream` argument must be initialized as a `:unary` stream with
+  a `:materializer` set.
   """
-  @spec run(t()) :: any()
+  @spec run(stream :: t()) :: :noreply
   def run(%__MODULE__{flow: flow, options: opts}) do
-    if !Keyword.get(opts, :unary, false) do
-      raise ArgumentError, "run/2 is not supported for non-unary streams"
+    opts = Keyword.take(opts, [:unary, :materializer])
+
+    if opts[:unary] != true do
+      raise ArgumentError, "GRPC.Stream.run/1 only supports unary streams"
     end
 
-    # We have to call `Enum.to_list` because we want to actually run and materialize the full stream. 
-    # List.flatten and List.first are used so that we can obtain the first result of the materialized list.
-    flow
-    |> Flow.map(fn
-      {:ok, msg} ->
-        msg
+    materializer = opts[:materializer]
 
-      {:error, %GRPC.RPCError{} = reason} ->
-        reason
+    if is_nil(materializer) do
+      raise ArgumentError,
+            "GRPC.Stream.run/1 requires a materializer to be set in the GRPC.Stream"
+    end
 
-      {:error, reason} ->
-        GRPC.RPCError.exception(message: "[Error] #{inspect(reason)}")
+    send_response(materializer, Enum.at(flow, 0), opts)
 
-      msg ->
-        msg
-    end)
-    |> Enum.to_list()
-    |> List.flatten()
-    |> List.first()
+    :noreply
   end
 
   @doc """
@@ -214,7 +204,7 @@ defmodule GRPC.Stream do
         flow
 
       {:error, reason} ->
-        msg = GRPC.RPCError.exception(message: "[Error] #{inspect(reason)}")
+        msg = GRPC.RPCError.exception(message: "#{inspect(reason)}")
         send_response(from, msg, opts)
         flow
 
@@ -224,6 +214,104 @@ defmodule GRPC.Stream do
     end)
     |> Flow.run()
   end
+
+  @doc """
+  Applies a **side-effecting function** to each element of the stream **without altering** its values.
+
+  The `effect/2` function is useful for performing **imperative or external actions** 
+  (such as logging, sending messages, collecting metrics, or debugging) 
+  while preserving the original stream data.
+
+  It behaves like `Enum.each/2`, but returns the stream itself so it can continue in the pipeline.
+
+  ## Examples
+
+  ```elixir
+  iex> parent = self()
+  iex> stream =
+  ...>   GRPC.Stream.from([1, 2, 3])
+  ...>   |> GRPC.Stream.effect(fn x -> send(parent, {:seen, x*2}) end)
+  ...>   |> GRPC.Stream.to_flow()
+  ...>   |> Enum.to_list()
+  iex> assert_receive {:seen, 2}
+  iex> assert_receive {:seen, 4}
+  iex> assert_receive {:seen, 6}
+  iex> stream
+  [1, 2, 3]
+  ``` 
+  In this example, the effect/2 function sends a message to the current process
+  for each element in the stream, but the resulting stream values remain unchanged.
+
+  ## Parameters
+
+  - `stream` — The input `GRPC.Stream`.
+  - `effect_fun` — A function that receives each item and performs a side effect
+  (e.g. IO.inspect/1, Logger.info/1, send/2, etc.).
+
+  ### Notes
+
+  - This function is **lazy** — the `effect_fun` will only run once the stream is materialized
+  (e.g. via `GRPC.Stream.run/1` or `GRPC.Stream.run_with/3`).
+  - The use of `effect/2` ensures that the original item is returned unchanged,
+  enabling seamless continuation of the pipeline.
+  """
+  @spec effect(t(), (term -> any)) :: t()
+  defdelegate effect(stream, effect_fun), to: Operators
+
+  @doc """
+  Sends a request to an external process and awaits a response.
+
+  If `target` is a PID, a message in the format `{:request, item, from}` is sent, and a reply
+  in the format `{:response, msg}` is expected.
+
+  If `target` is an `atom` we will try to locate the process through `Process.whereis/1`.
+
+  ## Parameters
+
+    - `stream`: The `GRPC.Stream` pipeline.
+    - `target`: Target process PID or atom name.
+    - `timeout`: Timeout in milliseconds (defaults to `5000`).
+
+  ## Returns
+
+    - Updated stream if successful.
+    - `{:error, reason}` if the request fails or times out.
+  """
+  @spec ask(t(), pid | atom, non_neg_integer) :: t() | {:error, reason()}
+  defdelegate ask(stream, target, timeout \\ 5000), to: Operators
+
+  @doc """
+  Same as `ask/3`, but raises an exception on failure.
+
+  ## Caution
+
+  This version propagates errors via raised exceptions, which can crash the Flow worker and halt the pipeline.
+  Prefer `ask/3` for production usage unless failure should abort the stream.
+  """
+  @spec ask!(t(), pid | atom, non_neg_integer) :: t()
+  defdelegate ask!(stream, target, timeout \\ 5000), to: Operators
+
+  @doc """
+  Filters the stream using the given predicate function.
+
+  The filter function is applied concurrently to the stream entries, so it shouldn't rely on execution order.
+  """
+  @spec filter(t(), (term -> term)) :: t
+  defdelegate filter(stream, filter), to: Operators
+
+  @doc """
+  Applies a function to each entry and concatenates the resulting lists.
+
+  Useful for emitting multiple messages for each input.
+  """
+  @spec flat_map(t, (term -> Enumerable.t())) :: t()
+  defdelegate flat_map(stream, flat_mapper), to: Operators
+
+  @doc """
+  Applies a function to each stream item.
+  """
+  @spec map(t(), (term -> term)) :: t()
+  defdelegate map(stream, mapper), to: Operators
 
   @doc """
   Intercepts and transforms error tuples or unexpected exceptions that occur
@@ -282,103 +370,6 @@ defmodule GRPC.Stream do
     to normalize exceptions from downstream Flow stages into well-defined gRPC errors.
   """
   defdelegate map_error(stream, func), to: Operators
-
-  @doc """
-  Applies a **side-effecting function** to each element of the stream **without altering** its values.
-
-  The `effect/2` function is useful for performing **imperative or external actions** 
-  (such as logging, sending messages, collecting metrics, or debugging) 
-  while preserving the original stream data.
-
-  It behaves like `Enum.each/2`, but returns the stream itself so it can continue in the pipeline.
-
-  ## Examples
-
-  ```elixir
-  iex> parent = self()
-  iex> stream =
-  ...>   GRPC.Stream.from([1, 2, 3])
-  ...>   |> GRPC.Stream.effect(fn x -> send(parent, {:seen, x*2}) end)
-  ...>   |> GRPC.Stream.to_flow()
-  ...>   |> Enum.to_list()
-  iex> assert_receive {:seen, 2}
-  iex> assert_receive {:seen, 4}
-  iex> assert_receive {:seen, 6}
-  iex> stream
-  [1, 2, 3]
-  ``` 
-  In this example, the effect/2 function sends a message to the current process
-  for each element in the stream, but the resulting stream values remain unchanged.
-
-  ## Parameters
-
-  - `stream` — The input `GRPC.Stream`.
-  - `effect_fun` — A function that receives each item and performs a side effect
-  (e.g. IO.inspect/1, Logger.info/1, send/2, etc.).
-
-  ### Notes
-
-  - This function is **lazy** — the `effect_fun` will only run once the stream is materialized
-  (e.g. via `GRPC.Stream.run/1` or `GRPC.Stream.run_with/3`).
-  - The use of `effect/2` ensures that the original item is returned unchanged,
-  enabling seamless continuation of the pipeline.
-  """
-  defdelegate effect(stream, effect_fun), to: Operators
-
-  @doc """
-  Sends a request to an external process and awaits a response.
-
-  If `target` is a PID, a message in the format `{:request, item, from}` is sent, and a reply
-  in the format `{:response, msg}` is expected.
-
-  If `target` is an `atom` we will try to locate the process through `Process.whereis/1`.
-
-  ## Parameters
-
-    - `stream`: The `GRPC.Stream` pipeline.
-    - `target`: Target process PID or atom name.
-    - `timeout`: Timeout in milliseconds (defaults to `5000`).
-
-  ## Returns
-
-    - Updated stream if successful.
-    - `{:error, reason}` if the request fails or times out.
-  """
-  @spec ask(t(), pid | atom, non_neg_integer) :: t() | {:error, reason()}
-  defdelegate ask(stream, target, timeout \\ 5000), to: Operators
-
-  @doc """
-  Same as `ask/3`, but raises an exception on failure.
-
-  ## Caution
-
-  This version propagates errors via raised exceptions, which can crash the Flow worker and halt the pipeline.
-  Prefer `ask/3` for production usage unless failure should abort the stream.
-  """
-  @spec ask!(t(), pid | atom, non_neg_integer) :: t()
-  defdelegate ask!(stream, target, timeout \\ 5000), to: Operators
-
-  @doc """
-  Filters the stream using the given predicate function.
-
-  The filter function is applied concurrently to the stream entries, so it shouldn't rely on execution order.
-  """
-  @spec filter(t(), (term -> term)) :: t
-  defdelegate filter(stream, filter), to: Operators
-
-  @doc """
-  Applies a function to each entry and concatenates the resulting lists.
-
-  Useful for emitting multiple messages for each input.
-  """
-  @spec flat_map(t, (term -> Enumerable.t())) :: t()
-  defdelegate flat_map(stream, flat_mapper), to: Operators
-
-  @doc """
-  Applies a function to each stream item.
-  """
-  @spec map(t(), (term -> term)) :: t()
-  defdelegate map(stream, mapper), to: Operators
 
   @doc """
   Applies a transformation function to each stream item, passing the context as an additional argument.
@@ -456,6 +447,20 @@ defmodule GRPC.Stream do
 
     opts = Keyword.merge(opts, metadata: metadata)
     dispatcher = Keyword.get(opts, :default_dispatcher, GenStage.DemandDispatcher)
+
+    if opts[:unary] do
+      case opts[:materializer] do
+        %GRPC.Server.Stream{grpc_type: :unary} ->
+          :ok
+
+        %GRPC.Server.Stream{} ->
+          raise ArgumentError,
+                "materializer must be set to a unary GRPC.Server.Stream when unary: true is passed"
+
+        _ ->
+          raise ArgumentError, "materializer is required when unary: true is passed"
+      end
+    end
 
     flow =
       case Keyword.get(opts, :join_with) do
