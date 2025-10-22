@@ -226,7 +226,7 @@ defmodule GRPC.Stream do
   end
 
   @doc """
-  Intercepts and transforms **error tuples** or **unexpected exceptions** that occur
+  Intercepts and transforms error tuples or unexpected exceptions that occur
   within a gRPC stream pipeline.
 
   `map_error/3` allows graceful handling or recovery from errors produced by previous
