@@ -165,6 +165,141 @@ defmodule GRPC.StreamTest do
     end
   end
 
+  describe "ask/3 error handling" do
+    test "returns timeout error if response not received in time" do
+      pid =
+        spawn(fn ->
+          # do not send any response
+          receive do
+            _ -> :ok
+          end
+        end)
+
+      result =
+        GRPC.Stream.from([:hello])
+        # very short timeout
+        |> GRPC.Stream.ask(pid, 10)
+        |> GRPC.Stream.to_flow()
+        |> Enum.to_list()
+
+      assert result == [{:error, :timeout}]
+    end
+  end
+
+  describe "safe_invoke/2 handling {:ok, value} and direct value" do
+    test "maps {:ok, value} to value" do
+      stream =
+        GRPC.Stream.from([1, 2])
+        |> GRPC.Stream.map(fn x -> {:ok, x * 10} end)
+
+      result = stream |> GRPC.Stream.to_flow() |> Enum.to_list()
+      assert result == [10, 20]
+    end
+
+    test "keeps direct values as is" do
+      stream =
+        GRPC.Stream.from([1, 2])
+        |> GRPC.Stream.map(fn x -> x * 5 end)
+
+      result = stream |> GRPC.Stream.to_flow() |> Enum.to_list()
+      assert result == [5, 10]
+    end
+  end
+
+  describe "safe_invoke/2 catches errors" do
+    test "map/2 handles function returning {:error, reason}" do
+      stream =
+        GRPC.Stream.from([1, 2, 3])
+        |> GRPC.Stream.map(fn
+          2 -> {:error, :fail}
+          x -> x
+        end)
+
+      results = stream |> GRPC.Stream.to_flow() |> Enum.to_list()
+      assert results == [1, {:error, :fail}, 3]
+    end
+
+    test "map/2 catches exceptions" do
+      stream =
+        GRPC.Stream.from([1, 2])
+        |> GRPC.Stream.map(fn
+          2 -> raise "boom"
+          x -> x
+        end)
+
+      results = stream |> GRPC.Stream.to_flow() |> Enum.to_list()
+      assert match?([1, {:error, {:exception, %RuntimeError{message: "boom"}}}], results)
+    end
+
+    test "flat_map/2 catches thrown values" do
+      stream =
+        GRPC.Stream.from([1, 2])
+        |> GRPC.Stream.flat_map(fn
+          2 -> throw(:fail)
+          x -> [x]
+        end)
+
+      results = stream |> GRPC.Stream.to_flow() |> Enum.to_list()
+      assert results == [1, {:error, {:throw, :fail}}]
+    end
+  end
+
+  describe "map_error/2" do
+    test "transforms {:error, reason} tuples" do
+      stream =
+        GRPC.Stream.from([{:error, :invalid_input}, {:ok, 42}, 100])
+        |> GRPC.Stream.map_error(fn
+          {:error, :invalid_input} -> {:error, :mapped_error}
+          msg -> msg
+        end)
+
+      result = stream |> GRPC.Stream.to_flow() |> Enum.to_list()
+
+      assert Enum.sort(result) == [
+               42,
+               100,
+               {:error,
+                %GRPC.RPCError{
+                  __exception__: true,
+                  details: nil,
+                  message: ":mapped_error",
+                  status: nil
+                }}
+             ]
+    end
+
+    test "transforms exceptions raised inside previous map" do
+      stream =
+        GRPC.Stream.from([1, 2])
+        |> GRPC.Stream.map(fn
+          2 -> raise "boom"
+          x -> x
+        end)
+        |> GRPC.Stream.map_error(fn
+          {:error, %RuntimeError{message: "boom"}} ->
+            GRPC.RPCError.exception(message: "Validation or runtime error")
+
+          msg ->
+            msg
+        end)
+
+      result = stream |> GRPC.Stream.to_flow() |> Enum.to_list()
+
+      assert match?(
+               [
+                 1,
+                 {:error,
+                  %GRPC.RPCError{
+                    status: nil,
+                    message: "{:exception, %RuntimeError{message: \"boom\"}}",
+                    details: nil
+                  }}
+               ],
+               result
+             )
+    end
+  end
+
   describe "map/2, flat_map/2, filter/2" do
     test "maps values correctly" do
       result =
