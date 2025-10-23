@@ -649,7 +649,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   defp extract_subtype("application/grpc-web-text+" <> rest), do: {:ok, :grpcweb, rest}
 
   defp extract_subtype(type) do
-    Logger.debug("""
+    Logger.warning("""
     Received invalid content-type: "#{type}".
     This usually means the request is missing a proper Content-Type header,
     or it's using a non-standard value. This may cause request parsing or response
