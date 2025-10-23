@@ -14,8 +14,12 @@ defmodule HelloworldStreams.Server do
   def say_unary_hello(request, _materializer) do
     GRPCStream.unary(request)
     |> GRPCStream.ask(Transformer)
-    |> GRPCStream.map(fn %HelloReply{} = reply ->
-      %HelloReply{message: "[Reply] #{reply.message}"}
+    |> GRPCStream.map(fn
+      %HelloReply{} = reply ->
+        %HelloReply{message: "[Reply] #{reply.message}"}
+
+      {:error, reason} ->
+        GRPC.RPCError.exception(message: "[Error] #{inspect(reason)}")
     end)
     |> GRPCStream.run()
   end
