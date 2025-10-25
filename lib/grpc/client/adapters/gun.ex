@@ -267,11 +267,7 @@ defmodule GRPC.Client.Adapters.Gun do
           headers = GRPC.Transport.HTTP2.decode_headers(headers)
           {:response, headers, :fin}
         else
-          {:error,
-           GRPC.RPCError.exception(
-             GRPC.Status.internal(),
-             "status got is #{status} instead of 200"
-           )}
+          {:error, GRPC.RPCError.from_http_status(status)}
         end
 
       {:response, :nofin, status, headers} ->
@@ -279,11 +275,7 @@ defmodule GRPC.Client.Adapters.Gun do
           headers = GRPC.Transport.HTTP2.decode_headers(headers)
           {:response, headers, :nofin}
         else
-          {:error,
-           GRPC.RPCError.exception(
-             GRPC.Status.internal(),
-             "status got is #{status} instead of 200"
-           )}
+          {:error, GRPC.RPCError.from_http_status(status)}
         end
 
       {:data, :fin, data} ->
