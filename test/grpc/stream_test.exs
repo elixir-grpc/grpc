@@ -168,7 +168,7 @@ defmodule GRPC.StreamTest do
   describe "ask/3 error handling" do
     test "returns timeout error if response not received in time" do
       pid =
-        spawn(fn ->
+        spawn_link(fn ->
           # do not send any response
           receive do
             _ -> :ok
