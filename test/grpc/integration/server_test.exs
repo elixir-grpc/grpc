@@ -46,6 +46,7 @@ defmodule GRPC.Integration.ServerTest do
 
     def stream_messages(msg_request, materializer) do
       1..5
+      |> Stream.take(5)
       |> GRPC.Stream.from()
       |> GRPC.Stream.map(fn i ->
         %Transcode.Message{

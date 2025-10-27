@@ -11,7 +11,6 @@ defmodule GRPC.Stream.Operators do
   @spec ask(GRPCStream.t(), pid | atom, non_neg_integer) ::
           GRPCStream.t() | {:error, :timeout | :process_not_alive}
   def ask(%GRPCStream{flow: flow} = stream, target, timeout \\ 5000) do
-    # mapper = fn item -> do_ask(item, target, timeout, raise_on_error: false) end
     mapper = fn item -> safe_invoke(&do_ask(&1, target, timeout, raise_on_error: false), item) end
     %GRPCStream{stream | flow: Flow.map(flow, mapper)}
   end
@@ -54,13 +53,12 @@ defmodule GRPC.Stream.Operators do
 
   @spec effect(GRPCStream.t(), (term -> term())) :: GRPCStream.t()
   def effect(%GRPCStream{flow: flow} = stream, effect_fun) when is_function(effect_fun, 1) do
-    %GRPCStream{
-      stream
-      | flow:
-          Flow.map(flow, fn flow_item ->
-            tap(flow_item, fn item -> safe_invoke(effect_fun, item) end)
-          end)
-    }
+    flow =
+      Flow.map(flow, fn flow_item ->
+        tap(flow_item, fn item -> safe_invoke(effect_fun, item) end)
+      end)
+
+    %GRPCStream{stream | flow: flow}
   end
 
   @spec filter(GRPCStream.t(), (term -> term)) :: GRPCStream.t()
@@ -104,32 +102,28 @@ defmodule GRPC.Stream.Operators do
   def map_error(%GRPCStream{flow: flow} = stream, func) when is_function(func, 1) do
     mapper =
       Flow.map(flow, fn
-        {:error, _reason} = item ->
-          res = safe_invoke(func, item)
-
-          case res do
-            {:error, %GRPC.RPCError{} = new_reason} ->
-              {:error, new_reason}
-
-            {:error, new_reason} ->
-              msg = "#{inspect(new_reason)}"
-              {:error, GRPC.RPCError.exception(message: msg)}
-
-            {:ok, other} ->
-              other
-
-            other ->
-              other
-          end
-
-        {:ok, other} ->
-          other
-
-        other ->
-          other
+        {:error, reason} -> handle_error(func, reason)
+        {:ok, value} -> value
+        other -> other
       end)
 
     %GRPCStream{stream | flow: mapper}
+  end
+
+  defp handle_error(func, reason) do
+    case safe_invoke(func, {:error, reason}) do
+      {:error, %GRPC.RPCError{} = rpc_error} ->
+        {:error, rpc_error}
+
+      {:error, other_reason} ->
+        {:error, GRPC.RPCError.exception(message: inspect(other_reason))}
+
+      {:ok, value} ->
+        value
+
+      other ->
+        other
+    end
   end
 
   @spec partition(GRPCStream.t(), keyword()) :: GRPCStream.t()

@@ -272,12 +272,8 @@ defmodule GRPC.Stream do
     - `target`: Target process PID or atom name.
     - `timeout`: Timeout in milliseconds (defaults to `5000`).
 
-  ## Returns
-
-    - Updated stream if successful.
-    - `{:error, reason}` if the request fails or times out.
   """
-  @spec ask(t(), pid | atom, non_neg_integer) :: t() | {:error, reason()}
+  @spec ask(t(), pid | atom, non_neg_integer) :: t() | {:error, :timeout | :process_not_alive}
   defdelegate ask(stream, target, timeout \\ 5000), to: Operators
 
   @doc """
