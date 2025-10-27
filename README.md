@@ -106,7 +106,8 @@ defmodule HelloworldStreams.Server do
 
   @spec say_unary_hello(HelloRequest.t(), GRPC.Server.Stream.t()) :: any()
   def say_unary_hello(request, materializer) do
-    GRPC.Stream.unary(request, materializer: materializer)
+    request
+    |> GRPC.Stream.unary(materializer: materializer)
     |> GRPC.Stream.map(fn %HelloReply{} = reply ->
       %HelloReply{message: "[Reply] #{reply.message}"}
     end)
