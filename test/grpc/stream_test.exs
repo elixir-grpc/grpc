@@ -169,10 +169,7 @@ defmodule GRPC.StreamTest do
     test "returns timeout error if response not received in time" do
       pid =
         spawn_link(fn ->
-          # do not send any response
-          receive do
-            _ -> :ok
-          end
+          Process.sleep(:infinity)
         end)
 
       result =
