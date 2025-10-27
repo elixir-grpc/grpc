@@ -210,7 +210,7 @@ iex> GRPC.Stream.from([1, 2])
 In this example:
 
 * The function inside `map/2` raises an exception for the value `2`.
-* map_error/2 captures and transforms that error into a structured `GRPC.RPCError` response.
+* `map_error/2` captures and transforms that error into a structured `GRPC.RPCError` response.
 * The stream continues processing without being interrupted.
 
 This makes map_error/2 suitable for input validation, runtime fault recovery, and user-facing error translation within gRPC pipelines.
