@@ -216,7 +216,7 @@ defmodule GRPC.Stream do
   end
 
   @doc """
-  Applies a **side-effecting function** to each element of the stream **without altering** its values.
+  Applies a side-effect function to each element of the stream without altering its values.
 
   The `effect/2` function is useful for performing **imperative or external actions** 
   (such as logging, sending messages, collecting metrics, or debugging) 
