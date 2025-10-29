@@ -273,7 +273,8 @@ defmodule GRPC.Client.Connection do
         :refresh,
         %{lb_mod: lb_mod, lb_state: lb_state, real_channels: channels, virtual_channel: vc} =
           state
-      ) when not is_nil(lb_mod) do
+      )
+      when not is_nil(lb_mod) do
     {:ok, {prefer_host, prefer_port}, new_lb_state} = lb_mod.pick(lb_state)
 
     channel_key = "#{prefer_host}:#{prefer_port}"
