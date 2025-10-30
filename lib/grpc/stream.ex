@@ -218,8 +218,8 @@ defmodule GRPC.Stream do
   @doc """
   Applies a side-effect function to each element of the stream without altering its values.
 
-  The `effect/2` function is useful for performing **imperative or external actions** 
-  (such as logging, sending messages, collecting metrics, or debugging) 
+  The `effect/2` function is useful for performing imperative or external actions
+  (such as logging, sending messages, collecting metrics, or debugging)
   while preserving the original stream data.
 
   It behaves like `Enum.each/2`, but returns the stream itself so it can continue in the pipeline.
@@ -238,7 +238,7 @@ defmodule GRPC.Stream do
   iex> assert_receive {:seen, 6}
   iex> stream
   [1, 2, 3]
-  ``` 
+  ```
   In this example, the effect/2 function sends a message to the current process
   for each element in the stream, but the resulting stream values remain unchanged.
 
@@ -250,7 +250,7 @@ defmodule GRPC.Stream do
 
   ### Notes
 
-  - This function is **lazy** — the `effect_fun` will only run once the stream is materialized
+  - This function is lazy — the `effect_fun` will only run once the stream is materialized
   (e.g. via `GRPC.Stream.run/1` or `GRPC.Stream.run_with/3`).
   - The use of `effect/2` ensures that the original item is returned unchanged,
   enabling seamless continuation of the pipeline.
@@ -359,10 +359,10 @@ defmodule GRPC.Stream do
 
   ## Notes
 
-  - `map_error/3` is **lazy** and only executes when the stream is materialized
+  - `map_error/3` is lazy and only executes when the stream is materialized
     (via `GRPC.Stream.run/1` or `GRPC.Stream.run_with/3`).
 
-  - Use this operator to implement **robust error recovery**, **input validation**, or
+  - Use this operator to implement robust error recovery, input validation, or
     to normalize exceptions from downstream Flow stages into well-defined gRPC errors.
   """
   defdelegate map_error(stream, func), to: Operators

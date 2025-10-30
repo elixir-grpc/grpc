@@ -1,12 +1,12 @@
 defmodule GRPC.Client.Connection do
   @moduledoc """
-  Connection manager for gRPC client channels, with optional **load balancing**
-  and **name resolution** support.
+  Connection manager for gRPC client channels, with optional load balancing
+  and name resolution support.
 
   A `Conn` process manages one or more underlying gRPC connections
-  (`GRPC.Channel` structs) and exposes a **virtual channel** to be used by
+  (`GRPC.Channel` structs) and exposes a virtual channel to be used by
   client stubs. The orchestration process runs as a `GenServer` registered
-  globally (via `:global`), so only one orchestrator exists **per connection**
+  globally (via `:global`), so only one orchestrator exists per connection
   in a BEAM node.
 
   ## Overview
