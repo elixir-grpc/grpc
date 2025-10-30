@@ -273,7 +273,8 @@ defmodule GRPC.Client.Connection do
         :refresh,
         %{lb_mod: lb_mod, lb_state: lb_state, real_channels: channels, virtual_channel: vc} =
           state
-      ) do
+      )
+      when not is_nil(lb_mod) do
     {:ok, {prefer_host, prefer_port}, new_lb_state} = lb_mod.pick(lb_state)
 
     channel_key = "#{prefer_host}:#{prefer_port}"
@@ -293,6 +294,8 @@ defmodule GRPC.Client.Connection do
         {:noreply, %{state | lb_state: new_lb_state, virtual_channel: picked_channel}}
     end
   end
+
+  def handle_info(:refresh, state), do: {:noreply, state}
 
   def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
     Logger.warning(
