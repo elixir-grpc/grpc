@@ -158,7 +158,7 @@ defmodule GRPC.Stream do
             "GRPC.Stream.run/1 requires a materializer to be set in the GRPC.Stream"
     end
 
-    send_response(materializer, Enum.at(flow, 0))
+    send_response(materializer, Enum.at(flow, 0), opts)
 
     :noreply
   end
@@ -193,18 +193,70 @@ defmodule GRPC.Stream do
       raise ArgumentError, "run_with/3 is not supported for unary streams"
     end
 
-    dry_run? = Keyword.get(opts, :dry_run, false)
-
     flow
-    |> Flow.map(fn msg ->
-      if not dry_run? do
-        send_response(from, msg)
-      end
+    |> Flow.map(fn
+      {:ok, msg} ->
+        send_response(from, msg, opts)
+        flow
 
-      flow
+      {:error, %GRPC.RPCError{} = reason} ->
+        send_response(from, reason, opts)
+        flow
+
+      {:error, reason} ->
+        msg = GRPC.RPCError.exception(message: "#{inspect(reason)}")
+        send_response(from, msg, opts)
+        flow
+
+      msg ->
+        send_response(from, msg, opts)
+        flow
     end)
     |> Flow.run()
   end
+
+  @doc """
+  Applies a side-effect function to each element of the stream without altering its values.
+
+  The `effect/2` function is useful for performing imperative or external actions
+  (such as logging, sending messages, collecting metrics, or debugging)
+  while preserving the original stream data.
+
+  It behaves like `Enum.each/2`, but returns the stream itself so it can continue in the pipeline.
+
+  ## Examples
+
+  ```elixir
+  iex> parent = self()
+  iex> stream =
+  ...>   GRPC.Stream.from([1, 2, 3])
+  ...>   |> GRPC.Stream.effect(fn x -> send(parent, {:seen, x*2}) end)
+  ...>   |> GRPC.Stream.to_flow()
+  ...>   |> Enum.to_list()
+  iex> assert_receive {:seen, 2}
+  iex> assert_receive {:seen, 4}
+  iex> assert_receive {:seen, 6}
+  iex> stream
+  [1, 2, 3]
+  ```
+  In this example, the effect/2 function sends a message to the current process
+  for each element in the stream, but the resulting stream values remain unchanged.
+
+  ## Parameters
+
+  - `stream` — The input `GRPC.Stream`.
+  - `effect_fun` — A function that receives each item and performs a side effect
+  (e.g. IO.inspect/1, Logger.info/1, send/2, etc.).
+
+  ### Notes
+
+  - This function is lazy — the `effect_fun` will only run once the stream is materialized
+  (e.g. via `GRPC.Stream.run/1` or `GRPC.Stream.run_with/3`).
+  - The use of `effect/2` ensures that the original item is returned unchanged,
+  enabling seamless continuation of the pipeline.
+  """
+  @spec effect(t(), (term -> any)) :: t()
+  defdelegate effect(stream, effect_fun), to: Operators
 
   @doc """
   Sends a request to an external process and awaits a response.
@@ -220,12 +272,8 @@ defmodule GRPC.Stream do
     - `target`: Target process PID or atom name.
     - `timeout`: Timeout in milliseconds (defaults to `5000`).
 
-  ## Returns
-
-    - Updated stream if successful.
-    - `{:error, item, reason}` if the request fails or times out.
   """
-  @spec ask(t(), pid | atom, non_neg_integer) :: t() | {:error, item(), reason()}
+  @spec ask(t(), pid | atom, non_neg_integer) :: t() | {:error, :timeout | :process_not_alive}
   defdelegate ask(stream, target, timeout \\ 5000), to: Operators
 
   @doc """
@@ -260,6 +308,64 @@ defmodule GRPC.Stream do
   """
   @spec map(t(), (term -> term)) :: t()
   defdelegate map(stream, mapper), to: Operators
+
+  @doc """
+  Intercepts and transforms error tuples or unexpected exceptions that occur
+  within a gRPC stream pipeline.
+
+  `map_error/3` allows graceful handling or recovery from errors produced by previous
+  operators (e.g. `map/2`, `flat_map/2`) or from validation logic applied to incoming data.
+
+  The provided `handler/1` function receives the error reason (or the exception struct) like:
+
+      {:error, reason} -> failure
+      {:error, {:exception, exception}} -> failure due to exception
+      {:error, {kind, reason}} -> failure due to throw or exit
+
+  And can either:
+
+    * Return a new error tuple — e.g. `{:error, new_reason}` — to re-emit a modified error.
+    * Return any other value to recover from the failure and continue the pipeline.
+
+  This makes it suitable for both input validation and capturing unexpected runtime errors
+  in stream transformations.
+
+  ## Parameters
+
+    - `stream` — The input stream or `Flow` pipeline.
+    - `func` — A function that takes an error reason or exception and returns either a new value or an error tuple.
+
+  ## Returns
+
+    - A new stream where all error tuples and raised exceptions are processed by `func/1`.
+
+  ## Examples
+
+      iex> GRPC.Stream.from([1, 2])
+      ...> |> GRPC.Stream.map(fn
+      ...>   2 -> raise "boom"
+      ...>   x -> x
+      ...> end)
+      ...> |> GRPC.Stream.map_error(fn
+      ...>   {:error, {:exception, _reason}} ->
+      ...>     {:error, GRPC.RPCError.exception(message: "Validation or runtime error")}
+      ...> end)
+
+  In this example:
+
+  * The call to `GRPC.Stream.map/2` raises an exception for value `2`.
+  * `map_error/3` catches the error and wraps it in a `GRPC.RPCError` struct with a custom message.
+  * The pipeline continues execution, transforming errors into structured responses.
+
+  ## Notes
+
+  - `map_error/3` is lazy and only executes when the stream is materialized
+    (via `GRPC.Stream.run/1` or `GRPC.Stream.run_with/3`).
+
+  - Use this operator to implement robust error recovery, input validation, or
+    to normalize exceptions from downstream Flow stages into well-defined gRPC errors.
+  """
+  defdelegate map_error(stream, func), to: Operators
 
   @doc """
   Applies a transformation function to each stream item, passing the context as an additional argument.
@@ -386,7 +492,11 @@ defmodule GRPC.Stream do
     %__MODULE__{flow: flow, options: opts}
   end
 
-  defp send_response(from, msg) do
-    GRPC.Server.send_reply(from, msg)
+  defp send_response(from, msg, opts) do
+    dry_run? = Keyword.get(opts, :dry_run, false)
+
+    if not dry_run? do
+      GRPC.Server.send_reply(from, msg)
+    end
   end
 end
