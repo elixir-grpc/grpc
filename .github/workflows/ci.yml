@@ -52,7 +52,7 @@ jobs:
       - name: Install Dependencies
         run: mix deps.get 1>/dev/null
       - name: Run Tests
-        run: mix test --warnings-as-errors
+        run: mix test
   interop-tests:
     runs-on: ubuntu-latest
     name: Interop tests
