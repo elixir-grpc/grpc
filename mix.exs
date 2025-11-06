@@ -167,7 +167,7 @@ defmodule GRPC.Mixfile do
       groups_for_extras: [
         "Getting Started": ~r"^guides/getting_started/",
         Advanced: ~r"^guides/advanced/",
-        Cheatsheets: ~r"^guides/cheatsheets/",
+        Cheatsheets: ~r"^guides/cheatsheets/"
       ]
     ]
   end

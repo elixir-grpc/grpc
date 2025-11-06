@@ -90,7 +90,7 @@ defmodule GRPC do
       {:ok, reply} = MyApp.Greeter.Stub.say_hello(channel, req)
 
   See `GRPC.Stub` for more Client examples.
-  
+
   ## HTTP Transcoding (optional)
 
   Enable REST-to-gRPC mapping:
