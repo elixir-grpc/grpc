@@ -1,6 +1,7 @@
 defmodule GRPC.Mixfile do
   use Mix.Project
 
+  @source_url "https://github.com/elixir-grpc/grpc"
   @version "0.11.2"
 
   def project do
@@ -10,17 +11,13 @@ defmodule GRPC.Mixfile do
       elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
       build_embedded: Mix.env() == :prod,
-      start_permanent: Mix.env() == :prod,
       deps: deps(),
+      docs: docs(),
+      name: "gRPC",
+      start_permanent: Mix.env() == :prod,
       package: package(),
       aliases: aliases(),
-      description: "The Elixir implementation of gRPC",
-      docs: [
-        extras: ["README.md"],
-        main: "readme",
-        source_ref: "v#{@version}",
-        source_url: "https://github.com/elixir-grpc/grpc"
-      ],
+      description: "The Elixir implementation of gRPC Protocol",
       xref: [exclude: [IEx]]
     ]
   end
@@ -43,12 +40,14 @@ defmodule GRPC.Mixfile do
       {:cowlib, "~> 2.12"},
       {:castore, "~> 0.1 or ~> 1.0", optional: true},
       {:protobuf, "~> 0.14"},
-      {:protobuf_generate, "~> 0.1.1", only: [:dev, :test]},
       {:mint, "~> 1.5"},
-      {:ex_doc, "~> 0.29", only: :dev},
+      {:telemetry, "~> 1.0"},
+      {:protobuf_generate, "~> 0.1.1", only: [:dev, :test]},
       {:ex_parameterized, "~> 1.3.7", only: :test},
       {:mox, "~> 1.2", only: :test},
-      {:telemetry, "~> 1.0"}
+      {:ex_doc, "~> 0.29", only: [:dev, :docs]},
+      {:makeup, "~> 1.2.1", only: [:dev, :docs]},
+      {:makeup_syntect, "~> 0.1", only: [:dev, :docs]}
     ]
   end
 
@@ -60,6 +59,139 @@ defmodule GRPC.Mixfile do
       files: ~w(mix.exs README.md lib src config priv/templates LICENSE .formatter.exs)
     }
   end
+
+  defp docs() do
+    [
+      main: "GRPC",
+      source_ref: "v#{@version}",
+      source_url_pattern: "#{@source_url}/blob/v#{@version}/grpc/%{path}#L%{line}",
+      before_closing_body_tag: &before_closing_body_tag/1,
+      extras: [
+        "guides/getting_started/introduction.md",
+        "guides/getting_started/installation.md",
+        "guides/getting_started/codegen.md",
+        "guides/getting_started/quickstart.livemd",
+        "guides/getting_started/stream.livemd",
+        "guides/getting_started/error_handling.md",
+        "guides/getting_started/client.md",
+        "guides/cheatsheets/streams.cheatmd",
+        "guides/advanced/transcoding.livemd",
+        "guides/advanced/load_balancing.md",
+        "guides/advanced/cors.md",
+        "guides/advanced/telemetry.livemd",
+        "guides/advanced/pooling.md"
+      ],
+      skip_undefined_reference_warnings_on: ["CHANGELOG.md"],
+      groups_for_docs: [
+        "Functions: Stream Creation": &(&1[:type] == :creation),
+        "Functions: Stream Materializers": &(&1[:type] == :materializer),
+        "Functions: Stream Transformers": &(&1[:type] == :transformer),
+        "Functions: Stream Mappers": &(&1[:type] == :mapper),
+        "Functions: Stream Reducers": &(&1[:type] == :reducer),
+        "Functions: Stream Filters": &(&1[:type] == :filter),
+        "Functions: Stream Windowning": &(&1[:type] == :windowing),
+        "Functions: Stream Utilities": &(&1[:type] == :utility),
+        "Functions: Client Connection": &(&1[:type] == :client_connection),
+        "Functions: Client Request": &(&1[:type] == :client_request)
+      ],
+      groups_for_modules: [
+        Server: [
+          GRPC.Server,
+          GRPC.Service,
+          GRPC.Endpoint,
+          GRPC.Server.Supervisor,
+          GRPC.Server.Adapter,
+          GRPC.Server.Adapters.Cowboy,
+          GRPC.Server.Adapters.Cowboy.Handler,
+          GRPC.Server.Adapters.Cowboy.Router,
+          GRPC.Status,
+          GRPC.Server.Stream,
+          GRPC.Server.Interceptors.Logger,
+          GRPC.Server.Interceptors.CORS,
+          GRPC.Server.Router
+        ],
+        Stream: [
+          GRPC.Stream,
+          GRPC.Stream.Operators
+        ],
+        Client: [
+          GRPC.Stub,
+          GRPC.Channel,
+          GRPC.Credential,
+          GRPC.Client.Supervisor,
+          GRPC.Client.Adapter,
+          GRPC.Client.Adapters.Gun,
+          GRPC.Client.Adapters.Mint,
+          GRPC.Client.Adapters.Mint.StreamResponseProcess,
+          GRPC.Client.Adapters.Mint.ConnectionProcess,
+          GRPC.Client.Adapters.Mint.ConnectionProcess.State,
+          GRPC.Client.Interceptor,
+          GRPC.Client.Interceptors.Logger,
+          GRPC.Client.Connection,
+          GRPC.Client.LoadBalancing,
+          GRPC.Client.LoadBalancing.RoundRobin,
+          GRPC.Client.LoadBalancing.PickFirst,
+          GRPC.Client.Resolver,
+          GRPC.Client.Resolver.DNS,
+          GRPC.Client.Resolver.DNS.Adapter,
+          GRPC.Client.Resolver.Unix,
+          GRPC.Client.Resolver.IPv4,
+          GRPC.Client.Resolver.IPv6,
+          GRPC.Client.ServiceConfig,
+          GRPC.Client.Stream
+        ],
+        Telemetry: [
+          GRPC.Telemetry
+        ],
+        Transport: [
+          GRPC.Transport.HTTP2,
+          GRPC.Transport.Utils
+        ],
+        Codecs: [
+          GRPC.Codec,
+          GRPC.Codec.Erlpack,
+          GRPC.Codec.JSON,
+          GRPC.Codec.Proto,
+          GRPC.Codec.WebText
+        ],
+        Compressors: [
+          GRPC.Compressor,
+          GRPC.Compressor.Gzip
+        ],
+        "Error Handling": [
+          GRPC.RPCError,
+          GRPC.Server.Adapters.ReportException,
+          GRPC.Logger
+        ]
+      ],
+      groups_for_extras: [
+        "Getting Started": ~r"^guides/getting_started/",
+        Advanced: ~r"^guides/advanced/",
+        Cheatsheets: ~r"^guides/cheatsheets/",
+      ]
+    ]
+  end
+
+  defp before_closing_body_tag(:html) do
+    """
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.13.19/dist/katex.min.css" integrity="sha384-beuqjL2bw+6DBM2eOpr5+Xlw+jiH44vMdVQwKxV28xxpoInPHTVmSvvvoPq9RdSh" crossorigin="anonymous">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.13.19/dist/katex.min.js" integrity="sha384-aaNb715UK1HuP4rjZxyzph+dVss/5Nx3mLImBe9b0EW4vMUkc1Guw4VRyQKBC0eG" crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.13.19/dist/contrib/auto-render.min.js" integrity="sha384-+XBljXPPiv+OzfbB3cVmLHf4hdUFHlWNZN5spNQ7rmHTXpd7WvJum6fIACpNNfIR" crossorigin="anonymous"
+            onload="renderMathInElement(document.body);"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function() {
+        renderMathInElement(document.body, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "$", right: "$", display: false },
+          ]
+        });
+      });
+    </script>
+    """
+  end
+
+  defp before_closing_body_tag(_), do: ""
 
   defp aliases do
     [

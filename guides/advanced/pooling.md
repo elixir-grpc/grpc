@@ -1,4 +1,4 @@
-# Managing HTTP/2 Connections Efficiently
+# Pooling
 
 When managing large numbers of gRPC HTTP/2 connections, you may benefit from pooling of some sort.
 

@@ -454,6 +454,7 @@ defmodule GRPC.Server do
 
       iex> GRPC.Server.send_reply(stream, reply)
   """
+  @deprecated "Use GRPC.Stream API instead"
   @spec send_reply(GRPC.Server.Stream.t(), struct()) :: GRPC.Server.Stream.t()
   def send_reply(
         %{__interface__: interface} = stream,

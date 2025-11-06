@@ -106,7 +106,7 @@ defmodule GRPC.Stub do
 
   @doc """
   Establishes a connection with a gRPC server and returns a `GRPC.Channel` required
-  for sending requests. Supports advanced connection resolution via the gRPC `Resolver`
+  for sending requests. Supports advanced connection resolution via the gRPC `GRPC.Client.Resolver`
   and various target schemes (`dns`, `unix`, `xds`, `host:port`, etc).
 
   This function is part of the connection orchestration layer, which manages
@@ -164,6 +164,7 @@ defmodule GRPC.Stub do
 
   * When using DNS or xDS targets, the connection layer periodically refreshes endpoints.
   """
+  @doc type: :client_connection
   @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(addr, opts \\ []) when is_binary(addr) and is_list(opts) do
     Connection.connect(addr, opts)
@@ -212,6 +213,7 @@ defmodule GRPC.Stub do
   @doc """
   Disconnects the adapter and frees any resources the adapter is consuming
   """
+  @doc type: :client_connection
   @spec disconnect(Channel.t()) :: {:ok, Channel.t()} | {:error, any()}
   def disconnect(%Channel{} = channel) do
     Connection.disconnect(channel)
@@ -339,6 +341,7 @@ defmodule GRPC.Stub do
     * `:end_stream` - indicates it's the last one request, then the stream will be in
       half_closed state. Default is false.
   """
+  @doc type: :client_request
   @spec send_request(GRPC.Client.Stream.t(), struct, keyword()) :: GRPC.Client.Stream.t()
   def send_request(%{__interface__: interface} = stream, request, opts \\ []) do
     interface[:send_request].(stream, request, opts)
@@ -354,6 +357,7 @@ defmodule GRPC.Stub do
       iex> stream = GRPC.Stub.send_request(stream, request)
       iex> GRPC.Stub.end_stream(stream)
   """
+  @doc type: :client_request
   @spec end_stream(GRPC.Client.Stream.t()) :: GRPC.Client.Stream.t()
   def end_stream(%{channel: channel} = stream) do
     channel.adapter.end_stream(stream)
@@ -364,6 +368,7 @@ defmodule GRPC.Stub do
 
   After that, callings to `recv/2` will return a CANCEL error.
   """
+  @doc type: :client_request
   def cancel(%{channel: channel} = stream) do
     case channel.adapter.cancel(stream) do
       :ok -> %{stream | canceled: true}
@@ -414,6 +419,7 @@ defmodule GRPC.Stub do
       iex> ex_stream |> Enum.to_list()
       []
   """
+  @doc type: :client_request
   @spec recv(GRPC.Client.Stream.t(), keyword()) ::
           {:ok, struct()}
           | {:ok, struct(), map()}

@@ -1,0 +1,124 @@
+# Quickstart
+
+## Overview
+
+This section introduces a minimal protobuf service, a server implementation, 
+a supervised endpoint that starts the gRPC server, an optional server logging interceptor, 
+and a working client request to verify that everything is functioning correctly.
+
+---
+
+## Setup
+
+```elixir
+app_root = Path.join(__DIR__, "..")
+
+Mix.install(
+  [
+    {:grpc, path: app_root, env: :dev}
+  ],
+  config_path: Path.join(app_root, "config/config.exs"),
+  lockfile: Path.join(app_root, "mix.lock")
+)
+```
+
+---
+
+## Protobuf Service and Messages
+
+```elixir
+defmodule Helloworld.HelloRequest do
+  use Protobuf, syntax: :proto3
+  field :name, 1, type: :string
+end
+
+defmodule Helloworld.HelloReply do
+  use Protobuf, syntax: :proto3
+  field :message, 1, type: :string
+end
+
+defmodule Helloworld.Greeter.Service do
+  use GRPC.Service, name: "helloworld.Greeter"
+  rpc :SayHello, Helloworld.HelloRequest, Helloworld.HelloReply
+end
+
+defmodule Helloworld.Greeter.Stub do
+  use GRPC.Stub, service: Helloworld.Greeter.Service
+end
+```
+
+---
+
+## Logging Interceptor
+
+We create a basic interceptor to log incoming RPC calls.
+
+```elixir
+defmodule LoggingInterceptor do
+  @behaviour GRPC.Server.Interceptor
+  require Logger
+
+  def init(options), do: options
+
+  def call(%GRPC.Server.Stream{} = stream, req, next, _opts) do
+    Logger.info("RPC: #{stream.service_name}/#{stream.method_name} received request")
+    next.(stream, req)
+  end
+end
+```
+
+---
+
+## gRPC Server Implementation
+
+```elixir
+defmodule HelloServer do
+  use GRPC.Server, service: Helloworld.Greeter.Service
+
+  def say_hello(%{name: name}, _stream) do
+    Helloworld.HelloReply.new(message: "Hello, #{name}!")
+  end
+end
+```
+
+---
+
+## Endpoint with Interceptor
+
+```elixir
+defmodule HelloEndpoint do
+  use GRPC.Endpoint
+
+  intercept(LoggingInterceptor)
+  run(HelloServer)
+end
+```
+
+---
+
+## Starting the Server
+
+Here we start the GRPC server under supervision at port `50051`.
+
+```elixir
+{:ok, _pid} =
+  GRPC.Server.Supervisor.start_link(endpoint: HelloEndpoint, port: 50051)
+
+IO.puts("gRPC Server running on port 50051")
+```
+
+---
+
+## Create a Client and Test the RPC
+
+```elixir
+{:ok, _} = GRPC.Client.Supervisor.start_link()
+{:ok, channel} = GRPC.Stub.connect("localhost:50051")
+
+request = Helloworld.HelloRequest.new(name: "Hello gRPC Livebook")
+{:ok, reply} = Helloworld.Greeter.Stub.say_hello(channel, request)
+
+IO.inspect(reply, label: "Received reply")
+```
+
+---
