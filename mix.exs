@@ -83,7 +83,7 @@ defmodule GRPC.Mixfile do
         "Functions: Creation": &(&1[:type] == :creation),
         "Functions: Materializers": &(&1[:type] == :materialization),
         "Functions: Transformers": &(&1[:type] == :transforms),
-        "Functions: Utilities": &(&1[:type] == :utility)
+        "Functions: Actions": &(&1[:type] == :actions)
       ],
       groups_for_modules: [
         Server: [

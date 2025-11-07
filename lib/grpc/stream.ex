@@ -289,7 +289,7 @@ defmodule GRPC.Stream do
   - The use of `effect/2` ensures that the original item is returned unchanged,
   enabling seamless continuation of the pipeline.
   """
-  @doc type: :utility
+  @doc type: :actions
   @spec effect(t(), (term -> any)) :: t()
   defdelegate effect(stream, effect_fun), to: Operators
 
@@ -308,7 +308,7 @@ defmodule GRPC.Stream do
     - `timeout`: Timeout in milliseconds (defaults to `5000`).
 
   """
-  @doc type: :utility
+  @doc type: :actions
   @spec ask(t(), pid | atom, non_neg_integer) :: t() | {:error, :timeout | :process_not_alive}
   defdelegate ask(stream, target, timeout \\ 5000), to: Operators
 
@@ -320,7 +320,7 @@ defmodule GRPC.Stream do
   This version propagates errors via raised exceptions, which can crash the Flow worker and halt the pipeline.
   Prefer `ask/3` for production usage unless failure should abort the stream.
   """
-  @doc type: :utility
+  @doc type: :actions
   @spec ask!(t(), pid | atom, non_neg_integer) :: t()
   defdelegate ask!(stream, target, timeout \\ 5000), to: Operators
 
