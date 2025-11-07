@@ -10,7 +10,7 @@ Typically, you start this client supervisor as part of your application's superv
 
 ```elixir
 children = [
-  {GRPC.Client.Supervisor, []}
+  GRPC.Client.Supervisor
 ]
 
 opts = [strategy: :one_for_one, name: MyApp.Supervisor]

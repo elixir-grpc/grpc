@@ -6,9 +6,9 @@ The package can be installed as:
 def deps do
   [
     {:grpc, "~> 0.11"},
-    {:protobuf, "~> 0.14"}, # optional for import wellknown google types
-    {:grpc_reflection, "~> 0.2"}, # optional enable grpc reflection
-    {:protobuf_generate, "~> 0.1", only: :dev} # optional for protobuf codegen
+    {:protobuf, "~> 0.14"}, # optional for importing well-known Google gRPC types
+    {:grpc_reflection, "~> 0.2"}, # optional for enabling gRPC reflection
+    {:protobuf_generate, "~> 0.1", only: :dev} # optional for Protobuf code generation with plugins
   ]
 end
 ``` 
