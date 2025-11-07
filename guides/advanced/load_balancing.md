@@ -9,7 +9,7 @@ This guide explains how to define target URIs and how the built-in resolver disc
 ## Target Schemes and Resolvers
 
 The `connect/2` function supports URI-like targets that are resolved via the internal **gRPC** [Resolver](lib/grpc/client/resolver.ex).  
-You can connect using `DNS`, `Unix Domain sockets`, `IPv4/IPv6`, or even `xDS-based endpoints`.
+You can connect using `DNS`, `Unix Domain sockets`, and `IPv4/IPv6` for now.
 
 ### Supported formats:
 
@@ -18,10 +18,7 @@ You can connect using `DNS`, `Unix Domain sockets`, `IPv4/IPv6`, or even `xDS-ba
 | `dns://`  | `"dns://example.com:50051"` | Resolves via DNS `A/AAAA` records            |
 | `ipv4:`   | `"ipv4:10.0.0.5:50051"`     | Connects directly to an IPv4 address         |
 | `unix:`   | `"unix:/tmp/service.sock"`  | Connects via a Unix domain socket            |
-| `xds:///` | `"xds:///my-service"`       | Resolves via xDS control plane (Envoy/Istio) |
 | none      | `"127.0.0.1:50051"`         | Implicit DNS (default port `50051`)          |
-
->__Note__: The implementation of xDS is still underway.
 
 ---
 

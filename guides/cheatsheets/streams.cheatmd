@@ -82,9 +82,6 @@ iex> stream =
 ...>   |> GRPC.Stream.effect(fn x -> send(parent, {:seen, x*2}) end)
 ...>   |> GRPC.Stream.to_flow()
 ...>   |> Enum.to_list()
-iex> assert_receive {:seen, 2}
-iex> assert_receive {:seen, 4}
-iex> assert_receive {:seen, 6}
 iex> stream
 [1, 2, 3]
 ```
