@@ -342,23 +342,33 @@ defmodule GRPC.Integration.ServerTest do
     )
   end
 
-  test "passes thrown exceptions to `exception_log_filter" do
-    defmodule ExceptionFilterMustBeRaisedError do
-      def filter(%ArgumentError{message: "exception raised"}) do
-        true
-      end
+  defmodule ExceptionFilterMustBeRaisedError do
+    def filter(exception) do
+      data = get_in(exception.adapter_extra[:req][:headers]["test-data"])
+
+      {pid, ref} = :erlang.binary_to_term(data)
+      send(pid, {:exception_log_filter, ref})
+
+      true
     end
+  end
+
+  test "passes thrown exceptions to `exception_log_filter" do
+    test_pid = self()
+    ref = make_ref()
 
     run_server(
       [HelloErrorServer],
       fn port ->
-        {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+        {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", headers: [{"test-data", :erlang.term_to_binary({test_pid, ref})}])
         req = %Helloworld.HelloRequest{name: "raise", duration: 0}
         Helloworld.Greeter.Stub.say_hello(channel, req)
       end,
       0,
       exception_log_filter: {ExceptionFilterMustBeRaisedError, :filter}
     )
+
+    assert_receive {:exception_log_filter, ^ref}
   end
 
   test "returns appropriate error for stream requests" do
