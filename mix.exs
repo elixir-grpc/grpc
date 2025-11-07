@@ -2,7 +2,7 @@ defmodule GRPC.Mixfile do
   use Mix.Project
 
   @source_url "https://github.com/elixir-grpc/grpc"
-  @version "0.11.2"
+  @version "0.11.4"
 
   def project do
     [
@@ -66,6 +66,7 @@ defmodule GRPC.Mixfile do
       source_ref: "v#{@version}",
       source_url_pattern: "#{@source_url}/blob/v#{@version}/grpc/%{path}#L%{line}",
       extras: [
+        "CHANGELOG.md",
         "guides/getting_started/quickstart.livemd",
         "guides/getting_started/stream.livemd",
         "guides/getting_started/error_handling.md",
