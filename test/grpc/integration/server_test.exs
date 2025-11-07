@@ -344,7 +344,7 @@ defmodule GRPC.Integration.ServerTest do
 
   defmodule ExceptionFilterMustBeRaisedError do
     def filter(exception) do
-      data = get_in(exception.adapter_extra[:req][:headers]["test-data"])
+      data = exception.adapter_extra[:req][:headers]["test-data"]
 
       {pid, ref} = :erlang.binary_to_term(data)
       send(pid, {:exception_log_filter, ref})
