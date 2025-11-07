@@ -7,11 +7,14 @@ defmodule GRPC.Server.Adapters.CowboyTest do
     test "produces the correct socket opts for ranch_tcp for inet" do
       spec =
         Cowboy.child_spec(:endpoint, [], 8080, [
-          {:foo, :bar},
-          {:ip, {127, 0, 0, 1}},
-          {:ipv6_v6only, false},
-          {:net, :inet},
-          {:baz, :foo}
+          {:adapter_opts,
+           [
+             {:foo, :bar},
+             {:ip, {127, 0, 0, 1}},
+             {:ipv6_v6only, false},
+             {:net, :inet},
+             {:baz, :foo}
+           ]}
         ])
 
       socket_opts = get_socket_opts_from_child_spec(spec)
@@ -23,11 +26,14 @@ defmodule GRPC.Server.Adapters.CowboyTest do
     test "produces the correct socket opts for ranch_tcp for inet6" do
       spec =
         Cowboy.child_spec(:endpoint, [], 8081, [
-          {:foo, :bar},
-          {:ip, {0, 0, 0, 0, 0, 0, 0, 1}},
-          {:ipv6_v6only, true},
-          {:net, :inet6},
-          {:baz, :foo}
+          {:adapter_opts,
+           [
+             {:foo, :bar},
+             {:ip, {0, 0, 0, 0, 0, 0, 0, 1}},
+             {:ipv6_v6only, true},
+             {:net, :inet6},
+             {:baz, :foo}
+           ]}
         ])
 
       socket_opts = get_socket_opts_from_child_spec(spec)

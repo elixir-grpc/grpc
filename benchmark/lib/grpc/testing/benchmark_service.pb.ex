@@ -1,6 +1,7 @@
 defmodule Grpc.Testing.BenchmarkService.Service do
   @moduledoc false
-  use GRPC.Service, name: "grpc.testing.BenchmarkService", protoc_gen_elixir_version: "0.11.0"
+
+  use GRPC.Service, name: "grpc.testing.BenchmarkService", protoc_gen_elixir_version: "0.14.0"
 
   rpc :UnaryCall, Grpc.Testing.SimpleRequest, Grpc.Testing.SimpleResponse
 
@@ -15,5 +16,6 @@ end
 
 defmodule Grpc.Testing.BenchmarkService.Stub do
   @moduledoc false
+
   use GRPC.Stub, service: Grpc.Testing.BenchmarkService.Service
 end

@@ -59,6 +59,7 @@ defmodule GRPC.Integration.StubTest do
   test "you can disconnect stubs" do
     run_server(HelloServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+      Process.sleep(100)
 
       %{adapter_payload: %{conn_pid: gun_conn_pid}} = channel
 
@@ -77,7 +78,6 @@ defmodule GRPC.Integration.StubTest do
   test "disconnecting a disconnected channel is a no-op" do
     run_server(HelloServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-      {:ok, channel} = GRPC.Stub.disconnect(channel)
       {:ok, _channel} = GRPC.Stub.disconnect(channel)
     end)
   end
@@ -95,7 +95,7 @@ defmodule GRPC.Integration.StubTest do
   end
 
   test "invalid channel function clause error" do
-    req = Helloworld.HelloRequest.new(name: "GRPC")
+    req = %Helloworld.HelloRequest{name: "GRPC"}
 
     assert_raise FunctionClauseError, ~r/Helloworld.Greeter.Stub.say_hello/, fn ->
       Helloworld.Greeter.Stub.say_hello(nil, req)

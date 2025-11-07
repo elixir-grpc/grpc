@@ -122,16 +122,24 @@ defmodule GRPC.Server do
 
   defmacro __using__(opts) do
     quote bind_quoted: [opts: opts], location: :keep do
+      opts =
+        Keyword.validate!(opts, [
+          :service,
+          codecs: [GRPC.Codec.Proto, GRPC.Codec.WebText, GRPC.Codec.JSON],
+          compressors: [],
+          http_transcode: false
+        ])
+
       service_mod = opts[:service]
       service_name = service_mod.__meta__(:name)
-      codecs = opts[:codecs] || [GRPC.Codec.Proto, GRPC.Codec.WebText, GRPC.Codec.JSON]
-      compressors = opts[:compressors] || []
-      http_transcode = opts[:http_transcode] || false
+      codecs = opts[:codecs]
+      compressors = opts[:compressors]
+      http_transcode = opts[:http_transcode]
 
       codecs = if http_transcode, do: [GRPC.Codec.JSON | codecs], else: codecs
 
       routes =
-        for {name, _, _, options} = rpc <- service_mod.__rpc_calls__, reduce: [] do
+        for {name, _, _, options} = rpc <- service_mod.__rpc_calls__(), reduce: [] do
           acc ->
             path = "/#{service_name}/#{name}"
 
@@ -147,12 +155,13 @@ defmodule GRPC.Server do
             [{:grpc, path} | acc]
         end
 
-      Enum.each(service_mod.__rpc_calls__, fn {name, _, _, options} = rpc ->
+      Enum.each(service_mod.__rpc_calls__(), fn {name, _, _, options} = rpc ->
         func_name = name |> to_string |> Macro.underscore() |> String.to_atom()
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
 
-        def __call_rpc__(unquote(path), :post, stream) do
+        def __call_rpc__(unquote(path), http_method, stream)
+            when http_method == :post or http_method == :options do
           GRPC.Server.call(
             unquote(service_mod),
             %{
@@ -178,8 +187,7 @@ defmodule GRPC.Server do
                 | service_name: unquote(service_name),
                   method_name: unquote(to_string(name)),
                   grpc_type: unquote(grpc_type),
-                  http_method: unquote(http_method),
-                  http_transcode: unquote(http_transcode)
+                  http_method: unquote(http_method)
               },
               unquote(Macro.escape(put_elem(rpc, 0, func_name))),
               unquote(func_name)
@@ -188,7 +196,7 @@ defmodule GRPC.Server do
         end
       end)
 
-      def __call_rpc__(_, stream) do
+      def __call_rpc__(_http_path, _http_method, stream) do
         raise GRPC.RPCError, status: :unimplemented
       end
 
@@ -252,7 +260,7 @@ defmodule GRPC.Server do
            codec: codec,
            adapter: adapter,
            payload: payload,
-           http_transcode: true
+           access_mode: :http_transcoding
          } = stream,
          func_name
        ) do
@@ -269,6 +277,10 @@ defmodule GRPC.Server do
       resp = {:error, _} ->
         resp
     end
+  end
+
+  defp do_handle_request(false, res_stream, %{is_preflight?: true} = stream, func_name) do
+    call_with_interceptors(res_stream, func_name, stream, [])
   end
 
   defp do_handle_request(
@@ -339,7 +351,8 @@ defmodule GRPC.Server do
        ) do
     GRPC.Telemetry.server_span(server, endpoint, func_name, stream, fn ->
       last = fn r, s ->
-        reply = apply(server, func_name, [r, s])
+        # no response is rquired for preflight requests
+        reply = if stream.is_preflight?, do: [], else: apply(server, func_name, [r, s])
 
         if res_stream do
           {:ok, stream}
@@ -399,9 +412,10 @@ defmodule GRPC.Server do
   @spec start_endpoint(atom(), non_neg_integer(), Keyword.t()) ::
           {atom(), any(), non_neg_integer()}
   def start_endpoint(endpoint, port, opts \\ []) do
+    opts = Keyword.validate!(opts, adapter: GRPC.Server.Adapters.Cowboy)
+    adapter = opts[:adapter]
     servers = endpoint.__meta__(:servers)
     servers = GRPC.Server.servers_to_map(servers)
-    adapter = Keyword.get(opts, :adapter) || GRPC.Server.Adapters.Cowboy
     adapter.start(endpoint, servers, port, opts)
   end
 
@@ -417,7 +431,8 @@ defmodule GRPC.Server do
   @doc false
   @spec stop(module() | [module()], Keyword.t()) :: any()
   def stop(servers, opts \\ []) do
-    adapter = Keyword.get(opts, :adapter) || GRPC.Server.Adapters.Cowboy
+    opts = Keyword.validate!(opts, adapter: GRPC.Server.Adapters.Cowboy)
+    adapter = opts[:adapter]
     servers = GRPC.Server.servers_to_map(servers)
     adapter.stop(nil, servers)
   end
@@ -425,18 +440,11 @@ defmodule GRPC.Server do
   @doc false
   @spec stop_endpoint(atom(), Keyword.t()) :: any()
   def stop_endpoint(endpoint, opts \\ []) do
-    adapter = Keyword.get(opts, :adapter) || GRPC.Server.Adapters.Cowboy
+    opts = Keyword.validate!(opts, adapter: GRPC.Server.Adapters.Cowboy)
+    adapter = opts[:adapter]
     servers = endpoint.__meta__(:servers)
     servers = GRPC.Server.servers_to_map(servers)
     adapter.stop(endpoint, servers)
-  end
-
-  @doc """
-  DEPRECATED. Use `send_reply/3` instead
-  """
-  @deprecated "Use send_reply/3 instead"
-  def stream_send(stream, reply) do
-    send_reply(stream, reply)
   end
 
   @doc """

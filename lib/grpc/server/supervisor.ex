@@ -10,7 +10,7 @@ defmodule GRPC.Server.Supervisor do
 
         def start(_type, _args) do
           children = [
-            {GRPC.Server.Supervisor, endpoint: Your.Endpoint, port: 50051, start_server: true, ...}]
+            {GRPC.Server.Supervisor, endpoint: Your.Endpoint, port: 50051, start_server: true, adapter_opts: [ip: {0, 0, 0, 0}], ...}]
 
           Supervisor.start_link(children, strategy: :one_for_one, name: __MODULE__)
         end
@@ -41,6 +41,7 @@ defmodule GRPC.Server.Supervisor do
     * `:endpoint` - defines the endpoint module that will be started.
     * `:port` - the HTTP port for the endpoint.
     * `:servers` - the list of servers that will be be started.
+    * `:adapter_opts` - options for the adapter.
 
   Either `:endpoint` or `:servers` must be present, but not both.
   """
@@ -54,10 +55,25 @@ defmodule GRPC.Server.Supervisor do
   end
 
   def init(opts) when is_list(opts) do
-    unless is_nil(Application.get_env(:grpc, :start_server)) do
+    if not is_nil(Application.get_env(:grpc, :start_server)) do
       raise "the :start_server config key has been deprecated.\
       The currently supported way is to configure it\
       through the :start_server option for the GRPC.Server.Supervisor"
+    end
+
+    opts =
+      case Keyword.validate(opts, [:endpoint, :servers, :start_server, :port, :adapter_opts]) do
+        {:ok, _opts} ->
+          opts
+
+        {:error, _} ->
+          raise ArgumentError,
+                "just [:endpoint, :servers, :start_server, :port, :adapter_opts] are accepted as arguments, and any other keys for adapters should be passed as adapter_opts!"
+      end
+
+    case validate_cred(opts) do
+      {:ok, _cred} -> :ok
+      {:error, err} -> raise ArgumentError, err
     end
 
     endpoint_or_servers =
@@ -124,5 +140,16 @@ defmodule GRPC.Server.Supervisor do
     adapter = Keyword.get(opts, :adapter) || @default_adapter
     servers = GRPC.Server.servers_to_map(servers)
     adapter.child_spec(nil, servers, port, opts)
+  end
+
+  defp validate_cred(opts) do
+    with cred <- Kernel.get_in(opts, [:adapter_opts, :cred]),
+         true <- cred == nil or (is_map(cred) and is_list(Map.get(cred, :ssl))) do
+      {:ok, cred}
+    else
+      _ ->
+        {:error,
+         "the :cred option must be a map with an :ssl key containing a list of SSL options"}
+    end
   end
 end

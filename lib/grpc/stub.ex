@@ -37,12 +37,14 @@ defmodule GRPC.Stub do
 
   You can refer to `call/6` for doc of your RPC functions.
   """
+  require Logger
+
   alias GRPC.Channel
-  @insecure_scheme "http"
-  @secure_scheme "https"
+  alias GRPC.Client.Connection
+
+  @default_timeout 10_000
+
   @canceled_error GRPC.RPCError.exception(GRPC.Status.cancelled(), "The operation was cancelled")
-  # 10 seconds
-  @default_timeout 10000
 
   @type receive_data_return ::
           {:ok, struct()}
@@ -55,15 +57,15 @@ defmodule GRPC.Stub do
           | {:error, GRPC.RPCError.t()}
           | receive_data_return
 
-  require Logger
-
   defmacro __using__(opts) do
+    opts = Keyword.validate!(opts, [:service])
+
     quote bind_quoted: [opts: opts] do
       service_mod = opts[:service]
       service_name = service_mod.__meta__(:name)
 
-      Enum.each(service_mod.__rpc_calls__, fn {name, {_, req_stream}, {_, res_stream}, _options} =
-                                                rpc ->
+      Enum.each(service_mod.__rpc_calls__(), fn {name, {_, req_stream}, {_, res_stream}, _options} =
+                                                  rpc ->
         func_name = name |> to_string |> Macro.underscore()
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
@@ -103,19 +105,27 @@ defmodule GRPC.Stub do
   end
 
   @doc """
-  Establish a connection with gRPC server and return `GRPC.Channel` needed for
-  sending requests.
+  Establishes a connection with a gRPC server and returns a `GRPC.Channel` required
+  for sending requests. Supports advanced connection resolution via the gRPC `GRPC.Client.Resolver`
+  and various target schemes (`dns`, `unix`, `xds`, `host:port`, etc).
 
-  ## Examples
+  This function is part of the connection orchestration layer, which manages
+  connection setup, name resolution, and optional load balancing.
 
-      iex> GRPC.Stub.connect("localhost:50051")
-      {:ok, channel}
+  ## Target Syntax
 
-      iex> GRPC.Stub.connect("localhost:50051", accepted_compressors: [GRPC.Compressor.Gzip])
-      {:ok, channel}
+  The `target` argument to `connect/2` accepts URI-like strings that are resolved
+  using the configured [Resolver](GRPC.Client.Resolver).
 
-      iex> GRPC.Stub.connect("/paht/to/unix.sock")
-      {:ok, channel}
+  Supported formats:
+
+    * `"dns://example.com:50051"` — resolves via DNS (A/AAAA records and `_grpc_config` TXT)
+    * `"ipv4:10.0.0.5:50051"` — fixed IPv4 address
+    * `"unix:/tmp/my.sock"` — Unix domain socket
+    * `"xds:///my-service"` — resolves via xDS control plane (Envoy/Istio/Traffic Director)
+    * `"127.0.0.1:50051"` — implicit DNS (default port 50051)
+
+  If no scheme is provided, the resolver assumes `dns` by default.
 
   ## Options
 
@@ -124,64 +134,42 @@ defmodule GRPC.Stub do
     * `:adapter` - custom client adapter
     * `:interceptors` - client interceptors
     * `:codec` - client will use this to encode and decode binary message
-    * `:compressor` - the client will use this to compress requests and decompress responses. If this is set, accepted_compressors
-        will be appended also, so this can be used safely without `:accepted_compressors`.
+    * `:compressor` - the client will use this to compress requests and decompress responses.
+      If this is set, accepted_compressors will be appended also, so this can be used safely
+      without `:accepted_compressors`.
     * `:accepted_compressors` - tell servers accepted compressors, this can be used without `:compressor`
     * `:headers` - headers to attach to each request
+
+  ## Examples
+
+  ### Basic Connection
+
+      iex> GRPC.Stub.connect("localhost:50051")
+      {:ok, channel}
+
+      iex> GRPC.Stub.connect("localhost:50051", accepted_compressors: [GRPC.Compressor.Gzip])
+      {:ok, channel}
+
+  ### DNS Target
+
+      iex> {:ok, ch} = GRPC.Client.Connection.connect("dns://my-service.local:50051")
+
+  ### Unix Socket
+
+      iex> GRPC.Stub.connect("/path/to/unix.sock")
+      {:ok, channel}
+
+
+  ## Notes
+
+  * When using DNS or xDS targets, the connection layer periodically refreshes endpoints.
   """
   @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(addr, opts \\ []) when is_binary(addr) and is_list(opts) do
-    # This works because we only accept `http` and `https` schemes (allowlisted below explicitly)
-    # addresses like "localhost:1234" parse as if `localhost` is the scheme for URI, and this falls through to
-    # the base case. Accepting only `http/https` is a trait of `connect/3`.
-
-    case URI.parse(addr) do
-      %URI{scheme: @secure_scheme, host: host, port: port} ->
-        opts = Keyword.put_new_lazy(opts, :cred, &default_ssl_option/0)
-        connect(host, port, opts)
-
-      %URI{scheme: @insecure_scheme, host: host, port: port} ->
-        if opts[:cred] do
-          raise ArgumentError, "invalid option for insecure (http) address: :cred"
-        end
-
-        connect(host, port, opts)
-
-      # For compatibility with previous versions, we accept URIs in
-      # the "#{address}:#{port}" format
-      _ ->
-        case String.split(addr, ":") do
-          [socket_path] ->
-            connect({:local, socket_path}, 0, opts)
-
-          [address, port] ->
-            port = String.to_integer(port)
-            connect(address, port, opts)
-        end
-    end
+    Connection.connect(addr, opts)
   end
 
-  if {:module, CAStore} == Code.ensure_loaded(CAStore) do
-    defp default_ssl_option do
-      %GRPC.Credential{
-        ssl: [
-          verify: :verify_peer,
-          depth: 99,
-          cacert_file: CAStore.file_path()
-        ]
-      }
-    end
-  else
-    defp default_ssl_option do
-      raise """
-      no GRPC credentials provided. Please either:
-
-      - Pass the `:cred` option to `GRPC.Stub.connect/2,3`
-      - Add `:castore` to your list of dependencies in `mix.exs`
-      """
-    end
-  end
-
+  @deprecated "Use connect/2 instead"
   @spec connect(
           String.t() | {:local, String.t()},
           binary() | non_neg_integer(),
@@ -198,42 +186,14 @@ defmodule GRPC.Stub do
       through the :adapter option for GRPC.Stub.connect/3"
     end
 
-    adapter = Keyword.get(opts, :adapter) || GRPC.Client.Adapters.Gun
-
-    cred = Keyword.get(opts, :cred)
-    scheme = if cred, do: @secure_scheme, else: @insecure_scheme
-    interceptors = (Keyword.get(opts, :interceptors) || []) |> init_interceptors
-    codec = Keyword.get(opts, :codec) || GRPC.Codec.Proto
-    compressor = Keyword.get(opts, :compressor)
-    accepted_compressors = Keyword.get(opts, :accepted_compressors) || []
-    headers = Keyword.get(opts, :headers) || []
-
-    accepted_compressors =
-      if compressor do
-        Enum.uniq([compressor | accepted_compressors])
-      else
-        accepted_compressors
+    ip_type =
+      case :inet.parse_address(to_charlist(host)) do
+        {:ok, {_, _, _, _}} -> "ipv4"
+        {:ok, {_, _, _, _, _, _, _, _}} -> "ipv6"
+        {:error, _} -> "ipv4"
       end
 
-    adapter_opts = opts[:adapter_opts] || []
-
-    unless is_list(adapter_opts) do
-      raise ArgumentError, ":adapter_opts must be a keyword list if present"
-    end
-
-    %Channel{
-      host: host,
-      port: port,
-      scheme: scheme,
-      cred: cred,
-      adapter: adapter,
-      interceptors: interceptors,
-      codec: codec,
-      compressor: compressor,
-      accepted_compressors: accepted_compressors,
-      headers: headers
-    }
-    |> adapter.connect(adapter_opts)
+    connect("#{ip_type}:#{host}:#{port}", opts)
   end
 
   def retry_timeout(curr) when curr < 11 do
@@ -249,19 +209,12 @@ defmodule GRPC.Stub do
     round(timeout + jitter * timeout)
   end
 
-  defp init_interceptors(interceptors) do
-    Enum.map(interceptors, fn
-      {interceptor, opts} -> {interceptor, interceptor.init(opts)}
-      interceptor -> {interceptor, interceptor.init([])}
-    end)
-  end
-
   @doc """
   Disconnects the adapter and frees any resources the adapter is consuming
   """
   @spec disconnect(Channel.t()) :: {:ok, Channel.t()} | {:error, any()}
-  def disconnect(%Channel{adapter: adapter} = channel) do
-    adapter.disconnect(channel)
+  def disconnect(%Channel{} = channel) do
+    Connection.disconnect(channel)
   end
 
   @doc false
@@ -285,7 +238,26 @@ defmodule GRPC.Stub do
   def call(_service_mod, rpc, %{channel: channel} = stream, request, opts) do
     {_, {req_mod, req_stream}, {res_mod, response_stream}, _rpc_options} = rpc
 
-    stream = %{stream | request_mod: req_mod, response_mod: res_mod}
+    ch =
+      case Connection.pick_channel(channel, opts) do
+        {:ok, ch} ->
+          if Process.alive?(ch.adapter_payload.conn_pid) do
+            ch
+          else
+            Logger.warning(
+              "The connection process #{inspect(ch.adapter_payload.conn_pid)} is not alive, " <>
+                "please create a new channel via GRPC.Stub.connect/2"
+            )
+
+            channel
+          end
+
+        _ ->
+          # fallback to the channel in the stream
+          channel
+      end
+
+    stream = %{stream | channel: ch, request_mod: req_mod, response_mod: res_mod}
 
     opts =
       if req_stream || response_stream do
@@ -294,8 +266,12 @@ defmodule GRPC.Stub do
         parse_req_opts([{:timeout, @default_timeout} | opts])
       end
 
-    compressor = Keyword.get(opts, :compressor, channel.compressor)
-    accepted_compressors = Keyword.get(opts, :accepted_compressors, [])
+    compressor = Keyword.get(opts, :compressor, ch.compressor)
+    accepted_compressors = Keyword.get(opts, :accepted_compressors, ch.accepted_compressors)
+
+    if not is_list(accepted_compressors) do
+      raise ArgumentError, "accepted_compressors is not a list"
+    end
 
     accepted_compressors =
       if compressor do
@@ -306,8 +282,8 @@ defmodule GRPC.Stub do
 
     stream = %{
       stream
-      | codec: Keyword.get(opts, :codec, channel.codec),
-        compressor: Keyword.get(opts, :compressor, channel.compressor),
+      | codec: Keyword.get(opts, :codec, ch.codec),
+        compressor: compressor,
         accepted_compressors: accepted_compressors
     }
 
@@ -350,14 +326,6 @@ defmodule GRPC.Stub do
       end)
 
     next.(stream, req)
-  end
-
-  @doc """
-  DEPRECATED. Use `send_request/3` instead
-  """
-  @deprecated "Use send_request/3 instead"
-  def stream_send(stream, request, opts \\ []) do
-    send_request(stream, request, opts)
   end
 
   @doc """

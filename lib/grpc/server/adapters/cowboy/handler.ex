@@ -1,50 +1,86 @@
 defmodule GRPC.Server.Adapters.Cowboy.Handler do
-  @moduledoc false
+  @moduledoc """
+  A cowboy handler accepting all requests and calls corresponding functions defined by users.
+  """
 
-  # A cowboy handler accepting all requests and calls corresponding functions
-  # defined by users.
-
+  alias GRPC.Server.Adapters.ReportException
   alias GRPC.Transport.HTTP2
   alias GRPC.RPCError
   require Logger
 
+  @behaviour :cowboy_loop
+
   @adapter GRPC.Server.Adapters.Cowboy
   @default_trailers HTTP2.server_trailers()
 
-  @spec init(
-          map(),
-          state ::
-            {endpoint :: atom(), server :: {String.t(), module()}, route :: String.t(),
-             opts :: keyword()}
-        ) :: {:cowboy_loop, map(), map()}
-  def init(req, {endpoint, {_name, server}, route, opts} = state) do
-    http_method =
-      req
-      |> :cowboy_req.method()
-      |> String.downcase()
-      |> String.to_existing_atom()
+  @type init_state :: {
+          endpoint :: atom(),
+          server :: {name :: String.t(), module()},
+          route :: String.t(),
+          opts :: keyword()
+        }
 
-    with {:ok, sub_type, content_type} <- find_content_type_subtype(req),
+  @type pending_reader :: {
+          cowboy_read_ref :: reference,
+          server_rpc_pid :: pid,
+          server_rpc_reader_reference :: reference
+        }
+  @type stream_state :: %{
+          pid: server_rpc_pid :: pid,
+          handling_timer: timeout_timer_ref :: reference,
+          pending_reader: nil | pending_reader,
+          access_mode: GRPC.Server.Stream.access_mode()
+        }
+  @type init_result ::
+          {:cowboy_loop, :cowboy_req.req(), stream_state} | {:ok, :cowboy_req.req(), init_state}
+
+  @type is_fin :: :fin | :nofin
+
+  @type stream_body_opts :: {:code, module()} | {:compress, boolean()}
+
+  @type headers :: %{binary() => binary()}
+
+  @doc """
+  This function is meant to be called whenever a new request arrives to an existing connection.
+  This handler works mainly with two linked processes.
+  One of them is the process started by cowboy which internally we'll refer to it as `stream_pid`,
+  this process is responsible to interface the interactions with the open socket.
+  The second process is the one we start in this function, we'll refer to it as `server_rpc_pid`,
+  which is the point where we call the functions implemented by users (aka the modules who use
+  the `GRPC.Server` macro)
+  """
+  @spec init(:cowboy_req.req(), state :: init_state) :: init_result
+  def init(req, {endpoint, {_name, server}, route, opts} = state) do
+    http_method = extract_http_method(req) |> String.to_existing_atom()
+
+    with {:ok, access_mode, sub_type, content_type} <- find_content_type_subtype(req),
          {:ok, codec} <- find_codec(sub_type, content_type, server),
          {:ok, compressor} <- find_compressor(req, server) do
+      stream_pid = self()
+      http_transcode = access_mode == :http_transcoding
+      request_headers = :cowboy_req.headers(req)
+
       stream = %GRPC.Server.Stream{
         server: server,
         endpoint: endpoint,
         adapter: @adapter,
-        payload: %{pid: self()},
+        payload: %{pid: stream_pid},
         local: opts[:local],
         codec: codec,
         http_method: http_method,
+        http_request_headers: request_headers,
+        http_transcode: http_transcode,
         compressor: compressor,
-        http_transcode: transcode?(req)
+        is_preflight?: preflight?(req),
+        access_mode: access_mode
       }
 
-      pid = spawn_link(__MODULE__, :call_rpc, [server, route, stream])
+      server_rpc_pid = :proc_lib.spawn_link(__MODULE__, :call_rpc, [server, route, stream])
       Process.flag(:trap_exit, true)
 
       req = :cowboy_req.set_resp_headers(HTTP2.server_headers(stream), req)
 
-      timeout = :cowboy_req.header("grpc-timeout", req)
+      timeout = Map.get(request_headers, "grpc-timeout")
 
       timer_ref =
         if is_binary(timeout) do
@@ -55,7 +91,16 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           )
         end
 
-      {:cowboy_loop, req, %{pid: pid, handling_timer: timer_ref, pending_reader: nil}}
+      {
+        :cowboy_loop,
+        req,
+        %{
+          pid: server_rpc_pid,
+          handling_timer: timer_ref,
+          pending_reader: nil,
+          access_mode: access_mode
+        }
+      }
     else
       {:error, error} ->
         Logger.error(fn -> inspect(error) end)
@@ -87,12 +132,29 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           content_type
       end
 
-    find_subtype(content_type)
+    http_method = extract_http_method(req)
+
+    {:ok, access_mode, subtype} =
+      case extract_subtype(content_type) do
+        {:ok, :unknown, "unknown"} ->
+          if http_method == "post" do
+            {:ok, :grpc, "proto"}
+          else
+            {:ok, :http_transcoding, "json"}
+          end
+
+        resp ->
+          resp
+      end
+
+    access_mode = resolve_access_mode(req, access_mode, subtype)
+    {:ok, access_mode, subtype, content_type}
   end
 
-  defp find_subtype(content_type) do
-    {:ok, subtype} = extract_subtype(content_type)
-    {:ok, subtype, content_type}
+  defp extract_http_method(req) do
+    req
+    |> :cowboy_req.method()
+    |> String.downcase()
   end
 
   defp find_compressor(req, server) do
@@ -116,54 +178,126 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   # APIs begin
+  @doc """
+  Synchronously reads the whole body content of a given request.
+  Raise in case of a timeout.
+  """
+  @spec read_full_body(stream_pid :: pid) :: binary()
   def read_full_body(pid) do
     sync_call(pid, :read_full_body)
   end
 
+  @doc """
+  Synchronously reads a chunk of body content of a given request.
+  Raise in case of a timeout.
+  """
+  @spec read_body(stream_pid :: pid) :: binary()
   def read_body(pid) do
     sync_call(pid, :read_body)
   end
 
-  def stream_body(pid, data, opts, is_fin, http_transcode \\ false) do
-    send(pid, {:stream_body, data, opts, is_fin, http_transcode})
+  @doc """
+  Asynchronously send back to client a chunk of `data`, when `http_transcode?` is true, the
+  data is sent back as it's, with no transformation of protobuf binaries to http2 data frames.
+  """
+  @spec stream_body(
+          stream_pid :: pid,
+          data :: iodata,
+          opts :: list(stream_body_opts),
+          is_fin,
+          http_transcode? :: boolean()
+        ) :: :ok
+  def stream_body(pid, data, opts, is_fin, http_transcode? \\ false) do
+    send(pid, {:stream_body, data, opts, is_fin, http_transcode?})
+    :ok
   end
 
+  @doc """
+  Asynchronously send back to the client the http status and the headers for a given request.
+  """
+  @spec stream_reply(stream_pid :: pid, status :: non_neg_integer(), headers :: headers) :: :ok
   def stream_reply(pid, status, headers) do
     send(pid, {:stream_reply, status, headers})
+    :ok
   end
 
+  @doc """
+  Asynchronously set the headers for a given request. This function does not send any
+  data back to the client. It simply appends the headers to be used in the response.
+  """
+  @spec set_resp_headers(stream_pid :: pid, headers :: headers) :: :ok
   def set_resp_headers(pid, headers) do
     send(pid, {:set_resp_headers, headers})
+    :ok
   end
 
+  @doc """
+  Asynchronously set the trailer headers for a given request. This function does not send any
+  data back to the client. It simply appends the trailer headers to be used in the response.
+  """
+  @spec set_resp_trailers(stream_pid :: pid, trailers :: headers) :: :ok
   def set_resp_trailers(pid, trailers) do
     send(pid, {:set_resp_trailers, trailers})
+    :ok
   end
 
+  @doc """
+  Asynchronously set the compressor algorithm to be used for compress the responses. This checks if
+  the `grpc-accept-encoding` header is present on the original request, otherwise no compression
+  is applied.
+  """
+  @spec set_compressor(stream_pid :: pid, compressor :: module) :: :ok
   def set_compressor(pid, compressor) do
     send(pid, {:set_compressor, compressor})
+    :ok
   end
 
+  @doc """
+  Asynchronously stream the given trailers of request back to client.
+  """
+  @spec stream_trailers(stream_pid :: pid, trailers :: headers) :: :ok
   def stream_trailers(pid, trailers) do
     send(pid, {:stream_trailers, trailers})
+    :ok
   end
 
+  @doc """
+  Return all request headers.
+  """
+  @spec get_headers(stream_pid :: pid) :: :cowboy.http_headers()
   def get_headers(pid) do
     sync_call(pid, :get_headers)
   end
 
+  @doc """
+  Return the peer IP address and port number
+  """
+  @spec get_peer(stream_pid :: pid) :: {:inet.ip_address(), :inet.port_number()}
   def get_peer(pid) do
     sync_call(pid, :get_peer)
   end
 
+  @doc """
+  Return the client TLS certificate. `:undefined` is returned if no certificate was specified
+  when establishing the connection.
+  """
+  @spec get_cert(stream_pid :: pid) :: binary() | :undefined
   def get_cert(pid) do
     sync_call(pid, :get_cert)
   end
 
+  @doc """
+  Return the query string for the request URI.
+  """
+  @spec get_qs(stream_pid :: pid) :: binary()
   def get_qs(pid) do
     sync_call(pid, :get_qs)
   end
 
+  @doc """
+  Return all bindings of a given request.
+  """
+  @spec get_bindings(stream_pid :: pid) :: :cowboy_router.bindings()
   def get_bindings(pid) do
     sync_call(pid, :get_bindings)
   end
@@ -204,6 +338,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
   def info({:request_body, ref, :nofin, body}, req, %{pending_reader: {ref, pid, reader_ref}} = s) do
     send(pid, {reader_ref, {:more, body}})
+
     {:ok, req, %{s | pending_reader: nil}}
   end
 
@@ -329,6 +464,10 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     error = %RPCError{status: GRPC.Status.deadline_exceeded(), message: "Deadline expired"}
     req = send_error(req, error, state, :timeout)
 
+    [req: req]
+    |> ReportException.new(error)
+    |> log_error()
+
     {:stop, req, state}
   end
 
@@ -343,32 +482,42 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  def info({:EXIT, pid, :normal}, req, state = %{pid: pid}) do
-    exit_handler(pid, :normal)
+  def info({:EXIT, server_rpc_pid, reason}, req, state = %{pid: server_rpc_pid})
+      when reason in [:normal, :shutdown] do
     {:stop, req, state}
   end
 
   # expected error raised from user to return error immediately
-  def info({:EXIT, pid, {%RPCError{} = error, _stacktrace}}, req, state = %{pid: pid}) do
+  def info({:EXIT, pid, {%RPCError{} = error, stacktrace}}, req, state = %{pid: pid}) do
     req = send_error(req, error, state, :rpc_error)
+
+    [req: req]
+    |> ReportException.new(error, stacktrace)
+    |> log_error(stacktrace)
+
     {:stop, req, state}
   end
 
   # unknown error raised from rpc
-  def info({:EXIT, pid, {:handle_error, _kind}} = err, req, state = %{pid: pid}) do
-    Logger.warning("3. #{inspect(state)} #{inspect(err)}")
+  def info({:EXIT, pid, {:handle_error, error}}, req, state = %{pid: pid}) do
+    %{kind: kind, reason: reason, stack: stack} = error
+    rpc_error = %RPCError{status: GRPC.Status.unknown(), message: "Internal Server Error"}
+    req = send_error(req, rpc_error, state, :error)
 
-    error = %RPCError{status: GRPC.Status.unknown(), message: "Internal Server Error"}
-    req = send_error(req, error, state, :error)
+    [req: req]
+    |> ReportException.new(reason, stack, kind)
+    |> log_error(stack)
 
     {:stop, req, state}
   end
 
   def info({:EXIT, pid, {reason, stacktrace}}, req, state = %{pid: pid}) do
-    Logger.error(Exception.format(:error, reason, stacktrace))
-
     error = %RPCError{status: GRPC.Status.unknown(), message: "Internal Server Error"}
     req = send_error(req, error, state, reason)
+
+    [req: req]
+    |> ReportException.new(reason, stacktrace)
+    |> log_error(stacktrace)
 
     {:stop, req, state}
   end
@@ -394,17 +543,17 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         end
       catch
         kind, e ->
-          Logger.error(Exception.format(kind, e, __STACKTRACE__))
+          reason = Exception.normalize(kind, e, __STACKTRACE__)
 
-          exit({:handle_error, kind})
+          {:error, %{kind: kind, reason: reason, stack: __STACKTRACE__}}
       end
 
     case result do
       {:error, %GRPC.RPCError{} = e} ->
-        exit({e, ""})
+        exit({e, _stacktrace = []})
 
-      {:error, %{kind: kind}} ->
-        exit({:handle_error, kind})
+      {:error, %{kind: _kind, reason: _reason, stack: _stack} = e} ->
+        exit({:handle_error, e})
 
       other ->
         other
@@ -412,9 +561,11 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   defp do_call_rpc(server, path, %{http_method: http_method} = stream) do
-    result = server.__call_rpc__(path, http_method, stream)
+    case server.__call_rpc__(path, http_method, stream) do
+      {:ok, stream, :noreply} ->
+        GRPC.Server.send_trailers(stream, @default_trailers)
+        {:ok, stream}
 
-    case result do
       {:ok, stream, response} ->
         stream
         |> GRPC.Server.send_reply(response)
@@ -483,38 +634,49 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  defp extract_subtype("application/json"), do: {:ok, "json"}
-  defp extract_subtype("application/grpc"), do: {:ok, "proto"}
-  defp extract_subtype("application/grpc+"), do: {:ok, "proto"}
-  defp extract_subtype("application/grpc;"), do: {:ok, "proto"}
-  defp extract_subtype(<<"application/grpc+", rest::binary>>), do: {:ok, rest}
-  defp extract_subtype(<<"application/grpc;", rest::binary>>), do: {:ok, rest}
+  defp extract_subtype("application/json"), do: {:ok, :http_transcoding, "json"}
+  defp extract_subtype("application/grpc"), do: {:ok, :grpc, "proto"}
+  defp extract_subtype("application/grpc+"), do: {:ok, :grpc, "proto"}
+  defp extract_subtype("application/grpc;"), do: {:ok, :grpc, "proto"}
+  defp extract_subtype(<<"application/grpc+", rest::binary>>), do: {:ok, :grpc, rest}
+  defp extract_subtype(<<"application/grpc;", rest::binary>>), do: {:ok, :grpc, rest}
 
-  defp extract_subtype("application/grpc-web"), do: {:ok, "proto"}
-  defp extract_subtype("application/grpc-web+"), do: {:ok, "proto"}
-  defp extract_subtype("application/grpc-web;"), do: {:ok, "proto"}
-  defp extract_subtype("application/grpc-web-text"), do: {:ok, "text"}
-  defp extract_subtype("application/grpc-web+" <> rest), do: {:ok, rest}
-  defp extract_subtype("application/grpc-web-text+" <> rest), do: {:ok, rest}
+  defp extract_subtype("application/grpc-web"), do: {:ok, :grpcweb, "proto"}
+  defp extract_subtype("application/grpc-web+"), do: {:ok, :grpcweb, "proto"}
+  defp extract_subtype("application/grpc-web;"), do: {:ok, :grpcweb, "proto"}
+  defp extract_subtype("application/grpc-web-text"), do: {:ok, :grpcweb, "text"}
+  defp extract_subtype("application/grpc-web+" <> rest), do: {:ok, :grpcweb, rest}
+  defp extract_subtype("application/grpc-web-text+" <> rest), do: {:ok, :grpcweb, rest}
 
   defp extract_subtype(type) do
-    Logger.warning("Got unknown content-type #{type}, please create an issue.")
-    {:ok, "proto"}
+    Logger.warning("""
+    Received invalid content-type: "#{type}".
+    This usually means the request is missing a proper Content-Type header,
+    or it's using a non-standard value. This may cause request parsing or response
+    encoding errors.
+    """)
+
+    {:ok, :unknown, "unknown"}
   end
 
-  defp transcode?(%{version: "HTTP/1.1"}), do: true
+  defp resolve_access_mode(%{version: "HTTP/1.1"}, _detected_access_mode, _type_subtype),
+    do: :http_transcoding
 
-  defp transcode?(req) do
-    case find_content_type_subtype(req) do
-      {:ok, "json", _} -> true
-      _ -> false
-    end
-  end
+  defp resolve_access_mode(%{method: "OPTIONS"}, _detected_access_mode, _type_subtype),
+    do: :grpcweb
+
+  defp resolve_access_mode(_req, detected_access_mode, _type_subtype), do: detected_access_mode
+
+  defp preflight?(%{method: "OPTIONS"}), do: true
+  defp preflight?(_), do: false
 
   defp send_error(req, error, state, reason) do
-    trailers = HTTP2.server_trailers(error.status, error.message)
+    trailers = HTTP2.server_trailers(error.status, error.message, error.details)
 
-    status = if transcode?(req), do: GRPC.Status.http_code(error.status), else: 200
+    status =
+      if state.access_mode == :http_transcoding,
+        do: GRPC.Status.http_code(error.status),
+        else: 200
 
     if pid = Map.get(state, :pid) do
       exit_handler(pid, reason)
@@ -541,5 +703,13 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     :cowboy_req.cast({:read_body, self(), ref, length, period}, req)
 
     {:wait, ref}
+  end
+
+  defp log_error(%ReportException{kind: kind} = exception, stacktrace \\ []) do
+    crash_reason = GRPC.Logger.crash_reason(kind, exception, stacktrace)
+
+    kind
+    |> Exception.format(exception, stacktrace)
+    |> Logger.error(crash_reason: crash_reason)
   end
 end

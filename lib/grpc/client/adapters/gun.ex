@@ -7,7 +7,7 @@ defmodule GRPC.Client.Adapters.Gun do
 
   @behaviour GRPC.Client.Adapter
 
-  @default_transport_opts [nodelay: true]
+  @default_tcp_opts [nodelay: true]
   @max_retries 100
 
   @impl true
@@ -24,12 +24,17 @@ defmodule GRPC.Client.Adapters.Gun do
   defp connect_securely(%{cred: %{ssl: ssl}} = channel, opts) do
     transport_opts = Map.get(opts, :transport_opts) || []
 
-    tls_opts = Keyword.merge(@default_transport_opts ++ ssl, transport_opts)
+    tls_opts = Keyword.merge(ssl, transport_opts)
 
     open_opts =
       opts
       |> Map.delete(:transport_opts)
-      |> Map.merge(%{transport: :ssl, protocols: [:http2], tls_opts: tls_opts})
+      |> Map.merge(%{
+        transport: :ssl,
+        protocols: [:http2],
+        tcp_opts: @default_tcp_opts,
+        tls_opts: tls_opts
+      })
 
     do_connect(channel, open_opts)
   end
@@ -45,7 +50,7 @@ defmodule GRPC.Client.Adapters.Gun do
 
     transport_opts = Map.get(opts, :transport_opts) || []
 
-    tcp_opts = Keyword.merge(@default_transport_opts, transport_opts)
+    tcp_opts = Keyword.merge(@default_tcp_opts, transport_opts)
 
     open_opts =
       opts
@@ -150,24 +155,59 @@ defmodule GRPC.Client.Adapters.Gun do
       ) do
     %{channel: %{adapter_payload: adapter_payload}, payload: payload} = stream
 
-    with {:ok, headers, is_fin} <- recv_headers(adapter_payload, payload, opts) do
-      response = response_stream(is_fin, stream, opts)
+    case recv_headers(adapter_payload, payload, opts) do
+      {:ok, headers, :fin} ->
+        handle_fin_response(headers, opts)
 
-      if(opts[:return_headers]) do
-        {:ok, response, %{headers: headers}}
-      else
-        {:ok, response}
-      end
+      {:ok, headers, :nofin} ->
+        handle_streaming_nofin_response(stream, headers, opts)
+
+      {:error, _} = error ->
+        error
     end
   end
 
   def receive_data(stream, opts) do
     %{payload: payload, channel: %{adapter_payload: adapter_payload}} = stream
 
-    with {:ok, headers, _is_fin} <- recv_headers(adapter_payload, payload, opts),
-         {:ok, body, trailers} <- recv_body(adapter_payload, payload, opts),
+    case recv_headers(adapter_payload, payload, opts) do
+      {:ok, headers, :fin} ->
+        handle_fin_response(headers, opts)
+
+      {:ok, headers, :nofin} ->
+        handle_nofin_response(adapter_payload, payload, stream, headers, opts)
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp handle_fin_response(headers, opts) do
+    # Trailers-only response: headers contain trailers, check status
+    with :ok <- parse_trailers(headers) do
+      if opts[:return_headers] do
+        {:ok, [], %{headers: headers}}
+      else
+        {:ok, []}
+      end
+    end
+  end
+
+  defp handle_streaming_nofin_response(stream, headers, opts) do
+    response = response_stream(:nofin, stream, opts)
+
+    if opts[:return_headers] do
+      {:ok, response, %{headers: headers}}
+    else
+      {:ok, response}
+    end
+  end
+
+  defp handle_nofin_response(adapter_payload, payload, stream, headers, opts) do
+    # Regular response: fetch body and trailers
+    with {:ok, body, trailers} <- recv_body(adapter_payload, payload, opts),
          {:ok, response} <- parse_response(stream, headers, body, trailers) do
-      if(opts[:return_headers]) do
+      if opts[:return_headers] do
         {:ok, response, %{headers: headers, trailers: trailers}}
       else
         {:ok, response}
@@ -225,25 +265,7 @@ defmodule GRPC.Client.Adapters.Gun do
       {:response, :fin, status, headers} ->
         if status == 200 do
           headers = GRPC.Transport.HTTP2.decode_headers(headers)
-
-          case headers["grpc-status"] do
-            nil ->
-              {:error,
-               GRPC.RPCError.exception(
-                 GRPC.Status.internal(),
-                 "shouldn't finish when getting headers"
-               )}
-
-            "0" ->
-              {:response, headers, :fin}
-
-            _ ->
-              {:error,
-               GRPC.RPCError.exception(
-                 String.to_integer(headers["grpc-status"]),
-                 headers["grpc-message"]
-               )}
-          end
+          {:response, headers, :fin}
         else
           {:error, GRPC.RPCError.from_http_status(status)}
         end
@@ -251,16 +273,7 @@ defmodule GRPC.Client.Adapters.Gun do
       {:response, :nofin, status, headers} ->
         if status == 200 do
           headers = GRPC.Transport.HTTP2.decode_headers(headers)
-
-          if headers["grpc-status"] && headers["grpc-status"] != "0" do
-            {:error,
-             GRPC.RPCError.exception(
-               String.to_integer(headers["grpc-status"]),
-               headers["grpc-message"]
-             )}
-          else
-            {:response, headers, :nofin}
-          end
+          {:response, headers, :nofin}
         else
           {:error, GRPC.RPCError.from_http_status(status)}
         end
@@ -335,8 +348,6 @@ defmodule GRPC.Client.Adapters.Gun do
         err
     end
   end
-
-  defp response_stream(:fin, _stream, _opts), do: []
 
   defp response_stream(
          :nofin,
@@ -440,7 +451,14 @@ defmodule GRPC.Client.Adapters.Gun do
     if status == GRPC.Status.ok() do
       :ok
     else
-      {:error, %GRPC.RPCError{status: status, message: trailers["grpc-message"]}}
+      rpc_error =
+        GRPC.RPCError.from_grpc_status_details_bin(%{
+          status: status,
+          message: trailers["grpc-message"],
+          encoded_details_bin: trailers["grpc-status-details-bin"]
+        })
+
+      {:error, rpc_error}
     end
   end
 

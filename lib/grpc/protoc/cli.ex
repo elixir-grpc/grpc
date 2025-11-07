@@ -2,7 +2,7 @@ defmodule GRPC.Protoc.CLI do
   @moduledoc """
   `protoc` plugin for generating Elixir code.
 
-  `protoc-gen-elixir` (this name is important) **must** be in `$PATH`. You are not supposed
+  `protoc-gen-elixir` (this name is important) must be in `$PATH`. You are not supposed
   to call it directly, but only through `protoc`.
 
   ## Examples
