@@ -561,9 +561,11 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   defp do_call_rpc(server, path, %{http_method: http_method} = stream) do
-    result = server.__call_rpc__(path, http_method, stream)
+    case server.__call_rpc__(path, http_method, stream) do
+      {:ok, stream, :noreply} ->
+        GRPC.Server.send_trailers(stream, @default_trailers)
+        {:ok, stream}
 
-    case result do
       {:ok, stream, response} ->
         stream
         |> GRPC.Server.send_reply(response)
@@ -647,7 +649,12 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   defp extract_subtype("application/grpc-web-text+" <> rest), do: {:ok, :grpcweb, rest}
 
   defp extract_subtype(type) do
-    Logger.warning("Got unknown content-type #{type}, please create an issue. ")
+    Logger.warning("""
+    Received invalid content-type: "#{type}".
+    This usually means the request is missing a proper Content-Type header,
+    or it's using a non-standard value. This may cause request parsing or response
+    encoding errors.
+    """)
 
     {:ok, :unknown, "unknown"}
   end

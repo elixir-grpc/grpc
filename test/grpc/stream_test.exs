@@ -1,5 +1,5 @@
 defmodule GRPC.StreamTest do
-  use ExUnit.Case
+  use GRPC.Integration.TestCase
   doctest GRPC.Stream
 
   describe "simple test" do
@@ -9,22 +9,42 @@ defmodule GRPC.StreamTest do
 
     defmodule FakeAdapter do
       def get_headers(_), do: %{"content-type" => "application/grpc"}
+
+      def send_reply(%{test_pid: test_pid, ref: ref}, item, _opts) do
+        send(test_pid, {:send_reply, ref, item})
+      end
+
+      def send_trailers(%{test_pid: test_pid, ref: ref}, trailers) do
+        send(test_pid, {:send_trailers, ref, trailers})
+      end
     end
 
     test "unary/2 creates a flow from a unary input" do
-      input = %TestInput{message: 1}
+      test_pid = self()
+      ref = make_ref()
 
-      result =
-        GRPC.Stream.unary(input)
-        |> GRPC.Stream.map(& &1)
-        |> GRPC.Stream.run()
+      input = %Routeguide.Point{latitude: 1, longitude: 2}
 
-      assert result == input
+      materializer = %GRPC.Server.Stream{
+        adapter: FakeAdapter,
+        payload: %{test_pid: test_pid, ref: ref},
+        grpc_type: :unary
+      }
+
+      assert :noreply =
+               GRPC.Stream.unary(input, materializer: materializer)
+               |> GRPC.Stream.map(fn item ->
+                 item
+               end)
+               |> GRPC.Stream.run()
+
+      assert_receive {:send_reply, ^ref, response}
+      assert IO.iodata_to_binary(response) == Protobuf.encode(input)
     end
 
     test "unary/2 creates a flow with metadata" do
       input = %TestInput{message: 1}
-      materializer = %GRPC.Server.Stream{adapter: FakeAdapter}
+      materializer = %GRPC.Server.Stream{adapter: FakeAdapter, grpc_type: :unary}
 
       flow =
         GRPC.Stream.unary(input, materializer: materializer, propagate_context: true)
@@ -51,7 +71,7 @@ defmodule GRPC.StreamTest do
 
     test "from_as_ctx/3 creates a flow from enumerable input" do
       input = [%{message: "a"}, %{message: "b"}]
-      materializer = %GRPC.Server.Stream{adapter: FakeAdapter}
+      materializer = %GRPC.Server.Stream{adapter: FakeAdapter, grpc_type: :unary}
 
       flow =
         GRPC.Stream.from(input, propagate_context: true, materializer: materializer)
@@ -107,7 +127,7 @@ defmodule GRPC.StreamTest do
         |> GRPC.Stream.to_flow()
         |> Enum.to_list()
 
-      assert result == [{:error, "msg", :not_alive}]
+      assert result == [{:error, :process_not_alive}]
     end
   end
 
@@ -145,6 +165,138 @@ defmodule GRPC.StreamTest do
     end
   end
 
+  describe "ask/3 error handling" do
+    test "returns timeout error if response not received in time" do
+      pid =
+        spawn_link(fn ->
+          Process.sleep(:infinity)
+        end)
+
+      result =
+        GRPC.Stream.from([:hello])
+        # very short timeout
+        |> GRPC.Stream.ask(pid, 10)
+        |> GRPC.Stream.to_flow()
+        |> Enum.to_list()
+
+      assert result == [{:error, :timeout}]
+    end
+  end
+
+  describe "safe_invoke/2 handling {:ok, value} and direct value" do
+    test "maps {:ok, value} to value" do
+      stream =
+        GRPC.Stream.from([1, 2])
+        |> GRPC.Stream.map(fn x -> {:ok, x * 10} end)
+
+      result = stream |> GRPC.Stream.to_flow() |> Enum.to_list()
+      assert result == [10, 20]
+    end
+
+    test "keeps direct values as is" do
+      stream =
+        GRPC.Stream.from([1, 2])
+        |> GRPC.Stream.map(fn x -> x * 5 end)
+
+      result = stream |> GRPC.Stream.to_flow() |> Enum.to_list()
+      assert result == [5, 10]
+    end
+  end
+
+  describe "safe_invoke/2 catches errors" do
+    test "map/2 handles function returning {:error, reason}" do
+      stream =
+        GRPC.Stream.from([1, 2, 3])
+        |> GRPC.Stream.map(fn
+          2 -> {:error, :fail}
+          x -> x
+        end)
+
+      results = stream |> GRPC.Stream.to_flow() |> Enum.to_list()
+      assert results == [1, {:error, :fail}, 3]
+    end
+
+    test "map/2 catches exceptions" do
+      stream =
+        GRPC.Stream.from([1, 2])
+        |> GRPC.Stream.map(fn
+          2 -> raise "boom"
+          x -> x
+        end)
+
+      results = stream |> GRPC.Stream.to_flow() |> Enum.to_list()
+      assert match?([1, {:error, {:exception, %RuntimeError{message: "boom"}}}], results)
+    end
+
+    test "flat_map/2 catches thrown values" do
+      stream =
+        GRPC.Stream.from([1, 2])
+        |> GRPC.Stream.flat_map(fn
+          2 -> throw(:fail)
+          x -> [x]
+        end)
+
+      results = stream |> GRPC.Stream.to_flow() |> Enum.to_list()
+      assert results == [1, {:error, {:throw, :fail}}]
+    end
+  end
+
+  describe "map_error/2" do
+    test "transforms {:error, reason} tuples" do
+      stream =
+        GRPC.Stream.from([{:error, :invalid_input}, {:ok, 42}, 100])
+        |> GRPC.Stream.map_error(fn
+          {:error, :invalid_input} -> {:error, :mapped_error}
+          msg -> msg
+        end)
+
+      result = stream |> GRPC.Stream.to_flow() |> Enum.to_list()
+
+      assert Enum.sort(result) == [
+               42,
+               100,
+               {:error,
+                %GRPC.RPCError{
+                  __exception__: true,
+                  details: nil,
+                  message: ":mapped_error",
+                  status: nil
+                }}
+             ]
+    end
+
+    test "transforms exceptions raised inside previous map" do
+      stream =
+        GRPC.Stream.from([1, 2])
+        |> GRPC.Stream.map(fn
+          2 -> raise "boom"
+          x -> x
+        end)
+        |> GRPC.Stream.map_error(fn
+          {:error, %RuntimeError{message: "boom"}} ->
+            GRPC.RPCError.exception(message: "Validation or runtime error")
+
+          msg ->
+            msg
+        end)
+
+      result = stream |> GRPC.Stream.to_flow() |> Enum.to_list()
+
+      assert match?(
+               [
+                 1,
+                 {:error,
+                  %GRPC.RPCError{
+                    status: nil,
+                    message: "{:exception, %RuntimeError{message: \"boom\"}}",
+                    details: nil
+                  }}
+               ],
+               result
+             )
+    end
+  end
+
   describe "map/2, flat_map/2, filter/2" do
     test "maps values correctly" do
       result =
@@ -174,6 +326,44 @@ defmodule GRPC.StreamTest do
         |> Enum.to_list()
 
       assert result == [2, 4]
+    end
+  end
+
+  describe "effect/2" do
+    test "applies side effects without altering values" do
+      parent = self()
+
+      result =
+        GRPC.Stream.from([1, 2, 3])
+        |> GRPC.Stream.effect(fn x -> send(parent, {:effect_called, x}) end)
+        |> GRPC.Stream.to_flow()
+        |> Enum.to_list()
+
+      assert Enum.sort(result) == [1, 2, 3]
+
+      assert_receive {:effect_called, 1}
+      assert_receive {:effect_called, 2}
+      assert_receive {:effect_called, 3}
+    end
+
+    test "continues pipeline even if effect function raises an error" do
+      parent = self()
+
+      result =
+        GRPC.Stream.from([1, 2, 3])
+        |> GRPC.Stream.effect(fn
+          2 -> raise "boom"
+          x -> send(parent, {:effect_called, x})
+        end)
+        |> GRPC.Stream.to_flow()
+        |> Enum.to_list()
+
+      # Even with error 2, the pipeline should continue and return all elements
+      assert Enum.sort(result) == [1, 2, 3]
+
+      # The effect should have been called for 1 and 3
+      assert_receive {:effect_called, 1}
+      assert_receive {:effect_called, 3}
     end
   end
 
@@ -254,6 +444,38 @@ defmodule GRPC.StreamTest do
       end
 
       assert result == :ok
+    end
+  end
+
+  describe "run/1" do
+    defmodule MyGRPCService do
+      use GRPC.Server, service: Routeguide.RouteGuide.Service
+
+      def get_feature(input, materializer) do
+        GRPC.Stream.unary(input, materializer: materializer)
+        |> GRPC.Stream.map(fn point ->
+          %Routeguide.Feature{location: point, name: "#{point.latitude},#{point.longitude}"}
+        end)
+        |> GRPC.Stream.run()
+      end
+    end
+
+    test "runs a unary stream" do
+      run_server([MyGRPCService], fn port ->
+        point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
+        {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", adapter_opts: [retry_timeout: 10])
+
+        expected_response = %Routeguide.Feature{
+          location: point,
+          name: "#{point.latitude},#{point.longitude}"
+        }
+
+        assert {:ok, response, %{trailers: trailers}} =
+                 Routeguide.RouteGuide.Stub.get_feature(channel, point, return_headers: true)
+
+        assert response == expected_response
+        assert trailers == GRPC.Transport.HTTP2.server_trailers()
+      end)
     end
   end
 

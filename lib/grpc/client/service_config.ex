@@ -9,12 +9,12 @@ defmodule GRPC.Client.ServiceConfig do
 
   According to the gRPC specification ([service_config.md](https://github.com/grpc/grpc/blob/master/doc/service_config.md)):
 
-  - **loadBalancingConfig**: a list of load balancing policies.  
+  - loadBalancingConfig: a list of load balancing policies.
     The client should pick the first policy it supports. Common values are:
       - `"pick_first"`: always pick the first server.
       - `"round_robin"`: distribute calls across servers in round-robin.
 
-  - **methodConfig**: a list of configurations applied to specific methods or services.  
+  - methodConfig: a list of configurations applied to specific methods or services.
     Each entry can include:
       - `"name"`: a list of `{ "service": "<service_name>", "method": "<method_name>" }`
         or `{ "service": "<service_name>" }` to match all methods in the service.

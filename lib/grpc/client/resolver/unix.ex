@@ -10,7 +10,7 @@ defmodule GRPC.Client.Resolver.Unix do
 
       unix:///absolute/path/to/socket
 
-  - The scheme **must** be `unix`.
+  - The scheme must be `unix`.
   - The path must be absolute (`/var/run/my.sock`).
   - The port is not used in Unix sockets; `:port` will be `nil`.
   - The socket type is indicated via `:socket => :unix`.
