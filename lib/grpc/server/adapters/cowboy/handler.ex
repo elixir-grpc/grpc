@@ -41,7 +41,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
   @type headers :: %{binary() => binary()}
 
-  @type exception_log_filter :: {module(), atom()}
+  @type exception_log_filter :: {module(), atom()} | nil
 
   @doc """
   This function is meant to be called whenever a new request arrives to an existing connection.
@@ -115,13 +115,18 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  defp extract_exception_log_filter_opt(%{exception_log_filter: {module, func_name}})
-       when is_atom(module) and is_atom(func_name) do
-    fn exception -> apply(module, func_name, [exception]) end
-  end
+  defp extract_exception_log_filter_opt(opts) do
+    case opts[:exception_log_filter] do
 
-  defp extract_exception_log_filter_opt(%{}) do
-    fn _exception -> true end
+      {module, func_name} when is_atom(module) and is_atom(func_name) ->
+        {module, func_name}
+
+      nil ->
+        nil
+
+      invalid ->
+        raise ArgumentError, "invalid exception log filter: #{inspect(invalid)}"
+    end
   end
 
   defp find_codec(subtype, content_type, server) do
@@ -719,19 +724,31 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     {:wait, ref}
   end
 
-  defp maybe_log_error(
-         %ReportException{kind: kind, reason: reason} = exception,
-         filter_fn,
-         stacktrace \\ []
-       ) do
-    if filter_fn.(reason) do
-      crash_reason = GRPC.Logger.crash_reason(kind, exception, stacktrace)
+  defp maybe_log_error(exception, filter, stacktrace \\ [])
 
-      kind
-      |> Exception.format(exception, stacktrace)
-      |> Logger.error(crash_reason: crash_reason)
+  defp maybe_log_error(
+         %ReportException{} = exception,
+         {module, func_name},
+         stacktrace
+       ) do
+    if apply(module, func_name, [exception]) do
+      log_error(exception, stacktrace)
     else
       :ok
     end
+  end
+
+  defp maybe_log_error(exception, nil, stacktrace) do
+    log_error(exception, stacktrace)
+  end
+
+  defp log_error(%ReportException{kind: kind} = exception, stacktrace) do
+    crash_reason = GRPC.Logger.crash_reason(kind, exception, stacktrace)
+
+    kind
+    |> Exception.format(exception, stacktrace)
+    |> Logger.error(crash_reason: crash_reason)
+
+    :ok
   end
 end
