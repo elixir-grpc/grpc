@@ -208,6 +208,16 @@ defmodule GRPC.Integration.ServerTest do
     end
   end
 
+  defmodule ExceptionLogFilter do
+    def always_allow(_exception) do
+      true
+    end
+
+    def never_allow(_exception) do
+      false
+    end
+  end
+
   test "multiple servers works" do
     run_server([FeatureServer, HelloServer], fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
@@ -288,31 +298,7 @@ defmodule GRPC.Integration.ServerTest do
             Helloworld.Greeter.Stub.say_hello(channel, req)
           end,
           0,
-          exception_log_filter: fn _exception -> true end
-        )
-      end)
-
-    assert logs =~ "Exception raised while handling /helloworld.Greeter/SayHello"
-  end
-
-  test "logs error if exception_log_filter returns true, using MF form" do
-    defmodule TestTrueFilter do
-      def filter(_exception) do
-        true
-      end
-    end
-
-    logs =
-      ExUnit.CaptureLog.capture_log(fn ->
-        run_server(
-          [HelloErrorServer],
-          fn port ->
-            {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-            req = %Helloworld.HelloRequest{name: "unknown error"}
-            Helloworld.Greeter.Stub.say_hello(channel, req)
-          end,
-          0,
-          exception_log_filter: {TestTrueFilter, :filter}
+          exception_log_filter: {ExceptionLogFilter, :always_allow}
         )
       end)
 
@@ -330,31 +316,7 @@ defmodule GRPC.Integration.ServerTest do
             Helloworld.Greeter.Stub.say_hello(channel, req)
           end,
           0,
-          exception_log_filter: fn _exception -> false end
-        )
-      end)
-
-    refute logs =~ "Exception raised while handling /helloworld.Greeter/SayHello"
-  end
-
-  test "does not log error if exception_log_filter returns false, using MF form" do
-    defmodule TestFalseFilter do
-      def filter(_exception) do
-        false
-      end
-    end
-
-    logs =
-      ExUnit.CaptureLog.capture_log(fn ->
-        run_server(
-          [HelloErrorServer],
-          fn port ->
-            {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-            req = %Helloworld.HelloRequest{name: "unknown error"}
-            Helloworld.Greeter.Stub.say_hello(channel, req)
-          end,
-          0,
-          exception_log_filter: {TestFalseFilter, :filter}
+          exception_log_filter: {TestFalseFilter, :never_allow}
         )
       end)
 
@@ -362,6 +324,12 @@ defmodule GRPC.Integration.ServerTest do
   end
 
   test "passes RPCErrors to `exception_log_filter" do
+    defmodule ExceptionFilterMustBeRPCError do
+      def filter(%GRPC.RPCError{}) do
+        true
+      end
+    end
+
     run_server(
       [HelloErrorServer],
       fn port ->
@@ -370,13 +338,17 @@ defmodule GRPC.Integration.ServerTest do
         Helloworld.Greeter.Stub.say_hello(channel, req)
       end,
       0,
-      exception_log_filter: fn exception ->
-        assert %GRPC.RPCError{} = exception
-      end
+      exception_log_filter: {ExceptionFilterMustBeRPCError, :filter}
     )
   end
 
   test "passes thrown exceptions to `exception_log_filter" do
+    defmodule ExceptionFilterMustBeRaisedError do
+      def filter(%ArgumentError{message: "exception raised"}) do
+        true
+      end
+    end
+
     run_server(
       [HelloErrorServer],
       fn port ->
@@ -385,9 +357,7 @@ defmodule GRPC.Integration.ServerTest do
         Helloworld.Greeter.Stub.say_hello(channel, req)
       end,
       0,
-      exception_log_filter: fn exception ->
-        assert %ArgumentError{message: "exception raised"} = exception
-      end
+      exception_log_filter: {ExceptionFilterMustBeRaisedError, :filter}
     )
   end
 

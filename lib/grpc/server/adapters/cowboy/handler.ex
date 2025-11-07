@@ -41,7 +41,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
   @type headers :: %{binary() => binary()}
 
-  @type exception_log_filter :: {module(), atom()} | (Exception.t() -> boolean())
+  @type exception_log_filter :: {module(), atom()}
 
   @doc """
   This function is meant to be called whenever a new request arrives to an existing connection.
@@ -113,11 +113,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         req = send_error_trailers(req, 200, trailers)
         {:ok, req, state}
     end
-  end
-
-  defp extract_exception_log_filter_opt(%{exception_log_filter: func})
-       when is_function(func, 1) do
-    func
   end
 
   defp extract_exception_log_filter_opt(%{exception_log_filter: {module, func_name}})

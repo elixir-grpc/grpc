@@ -41,7 +41,7 @@ defmodule GRPC.Server.Supervisor do
     * `:endpoint` - defines the endpoint module that will be started.
     * `:port` - the HTTP port for the endpoint.
     * `:servers` - the list of servers that will be be started.
-    * `:exception_log_filter` - a 1-arity function that returns a boolean, whether or not a given exception should be logged or dropped
+    * `:exception_log_filter` - a {Module, function} tuple that refers to a filter function. This must be a 1-arity function that returns a boolean, indicating whether or not a given exception should be logged or dropped.
     * `:adapter_opts` - options for the adapter.
 
   Either `:endpoint` or `:servers` must be present, but not both.
