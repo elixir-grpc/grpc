@@ -1,5 +1,20 @@
 # Streaming
 
+gRPC streaming in Elixir introduces a fully composable way to process data as it flows
+between client and server. Instead of treating each request as an isolated transaction,
+streaming allows messages to be transformed incrementally, combined with other streams
+and enriched through side-effects while still in transit.
+
+The objective here is to demonstrate how GRPC.Stream enables functional composition
+applied over live data, allowing pipelines to evolve, react and continue processing
+even under constant input.
+
+By exploring unary, server streaming and bidirectional streaming examples, this
+document highlights how state, concurrency and data transformation can interact
+seamlessly in an event-driven communication model.
+
+---
+
 ## Setup
 
 ```elixir
