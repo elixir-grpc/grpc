@@ -41,6 +41,7 @@ defmodule GRPC.Server.Supervisor do
     * `:endpoint` - defines the endpoint module that will be started.
     * `:port` - the HTTP port for the endpoint.
     * `:servers` - the list of servers that will be be started.
+    * `:exception_log_filter` - a 1-arity function that returns a boolean, whether or not a given exception should be logged or dropped
     * `:adapter_opts` - options for the adapter.
 
   Either `:endpoint` or `:servers` must be present, but not both.
@@ -62,13 +63,20 @@ defmodule GRPC.Server.Supervisor do
     end
 
     opts =
-      case Keyword.validate(opts, [:endpoint, :servers, :start_server, :port, :adapter_opts]) do
+      case Keyword.validate(opts, [
+             :endpoint,
+             :servers,
+             :start_server,
+             :port,
+             :adapter_opts,
+             :exception_log_filter
+           ]) do
         {:ok, _opts} ->
           opts
 
         {:error, _} ->
           raise ArgumentError,
-                "just [:endpoint, :servers, :start_server, :port, :adapter_opts] are accepted as arguments, and any other keys for adapters should be passed as adapter_opts!"
+                "just [:endpoint, :servers, :start_server, :port, :adapter_opts, :exception_log_filter] are accepted as arguments, and any other keys for adapters should be passed as adapter_opts!"
       end
 
     case validate_cred(opts) do

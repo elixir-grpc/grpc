@@ -29,7 +29,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           pid: server_rpc_pid :: pid,
           handling_timer: timeout_timer_ref :: reference,
           pending_reader: nil | pending_reader,
-          access_mode: GRPC.Server.Stream.access_mode()
+          access_mode: GRPC.Server.Stream.access_mode(),
+          exception_log_filter: exception_log_filter()
         }
   @type init_result ::
           {:cowboy_loop, :cowboy_req.req(), stream_state} | {:ok, :cowboy_req.req(), init_state}
@@ -39,6 +40,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   @type stream_body_opts :: {:code, module()} | {:compress, boolean()}
 
   @type headers :: %{binary() => binary()}
+
+  @type exception_log_filter :: {module(), atom()} | (Exception.t() -> boolean())
 
   @doc """
   This function is meant to be called whenever a new request arrives to an existing connection.
@@ -52,6 +55,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   @spec init(:cowboy_req.req(), state :: init_state) :: init_result
   def init(req, {endpoint, {_name, server}, route, opts} = state) do
     http_method = extract_http_method(req) |> String.to_existing_atom()
+    exception_log_filter = extract_exception_log_filter_opt(opts)
 
     with {:ok, access_mode, sub_type, content_type} <- find_content_type_subtype(req),
          {:ok, codec} <- find_codec(sub_type, content_type, server),
@@ -98,7 +102,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           pid: server_rpc_pid,
           handling_timer: timer_ref,
           pending_reader: nil,
-          access_mode: access_mode
+          access_mode: access_mode,
+          exception_log_filter: exception_log_filter
         }
       }
     else
@@ -108,6 +113,20 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         req = send_error_trailers(req, 200, trailers)
         {:ok, req, state}
     end
+  end
+
+  defp extract_exception_log_filter_opt(%{exception_log_filter: func})
+       when is_function(func, 1) do
+    func
+  end
+
+  defp extract_exception_log_filter_opt(%{exception_log_filter: {module, func_name}})
+       when is_atom(module) and is_atom(func_name) do
+    fn exception -> apply(module, func_name, [exception]) end
+  end
+
+  defp extract_exception_log_filter_opt(%{}) do
+    fn _exception -> true end
   end
 
   defp find_codec(subtype, content_type, server) do
@@ -466,7 +485,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
     [req: req]
     |> ReportException.new(error)
-    |> log_error()
+    |> maybe_log_error(state.exception_log_filter)
 
     {:stop, req, state}
   end
@@ -493,7 +512,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
     [req: req]
     |> ReportException.new(error, stacktrace)
-    |> log_error(stacktrace)
+    |> maybe_log_error(state.exception_log_filter, stacktrace)
 
     {:stop, req, state}
   end
@@ -506,7 +525,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
     [req: req]
     |> ReportException.new(reason, stack, kind)
-    |> log_error(stack)
+    |> maybe_log_error(state.exception_log_filter, stack)
 
     {:stop, req, state}
   end
@@ -517,7 +536,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
     [req: req]
     |> ReportException.new(reason, stacktrace)
-    |> log_error(stacktrace)
+    |> maybe_log_error(state.exception_log_filter, stacktrace)
 
     {:stop, req, state}
   end
@@ -705,11 +724,19 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     {:wait, ref}
   end
 
-  defp log_error(%ReportException{kind: kind} = exception, stacktrace \\ []) do
-    crash_reason = GRPC.Logger.crash_reason(kind, exception, stacktrace)
+  defp maybe_log_error(
+         %ReportException{kind: kind, reason: reason} = exception,
+         filter_fn,
+         stacktrace \\ []
+       ) do
+    if filter_fn.(reason) do
+      crash_reason = GRPC.Logger.crash_reason(kind, exception, stacktrace)
 
-    kind
-    |> Exception.format(exception, stacktrace)
-    |> Logger.error(crash_reason: crash_reason)
+      kind
+      |> Exception.format(exception, stacktrace)
+      |> Logger.error(crash_reason: crash_reason)
+    else
+      :ok
+    end
   end
 end
