@@ -82,6 +82,7 @@ defmodule GRPC.Stream do
 
       flow = GRPC.Stream.from(request, max_demand: 50)
   """
+  @doc type: :creation
   @spec from(any(), Keyword.t()) :: t()
   def from(input, opts \\ [])
 
@@ -109,12 +110,13 @@ defmodule GRPC.Stream do
   And any other options supported by `Flow`.
 
   ## Returns
-    - A `GRPCStream` that emits the single gRPC message under demand.
+    - A `GRPC.Stream` that emits the single gRPC message under demand.
 
   ## Example
 
-      flow = GRPCStream.single(request, max_demand: 5)
+      flow = GRPC.Stream.unary(request, max_demand: 5)
   """
+  @doc type: :creation
   @spec unary(any(), Keyword.t()) :: t()
   def unary(input, opts \\ []) when is_struct(input),
     do: build_grpc_stream([input], Keyword.merge(opts, unary: true))
@@ -128,6 +130,7 @@ defmodule GRPC.Stream do
 
     A `Flow` pipeline.
   """
+  @doc type: :transforms
   @spec to_flow(t()) :: Flow.t()
   def to_flow(%__MODULE__{flow: flow}) when is_nil(flow), do: Flow.from_enumerable([])
 
@@ -142,7 +145,22 @@ defmodule GRPC.Stream do
 
   The `stream` argument must be initialized as a `:unary` stream with
   a `:materializer` set.
+
+  ## Example
+
+      def say_unary_hello(request, mat) do
+        GRPC.Stream.unary(request, materializer: mat)
+        |> GRPC.Stream.map(fn
+          %HelloReply{} = reply ->
+            %HelloReply{message: "[Reply] message"}
+
+          {:error, _reason} ->
+            GRPC.RPCError.exception(message: "[Error] Something bad happened")
+        end)
+        |> GRPC.Stream.run()
+      end
   """
+  @doc type: :materialization
   @spec run(stream :: t()) :: :noreply
   def run(%__MODULE__{flow: flow, options: opts}) do
     opts = Keyword.take(opts, [:unary, :materializer])
@@ -181,8 +199,24 @@ defmodule GRPC.Stream do
 
   ## Example
 
-      GRPC.Stream.run_with(request, mat)
+      def say_bid_stream_hello(request, materializer) do
+        output_stream =
+          Stream.repeatedly(fn ->
+            %HelloReply{message: "I'm the Server ;)"}
+          end)
+
+        GRPC.Stream.from(request, join_with: output_stream)
+        |> GRPC.Stream.map(fn
+          %HelloRequest{} = _hello ->
+            %HelloReply{message: "Welcome Sr!"}
+
+          {:error, _reason} ->
+            GRPC.RPCError.exception(message: "[Error] Something bad happened")
+        end)
+        |> GRPC.Stream.run_with(materializer)
+      end
   """
+  @doc type: :materialization
   @spec run_with(t(), Stream.t(), Keyword.t()) :: :ok
   def run_with(
         %__MODULE__{flow: flow, options: flow_opts} = _stream,
@@ -255,6 +289,7 @@ defmodule GRPC.Stream do
   - The use of `effect/2` ensures that the original item is returned unchanged,
   enabling seamless continuation of the pipeline.
   """
+  @doc type: :actions
   @spec effect(t(), (term -> any)) :: t()
   defdelegate effect(stream, effect_fun), to: Operators
 
@@ -273,6 +308,7 @@ defmodule GRPC.Stream do
     - `timeout`: Timeout in milliseconds (defaults to `5000`).
 
   """
+  @doc type: :actions
   @spec ask(t(), pid | atom, non_neg_integer) :: t() | {:error, :timeout | :process_not_alive}
   defdelegate ask(stream, target, timeout \\ 5000), to: Operators
 
@@ -284,6 +320,7 @@ defmodule GRPC.Stream do
   This version propagates errors via raised exceptions, which can crash the Flow worker and halt the pipeline.
   Prefer `ask/3` for production usage unless failure should abort the stream.
   """
+  @doc type: :actions
   @spec ask!(t(), pid | atom, non_neg_integer) :: t()
   defdelegate ask!(stream, target, timeout \\ 5000), to: Operators
 
@@ -293,6 +330,7 @@ defmodule GRPC.Stream do
   The filter function is applied concurrently to the stream entries, so it shouldn't rely on execution order.
   """
   @spec filter(t(), (term -> term)) :: t
+  @doc type: :transforms
   defdelegate filter(stream, filter), to: Operators
 
   @doc """
@@ -300,12 +338,14 @@ defmodule GRPC.Stream do
 
   Useful for emitting multiple messages for each input.
   """
+  @doc type: :transforms
   @spec flat_map(t, (term -> Enumerable.t())) :: t()
   defdelegate flat_map(stream, flat_mapper), to: Operators
 
   @doc """
   Applies a function to each stream item.
   """
+  @doc type: :transforms
   @spec map(t(), (term -> term)) :: t()
   defdelegate map(stream, mapper), to: Operators
 
@@ -365,12 +405,14 @@ defmodule GRPC.Stream do
   - Use this operator to implement robust error recovery, input validation, or
     to normalize exceptions from downstream Flow stages into well-defined gRPC errors.
   """
+  @doc type: :transforms
   defdelegate map_error(stream, func), to: Operators
 
   @doc """
   Applies a transformation function to each stream item, passing the context as an additional argument.
   This is useful for operations that require access to the stream's headers.
   """
+  @doc type: :transforms
   @spec map_with_context(t(), (map(), term -> term)) :: t()
   defdelegate map_with_context(stream, mapper), to: Operators
 
@@ -386,6 +428,7 @@ defmodule GRPC.Stream do
   See https://hexdocs.pm/flow/Flow.html#module-partitioning for more details.
 
   """
+  @doc type: :transforms
   @spec partition(t(), keyword()) :: t()
   defdelegate partition(stream, options \\ []), to: Operators
 
@@ -401,6 +444,7 @@ defmodule GRPC.Stream do
   See https://hexdocs.pm/flow/Flow.html#reduce/3 for more details.
 
   """
+  @doc type: :transforms
   @spec reduce(t, (-> acc), (term(), acc -> acc)) :: t when acc: term()
   defdelegate reduce(stream, acc_fun, reducer_fun), to: Operators
 
@@ -408,6 +452,7 @@ defmodule GRPC.Stream do
   Emits only distinct items from the stream. See `uniq_by/2` for more information.
 
   """
+  @doc type: :transforms
   @spec uniq(t) :: t
   defdelegate uniq(stream), to: Operators
 
@@ -418,6 +463,7 @@ defmodule GRPC.Stream do
   This function requires care when used for unbounded flows. For more information see https://hexdocs.pm/flow/Flow.html#uniq_by/2
 
   """
+  @doc type: :transforms
   @spec uniq_by(t, (term -> term)) :: t
   defdelegate uniq_by(stream, fun), to: Operators
 
