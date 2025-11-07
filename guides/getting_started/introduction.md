@@ -1,6 +1,6 @@
 # Introduction
 
-GRPC is a fully featured Elixir implementation of the gRPC protocol (grpc.io),
+`GRPC` is a fully featured Elixir implementation of the gRPC protocol (grpc.io),
 enabling efficient communication between services through a unified and
 stream-oriented API. It supports all RPC types, friendly error handling, TLS,
 interceptors, reflection, and optional HTTP transcoding.
