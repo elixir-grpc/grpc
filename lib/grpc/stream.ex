@@ -130,7 +130,7 @@ defmodule GRPC.Stream do
 
     A `Flow` pipeline.
   """
-  @doc type: :transformer
+  @doc type: :transforms
   @spec to_flow(t()) :: Flow.t()
   def to_flow(%__MODULE__{flow: flow}) when is_nil(flow), do: Flow.from_enumerable([])
 
