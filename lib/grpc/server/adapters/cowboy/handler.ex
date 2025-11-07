@@ -117,7 +117,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
   defp extract_exception_log_filter_opt(opts) do
     case opts[:exception_log_filter] do
-
       {module, func_name} when is_atom(module) and is_atom(func_name) ->
         {module, func_name}
 
