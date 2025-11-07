@@ -360,7 +360,11 @@ defmodule GRPC.Integration.ServerTest do
     run_server(
       [HelloErrorServer],
       fn port ->
-        {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", headers: [{"test-data", :erlang.term_to_binary({test_pid, ref})}])
+        {:ok, channel} =
+          GRPC.Stub.connect("localhost:#{port}",
+            headers: [{"test-data", :erlang.term_to_binary({test_pid, ref})}]
+          )
+
         req = %Helloworld.HelloRequest{name: "raise", duration: 0}
         Helloworld.Greeter.Stub.say_hello(channel, req)
       end,
