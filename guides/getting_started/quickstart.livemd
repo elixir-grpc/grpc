@@ -1,10 +1,23 @@
 # Quickstart
 
-## Overview
+`GRPC` is a fully featured Elixir implementation of the gRPC protocol (grpc.io),
+enabling efficient communication between services through a unified and
+stream-oriented API. It supports all RPC types, friendly error handling, TLS,
+interceptors, reflection, and optional HTTP transcoding.
 
-This section introduces a minimal protobuf service, a server implementation, 
-a supervised endpoint that starts the gRPC server, an optional server logging interceptor, 
-and a working client request to verify that everything is functioning correctly.
+Suitable for both server and client development in pure Elixir, enabling
+scalable, efficient and type-safe distributed systems.
+
+## Main features:
+
+  * Unary, Server Streaming, Client Streaming, Bi-directional Streaming RPCs;
+  * Streaming-first API for every call;
+  * Interceptors (auth, logging, rate limiting, tracing);
+  * Error handling with predictable propagation;
+  * TLS authentication and message compression;
+  * Connection load balancing strategies (Round Robin, Pick First);
+  * gRPC Reflection;
+  * HTTP Transcoding for REST ↔ gRPC compatibility;
 
 ---
 
@@ -15,7 +28,10 @@ app_root = Path.join(__DIR__, "..")
 
 Mix.install(
   [
-    {:grpc, path: app_root, env: :dev}
+    {:grpc, path: app_root, env: :dev},
+    {:protobuf, "~> 0.14"}, # optional for importing well-known Google gRPC types
+    {:grpc_reflection, "~> 0.2"}, # optional for enabling gRPC reflection
+    {:protobuf_generate, "~> 0.1", only: :dev} # optional for Protobuf code generation with plugins
   ],
   config_path: Path.join(app_root, "config/config.exs"),
   lockfile: Path.join(app_root, "mix.lock")

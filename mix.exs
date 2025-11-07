@@ -45,7 +45,7 @@ defmodule GRPC.Mixfile do
       {:protobuf_generate, "~> 0.1.1", only: [:dev, :test]},
       {:ex_parameterized, "~> 1.3.7", only: :test},
       {:mox, "~> 1.2", only: :test},
-      {:ex_doc, "~> 0.29", only: [:dev, :docs]},
+      {:ex_doc, "~> 0.39", only: [:dev, :docs]},
       {:makeup, "~> 1.2.1", only: [:dev, :docs]},
       {:makeup_syntect, "~> 0.1", only: [:dev, :docs]}
     ]
@@ -65,15 +65,12 @@ defmodule GRPC.Mixfile do
       main: "GRPC",
       source_ref: "v#{@version}",
       source_url_pattern: "#{@source_url}/blob/v#{@version}/grpc/%{path}#L%{line}",
-      before_closing_body_tag: &before_closing_body_tag/1,
       extras: [
-        "guides/getting_started/introduction.md",
-        "guides/getting_started/installation.md",
-        "guides/getting_started/codegen.md",
         "guides/getting_started/quickstart.livemd",
         "guides/getting_started/stream.livemd",
         "guides/getting_started/error_handling.md",
         "guides/getting_started/client.md",
+        "guides/getting_started/codegen.md",
         "guides/cheatsheets/streams.cheatmd",
         "guides/advanced/transcoding.livemd",
         "guides/advanced/load_balancing.md",
@@ -83,16 +80,10 @@ defmodule GRPC.Mixfile do
       ],
       skip_undefined_reference_warnings_on: ["CHANGELOG.md"],
       groups_for_docs: [
-        "Functions: Stream Creation": &(&1[:type] == :creation),
-        "Functions: Stream Materializers": &(&1[:type] == :materializer),
-        "Functions: Stream Transformers": &(&1[:type] == :transformer),
-        "Functions: Stream Mappers": &(&1[:type] == :mapper),
-        "Functions: Stream Reducers": &(&1[:type] == :reducer),
-        "Functions: Stream Filters": &(&1[:type] == :filter),
-        "Functions: Stream Windowning": &(&1[:type] == :windowing),
-        "Functions: Stream Utilities": &(&1[:type] == :utility),
-        "Functions: Client Connection": &(&1[:type] == :client_connection),
-        "Functions: Client Request": &(&1[:type] == :client_request)
+        "Functions: Creation": &(&1[:type] == :creation),
+        "Functions: Materializers": &(&1[:type] == :materialization),
+        "Functions: Transformers": &(&1[:type] == :transforms),
+        "Functions: Utilities": &(&1[:type] == :utility)
       ],
       groups_for_modules: [
         Server: [
@@ -171,27 +162,6 @@ defmodule GRPC.Mixfile do
       ]
     ]
   end
-
-  defp before_closing_body_tag(:html) do
-    """
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.13.19/dist/katex.min.css" integrity="sha384-beuqjL2bw+6DBM2eOpr5+Xlw+jiH44vMdVQwKxV28xxpoInPHTVmSvvvoPq9RdSh" crossorigin="anonymous">
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.13.19/dist/katex.min.js" integrity="sha384-aaNb715UK1HuP4rjZxyzph+dVss/5Nx3mLImBe9b0EW4vMUkc1Guw4VRyQKBC0eG" crossorigin="anonymous"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.13.19/dist/contrib/auto-render.min.js" integrity="sha384-+XBljXPPiv+OzfbB3cVmLHf4hdUFHlWNZN5spNQ7rmHTXpd7WvJum6fIACpNNfIR" crossorigin="anonymous"
-            onload="renderMathInElement(document.body);"></script>
-    <script>
-      document.addEventListener("DOMContentLoaded", function() {
-        renderMathInElement(document.body, {
-          delimiters: [
-            { left: "$$", right: "$$", display: true },
-            { left: "$", right: "$", display: false },
-          ]
-        });
-      });
-    </script>
-    """
-  end
-
-  defp before_closing_body_tag(_), do: ""
 
   defp aliases do
     [
