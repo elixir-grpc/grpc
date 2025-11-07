@@ -82,6 +82,7 @@ iex> stream =
 ...>   |> GRPC.Stream.effect(fn x -> send(parent, {:seen, x*2}) end)
 ...>   |> GRPC.Stream.to_flow()
 ...>   |> Enum.to_list()
+iex> flush()
 iex> stream
 [1, 2, 3]
 ```
