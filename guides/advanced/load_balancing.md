@@ -39,6 +39,6 @@ iex> {:ok, reply} = channel |> Orders.OrderService.Stub.get_order(request)
 iex> {:ok, channel} = GRPC.Stub.connect("unix:/tmp/my.sock")
 ```
 
->__Note__: When using `DNS` or `xDS` targets, the connection layer periodically refreshes endpoints.
+>__Note__: When using `DNS` target, the connection layer periodically refreshes endpoints.
 
 ---
