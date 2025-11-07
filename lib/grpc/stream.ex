@@ -160,7 +160,7 @@ defmodule GRPC.Stream do
         |> GRPC.Stream.run()
       end
   """
-  @doc type: :materializer
+  @doc type: :materialization
   @spec run(stream :: t()) :: :noreply
   def run(%__MODULE__{flow: flow, options: opts}) do
     opts = Keyword.take(opts, [:unary, :materializer])
