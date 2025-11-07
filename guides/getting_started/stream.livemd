@@ -177,7 +177,7 @@ IO.puts("Streaming gRPC Server running on :50054")
 {:ok, reply} =
   Stream.EchoServer.Stub.say_unary_hello(
     channel,
-    Stream.HelloRequest{name: "Unary Test"}
+    %Stream.HelloRequest{name: "Unary Test"}
   )
 
 IO.inspect(reply, label: "Unary reply")
@@ -191,7 +191,7 @@ IO.inspect(reply, label: "Unary reply")
 {:ok, stream} =
   Stream.EchoServer.Stub.say_server_hello(
     channel,
-    Stream.HelloRequest{name: "Server Stream"}
+    %Stream.HelloRequest{name: "Server Stream"}
   )
 
 Enum.each(stream, fn msg ->
@@ -211,7 +211,7 @@ end)
 Enum.each(~w(Alice Bob Carol)a, fn name ->
   GRPC.Stub.send_request(
     bidi_stream,
-    Stream.HelloRequest{name: name}
+    %Stream.HelloRequest{name: name}
   )
   Process.sleep(150)
 end)
