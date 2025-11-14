@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.11.5 (2025-11-14)
+
+### Enhancements
+
+  * Feat add `exception_log_filter` option to server
+  
+### Bug fixes
+
+  * Fix ensure thers is only one `GRPC.Client.Supervisor`.
+  * Fix report `GRPC.Errors` as normal shutdowns
+
 ## v0.11.4 (2025-11-07)
 
 ### Enhancements
