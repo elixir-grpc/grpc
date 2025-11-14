@@ -44,7 +44,16 @@ defmodule GRPC.Client.Supervisor do
   use DynamicSupervisor
 
   def start_link(opts) do
-    DynamicSupervisor.start_link(__MODULE__, opts, name: __MODULE__)
+    case DynamicSupervisor.start_link(__MODULE__, opts, name: __MODULE__) do
+      {:ok, _pid} = started ->
+        started
+
+      {:error, {:already_started, pid}} ->
+        {:ok, pid}
+
+      other ->
+        other
+    end
   end
 
   @impl true

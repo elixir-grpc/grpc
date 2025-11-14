@@ -208,6 +208,16 @@ defmodule GRPC.Integration.ServerTest do
     end
   end
 
+  defmodule ExceptionLogFilter do
+    def always_allow(_exception) do
+      true
+    end
+
+    def never_allow(_exception) do
+      false
+    end
+  end
+
   test "multiple servers works" do
     run_server([FeatureServer, HelloServer], fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
@@ -275,6 +285,110 @@ defmodule GRPC.Integration.ServerTest do
       end)
 
     assert logs =~ "Exception raised while handling /helloworld.Greeter/SayHello"
+  end
+
+  test "logs error if exception_log_filter returns true" do
+    logs =
+      ExUnit.CaptureLog.capture_log(fn ->
+        run_server(
+          [HelloErrorServer],
+          fn port ->
+            {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+            req = %Helloworld.HelloRequest{name: "unknown error"}
+            Helloworld.Greeter.Stub.say_hello(channel, req)
+          end,
+          0,
+          exception_log_filter: {ExceptionLogFilter, :always_allow}
+        )
+      end)
+
+    assert logs =~ "Exception raised while handling /helloworld.Greeter/SayHello"
+  end
+
+  test "does not log error if exception_log_filter returns false" do
+    logs =
+      ExUnit.CaptureLog.capture_log(fn ->
+        run_server(
+          [HelloErrorServer],
+          fn port ->
+            {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+            req = %Helloworld.HelloRequest{name: "unknown error"}
+            Helloworld.Greeter.Stub.say_hello(channel, req)
+          end,
+          0,
+          exception_log_filter: {TestFalseFilter, :never_allow}
+        )
+      end)
+
+    refute logs =~ "Exception raised while handling /helloworld.Greeter/SayHello"
+  end
+
+  defmodule ExceptionFilterMustBeRPCError do
+    def filter(exception) do
+      data = exception.adapter_extra[:req][:headers]["test-data"]
+
+      {pid, ref} = :erlang.binary_to_term(data)
+      send(pid, {:exception_log_filter, ref, exception})
+
+      true
+    end
+  end
+
+  test "passes RPCErrors to `exception_log_filter" do
+    test_pid = self()
+    ref = make_ref()
+
+    run_server(
+      [HelloErrorServer],
+      fn port ->
+        {:ok, channel} =
+          GRPC.Stub.connect("localhost:#{port}",
+            headers: [{"test-data", :erlang.term_to_binary({test_pid, ref})}]
+          )
+
+        req = %Helloworld.HelloRequest{name: "world"}
+        Helloworld.Greeter.Stub.say_hello(channel, req)
+      end,
+      0,
+      exception_log_filter: {ExceptionFilterMustBeRPCError, :filter}
+    )
+
+    assert_receive {:exception_log_filter, ^ref,
+                    %GRPC.Server.Adapters.ReportException{reason: %GRPC.RPCError{}}}
+  end
+
+  defmodule ExceptionFilterMustBeRaisedError do
+    def filter(exception) do
+      data = exception.adapter_extra[:req][:headers]["test-data"]
+
+      {pid, ref} = :erlang.binary_to_term(data)
+      send(pid, {:exception_log_filter, ref, exception})
+
+      true
+    end
+  end
+
+  test "passes thrown exceptions to `exception_log_filter" do
+    test_pid = self()
+    ref = make_ref()
+
+    run_server(
+      [HelloErrorServer],
+      fn port ->
+        {:ok, channel} =
+          GRPC.Stub.connect("localhost:#{port}",
+            headers: [{"test-data", :erlang.term_to_binary({test_pid, ref})}]
+          )
+
+        req = %Helloworld.HelloRequest{name: "unknown error", duration: 0}
+        Helloworld.Greeter.Stub.say_hello(channel, req)
+      end,
+      0,
+      exception_log_filter: {ExceptionFilterMustBeRaisedError, :filter}
+    )
+
+    assert_receive {:exception_log_filter, ^ref,
+                    %GRPC.Server.Adapters.ReportException{reason: %RuntimeError{}}}
   end
 
   test "returns appropriate error for stream requests" do
