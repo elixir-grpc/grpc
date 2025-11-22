@@ -85,15 +85,15 @@ defmodule GRPC.Codec.JSONTest do
 
     test "merges passed options with default config" do
       request = %Helloworld.HelloRequest{name: "Merge Test", duration: nil}
-      
+
       encoded_default = JSON.encode(request)
       decoded_default = JSON.decode(encoded_default, Helloworld.HelloRequest)
       assert Map.has_key?(decoded_default, "duration")
-      
+
       encoded_override = JSON.encode(request, emit_unpopulated: false)
       decoded_override = JSON.decode(encoded_override, Helloworld.HelloRequest)
       refute Map.has_key?(decoded_override, "duration")
-      
+
       encoded_merged = JSON.encode(request, use_proto_names: true)
       decoded_merged = JSON.decode(encoded_merged, Helloworld.HelloRequest)
       assert Map.has_key?(decoded_merged, "duration")
