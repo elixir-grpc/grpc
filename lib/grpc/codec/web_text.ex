@@ -5,7 +5,7 @@ defmodule GRPC.Codec.WebText do
     "text"
   end
 
-  def encode(struct) do
+  def encode(struct, _opts \\ []) do
     Protobuf.Encoder.encode(struct)
   end
 
