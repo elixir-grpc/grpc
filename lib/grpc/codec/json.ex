@@ -38,7 +38,7 @@ if Code.ensure_loaded?(Jason) do
     """
 
     def encode(struct) do
-      Protobuf.JSON.encode!(struct)
+      Protobuf.JSON.encode!(struct, emit_unpopulated: true)
     end
 
     @doc """
