@@ -49,7 +49,7 @@ if Code.ensure_loaded?(Jason) do
     %MyStruct{id: 1, name: "John"} |> GRPC.Codec.JSON.encode()
 
     # Overriding with custom options
-    %MyStruct{id: 1, name: "John"} |> GRPC.Codec.JSON.encode(emit_unpopulated: false)
+     GRPC.Codec.JSON.encode(%MyStruct{id: 1, name: "John"}, emit_unpopulated: false)
     ```
 
     """
