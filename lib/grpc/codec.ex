@@ -5,7 +5,14 @@ defmodule GRPC.Codec do
 
   @doc ~s(Name is identity of the codec, which will be suffix after content-type "application/grpc+" such as "proto".)
   @callback name() :: String.t()
-  @callback encode(any) :: iodata()
+
+  @doc """
+  Encodes a value to iodata.
+
+  Optionally accepts a keyword list of options for customizing the encoding behavior.
+  """
+  @callback encode(any, opts :: keyword()) :: iodata()
+
   @callback decode(any, module :: atom) :: any
 
   @doc """

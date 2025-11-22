@@ -5,7 +5,7 @@ defmodule GRPC.Codec.Erlpack do
     "erlpack"
   end
 
-  def encode(struct) do
+  def encode(struct, _opts \\ []) do
     :erlang.term_to_binary(struct)
   end
 
