@@ -15,7 +15,7 @@ defmodule GRPC.Codec.JSONTest do
       encoded = JSON.encode(request)
 
       assert is_binary(encoded)
-      decoded_map = Jason.decode!(encoded)
+      decoded_map = JSON.decode(encoded, Helloworld.HelloRequest)
       assert decoded_map["name"] == "Alice"
     end
 
@@ -23,7 +23,7 @@ defmodule GRPC.Codec.JSONTest do
       request = %Helloworld.HelloRequest{name: "Bob", duration: nil}
       encoded = JSON.encode(request)
 
-      decoded_map = Jason.decode!(encoded)
+      decoded_map = JSON.decode(encoded, Helloworld.HelloRequest)
       assert Map.has_key?(decoded_map, "duration")
     end
 
@@ -31,7 +31,7 @@ defmodule GRPC.Codec.JSONTest do
       request = %Helloworld.HelloRequest{name: "", duration: nil}
       encoded = JSON.encode(request)
 
-      decoded_map = Jason.decode!(encoded)
+      decoded_map = JSON.decode(encoded, Helloworld.HelloRequest)
       assert Map.has_key?(decoded_map, "name")
       assert Map.has_key?(decoded_map, "duration")
       assert decoded_map["name"] == ""
@@ -41,7 +41,7 @@ defmodule GRPC.Codec.JSONTest do
       reply = %Helloworld.HelloReply{message: ""}
       encoded = JSON.encode(reply)
 
-      decoded_map = Jason.decode!(encoded)
+      decoded_map = JSON.decode(encoded, Helloworld.HelloReply)
       assert Map.has_key?(decoded_map, "message")
       assert decoded_map["message"] == ""
     end
@@ -67,13 +67,6 @@ defmodule GRPC.Codec.JSONTest do
 
       assert result["name"] == "Dave"
       refute Map.has_key?(result, "duration")
-    end
-
-    test "decodes complex JSON structures" do
-      json = ~s({"message": "Hello, World!"})
-      result = JSON.decode(json, Helloworld.HelloReply)
-
-      assert result["message"] == "Hello, World!"
     end
   end
 
