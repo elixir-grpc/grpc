@@ -313,7 +313,7 @@ defmodule GRPC.Client.Connection do
 
   @impl GenServer
   def handle_continue(:stop, state) do
-    Logger.info("#{inspect(__MODULE__)} stopping as requested")
+    Logger.debug("#{inspect(__MODULE__)} stopping as requested")
     {:stop, :normal, state}
   end
 
