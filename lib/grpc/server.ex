@@ -107,7 +107,7 @@ defmodule GRPC.Server do
         "message": "Hello gRPC"
       }
 
-  Custom codecs does not work with HTTP/JSON transcoding.
+  Custom codecs do not work with HTTP/JSON transcoding.
   For more comprehensive documentation on annotation usage in `.proto` files [see](https://cloud.google.com/endpoints/docs/grpc/transcoding)
   """
 
