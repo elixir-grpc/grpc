@@ -74,6 +74,7 @@ defmodule GRPC.Mixfile do
         "guides/getting_started/codegen.md",
         "guides/cheatsheets/streams.cheatmd",
         "guides/advanced/transcoding.livemd",
+        "guides/advanced/custom_codecs.md",
         "guides/advanced/load_balancing.md",
         "guides/advanced/cors.md",
         "guides/advanced/telemetry.livemd",
