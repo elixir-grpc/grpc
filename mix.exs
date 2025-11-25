@@ -33,11 +33,11 @@ defmodule GRPC.Mixfile do
   defp deps do
     [
       {:googleapis, "~> 0.1.0"},
-      {:cowboy, "~> 2.10"},
+      {:cowboy, "~> 2.14"},
       {:flow, "~> 1.2"},
       {:gun, "~> 2.0"},
       {:jason, ">= 0.0.0"},
-      {:cowlib, "~> 2.12"},
+      {:cowlib, "~> 2.14"},
       {:castore, "~> 0.1 or ~> 1.0", optional: true},
       {:protobuf, "~> 0.14"},
       {:mint, "~> 1.5"},
