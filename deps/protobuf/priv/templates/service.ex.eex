@@ -1,0 +1,31 @@
+defmodule <%= @module %>.Service do
+  <%= if @module_doc? do %>
+  <%= if @comment != "" do %>
+  @moduledoc """
+<%= Protobuf.Protoc.Generator.Util.pad_comment(@comment, 2) %>
+  """
+  <% end %>
+  <% else %>
+  @moduledoc false
+  <% end %>
+
+  use GRPC.Service, name: <%= inspect(@service_name) %>, protoc_gen_elixir_version: "<%= @version %>"
+
+  <%= if @descriptor_fun_body do %>
+  def descriptor do
+    # credo:disable-for-next-line
+    <%= @descriptor_fun_body %>
+  end
+  <% end %>
+
+  <%= for {method_name, input, output} <- @methods do %>
+  rpc :<%= method_name %>, <%= input %>, <%= output %>
+  <% end %>
+end
+
+defmodule <%= @module %>.Stub do
+  <%= unless @module_doc? do %>
+  @moduledoc false
+  <% end %>
+  use GRPC.Stub, service: <%= @module %>.Service
+end

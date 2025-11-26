@@ -29,9 +29,7 @@ defmodule Grpc.Testing.BenchmarkService.Server do
   end
 
   def new_payload(type, 0) do
-    Grpc.Testing.Payload.new(
-      type: type
-    )
+    Grpc.Testing.Payload.new(type: type)
   end
 
   def new_payload(type, size) do

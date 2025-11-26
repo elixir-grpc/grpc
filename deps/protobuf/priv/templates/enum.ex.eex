@@ -1,0 +1,23 @@
+defmodule <%= @module %> do
+  <%= if @module_doc? do %>
+  <%= if @comment != "" do %>
+  @moduledoc """
+<%= Protobuf.Protoc.Generator.Util.pad_comment(@comment, 2) %>
+  """
+  <% end %>
+  <% else %>
+  @moduledoc false
+  <% end %>
+
+  use Protobuf, <%= @use_options %>
+
+  <%= if @descriptor_fun_body do %>
+  def descriptor do
+    # credo:disable-for-next-line
+    <%= @descriptor_fun_body %>
+  end
+  <% end %>
+
+  <%= for %Google.Protobuf.EnumValueDescriptorProto{name: name, number: number} <- @fields do %>
+  field :<%= name %>, <%= number %><% end %>
+end

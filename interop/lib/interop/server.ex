@@ -11,6 +11,7 @@ defmodule Interop.Server do
   def unary_call(req, stream) do
     if req.expect_compressed do
       headers = GRPC.Stream.get_headers(stream)
+
       if req.expect_compressed.value do
         assert %{"grpc-encoding" => "gzip"} = headers
       else
@@ -21,7 +22,9 @@ defmodule Interop.Server do
     case req do
       %{response_compressed: %{value: true}} ->
         GRPC.Server.set_compressor(stream, GRPC.Compressor.Gzip)
-      _ -> :ok
+
+      _ ->
+        :ok
     end
 
     handle_metadata(stream)
@@ -36,23 +39,32 @@ defmodule Interop.Server do
   end
 
   def streaming_input_call(req_enum, _stream) do
-    size = Enum.reduce(req_enum, 0, fn req, acc ->
-      acc + byte_size(req.payload.body)
-    end)
+    size =
+      Enum.reduce(req_enum, 0, fn req, acc ->
+        acc + byte_size(req.payload.body)
+      end)
+
     %Grpc.Testing.StreamingInputCallResponse{aggregated_payload_size: size}
   end
 
   def streaming_output_call(req, stream) do
     GRPC.Server.set_compressor(stream, GRPC.Compressor.Gzip)
+
     Enum.map(req.response_parameters, fn params ->
-      resp = %Grpc.Testing.StreamingOutputCallResponse{payload: %{body: String.duplicate(<<0>>, params.size)}}
-      opts = if params.compressed == false do
-        [compress: false]
-      else
-        []
-      end
+      resp = %Grpc.Testing.StreamingOutputCallResponse{
+        payload: %{body: String.duplicate(<<0>>, params.size)}
+      }
+
+      opts =
+        if params.compressed == false do
+          [compress: false]
+        else
+          []
+        end
+
       GRPC.Server.send_reply(stream, resp, opts)
     end)
+
     # req.response_parameters
     # |> Enum.map(&Grpc.Testing.Payload.new(body: String.duplicate(<<0>>, &1.size)))
     # |> Enum.map(&Grpc.Testing.StreamingOutputCallResponse.new(payload: &1))

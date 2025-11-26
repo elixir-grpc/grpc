@@ -3,6 +3,7 @@ defmodule Benchmark.ClientWorker do
   use GenServer
 
   def init(args) do
+    {:ok, _pid} = GRPC.Client.Supervisor.start_link()
     send(self(), :start)
     {:ok, args}
   end

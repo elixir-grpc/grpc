@@ -13,10 +13,10 @@ endif
 
 test-prepare:
 	mix deps.get
-	cd interop && mix deps.get
+	cd grpc_server/interop && mix deps.get
 
 test-all:
 	mix test
-	cd interop && mix run script/run.exs
+	cd grpc_server/interop && mix run script/run.exs
 
 .PHONY: test release test-prepare test-all ci-cron

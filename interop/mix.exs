@@ -1,17 +1,18 @@
 defmodule Interop.MixProject do
   use Mix.Project
 
+  @version "1.0.0"
+
   def project do
     [
       app: :interop,
-      version: "0.1.0",
+      version: @version,
       elixir: "~> 1.4",
       start_permanent: true,
       deps: deps()
     ]
   end
 
-  # Run "mix help compile.app" to learn about applications.
   def application do
     [
       mod: {Interop.App, []},
@@ -19,14 +20,14 @@ defmodule Interop.MixProject do
     ]
   end
 
-  # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:grpc, path: "..", override: true},
+      {:grpc_server, path: "..", override: true},
+      {:grpc_client, path: "../../grpc_client", override: true},
       {:protobuf, "~> 0.14"},
       {:grpc_statsd, "~> 0.1.0"},
       {:statix, ">= 1.2.1"},
-      {:extrace, "~> 0.2"},
+      {:extrace, "~> 0.2"}
     ]
   end
 end

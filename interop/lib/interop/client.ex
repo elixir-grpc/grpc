@@ -1,7 +1,5 @@
 defmodule Interop.Client do
-
   import ExUnit.Assertions, only: [refute: 1]
-
   require Logger
 
   # To better understand the behavior of streams used in this module
@@ -32,8 +30,13 @@ defmodule Interop.Client do
 
   def large_unary2!(ch) do
     Logger.info("Run large_unary2!")
-    req = %Grpc.Testing.SimpleRequest{response_size: 1024*1024*8, payload: payload(1024*1024*8)}
-    reply = %Grpc.Testing.SimpleResponse{payload: payload(1024*1024*8)}
+
+    req = %Grpc.Testing.SimpleRequest{
+      response_size: 1024 * 1024 * 8,
+      payload: payload(1024 * 1024 * 8)
+    }
+
+    reply = %Grpc.Testing.SimpleResponse{payload: payload(1024 * 1024 * 8)}
     {:ok, ^reply} = Grpc.Testing.TestService.Stub.unary_call(ch, req)
   end
 
@@ -41,11 +44,23 @@ defmodule Interop.Client do
     Logger.info("Run client_compressed_unary!")
     # "Client calls UnaryCall with the feature probe, an uncompressed message" is not supported
 
-    req = %Grpc.Testing.SimpleRequest{expect_compressed: %{value: true}, response_size: 314_159, payload: payload(271_828)}
-    reply = %Grpc.Testing.SimpleResponse{payload: payload(314_159)}
-    {:ok, ^reply} = Grpc.Testing.TestService.Stub.unary_call(ch, req, compressor: GRPC.Compressor.Gzip)
+    req = %Grpc.Testing.SimpleRequest{
+      expect_compressed: %{value: true},
+      response_size: 314_159,
+      payload: payload(271_828)
+    }
 
-    req = %Grpc.Testing.SimpleRequest{expect_compressed: %{value: false}, response_size: 314_159, payload: payload(271_828)}
+    reply = %Grpc.Testing.SimpleResponse{payload: payload(314_159)}
+
+    {:ok, ^reply} =
+      Grpc.Testing.TestService.Stub.unary_call(ch, req, compressor: GRPC.Compressor.Gzip)
+
+    req = %Grpc.Testing.SimpleRequest{
+      expect_compressed: %{value: false},
+      response_size: 314_159,
+      payload: payload(271_828)
+    }
+
     reply = %Grpc.Testing.SimpleResponse{payload: payload(314_159)}
     {:ok, ^reply} = Grpc.Testing.TestService.Stub.unary_call(ch, req)
   end
@@ -53,13 +68,31 @@ defmodule Interop.Client do
   def server_compressed_unary!(ch) do
     Logger.info("Run server_compressed_unary!")
 
-    req = %Grpc.Testing.SimpleRequest{response_compressed: %{value: true}, response_size: 314_159, payload: payload(271_828)}
-    reply = %Grpc.Testing.SimpleResponse{payload: payload(314_159)}
-    {:ok, ^reply, %{headers: %{"grpc-encoding" => "gzip"}}} = Grpc.Testing.TestService.Stub.unary_call(ch, req, compressor: GRPC.Compressor.Gzip, return_headers: true)
+    req = %Grpc.Testing.SimpleRequest{
+      response_compressed: %{value: true},
+      response_size: 314_159,
+      payload: payload(271_828)
+    }
 
-    req = %Grpc.Testing.SimpleRequest{response_compressed: %{value: false}, response_size: 314_159, payload: payload(271_828)}
     reply = %Grpc.Testing.SimpleResponse{payload: payload(314_159)}
-    {:ok, ^reply, headers} = Grpc.Testing.TestService.Stub.unary_call(ch, req, return_headers: true)
+
+    {:ok, ^reply, %{headers: %{"grpc-encoding" => "gzip"}}} =
+      Grpc.Testing.TestService.Stub.unary_call(ch, req,
+        compressor: GRPC.Compressor.Gzip,
+        return_headers: true
+      )
+
+    req = %Grpc.Testing.SimpleRequest{
+      response_compressed: %{value: false},
+      response_size: 314_159,
+      payload: payload(271_828)
+    }
+
+    reply = %Grpc.Testing.SimpleResponse{payload: payload(314_159)}
+
+    {:ok, ^reply, headers} =
+      Grpc.Testing.TestService.Stub.unary_call(ch, req, return_headers: true)
+
     refute headers[:headers]["grpc-encoding"]
   end
 
@@ -69,13 +102,9 @@ defmodule Interop.Client do
     stream =
       ch
       |> Grpc.Testing.TestService.Stub.streaming_input_call()
-      |> GRPC.Stub.send_request(
-        %Grpc.Testing.StreamingInputCallRequest{payload: payload(27182)}
-      )
+      |> GRPC.Stub.send_request(%Grpc.Testing.StreamingInputCallRequest{payload: payload(27182)})
       |> GRPC.Stub.send_request(%Grpc.Testing.StreamingInputCallRequest{payload: payload(8)})
-      |> GRPC.Stub.send_request(
-        %Grpc.Testing.StreamingInputCallRequest{payload: payload(1828)}
-      )
+      |> GRPC.Stub.send_request(%Grpc.Testing.StreamingInputCallRequest{payload: payload(1828)})
       |> GRPC.Stub.send_request(
         %Grpc.Testing.StreamingInputCallRequest{payload: payload(45904)},
         end_stream: true
@@ -93,10 +122,17 @@ defmodule Interop.Client do
     stream =
       ch
       |> Grpc.Testing.TestService.Stub.streaming_input_call(compressor: GRPC.Compressor.Gzip)
-      |> GRPC.Stub.send_request(%Grpc.Testing.StreamingInputCallRequest{payload: payload(27182), expect_compressed: %{value: true}})
+      |> GRPC.Stub.send_request(%Grpc.Testing.StreamingInputCallRequest{
+        payload: payload(27182),
+        expect_compressed: %{value: true}
+      })
       |> GRPC.Stub.send_request(
-        %Grpc.Testing.StreamingInputCallRequest{payload: payload(45904), expect_compressed: %{value: false}},
-        end_stream: true, compress: false
+        %Grpc.Testing.StreamingInputCallRequest{
+          payload: payload(45904),
+          expect_compressed: %{value: false}
+        },
+        end_stream: true,
+        compress: false
       )
 
     reply = %Grpc.Testing.StreamingInputCallResponse{aggregated_payload_size: 73086}
@@ -115,12 +151,14 @@ defmodule Interop.Client do
 
   def server_compressed_streaming!(ch) do
     Logger.info("Run server_compressed_streaming!")
-    req = %Grpc.Testing.StreamingOutputCallRequest{response_parameters: [
-      %{compressed: %{value: true},
-        size: 31415},
-      %{compressed: %{value: false},
-        size: 92653}
-    ]}
+
+    req = %Grpc.Testing.StreamingOutputCallRequest{
+      response_parameters: [
+        %{compressed: %{value: true}, size: 31415},
+        %{compressed: %{value: false}, size: 92653}
+      ]
+    }
+
     {:ok, res_enum} = ch |> Grpc.Testing.TestService.Stub.streaming_output_call(req)
     result = Enum.map([31415, 92653], &String.duplicate(<<0>>, &1))
 
@@ -207,7 +245,6 @@ defmodule Interop.Client do
     {:trailers, new_trailers} = Enum.at(res_enum, 0)
     {new_headers, data, new_trailers}
   end
-
 
   defp process_full_duplex_response({:ok, res_enum}) do
     {:headers, headers} = Enum.at(res_enum, 0)

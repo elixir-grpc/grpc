@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+import "google/api/annotations.proto";
+
+package transcode;
+
+service Messaging {
+  rpc GetMessage(GetMessageRequest) returns (Message) {
+    option (google.api.http) = {
+        get: "/v1/messages/{name}"
+    };
+  }
+
+  rpc StreamMessages(GetMessageRequest) returns (stream Message) {
+    option (google.api.http) = {
+        get: "/v1/messages/stream/{name}"
+    };
+  }
+
+  rpc GetMessageWithSubPath(GetMessageRequest) returns (Message) {
+    option (google.api.http) = {
+        get: "/v1/{name=}"
+    };
+  }
+
+  rpc GetMessageWithQuery(GetMessageRequest) returns (Message) {
+    option (google.api.http) = {
+        get: "/v1/messages"
+    };
+  }
+
+  rpc GetMessageWithFieldPath(NestedMessageRequest) returns (Message) {
+    option (google.api.http) = {
+        get: "/v1/messages/fieldpath/{message.name}"
+    };
+  }
+
+  rpc CreateMessage(Message) returns (Message) {
+    option (google.api.http) = {
+        post: "/v1/messages"
+        body: "*"
+    };
+  }
+
+  rpc GetMessageWithResponseBody(GetMessageRequest) returns (MessageOut) {
+    option (google.api.http) = {
+        get: "/v1/messages/response_body/{name}",
+        response_body: "response"
+    };
+  }
+
+  rpc CreateMessageWithNestedBody(NestedMessageRequest) returns (Message) {
+    option (google.api.http) = {
+        post: "/v1/messages/nested",
+        body: "message"
+    };
+  }
+
+  rpc GetMessageWithSubpathQuery(NestedMessageRequest) returns (Message) {
+    option (google.api.http) = {
+        get: "/v1/messages/nested"
+    };
+  }
+}
+
+message MessageOut {
+  Message response = 1;
+}
+
+message GetMessageRequest {
+  string name = 1; // Mapped to URL path.
+}
+
+message Message {
+  string name = 1;
+  string text = 2;
+}
+
+message NestedMessageRequest {
+  GetMessageRequest message = 1;
+}

@@ -1,0 +1,43 @@
+= Gun
+
+Gun is an Erlang HTTP client with support for HTTP/1.1,
+HTTP/2, Websocket and more.
+
+== Goals
+
+Gun aims to provide an *easy to use* client compatible with
+HTTP/1.1, HTTP/2 and Websocket. Gun can connect through any
+combination of Socks and HTTP proxies.
+
+Gun is *always connected*. It will maintain a permanent
+connection to the server, reopening it as soon as the server
+closes it, saving time for the requests that come in.
+
+All connections are *supervised* automatically, allowing
+developers to focus on writing their code without worrying.
+
+== Sponsors
+
+Gun was previously sponsored by
+http://leo-project.net/leofs/[LeoFS Cloud Storage],
+https://sameroom.io/[Sameroom],
+and https://pleroma.social/[Pleroma].
+
+== Online documentation
+
+* https://ninenines.eu/docs/en/gun/2.2/guide[User guide]
+* https://ninenines.eu/docs/en/gun/2.2/manual[Function reference]
+
+== Offline documentation
+
+* While still online, run `make docs`
+* User guide available in `doc/` in PDF and HTML formats
+* Function reference man pages available in `doc/man3/` and `doc/man7/`
+* Run `make install-docs` to install man pages on your system
+* Full documentation in Asciidoc available in `doc/src/`
+
+== Getting help
+
+* https://discord.gg/x25nNq2fFE[Discord server]
+* https://github.com/ninenines/gun/issues[Issues tracker]
+* https://ninenines.eu/services/[Commercial Support]

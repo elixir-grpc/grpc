@@ -1,0 +1,13 @@
+{application,makeup_syntect,
+    [{modules,
+         ['Elixir.MakeupSyntect','Elixir.MakeupSyntect.Application',
+          'Elixir.MakeupSyntect.Lexer','Elixir.MakeupSyntect.Syntaxes']},
+     {compile_env,
+         [{rustler_precompiled,[force_build,makeup_syntect],error},
+          {rustler_precompiled,[force_build_all],error}]},
+     {optional_applications,[]},
+     {applications,[kernel,stdlib,elixir,logger,rustler_precompiled,makeup]},
+     {description,"Language lexers for Makeup using the syntect Rust library"},
+     {registered,[]},
+     {vsn,"0.1.3"},
+     {mod,{'Elixir.MakeupSyntect.Application',[]}}]}.
