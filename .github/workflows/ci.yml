@@ -50,7 +50,7 @@ jobs:
           path: deps
           key: v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
       - name: Install Dependencies
-        run: mix deps.get 1>/dev/null
+        run: mix setup 1>/dev/null
       - name: Run Tests
         run: mix test --warnings-as-errors
   interop-tests:
