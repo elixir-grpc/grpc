@@ -22,5 +22,9 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 benchmark-*.tar
 
+.elixir_ls
+
+.elixir_tools
+
 /syscall.so
 /syscall.so.*

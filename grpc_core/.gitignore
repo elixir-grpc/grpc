@@ -19,5 +19,9 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 grpc_core-*.tar
 
+.elixir_ls
+
+.elixir_tools
+
 # Temporary files, for example, from tests.
 /tmp/
