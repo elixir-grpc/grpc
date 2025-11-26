@@ -105,6 +105,3 @@ jobs:
       - name: Run interop tests
         run: mix run script/run.exs
         working-directory: ./interop
-
-  # Removed check_release job as it conflicts with path dependencies
-  # Hex publishing is now handled by release.yml workflow on tags
