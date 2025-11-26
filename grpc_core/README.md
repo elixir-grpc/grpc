@@ -28,7 +28,6 @@ Most users won't need to depend on `grpc_core` directly. Instead, use:
 
 - `{:grpc_client, "~> 0.12"}` for client-only applications
 - `{:grpc_server, "~> 0.12"}` for server-only applications  
-- `{:grpc, "~> 0.12"}` for applications using both client and server
 
 ## Documentation
 
