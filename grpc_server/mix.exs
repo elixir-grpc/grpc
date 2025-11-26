@@ -33,7 +33,7 @@ defmodule GRPC.Server.MixProject do
 
   defp deps do
     [
-      {:grpc_core, path: "../grpc_core"},
+#       {:grpc_core, path: "../grpc_core"},
       # {:grpc_core, "~> 1.0"}, # Uncomment for hex release
       {:cowboy, "~> 2.14"},
       {:cowlib, "~> 2.14"},

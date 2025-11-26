@@ -22,7 +22,9 @@ defmodule GRPC.GRPCRoot do
     [
       setup: cmd("deps.get"),
       compile: cmd("compile"),
-      test: cmd("test")
+      test: cmd("test"),
+      hex_build: cmd("hex.build"),
+      hex_docs: cmd("hex.docs")
     ]
   end
 
