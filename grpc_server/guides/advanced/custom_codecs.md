@@ -300,5 +300,4 @@ If you need custom encoding for HTTP endpoints, consider:
 - **Custom codecs are NOT supported for HTTP transcoding** - only `GRPC.Codec.JSON` is used
 
 For more examples, see the test suite:
-- `test/grpc/integration/custom_codec_test.exs`
 - `test/grpc/codec/proto_test.exs`

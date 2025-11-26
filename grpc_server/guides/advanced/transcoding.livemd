@@ -212,6 +212,6 @@ $ curl -XPOST -H 'Content-type: application/json' -d '{"name": "test", "from": "
 
 >__Note__: gRPC Transcode HttpRule https://docs.cloud.google.com/endpoints/docs/grpc-service-config/reference/rpc/google.api#google.api.HttpRule
 
-> __Warning__: HTTP transcoding **always** uses `GRPC.Codec.JSON` for encoding and decoding, regardless of any custom codecs configured in your server. This is by design, as HTTP transcoding follows the standard HTTP/JSON to gRPC mapping specification. If you need custom serialization formats, use standard gRPC (HTTP/2) instead. For more details, see the [Custom Codecs](custom_codecs.md) guide.                     
+> __Warning__: HTTP transcoding **always** uses `GRPC.Codec.JSON` for encoding and decoding, regardless of any custom codecs configured in your server. This is by design, as HTTP transcoding follows the standard HTTP/JSON to gRPC mapping specification. If you need custom serialization formats, use standard gRPC (HTTP/2) instead. For more details, see the [Custom Codecs](custom_codecs.md) guide.              
 
 ---
