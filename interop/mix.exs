@@ -22,8 +22,8 @@ defmodule Interop.MixProject do
 
   defp deps do
     [
-      {:grpc_server, path: "..", override: true},
-      {:grpc_client, path: "../../grpc_client", override: true},
+      {:grpc_server, path: "../grpc_server", override: true},
+      {:grpc_client, path: "../grpc_client", override: true},
       {:protobuf, "~> 0.14"},
       {:grpc_statsd, "~> 0.1.0"},
       {:statix, ">= 1.2.1"},

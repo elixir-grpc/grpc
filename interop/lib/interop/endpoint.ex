@@ -1,5 +1,5 @@
 defmodule Interop.Endpoint do
   use GRPC.Endpoint
 
-  run Interop.Server
+  run(Interop.Server)
 end
