@@ -30,16 +30,6 @@ defmodule GRPC.Server.SupervisorTest do
     test "starts children if opts sets true" do
       endpoint_str = "#{Macro.to_string(MockEndpoint)}"
 
-      # assert {:ok,
-      #         {%{strategy: :one_for_one},
-      #          [
-      #            %{
-      #              id: {:ranch_listener_sup, ^endpoint_str},
-      #              start: _,
-      #              type: :supervisor
-      #            }
-      #          ]}} = Supervisor.init(endpoint: MockEndpoint, port: 1234, start_server: true)
-
       assert {
                :ok,
                {
