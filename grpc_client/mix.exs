@@ -31,11 +31,11 @@ defmodule GrpcClient.MixProject do
       {:grpc_core, path: "../grpc_core"},
       {:gun, "~> 2.0"},
       {:mint, "~> 1.5"},
-      {:castore, "~> 0.1 or ~> 1.0", optional: true}, 
+      {:castore, "~> 0.1 or ~> 1.0", optional: true},
       {:ex_doc, "~> 0.39", only: [:dev, :docs], runtime: false},
       {:ex_parameterized, "~> 1.3.7", only: :test},
       {:mox, "~> 1.2", only: :test},
-      {:grpc_server, path: "../grpc_server", only: :test},
+      {:grpc_server, path: "../grpc_server", only: :test}
     ]
   end
 
@@ -57,7 +57,7 @@ defmodule GrpcClient.MixProject do
         "CHANGELOG.md",
         "guides/getting_started/client.md",
         "guides/advanced/custom_codecs.md",
-        "guides/advanced/load_balancing.md",
+        "guides/advanced/load_balancing.md"
       ],
       groups_for_modules: [
         "Client Core": [
@@ -67,7 +67,7 @@ defmodule GrpcClient.MixProject do
           GRPC.Client.Supervisor,
           GRPC.Client.Connection
         ],
-        "Adapters": [
+        Adapters: [
           GRPC.Client.Adapter,
           GRPC.Client.Adapters.Gun,
           GRPC.Client.Adapters.Mint
@@ -77,7 +77,7 @@ defmodule GrpcClient.MixProject do
           GRPC.Client.LoadBalancing.RoundRobin,
           GRPC.Client.LoadBalancing.PickFirst
         ],
-        "Resolvers": [
+        Resolvers: [
           GRPC.Client.Resolver,
           GRPC.Client.Resolver.DNS,
           GRPC.Client.Resolver.Unix,
@@ -87,7 +87,7 @@ defmodule GrpcClient.MixProject do
       ],
       groups_for_extras: [
         "Getting Started": ~r"^guides/getting_started/",
-        Advanced: ~r"^guides/advanced/",
+        Advanced: ~r"^guides/advanced/"
       ]
     ]
   end

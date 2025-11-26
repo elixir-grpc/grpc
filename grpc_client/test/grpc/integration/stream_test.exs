@@ -33,5 +33,4 @@ defmodule GRPC.StreamTest do
       end)
     end
   end
-  
 end

@@ -34,7 +34,7 @@ defmodule Transcode.MessageOut do
     }
   end
 
-  field :response, 1, type: Transcode.Message
+  field(:response, 1, type: Transcode.Message)
 end
 
 defmodule Transcode.GetMessageRequest do
@@ -73,7 +73,7 @@ defmodule Transcode.GetMessageRequest do
     }
   end
 
-  field :name, 1, type: :string
+  field(:name, 1, type: :string)
 end
 
 defmodule Transcode.Message do
@@ -126,8 +126,8 @@ defmodule Transcode.Message do
     }
   end
 
-  field :name, 1, type: :string
-  field :text, 2, type: :string
+  field(:name, 1, type: :string)
+  field(:text, 2, type: :string)
 end
 
 defmodule Transcode.NestedMessageRequest do
@@ -166,7 +166,7 @@ defmodule Transcode.NestedMessageRequest do
     }
   end
 
-  field :message, 1, type: Transcode.GetMessageRequest
+  field(:message, 1, type: Transcode.GetMessageRequest)
 end
 
 defmodule Transcode.Messaging.Service do

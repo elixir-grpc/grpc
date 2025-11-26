@@ -13,8 +13,8 @@ defmodule GRPC.Integration.EndpointTest do
   defmodule HelloEndpoint do
     use GRPC.Endpoint
 
-    intercept GRPC.Server.Interceptors.Logger
-    run HelloServer
+    intercept(GRPC.Server.Interceptors.Logger)
+    run(HelloServer)
   end
 
   defmodule HelloHaltInterceptor do
@@ -51,16 +51,16 @@ defmodule GRPC.Integration.EndpointTest do
   defmodule FeatureEndpoint do
     use GRPC.Endpoint
 
-    intercept GRPC.Server.Interceptors.Logger
-    run FeatureServer
+    intercept(GRPC.Server.Interceptors.Logger)
+    run(FeatureServer)
   end
 
   defmodule FeatureAndHelloHaltEndpoint do
     use GRPC.Endpoint
 
-    intercept GRPC.Server.Interceptors.Logger
-    run HelloServer, interceptors: [HelloHaltInterceptor]
-    run FeatureServer
+    intercept(GRPC.Server.Interceptors.Logger)
+    run(HelloServer, interceptors: [HelloHaltInterceptor])
+    run(FeatureServer)
   end
 
   test "endpoint uses Logger interceptor for unary" do
