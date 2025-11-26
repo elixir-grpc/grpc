@@ -37,7 +37,6 @@ defmodule GrpcClient.MixProject do
       {:ex_parameterized, "~> 1.3.7", only: :test},
       {:mox, "~> 1.2", only: :test},
       {:grpc_server, path: "../grpc_server", only: :test}
-      # {:grpc_server, "~> 1.0", only: :test} # Uncomment for hex release
     ]
   end
 
