@@ -1,4 +1,4 @@
-# gRPC Elixir
+# gRPC Elixir Server
 
 [![GitHub CI](https://github.com/elixir-grpc/grpc/actions/workflows/ci.yml/badge.svg)](https://github.com/elixir-grpc/grpc/actions/workflows/ci.yml)
 [![Hex.pm](https://img.shields.io/hexpm/v/grpc.svg)](https://hex.pm/packages/grpc)
@@ -7,7 +7,7 @@
 [![Total Downloads](https://img.shields.io/hexpm/dt/grpc.svg)](https://hex.pm/packages/grpc)
 [![Last Updated](https://img.shields.io/github/last-commit/elixir-grpc/grpc.svg)](https://github.com/elixir-grpc/grpc/commits/master)
 
-**gRPC Elixir** is a full-featured Elixir implementation of the [gRPC](https://grpc.io) protocol, supporting unary and streaming RPCs, interceptors, HTTP transcoding, and TLS. This version adopts a unified stream-based model for all types of calls.
+**gRPC Elixir server** is a full-featured Elixir implementation of the [gRPC](https://grpc.io) protocol, supporting unary and streaming RPCs, interceptors, HTTP transcoding, and TLS. This package adopts a unified stream-based model for all types of calls.
 
 ## Table of contents
 
@@ -22,16 +22,6 @@
     - [Recovery from errors](#recovery-from-errors)
     - [Unified Error Matching and Propagation](#unified-error-matching-and-propagation)
 - [Application Startup](#application-startup)
-- [Client Usage](#client-usage)
-  - [Basic Connection and RPC](#basic-connection-and-rpc)
-  - [Using Interceptors](#using-interceptors)
-  - [Target Schemes and Resolvers](#target-schemes-and-resolvers)
-    - [Supported formats](#supported-formats)
-    - [Example (DNS)](#example-dns)
-    - [Example (Unix socket)](#example-unix-socket)
-  - [Compression and Metadata](#compression-and-metadata)
-  - [Client Adapters](#client-adapters)
-    - [Using Mint Adapter](#using-mint-adapter)
 - [HTTP Transcoding](#http-transcoding)
 - [CORS](#cors)
 - [Features](#features)
@@ -45,7 +35,7 @@ The package can be installed as:
 ```elixir
 def deps do
   [
-    {:grpc, "~> 0.11"},
+    {:grpc_server, "~> 1.0"},
     {:protobuf, "~> 0.14"}, # optional for import wellknown google types
     {:grpc_reflection, "~> 0.2"} # optional enable grpc reflection
   ]
