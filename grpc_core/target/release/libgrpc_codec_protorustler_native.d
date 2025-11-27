@@ -1,0 +1,1 @@
+/home/adrianosantos/workspaces/git/me/grpc/grpc_core/target/release/libgrpc_codec_protorustler_native.so: /home/adrianosantos/workspaces/git/me/grpc/grpc_core/native/grpc_codec_protorustler_native/src/lib.rs
