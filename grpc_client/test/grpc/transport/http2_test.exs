@@ -22,7 +22,7 @@ defmodule GRPC.Transport.HTTP2Test do
     assert_header({":authority", "grpc.io"}, headers)
     assert_header({"content-type", "application/grpc"}, headers)
     assert_header({"te", "trailers"}, headers)
-    
+
     {_, user_agent} = Enum.find(headers, fn {k, _} -> k == "user-agent" end)
     assert user_agent =~ ~r/^grpc-elixir\/\d+\.\d+\.\d+/
   end
