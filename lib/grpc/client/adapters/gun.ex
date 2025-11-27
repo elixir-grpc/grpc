@@ -7,7 +7,7 @@ defmodule GRPC.Client.Adapters.Gun do
 
   @behaviour GRPC.Client.Adapter
 
-  @default_transport_opts [nodelay: true]
+  @default_tcp_opts [nodelay: true]
   @max_retries 100
 
   @impl true
@@ -24,12 +24,17 @@ defmodule GRPC.Client.Adapters.Gun do
   defp connect_securely(%{cred: %{ssl: ssl}} = channel, opts) do
     transport_opts = Map.get(opts, :transport_opts) || []
 
-    tls_opts = Keyword.merge(@default_transport_opts ++ ssl, transport_opts)
+    tls_opts = Keyword.merge(ssl, transport_opts)
 
     open_opts =
       opts
       |> Map.delete(:transport_opts)
-      |> Map.merge(%{transport: :ssl, protocols: [:http2], tls_opts: tls_opts})
+      |> Map.merge(%{
+        transport: :ssl,
+        protocols: [:http2],
+        tcp_opts: @default_tcp_opts,
+        tls_opts: tls_opts
+      })
 
     do_connect(channel, open_opts)
   end
@@ -45,7 +50,7 @@ defmodule GRPC.Client.Adapters.Gun do
 
     transport_opts = Map.get(opts, :transport_opts) || []
 
-    tcp_opts = Keyword.merge(@default_transport_opts, transport_opts)
+    tcp_opts = Keyword.merge(@default_tcp_opts, transport_opts)
 
     open_opts =
       opts

@@ -1,7 +1,7 @@
 defmodule GRPC.Mixfile do
   use Mix.Project
 
-  @version "0.10.0"
+  @version "0.10.2"
 
   def project do
     [
@@ -36,6 +36,7 @@ defmodule GRPC.Mixfile do
   defp deps do
     [
       {:cowboy, "~> 2.10"},
+      {:flow, "~> 1.2"},
       {:gun, "~> 2.0"},
       {:jason, ">= 0.0.0", optional: true},
       {:cowlib, "~> 2.12"},

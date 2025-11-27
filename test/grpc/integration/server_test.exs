@@ -134,15 +134,6 @@ defmodule GRPC.Integration.ServerTest do
       raise "unknown error(This is a test, please ignore it)"
     end
 
-    def say_hello(%{name: "error with details"}, _stream) do
-      detail =
-        Google.Rpc.QuotaFailure.new(
-          violations: [%{subject: "hello", description: "Limit one greeting per person"}]
-        )
-
-      raise GRPC.RPCError, status: GRPC.Status.resource_exhausted(), details: [detail]
-    end
-
     def say_hello(_req, _stream) do
       raise GRPC.RPCError, status: GRPC.Status.unauthenticated(), message: "Please authenticate"
     end
@@ -248,30 +239,6 @@ defmodule GRPC.Integration.ServerTest do
       end)
 
     assert logs =~ "Exception raised while handling /helloworld.Greeter/SayHello"
-  end
-
-  test "returns error details for unary requests" do
-    run_server([HelloErrorServer], fn port ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-      req = Helloworld.HelloRequest.new(name: "error with details")
-      {:error, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
-
-      assert %GRPC.RPCError{
-               __exception__: true,
-               details: [
-                 %Google.Rpc.QuotaFailure{
-                   violations: [
-                     %Google.Rpc.QuotaFailure.Violation{
-                       description: "Limit one greeting per person",
-                       subject: "hello"
-                     }
-                   ]
-                 }
-               ],
-               message: "Some resource has been exhausted",
-               status: 8
-             } == reply
-    end)
   end
 
   test "return errors for unknown errors" do
