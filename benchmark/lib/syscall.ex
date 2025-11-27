@@ -3,7 +3,8 @@ defmodule Benchmark.Syscall do
 
   # %{stime: {sec, usec}, utime: {sec, usec}}
   def init do
-    :ok = :erlang.load_nif("syscall", 0)
+    path = :filename.join(:code.priv_dir(:benchmark), ~c"syscall")
+    :ok = :erlang.load_nif(path, 0)
   end
 
   def getrusage() do

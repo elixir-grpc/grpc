@@ -1,11 +1,12 @@
 defmodule Benchmark.MixProject do
   use Mix.Project
+  @version "1.0.0-rc.1"
 
   def project do
     [
       app: :benchmark,
-      version: "1.0.0-rc.1",
-      elixir: "~> 1.6",
+      version: @version,
+      elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: deps()
     ]
@@ -13,7 +14,8 @@ defmodule Benchmark.MixProject do
 
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: [:logger],
+      mod: {Benchmark.Application, []}
     ]
   end
 

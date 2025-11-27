@@ -7,7 +7,7 @@ defmodule Benchmark.Server do
 
   def get_stats(server, reset \\ false) do
     {server, stats} = Benchmark.Stats.CpuTime.get_stats(server, reset)
-    stats = Grpc.Testing.ServerStats.new(stats)
+    stats = struct(Grpc.Testing.ServerStats, stats)
     {server, stats}
   end
 end
