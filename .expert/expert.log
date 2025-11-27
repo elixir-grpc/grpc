@@ -4098,3 +4098,407 @@ Type: :worker
 14:22:27.968 [debug] sent notification server -> client window/logMessage
 14:22:27.968 [warning] client -> server notification crashed
 14:22:27.968 [warning] client -> server notification crashed
+14:23:25.557 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (elixir 1.17.3) lib/enum.ex:987: Enum."-each/2-lists^foreach/1-0-"/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:198: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+
+14:23:25.557 [debug] sent notification server -> client window/logMessage
+14:23:25.557 [warning] client -> server notification crashed
+14:23:35.565 [info] Opened file:///Users/james.cleveland/workspace/surgeventures/grpc/lib/grpc/transport/utils.ex
+14:23:35.565 [debug] handled notification client -> server textDocument/didOpen in 566µs
+14:23:40.422 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:122: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:23:40.423 [debug] sent notification server -> client window/logMessage
+14:23:40.423 [warning] client -> server notification crashed
+14:23:40.831 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (elixir 1.17.3) lib/enum.ex:987: Enum."-each/2-lists^foreach/1-0-"/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:198: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+
+14:23:40.831 [debug] sent notification server -> client window/logMessage
+14:23:40.831 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:173: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:23:40.831 [debug] sent notification server -> client window/logMessage
+14:23:40.831 [warning] client -> server notification crashed
+14:23:40.831 [warning] client -> server notification crashed
+14:23:45.270 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:122: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:23:45.270 [debug] sent notification server -> client window/logMessage
+14:23:45.270 [warning] client -> server notification crashed
+14:23:45.564 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:173: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:23:45.564 [debug] sent notification server -> client window/logMessage
+14:23:45.564 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (elixir 1.17.3) lib/enum.ex:987: Enum."-each/2-lists^foreach/1-0-"/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:198: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+
+14:23:45.564 [debug] sent notification server -> client window/logMessage
+14:23:45.564 [warning] client -> server notification crashed
+14:23:45.564 [warning] client -> server notification crashed
+14:24:00.122 [info] Opened file:///Users/james.cleveland/workspace/surgeventures/grpc/lib/google/rpc/status.pb.ex
+14:24:00.122 [debug] handled notification client -> server textDocument/didOpen in 294µs
+14:24:06.517 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:122: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:24:06.517 [debug] sent notification server -> client window/logMessage
+14:24:06.517 [warning] client -> server notification crashed
+14:24:06.854 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (elixir 1.17.3) lib/enum.ex:987: Enum."-each/2-lists^foreach/1-0-"/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:198: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+
+14:24:06.854 [debug] sent notification server -> client window/logMessage
+14:24:06.854 [warning] client -> server notification crashed
+14:24:06.854 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:173: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:24:06.854 [debug] sent notification server -> client window/logMessage
+14:24:06.854 [warning] client -> server notification crashed
+14:24:16.953 [info] Opened file:///Users/james.cleveland/workspace/surgeventures/grpc/lib/google/rpc/error_details.pb.ex
+14:24:16.953 [debug] handled notification client -> server textDocument/didOpen in 588µs
+14:24:44.043 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (elixir 1.17.3) lib/enum.ex:987: Enum."-each/2-lists^foreach/1-0-"/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:198: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+
+14:24:44.043 [debug] sent notification server -> client window/logMessage
+14:24:44.043 [warning] client -> server notification crashed
+14:24:44.043 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:173: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:24:44.043 [debug] sent notification server -> client window/logMessage
+14:24:44.043 [warning] client -> server notification crashed
+14:24:56.755 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:122: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:24:56.755 [debug] sent notification server -> client window/logMessage
+14:24:56.755 [warning] client -> server notification crashed
+14:24:57.045 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:173: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:24:57.045 [debug] sent notification server -> client window/logMessage
+14:24:57.045 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (elixir 1.17.3) lib/enum.ex:987: Enum."-each/2-lists^foreach/1-0-"/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:198: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+
+14:24:57.045 [warning] client -> server notification crashed
+14:24:57.045 [debug] sent notification server -> client window/logMessage
+14:24:57.045 [warning] client -> server notification crashed
+14:26:10.641 [info] Opened file:///Users/james.cleveland/workspace/surgeventures/grpc/test/grpc/transport/http2_test.exs
+14:26:10.641 [debug] handled notification client -> server textDocument/didOpen in 2ms
+14:26:20.186 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:122: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:26:20.186 [debug] sent notification server -> client window/logMessage
+14:26:20.186 [warning] client -> server notification crashed
+14:26:20.617 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (elixir 1.17.3) lib/enum.ex:987: Enum."-each/2-lists^foreach/1-0-"/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:198: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+
+14:26:20.617 [debug] sent notification server -> client window/logMessage
+14:26:20.617 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:173: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:26:20.617 [debug] sent notification server -> client window/logMessage
+14:26:20.617 [warning] client -> server notification crashed
+14:26:20.617 [warning] client -> server notification crashed
+14:26:27.725 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:122: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:26:27.725 [debug] sent notification server -> client window/logMessage
+14:26:27.725 [warning] client -> server notification crashed
+14:26:28.034 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (elixir 1.17.3) lib/enum.ex:987: Enum."-each/2-lists^foreach/1-0-"/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:198: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+
+14:26:28.034 [debug] sent notification server -> client window/logMessage
+14:26:28.034 [warning] client -> server notification crashed
+14:26:28.034 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:173: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:26:28.034 [debug] sent notification server -> client window/logMessage
+14:26:28.034 [warning] client -> server notification crashed
+14:26:32.685 [info] Opened file:///Users/james.cleveland/workspace/surgeventures/grpc/test/grpc/integration/compressor_test.exs
+14:26:32.685 [debug] handled notification client -> server textDocument/didOpen in 613µs
+14:26:38.266 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:122: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:26:38.266 [debug] sent notification server -> client window/logMessage
+14:26:38.266 [warning] client -> server notification crashed
+14:26:38.630 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (elixir 1.17.3) lib/enum.ex:987: Enum."-each/2-lists^foreach/1-0-"/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:198: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+
+14:26:38.630 [debug] sent notification server -> client window/logMessage
+14:26:38.630 [warning] client -> server notification crashed
+14:26:38.630 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:173: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:26:38.630 [debug] sent notification server -> client window/logMessage
+14:26:38.630 [warning] client -> server notification crashed
+14:27:04.270 [info] Opened file:///Users/james.cleveland/workspace/surgeventures/grpc/test/grpc/transport/utils_test.exs
+14:27:04.270 [debug] handled notification client -> server textDocument/didOpen in 1ms
+14:27:10.435 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:122: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:27:10.435 [debug] sent notification server -> client window/logMessage
+14:27:10.435 [warning] client -> server notification crashed
+14:27:10.804 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:122: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:27:10.804 [debug] sent notification server -> client window/logMessage
+14:27:10.804 [warning] client -> server notification crashed
+14:27:10.804 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (elixir 1.17.3) lib/enum.ex:987: Enum."-each/2-lists^foreach/1-0-"/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:198: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+
+14:27:10.804 [debug] sent notification server -> client window/logMessage
+14:27:10.804 [warning] client -> server notification crashed
+14:27:10.805 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:173: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:27:10.805 [debug] sent notification server -> client window/logMessage
+14:27:10.805 [warning] client -> server notification crashed
+14:27:17.021 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:122: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:27:17.021 [debug] sent notification server -> client window/logMessage
+14:27:17.021 [warning] client -> server notification crashed
+14:27:17.304 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:122: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:27:17.304 [debug] sent notification server -> client window/logMessage
+14:27:17.304 [warning] client -> server notification crashed
+14:27:17.304 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (elixir 1.17.3) lib/enum.ex:987: Enum."-each/2-lists^foreach/1-0-"/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:198: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+
+14:27:17.304 [debug] sent notification server -> client window/logMessage
+14:27:17.304 [warning] client -> server notification crashed
+14:27:17.304 [error] ** (ErlangError) Erlang error: {:erpc, :noconnection}
+    (kernel 10.2.7.1) erpc.erl:1376: :erpc.call/5
+    (xp_expert 0.1.0-0ff78f1) lib/expert/state.ex:173: XPExpert.State.apply/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:205: XPExpert.apply_to_state/2
+    (xp_expert 0.1.0-0ff78f1) lib/expert.ex:144: XPExpert.handle_notification/2
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:519: anonymous fn/2 in XPGenLSP.loop/3
+    (xp_telemetry 1.3.0) /home/runner/work/expert/expert/apps/expert/deps/telemetry/src/telemetry.erl:324: :xp_telemetry.span/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:515: anonymous fn/4 in XPGenLSP.loop/3
+    (xp_gen_lsp 0.11.1) lib/gen_lsp.ex:592: anonymous fn/4 in XPGenLSP.attempt/4
+
+14:27:17.304 [debug] sent notification server -> client window/logMessage
+14:27:17.304 [warning] client -> server notification crashed
+14:28:41.954 [debug] handled notification client -> server workspace/didChangeConfiguration in 735µs
+14:28:41.954 [debug] handled notification client -> server workspace/didChangeConfiguration in 94µs
+14:28:45.276 [error] Save failed for uri file:///Users/james.cleveland/workspace/surgeventures/grpc/.gitignore error was {:error, :not_open}
+14:28:45.277 [error] Failed to handle textDocument/didSave, {{:error, :not_open}, %XPExpert.State{configuration: %XPExpert.Configuration{project: %XPForge.Project{root_uri: "file:///Users/james.cleveland/workspace/surgeventures/grpc", mix_exs_uri: "file:///Users/james.cleveland/workspace/surgeventures/grpc/mix.exs", mix_project?: true, mix_env: nil, mix_target: nil, env_variables: %{}, project_module: nil, entropy: 62787}, support: %XPExpert.Configuration.Support{code_action_dynamic_registration: true, hierarchical_symbols: true, snippet: true, deprecated: true, tags: %{value_set: [1]}, signature_help: %XPGenLSP.Structures.SignatureHelpClientCapabilities{context_support: nil, signature_information: %{documentation_format: ["markdown", "plaintext"], parameter_information: %{label_offset_support: true}, active_parameter_support: true}, dynamic_registration: true}, work_done_progress: true}, client_name: "Zed", additional_watched_extensions: nil, dialyzer_enabled?: false}, initialized?: true, engine_initialized?: false, shutdown_received?: false, in_flight_requests: %{}}}
+14:28:45.277 [debug] handled notification client -> server textDocument/didSave in 473µs
+14:28:51.441 [error] Save failed for uri file:///Users/james.cleveland/workspace/surgeventures/grpc/.gitignore error was {:error, :not_open}
+14:28:51.441 [error] Failed to handle textDocument/didSave, {{:error, :not_open}, %XPExpert.State{configuration: %XPExpert.Configuration{project: %XPForge.Project{root_uri: "file:///Users/james.cleveland/workspace/surgeventures/grpc", mix_exs_uri: "file:///Users/james.cleveland/workspace/surgeventures/grpc/mix.exs", mix_project?: true, mix_env: nil, mix_target: nil, env_variables: %{}, project_module: nil, entropy: 62787}, support: %XPExpert.Configuration.Support{code_action_dynamic_registration: true, hierarchical_symbols: true, snippet: true, deprecated: true, tags: %{value_set: [1]}, signature_help: %XPGenLSP.Structures.SignatureHelpClientCapabilities{context_support: nil, signature_information: %{documentation_format: ["markdown", "plaintext"], parameter_information: %{label_offset_support: true}, active_parameter_support: true}, dynamic_registration: true}, work_done_progress: true}, client_name: "Zed", additional_watched_extensions: nil, dialyzer_enabled?: false}, initialized?: true, engine_initialized?: false, shutdown_received?: false, in_flight_requests: %{}}}
+14:28:51.441 [debug] handled notification client -> server textDocument/didSave in 407µs

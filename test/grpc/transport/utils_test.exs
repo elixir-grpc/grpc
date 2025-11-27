@@ -93,9 +93,14 @@ defmodule GRPC.Transport.UtilsTest do
   test "encode_status_details/2 returns status with correct type_url" do
     status_details =
       encode_status_details(GRPC.Status.invalid_argument(), [
-        Google.Rpc.QuotaFailure.new(
-          violations: [%{subject: "test", description: "Limit one greeting per person"}]
-        )
+        %Google.Rpc.QuotaFailure{
+          violations: [
+            %Google.Rpc.QuotaFailure.Violation{
+              subject: "test",
+              description: "Limit one greeting per person"
+            }
+          ]
+        }
       ])
 
     %Google.Rpc.Status{code: 3, details: [%Google.Protobuf.Any{type_url: type_url}]} =
@@ -106,12 +111,22 @@ defmodule GRPC.Transport.UtilsTest do
 
   test "decode_status_details/1 decodes status details succesfully" do
     details = [
-      Google.Rpc.QuotaFailure.new(
-        violations: [%{subject: "test", description: "Limit one greeting per person"}]
-      ),
-      Google.Rpc.BadRequest.new(
-        violations: [%{description: "some description", field: "some field"}]
-      )
+      %Google.Rpc.QuotaFailure{
+        violations: [
+          %Google.Rpc.QuotaFailure.Violation{
+            subject: "test",
+            description: "Limit one greeting per person"
+          }
+        ]
+      },
+      %Google.Rpc.BadRequest{
+        field_violations: [
+          %Google.Rpc.BadRequest.FieldViolation{
+            description: "some description",
+            field: "some field"
+          }
+        ]
+      }
     ]
 
     encoded_status_details = encode_status_details(GRPC.Status.invalid_argument(), details)

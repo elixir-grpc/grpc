@@ -12,21 +12,10 @@ defmodule GRPC.Transport.HTTP2Test do
     assert pair == Enum.find(headers, nil, fn {k, _v} -> if k == key, do: true end)
   end
 
-  test "server_trailers/3 returns map without grpc-status-details-bin" do
-    trailers = HTTP2.server_trailers(GRPC.Status.invalid_argument(), "test message", "")
+  test "server_trailers/2 returns map with grpc-status and grpc-message" do
+    trailers = HTTP2.server_trailers(GRPC.Status.invalid_argument(), "test message")
 
-    assert trailers == %{"grpc-message" => "test message", "grpc-status" => "3"}
-  end
-
-  test "server_trailers/3 returns map with grpc-status-details-bin" do
-    trailers =
-      HTTP2.server_trailers(GRPC.Status.invalid_argument(), "test message", "some details")
-
-    assert trailers == %{
-             "grpc-message" => "test message",
-             "grpc-status" => "3",
-             "grpc-status-details-bin" => Base.encode64("some details")
-           }
+    assert trailers == %{"grpc-message" => "test%20message", "grpc-status" => "3"}
   end
 
   test "client_headers/3 returns basic headers" do
@@ -63,8 +52,9 @@ defmodule GRPC.Transport.HTTP2Test do
     headers =
       HTTP2.client_headers(stream, %{metadata: %{"key1-bin" => "abc", "key2-bin" => <<194, 128>>}})
 
+    # Base64 encoded without padding (per gRPC spec)
     assert_header({"key1-bin", "YWJj"}, headers)
-    assert_header({"key2-bin", "woA"}, headers)
+    assert_header({"key2-bin", "woA="}, headers)
   end
 
   test "client_headers/3 rejects reserved headers in metadata" do

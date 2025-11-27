@@ -82,7 +82,7 @@ defmodule GRPC.Transport.Utils do
   def encode_status_details(_errorcode, nil), do: ""
 
   def encode_status_details(errorcode, details) do
-    Google.Rpc.Status.new(code: errorcode, details: Enum.map(details, &build_any/1))
+    %Google.Rpc.Status{code: errorcode, details: Enum.map(details, &build_any/1)}
     |> Google.Rpc.Status.encode()
   end
 
@@ -99,7 +99,7 @@ defmodule GRPC.Transport.Utils do
   end
 
   defp build_any(message = %{__struct__: type}) do
-    Google.Protobuf.Any.new(type_url: get_type_url(type), value: Protobuf.encode(message))
+    %Google.Protobuf.Any{type_url: get_type_url(type), value: Protobuf.encode(message)}
   end
 
   def get_type_url(type) do
