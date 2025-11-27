@@ -1,0 +1,11 @@
+{application,rustler_precompiled,
+             [{modules,['Elixir.Mix.Tasks.RustlerPrecompiled.Download',
+                        'Elixir.RustlerPrecompiled',
+                        'Elixir.RustlerPrecompiled.Config',
+                        'Elixir.RustlerPrecompiled.Config.AvailableTargets']},
+              {optional_applications,[rustler]},
+              {applications,[kernel,stdlib,elixir,logger,inets,ssl,rustler,
+                             castore]},
+              {description,"Make the usage of precompiled NIFs easier for projects using Rustler"},
+              {registered,[]},
+              {vsn,"0.8.3"}]}.

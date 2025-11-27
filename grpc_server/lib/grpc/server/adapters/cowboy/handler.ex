@@ -170,9 +170,15 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   defp extract_http_method(req) do
-    req
-    |> :cowboy_req.method()
-    |> String.downcase()
+    case :cowboy_req.method(req) do
+      "POST" -> :post
+      "GET" -> :get
+      "PUT" -> :put
+      "DELETE" -> :delete
+      "HEAD" -> :head
+      "OPTIONS" -> :options
+      other -> String.downcase(other)
+    end
   end
 
   defp find_compressor(req, server) do
