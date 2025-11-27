@@ -54,7 +54,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   """
   @spec init(:cowboy_req.req(), state :: init_state) :: init_result
   def init(req, {endpoint, {_name, server}, route, opts} = state) do
-    http_method = extract_http_method(req) |> String.to_existing_atom()
+    http_method = extract_http_method(req)
     exception_log_filter = extract_exception_log_filter_opt(opts)
 
     with {:ok, access_mode, sub_type, content_type} <- find_content_type_subtype(req),
@@ -155,7 +155,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     {:ok, access_mode, subtype} =
       case extract_subtype(content_type) do
         {:ok, :unknown, "unknown"} ->
-          if http_method == "post" do
+          if http_method == :post do
             {:ok, :grpc, "proto"}
           else
             {:ok, :http_transcoding, "json"}
@@ -177,7 +177,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       "DELETE" -> :delete
       "HEAD" -> :head
       "OPTIONS" -> :options
-      other -> String.downcase(other)
+      "PATCH" -> :patch
+      other -> String.to_existing_atom(String.downcase(other))
     end
   end
 
