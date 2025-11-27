@@ -1,32 +1,50 @@
 # gRPC Elixir
 
-[![Hex.pm](https://img.shields.io/hexpm/v/grpc.svg)](https://hex.pm/packages/grpc)
-[![Travis Status](https://travis-ci.org/elixir-grpc/grpc.svg?branch=master)](https://travis-ci.org/elixir-grpc/grpc)
-[![GitHub actions Status](https://github.com/elixir-grpc/grpc/workflows/CI/badge.svg)](https://github.com/elixir-grpc/grpc/actions)
-[![Inline docs](http://inch-ci.org/github/elixir-grpc/grpc.svg?branch=master)](http://inch-ci.org/github/elixir-grpc/grpc)
+[![GitHub CI](https://github.com/surgeventures/grpc/actions/workflows/ci.yml/badge.svg)](https://github.com/surgeventures/grpc/actions/workflows/ci.yml)
 
-An Elixir implementation of [gRPC](http://www.grpc.io/).
+Fresha fork of [elixir-grpc/grpc](https://github.com/elixir-grpc/grpc) - an Elixir implementation of [gRPC](http://www.grpc.io/).
 
-**WARNING: Be careful to use it in production! Test and benchmark in advance.**
-
-**NOTICE: Erlang/OTP needs >= 20.3.2**
+**Requires: Elixir >= 1.15, OTP >= 24**
 
 ## Installation
-
-The package can be installed as:
 
 ```elixir
 def deps do
   [
-    {:grpc, "~> 0.6", hex: :grpc_fresha}
+    {:grpc, "~> 0.10", hex: :grpc_fresha}
   ]
 end
 ```
 
 ## Usage
 
-1. Generate Elixir code from proto file as [protobuf-elixir](https://github.com/tony612/protobuf-elixir#usage) shows(especially the `gRPC Support` section).
-2. Implement the server side code like below and remember to return the expected message types.
+1. Write your protobuf file:
+
+```protobuf
+syntax = "proto3";
+
+package helloworld;
+
+message HelloRequest {
+  string name = 1;
+}
+
+message HelloReply {
+  string message = 1;
+}
+
+service Greeter {
+  rpc SayHello (HelloRequest) returns (HelloReply) {}
+}
+```
+
+2. Generate Elixir code from proto file using [protobuf-elixir](https://github.com/elixir-protobuf/protobuf#usage):
+
+```shell
+protoc --elixir_out=plugins=grpc:./lib -I./priv/protos helloworld.proto
+```
+
+3. Implement the server:
 
 ```elixir
 defmodule Helloworld.Greeter.Server do
@@ -39,96 +57,102 @@ defmodule Helloworld.Greeter.Server do
 end
 ```
 
-3. Start the server
-
-You can start the gRPC server as a supervised process. First, add `GRPC.Server.Supervisor` to your supervision tree.
+4. Define endpoint:
 
 ```elixir
-# Define your endpoint
 defmodule Helloworld.Endpoint do
   use GRPC.Endpoint
 
-  intercept GRPC.Logger.Server
+  intercept GRPC.Server.Interceptors.Logger
   run Helloworld.Greeter.Server
 end
+```
 
-# In the start function of your Application
+5. Start server in your supervision tree:
+
+```elixir
 defmodule HelloworldApp do
   use Application
+
   def start(_type, _args) do
     children = [
-      # ...
-      supervisor(GRPC.Server.Supervisor, [{Helloworld.Endpoint, 50051}])
+      {GRPC.Server.Supervisor, endpoint: Helloworld.Endpoint, port: 50051, start_server: true}
     ]
-
-    opts = [strategy: :one_for_one, name: YourApp]
-    Supervisor.start_link(children, opts)
+    Supervisor.start_link(children, strategy: :one_for_one)
   end
 end
 ```
 
-Then start it when starting your application:
+6. Call RPC:
 
 ```elixir
-# config.exs
-config :grpc, start_server: true
-
-# test.exs
-config :grpc, start_server: false
-
-$ iex -S mix
-```
-
-or run grpc.server using a mix task
-
-```
-$ mix grpc.server
-```
-
-4. Call rpc:
-
-```elixir
-iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051")
-iex> request = Helloworld.HelloRequest.new(name: "grpc-elixir")
-iex> {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(request)
+{:ok, channel} = GRPC.Stub.connect("localhost:50051")
+request = Helloworld.HelloRequest.new(name: "grpc-elixir")
+{:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(request)
 
 # With interceptors
-iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Logger.Client])
-...
+{:ok, channel} = GRPC.Stub.connect("localhost:50051", interceptors: [GRPC.Client.Interceptors.Logger])
 ```
 
-Check [examples](examples) and [interop](interop)(Interoperability Test) for some examples.
+## Client Adapters
 
-## TODO
+Default adapter is `GRPC.Client.Adapters.Gun`. You can use Mint instead:
 
-- [x] Unary RPC
-- [x] Server streaming RPC
-- [x] Client streaming RPC
-- [x] Bidirectional streaming RPC
-- [x] Helloworld and RouteGuide examples
-- [x] Doc and more tests
-- [x] Authentication with TLS
-- [x] Improve code generation from protos ([protobuf-elixir](https://github.com/tony612/protobuf-elixir) [#8](https://github.com/elixir-grpc/grpc/issues/8))
-- [x] Timeout for unary calls
-- [x] Errors handling
-- [x] Benchmarking
-- [x] Logging
-- [x] Interceptors(See `GRPC.Endpoint`)
-- [x] [Connection Backoff](https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md)
-- [x] Data compression
-- [x] Support other encoding(other than protobuf)
+```elixir
+GRPC.Stub.connect("localhost:50051", adapter: GRPC.Client.Adapters.Mint)
+```
 
-## Benchmark
+Configure Mint adapter options:
 
-1. [Simple benchmark](examples/helloworld/README.md#Benchmark) by using [ghz](https://ghz.sh/)
+```elixir
+config :grpc, GRPC.Client.Adapters.Mint,
+  timeout: 10_000,
+  transport_opts: [cacertfile: "/path/to/ca.crt"]
+```
 
-2. [Benchmark](benchmark) followed by official spec
+## HTTP Transcoding
+
+Enable transcoding for HTTP/JSON access to gRPC methods:
+
+```elixir
+defmodule Helloworld.Greeter.Server do
+  use GRPC.Server,
+    service: Helloworld.Greeter.Service,
+    http_transcode: true
+  # ...
+end
+```
+
+See [examples/helloworld_transcoding](examples/helloworld_transcoding) for full example.
+
+## CORS
+
+Add CORS headers for browser access:
+
+```elixir
+defmodule Helloworld.Endpoint do
+  use GRPC.Endpoint
+
+  intercept GRPC.Server.Interceptors.Logger
+  intercept GRPC.Server.Interceptors.CORS, allow_origin: "mydomain.io"
+  run Helloworld.Greeter.Server
+end
+```
+
+## Features
+
+- Unary, server-streaming, client-streaming, bidirectional-streaming RPC
+- HTTP Transcoding
+- TLS Authentication
+- Interceptors
+- Connection Backoff
+- Data compression
+- gRPC Reflection (via [grpc-reflection](https://github.com/elixir-grpc/grpc-reflection))
+
+## Migration
+
+See [MIGRATION.md](MIGRATION.md) for upgrade guides between versions.
 
 ## Contributing
 
-You contributions are welcome!
-
-Please open issues if you have questions, problems and ideas. You can create pull
-requests directly if you want to fix little bugs, add small features and so on.
-But you'd better use issues first if you want to add a big feature or change a
-lot of code.
+See upstream [elixir-grpc/grpc](https://github.com/elixir-grpc/grpc) for issues and contributions.

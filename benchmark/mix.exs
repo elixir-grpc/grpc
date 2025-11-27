@@ -22,7 +22,7 @@ defmodule Benchmark.MixProject do
   defp deps do
     [
       {:grpc, path: ".."},
-      {:protobuf, github: "tony612/protobuf-elixir", override: true}
+      {:protobuf, "~> 0.14"}
     ]
   end
 end

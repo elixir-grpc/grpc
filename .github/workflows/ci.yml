@@ -3,12 +3,12 @@ name: Elixir CI Checks
 env:
   DEBIAN_FRONTEND: noninteractive
   DEPENDENCY_FILE: mix.lock
-  ELIXIR_VERSION: 1.10.4 # Elixir version used during package publishing
+  ELIXIR_VERSION: 1.16.0
   JOB_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-  OTP_VERSION: 22.3.4.7 # OTP version used during package publishing
-  RELEVANT_FILES: "benchmark config examples interop lib priv src test mix.exs mix.lock" # Important, this controls the caching, make sure to keep this right
+  OTP_VERSION: 26.1
+  RELEVANT_FILES: "benchmark config examples interop lib priv src test mix.exs mix.lock"
   REPOSITORY: grpc
-  RUNNER_OS: ubuntu20 # Must match Elixir/OTP version in described in action erlef/setup-beam@v1
+  RUNNER_OS: ubuntu22
   SHA: ${{ github.sha }}
 
 concurrency:
@@ -34,9 +34,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        otp: [21.3.8.24, 22.3.4.7]
-        elixir: [1.10.4]
-        runner-os: [ubuntu20]
+        otp: [26.1]
+        elixir: [1.16.0]
+        runner-os: [ubuntu22]
     steps:
       - name: Checkout latest codebase
         uses: actions/checkout@v4
@@ -80,7 +80,7 @@ jobs:
       - uses: runs-on/cache@v4
         id: build-cache
         with:
-          path: '**/*'
+          path: "**/*"
           key: ${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-compile-dev-${{ steps.hash.outputs.HASH }}
       - name: Compile with warning as --warnings-as-errors
         if: steps.build-cache.outputs.cache-hit != 'true'
@@ -97,15 +97,16 @@ jobs:
         run: |
           echo "Running publish --dry-run"
           mix hex.publish --dry-run
+
   test:
     name: Unit Tests (Elixir ${{ matrix.elixir }} & OTP ${{ matrix.otp }})
     runs-on: runs-on,runner=2cpu-linux-x64
     strategy:
       fail-fast: false
       matrix:
-        otp: [21.3.8.24, 22.3.4.7]
-        elixir: [1.10.4]
-        runner-os: [ubuntu20]
+        otp: [26.1]
+        elixir: [1.16.0]
+        runner-os: [ubuntu22]
     steps:
       - name: Checkout latest codebase
         uses: actions/checkout@v4
@@ -149,7 +150,7 @@ jobs:
       - uses: runs-on/cache@v4
         id: build-cache
         with:
-          path: '**/*'
+          path: "**/*"
           key: ${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-compile-test-${{ steps.hash.outputs.HASH }}
       - name: Compile with MIX_ENV=test
         if: steps.build-cache.outputs.cache-hit != 'true'
@@ -162,6 +163,7 @@ jobs:
         run: |
           echo "Running tests"
           mix test --cover
+
   permit:
     name: Permit Package Publishing
     needs: [static, test]
@@ -248,31 +250,36 @@ jobs:
           echo "Publishing package"
           mix hex.publish --yes
 
-
   interop-tests:
     runs-on: runs-on,runner=2cpu-linux-x64
     name: Interop tests
-    container:
-      image: elixir:1.10-slim
+    needs: [static]
     steps:
-    - uses: actions/checkout@v4
-    - name: Install Dependencies
-      run: |
-        mix local.rebar --force
-        mix local.hex --force
-        mix deps.get
-      working-directory: ./interop
-    - name: Run interop tests
-      run: mix run script/run.exs
-      working-directory: ./interop
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: 26.1
+          elixir-version: 1.16.0
+      - name: Install Dependencies
+        run: |
+          mix local.rebar --force
+          mix local.hex --force
+          mix deps.get
+        working-directory: ./interop
+      - name: Run interop tests
+        run: mix run script/run.exs
+        working-directory: ./interop
 
   check_release:
     runs-on: runs-on,runner=2cpu-linux-x64
     name: Check release
-    container:
-      image: elixir:1.10-slim
+    needs: [static]
     steps:
       - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: 26.1
+          elixir-version: 1.16.0
       - name: Install Dependencies
         run: |
           mix local.rebar --force

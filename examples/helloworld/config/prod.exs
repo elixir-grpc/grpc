@@ -1,6 +1,4 @@
-use Mix.Config
-
-config :grpc, start_server: true
+import Config
 
 config :logger,
-  level: :warn
+  level: :warning

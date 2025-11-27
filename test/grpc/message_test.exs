@@ -15,4 +15,23 @@ defmodule GRPC.MessageTest do
 
     assert {:ok, message} == GRPC.Message.from_data(%{compressor: GRPC.Compressor.Gzip}, data)
   end
+
+  test "iodata can be passed to and returned from `to_data/2`" do
+    message = List.duplicate("foo", 100)
+
+    assert {:ok, data, 32} =
+             GRPC.Message.to_data(message, iolist: true, compressor: GRPC.Compressor.Gzip)
+
+    assert is_list(data)
+    binary = IO.iodata_to_binary(data)
+
+    assert {:ok, IO.iodata_to_binary(message)} ==
+             GRPC.Message.from_data(%{compressor: GRPC.Compressor.Gzip}, binary)
+  end
+
+  test "to_data/2 invokes codec.pack_for_channel on the gRPC body if codec implements it" do
+    message = "web-text"
+    assert {:ok, base64_payload, _} = GRPC.Message.to_data(message, %{codec: GRPC.Codec.WebText})
+    assert message == GRPC.Message.from_data(Base.decode64!(base64_payload))
+  end
 end

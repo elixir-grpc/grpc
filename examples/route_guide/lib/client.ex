@@ -89,9 +89,7 @@ defmodule RouteGuide.Client do
 
     Enum.each(result_enum, fn {:ok, note} ->
       IO.puts(
-        "Got message #{note.message} at point(#{note.location.latitude}, #{
-          note.location.longitude
-        })"
+        "Got message #{note.message} at point(#{note.location.latitude}, #{note.location.longitude})"
       )
     end)
   end

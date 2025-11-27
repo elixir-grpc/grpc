@@ -7,31 +7,31 @@ defmodule GRPC.Client.Stream do
     * `:channel`           - `GRPC.Channel`, the channel established by client
     * `:payload`           - data used by adapter in a request
     * `:path`              - the request path to sent
-    * `request_mod`        - the request module, or nil for untyped protocols
-    * `response_mod`       - the response module, or nil for untyped protocols
+    * `:request_mod`       - the request module, or nil for untyped protocols
+    * `:response_mod`      - the response module, or nil for untyped protocols
     * `:codec`             - the codec
     * `:req_stream`        - indicates if request is streaming
     * `:res_stream`        - indicates if reply is streaming
   """
 
-  @typep stream_payload :: any
+  @typep stream_payload :: any()
   @type t :: %__MODULE__{
           channel: GRPC.Channel.t(),
           service_name: String.t(),
           method_name: String.t(),
-          grpc_type: atom,
-          rpc: tuple,
+          grpc_type: atom(),
+          rpc: tuple(),
           payload: stream_payload,
           path: String.t(),
-          request_mod: atom,
-          response_mod: atom,
-          codec: atom,
-          server_stream: boolean,
-          canceled: boolean,
-          compressor: module,
-          accepted_compressors: [module],
-          headers: map,
-          __interface__: map
+          request_mod: atom(),
+          response_mod: atom(),
+          codec: atom(),
+          server_stream: boolean(),
+          canceled: boolean(),
+          compressor: module(),
+          accepted_compressors: [module()],
+          headers: map(),
+          __interface__: map()
         }
 
   defstruct channel: nil,
@@ -50,7 +50,10 @@ defmodule GRPC.Client.Stream do
             compressor: nil,
             accepted_compressors: [],
             headers: %{},
-            __interface__: %{send_request: &__MODULE__.send_request/3, recv: &GRPC.Stub.do_recv/2}
+            __interface__: %{
+              send_request: &__MODULE__.send_request/3,
+              receive_data: &__MODULE__.receive_data/2
+            }
 
   @doc false
   def put_payload(%{payload: payload} = stream, key, val) do
@@ -75,7 +78,7 @@ defmodule GRPC.Client.Stream do
         opts
       ) do
     encoded = codec.encode(request)
-    send_end_stream = Keyword.get(opts, :end_stream, false)
+    send_end_stream = Keyword.get(opts, :end_stream) || false
 
     # If compressor exists, compress is true by default
     compressor =
@@ -89,5 +92,9 @@ defmodule GRPC.Client.Stream do
       send_end_stream: send_end_stream,
       compressor: compressor
     )
+  end
+
+  def receive_data(%{channel: %{adapter: adapter}} = stream, opts) do
+    adapter.receive_data(stream, opts)
   end
 end

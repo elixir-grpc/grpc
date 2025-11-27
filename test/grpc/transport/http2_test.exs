@@ -1,10 +1,12 @@
 defmodule GRPC.Transport.HTTP2Test do
   use ExUnit.Case, async: true
-  alias GRPC.Channel
+  alias GRPC.{Channel, Status}
   alias GRPC.Transport.HTTP2
 
-  @channel %Channel{scheme: "http", host: "grpc.io"}
   alias GRPC.Client.Stream
+  alias GRPC.Server.Stream, as: ServerStream
+
+  @channel %Channel{scheme: "http", host: "grpc.io"}
 
   defp assert_header({key, _v} = pair, headers) do
     assert pair == Enum.find(headers, nil, fn {k, _v} -> if k == key, do: true end)
@@ -115,5 +117,29 @@ defmodule GRPC.Transport.HTTP2Test do
 
     assert {_, "application/grpc+custom-codec"} =
              Enum.find(headers, fn {key, _} -> key == "content-type" end)
+  end
+
+  test "server_headers/3 sets content-type based on the codec name" do
+    for {expected_content_type, codec} <- [
+          {"grpc-web-text", GRPC.Codec.WebText},
+          {"grpc+erlpack", GRPC.Codec.Erlpack}
+        ] do
+      stream = %ServerStream{codec: codec}
+
+      assert %{"content-type" => "application/" <> ^expected_content_type} =
+               HTTP2.server_headers(stream)
+    end
+  end
+
+  test "decode_headers/2 url decodes grpc-message" do
+    trailers = HTTP2.server_trailers(Status.unknown(), "Unknown error")
+    assert %{"grpc-message" => "Unknown error"} = HTTP2.decode_headers(trailers)
+  end
+
+  test "server_trailers/3 sets url encoded grpc-message" do
+    assert %{"grpc-message" => "Ok"} = HTTP2.server_trailers(Status.ok(), "Ok")
+
+    assert %{"grpc-message" => "Unknown%20error"} =
+             HTTP2.server_trailers(Status.unknown(), "Unknown error")
   end
 end

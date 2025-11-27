@@ -1,9 +1,10 @@
-opts = [interceptors: [GRPC.Logger.Client]]
+opts = [interceptors: [GRPC.Client.Interceptors.Logger]]
+
 opts =
   if System.get_env("TLS") do
     ca_path = Path.expand("./tls/ca.pem", :code.priv_dir(:route_guide))
     cred = GRPC.Credential.new(ssl: [cacertfile: ca_path])
-    [{:cred, cred}|opts]
+    [{:cred, cred} | opts]
   else
     opts
   end

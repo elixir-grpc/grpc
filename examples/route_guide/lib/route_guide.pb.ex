@@ -1,81 +1,46 @@
 defmodule Routeguide.Point do
-  use Protobuf
+  @moduledoc false
 
-  @type t :: %__MODULE__{
-          latitude: integer,
-          longitude: integer
-        }
-  defstruct [:latitude, :longitude]
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
-  field :latitude, 1, optional: true, type: :int32
-  field :longitude, 2, optional: true, type: :int32
+  field :latitude, 1, type: :int32
+  field :longitude, 2, type: :int32
 end
 
 defmodule Routeguide.Rectangle do
-  use Protobuf
+  @moduledoc false
 
-  @type t :: %__MODULE__{
-          lo: Routeguide.Point.t(),
-          hi: Routeguide.Point.t()
-        }
-  defstruct [:lo, :hi]
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
-  field :lo, 1, optional: true, type: Routeguide.Point
-  field :hi, 2, optional: true, type: Routeguide.Point
+  field :lo, 1, type: Routeguide.Point
+  field :hi, 2, type: Routeguide.Point
 end
 
 defmodule Routeguide.Feature do
-  use Protobuf
+  @moduledoc false
 
-  @type t :: %__MODULE__{
-          name: String.t(),
-          location: Routeguide.Point.t()
-        }
-  defstruct [:name, :location]
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
-  field :name, 1, optional: true, type: :string
-  field :location, 2, optional: true, type: Routeguide.Point
+  field :name, 1, type: :string
+  field :location, 2, type: Routeguide.Point
 end
 
 defmodule Routeguide.RouteNote do
-  use Protobuf
+  @moduledoc false
 
-  @type t :: %__MODULE__{
-          location: Routeguide.Point.t(),
-          message: String.t()
-        }
-  defstruct [:location, :message]
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
-  field :location, 1, optional: true, type: Routeguide.Point
-  field :message, 2, optional: true, type: :string
+  field :location, 1, type: Routeguide.Point
+  field :message, 2, type: :string
 end
 
 defmodule Routeguide.RouteSummary do
-  use Protobuf
+  @moduledoc false
 
-  @type t :: %__MODULE__{
-          point_count: integer,
-          feature_count: integer,
-          distance: integer,
-          elapsed_time: integer
-        }
-  defstruct [:point_count, :feature_count, :distance, :elapsed_time]
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
-  field :point_count, 1, optional: true, type: :int32
-  field :feature_count, 2, optional: true, type: :int32
-  field :distance, 3, optional: true, type: :int32
-  field :elapsed_time, 4, optional: true, type: :int32
-end
-
-defmodule Routeguide.RouteGuide.Service do
-  use GRPC.Service, name: "routeguide.RouteGuide"
-
-  rpc :GetFeature, Routeguide.Point, Routeguide.Feature
-  rpc :ListFeatures, Routeguide.Rectangle, stream(Routeguide.Feature)
-  rpc :RecordRoute, stream(Routeguide.Point), Routeguide.RouteSummary
-  rpc :RouteChat, stream(Routeguide.RouteNote), stream(Routeguide.RouteNote)
-end
-
-defmodule Routeguide.RouteGuide.Stub do
-  use GRPC.Stub, service: Routeguide.RouteGuide.Service
+  field :point_count, 1, type: :int32, json_name: "pointCount"
+  field :feature_count, 2, type: :int32, json_name: "featureCount"
+  field :distance, 3, type: :int32
+  field :elapsed_time, 4, type: :int32, json_name: "elapsedTime"
 end

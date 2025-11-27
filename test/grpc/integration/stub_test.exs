@@ -5,7 +5,7 @@ defmodule GRPC.Integration.StubTest do
     use GRPC.Server, service: Helloworld.Greeter.Service
 
     def say_hello(req, _stream) do
-      Helloworld.HelloReply.new(message: "Hello, #{req.name}")
+      %Helloworld.HelloReply{message: "Hello, #{req.name}"}
     end
   end
 
@@ -58,18 +58,28 @@ defmodule GRPC.Integration.StubTest do
 
   test "body larger than 2^14 works" do
     run_server(HelloServer, fn port ->
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", interceptors: [GRPC.Logger.Client])
+      {:ok, channel} =
+        GRPC.Stub.connect("localhost:#{port}", interceptors: [GRPC.Client.Interceptors.Logger])
+
       name = String.duplicate("a", round(:math.pow(2, 15)))
-      req = Helloworld.HelloRequest.new(name: name)
+      req = %Helloworld.HelloRequest{name: name}
       {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
       assert reply.message == "Hello, #{name}"
     end)
   end
 
+  test "invalid channel function clause error" do
+    req = %Helloworld.HelloRequest{name: "GRPC"}
+
+    assert_raise FunctionClauseError, ~r/Helloworld.Greeter.Stub.say_hello/, fn ->
+      Helloworld.Greeter.Stub.say_hello(nil, req)
+    end
+  end
+
   test "returns error when timeout" do
     run_server(SlowServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-      req = Helloworld.HelloRequest.new(name: "Elixir")
+      req = %Helloworld.HelloRequest{name: "Elixir"}
 
       assert {:error,
               %GRPC.RPCError{

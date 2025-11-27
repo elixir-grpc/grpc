@@ -5,11 +5,9 @@ defmodule Routeguide.App do
   @key_path Path.expand("./tls/server1.key", :code.priv_dir(:route_guide))
 
   def start(_type, _args) do
-    import Supervisor.Spec
-
     children = [
-      supervisor(RouteGuide.Data, []),
-      supervisor(GRPC.Server.Supervisor, [start_args()])
+      RouteGuide.Data,
+      {GRPC.Server.Supervisor, start_args()}
     ]
 
     opts = [strategy: :one_for_one, name: Routeguide]
@@ -17,12 +15,13 @@ defmodule Routeguide.App do
   end
 
   defp start_args do
+    opts = [endpoint: Routeguide.Endpoint, port: 10000, start_server: true]
+
     if System.get_env("TLS") do
       cred = GRPC.Credential.new(ssl: [certfile: @cert_path, keyfile: @key_path])
-      IO.inspect(cred)
-      {Routeguide.Endpoint, 10000, cred: cred}
+      Keyword.put(opts, :cred, cred)
     else
-      {Routeguide.Endpoint, 10000}
+      opts
     end
   end
 end

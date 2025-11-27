@@ -8,30 +8,32 @@ defmodule GRPC.Transport.HTTP2 do
 
   require Logger
 
+  def server_headers(%{codec: GRPC.Codec.WebText = codec}) do
+    %{"content-type" => "application/grpc-web-#{codec.name()}"}
+  end
+
+  # TO-DO: refactor when we add a GRPC.Codec.content_type callback
+  def server_headers(%{codec: GRPC.Codec.JSON}) do
+    %{"content-type" => "application/json"}
+  end
+
   def server_headers(%{codec: codec}) do
     %{"content-type" => "application/grpc+#{codec.name()}"}
   end
 
-  @spec server_trailers(integer, String.t(), String.t()) :: map
-  def server_trailers(status \\ Status.ok(), message \\ "", status_details \\ "") do
-    {_, status_details} = encode_metadata_pair({"grpc-status-details-bin", status_details})
-
-    trailers = %{
+  @spec server_trailers(integer, String.t()) :: map
+  def server_trailers(status \\ Status.ok(), message \\ "") do
+    %{
       "grpc-status" => Integer.to_string(status),
-      "grpc-message" => message
+      "grpc-message" => URI.encode(message)
     }
-
-    case status_details do
-      "" -> trailers
-      status_details -> Map.put(trailers, "grpc-status-details-bin", status_details)
-    end
   end
 
   @doc """
   Now we may not need this because gun already handles the pseudo headers.
   """
-  @spec client_headers(GRPC.Client.Stream.t(), map) :: [{String.t(), String.t()}]
-  def client_headers(%{channel: channel, path: path} = s, opts \\ %{}) do
+  @spec client_headers(GRPC.Client.Stream.t(), keyword()) :: [{String.t(), String.t()}]
+  def client_headers(%{channel: channel, path: path} = s, opts \\ []) do
     [
       {":method", "POST"},
       {":scheme", channel.scheme},
@@ -40,10 +42,12 @@ defmodule GRPC.Transport.HTTP2 do
     ] ++ client_headers_without_reserved(s, opts)
   end
 
-  @spec client_headers_without_reserved(GRPC.Client.Stream.t(), map) :: [{String.t(), String.t()}]
-  def client_headers_without_reserved(%{codec: codec} = stream, opts \\ %{}) do
+  @spec client_headers_without_reserved(GRPC.Client.Stream.t(), keyword()) :: [
+          {String.t(), String.t()}
+        ]
+  def client_headers_without_reserved(%{codec: codec} = stream, opts \\ []) do
     [
-      # It seems only gRPC implementations only support "application/grpc", so we support :content_type now.
+      # It seems only gRPC implemenations only support "application/grpc", so we support :content_type now.
       {"content-type", content_type(opts[:content_type], codec)},
       {"user-agent", "grpc-elixir/#{opts[:grpc_version] || GRPC.version()}"},
       {"te", "trailers"}
@@ -62,15 +66,11 @@ defmodule GRPC.Transport.HTTP2 do
 
   defp content_type(custom, _codec) when is_binary(custom), do: custom
 
-  defp content_type(_, codec) do
-    # Some gRPC implementations don't support application/grpc+xyz,
-    # to avoid this kind of trouble, use application/grpc by default
-    if codec == GRPC.Codec.Proto do
-      "application/grpc"
-    else
-      "application/grpc+#{codec.name()}"
-    end
-  end
+  # Some gRPC implementations don't support application/grpc+xyz,
+  # to avoid this kind of trouble, use application/grpc by default
+  defp content_type(_, GRPC.Codec.Proto), do: "application/grpc"
+  defp content_type(_, codec = GRPC.Codec.WebText), do: "application/grpc-web-#{codec.name()}"
+  defp content_type(_, codec), do: "application/grpc+#{codec.name()}"
 
   def extract_metadata(headers) do
     headers
@@ -83,7 +83,7 @@ defmodule GRPC.Transport.HTTP2 do
       if is_metadata(k) do
         decode_metadata({k, v})
       else
-        {k, v}
+        decode_reserved({k, v})
       end
     end)
   end
@@ -98,7 +98,7 @@ defmodule GRPC.Transport.HTTP2 do
   end
 
   defp append_encoding(headers, grpc_encoding) when is_binary(grpc_encoding) do
-    Logger.warn("grpc_encoding option is deprecated, please use compressor.")
+    Logger.warning("grpc_encoding option is deprecated, please use compressor.")
     [{"grpc-encoding", grpc_encoding} | headers]
   end
 
@@ -138,26 +138,22 @@ defmodule GRPC.Transport.HTTP2 do
   end
 
   defp encode_metadata_pair({key, val}) do
-    # Implementations ... should emit un-padded values
-    val = if String.ends_with?(key, "-bin"), do: Base.encode64(val, padding: false), else: val
-    {String.downcase(key), val}
+    val = if String.ends_with?(key, "-bin"), do: Base.encode64(val), else: val
+    {String.downcase(to_string(key)), val}
   end
 
-  defp decode_metadata(kv = {key, val}) do
-    # Implementations MUST accept padded and un-padded values
-    if String.ends_with?(key, "-bin") do
-      if rem(IO.iodata_length(val), 4) == 0 do
-        {key, Base.decode64!(val)}
-      else
-        {key, Base.decode64!(val, padding: false)}
-      end
-    else
-      kv
-    end
+  defp decode_metadata({key, val}) do
+    val = if String.ends_with?(key, "-bin"), do: Base.decode64!(val, padding: false), else: val
+    {key, val}
   end
+
+  defp decode_reserved({"grpc-message" = key, val}) do
+    {key, URI.decode(val)}
+  end
+
+  defp decode_reserved(kv), do: kv
 
   defp is_reserved_header(":" <> _), do: true
-  defp is_reserved_header("grpc-status-details-bin"), do: false
   defp is_reserved_header("grpc-" <> _), do: true
   defp is_reserved_header("content-type"), do: true
   defp is_reserved_header("te"), do: true
