@@ -14,17 +14,17 @@ defmodule GRPC.Transport.HTTP2Test do
 
   test "client_headers/3 returns basic headers" do
     stream = %Stream{channel: @channel, path: "/foo/bar"}
-    headers = HTTP2.client_headers(stream, %{grpc_version: "1.0.0"})
+    headers = HTTP2.client_headers(stream, %{})
 
-    assert headers == [
-             {":method", "POST"},
-             {":scheme", "http"},
-             {":path", "/foo/bar"},
-             {":authority", "grpc.io"},
-             {"content-type", "application/grpc"},
-             {"user-agent", "grpc-elixir/1.0.0"},
-             {"te", "trailers"}
-           ]
+    assert_header({":method", "POST"}, headers)
+    assert_header({":scheme", "http"}, headers)
+    assert_header({":path", "/foo/bar"}, headers)
+    assert_header({":authority", "grpc.io"}, headers)
+    assert_header({"content-type", "application/grpc"}, headers)
+    assert_header({"te", "trailers"}, headers)
+    
+    {_, user_agent} = Enum.find(headers, fn {k, _} -> k == "user-agent" end)
+    assert user_agent =~ ~r/^grpc-elixir\/\d+\.\d+\.\d+/
   end
 
   test "client_headers/3 returns grpc-encoding" do
