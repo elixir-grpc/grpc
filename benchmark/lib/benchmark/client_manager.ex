@@ -61,17 +61,16 @@ defmodule Benchmark.ClientManager do
 
     buckets = Enum.map(merged.buckets, fn b -> b.count end)
 
-    latencies =
-      Grpc.Testing.HistogramData.new(
-        bucket: buckets,
-        min_seen: merged.min,
-        max_seen: merged.max,
-        sum: merged.sum,
-        sum_of_squares: merged.sum_of_squares,
-        count: merged.count
-      )
+    latencies = %Grpc.Testing.HistogramData{
+      bucket: buckets,
+      min_seen: merged.min,
+      max_seen: merged.max,
+      sum: merged.sum,
+      sum_of_squares: merged.sum_of_squares,
+      count: merged.count
+    }
 
-    stats = %{Grpc.Testing.ClientStats.new(stats) | latencies: latencies}
+    stats = %{struct(Grpc.Testing.ClientStats, stats) | latencies: latencies}
 
     state =
       if reset do

@@ -31,6 +31,7 @@ defmodule Grpc.Testing.TestService.Stub do
   @moduledoc false
   use GRPC.Stub, service: Grpc.Testing.TestService.Service
 end
+
 defmodule Grpc.Testing.UnimplementedService.Service do
   @moduledoc false
   use GRPC.Service, name: "grpc.testing.UnimplementedService", protoc_gen_elixir_version: "0.10.0"
@@ -42,6 +43,7 @@ defmodule Grpc.Testing.UnimplementedService.Stub do
   @moduledoc false
   use GRPC.Stub, service: Grpc.Testing.UnimplementedService.Service
 end
+
 defmodule Grpc.Testing.ReconnectService.Service do
   @moduledoc false
   use GRPC.Service, name: "grpc.testing.ReconnectService", protoc_gen_elixir_version: "0.10.0"
@@ -55,6 +57,7 @@ defmodule Grpc.Testing.ReconnectService.Stub do
   @moduledoc false
   use GRPC.Stub, service: Grpc.Testing.ReconnectService.Service
 end
+
 defmodule Grpc.Testing.LoadBalancerStatsService.Service do
   @moduledoc false
   use GRPC.Service,
@@ -74,6 +77,7 @@ defmodule Grpc.Testing.LoadBalancerStatsService.Stub do
   @moduledoc false
   use GRPC.Stub, service: Grpc.Testing.LoadBalancerStatsService.Service
 end
+
 defmodule Grpc.Testing.XdsUpdateHealthService.Service do
   @moduledoc false
   use GRPC.Service,
@@ -89,6 +93,7 @@ defmodule Grpc.Testing.XdsUpdateHealthService.Stub do
   @moduledoc false
   use GRPC.Stub, service: Grpc.Testing.XdsUpdateHealthService.Service
 end
+
 defmodule Grpc.Testing.XdsUpdateClientConfigureService.Service do
   @moduledoc false
   use GRPC.Service,

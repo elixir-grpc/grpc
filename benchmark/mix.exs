@@ -1,27 +1,28 @@
 defmodule Benchmark.MixProject do
   use Mix.Project
+  @version "1.0.0-rc.1"
 
   def project do
     [
       app: :benchmark,
-      version: "0.1.0",
-      elixir: "~> 1.6",
+      version: @version,
+      elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: deps()
     ]
   end
 
-  # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: [:logger],
+      mod: {Benchmark.Application, []}
     ]
   end
 
-  # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:grpc, path: ".."},
+      {:grpc_server, path: "../grpc_server"},
+      {:grpc_client, path: "../grpc_client"},
       {:protobuf, "~> 0.14"}
     ]
   end

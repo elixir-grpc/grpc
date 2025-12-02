@@ -28,18 +28,16 @@ defmodule Benchmark.ClientWorker do
   def unary_call(ch, req_size, resp_size) do
     payload_type = Grpc.Testing.PayloadType.value(:COMPRESSABLE)
 
-    payload =
-      Grpc.Testing.Payload.new(
-        type: payload_type,
-        body: List.duplicate(<<0>>, req_size)
-      )
+    payload = %Grpc.Testing.Payload{
+      type: payload_type,
+      body: List.duplicate(<<0>>, req_size)
+    }
 
-    req =
-      Grpc.Testing.SimpleRequest.new(
-        response_type: payload_type,
-        response_size: resp_size,
-        payload: payload
-      )
+    req = %Grpc.Testing.SimpleRequest{
+      response_type: payload_type,
+      response_size: resp_size,
+      payload: payload
+    }
 
     Grpc.Testing.BenchmarkService.Stub.unary_call(ch, req)
   end
@@ -49,18 +47,16 @@ defmodule Benchmark.ClientWorker do
 
     payload_type = Grpc.Testing.PayloadType.value(:COMPRESSABLE)
 
-    payload =
-      Grpc.Testing.Payload.new(
-        type: payload_type,
-        body: List.duplicate(<<0>>, req_size)
-      )
+    payload = %Grpc.Testing.Payload{
+      type: payload_type,
+      body: List.duplicate(<<0>>, req_size)
+    }
 
-    req =
-      Grpc.Testing.SimpleRequest.new(
-        response_type: payload_type,
-        response_size: resp_size,
-        payload: payload
-      )
+    req = %Grpc.Testing.SimpleRequest{
+      response_type: payload_type,
+      response_size: resp_size,
+      payload: payload
+    }
 
     streaming_loop(stream, req, manager, nil)
   end
