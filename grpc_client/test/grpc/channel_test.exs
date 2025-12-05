@@ -10,6 +10,8 @@ defmodule GRPC.ChannelTest do
           GRPC.Stub.connect("http://#{unquote(addr)}:50051", adapter: ClientAdapter)
 
         assert %Channel{host: unquote(addr), port: 50051, scheme: "http", cred: nil} = channel
+
+        assert {:ok, _} = GRPC.Stub.disconnect(channel)
       end
 
       test "errors if credential is provided" do
@@ -31,6 +33,8 @@ defmodule GRPC.ChannelTest do
         assert Keyword.has_key?(cred.ssl, :verify)
         assert Keyword.has_key?(cred.ssl, :depth)
         assert Keyword.has_key?(cred.ssl, :cacert_file)
+
+        assert {:ok, _} = GRPC.Stub.disconnect(channel)
       end
 
       test "allows overriding default credentials" do
@@ -40,6 +44,8 @@ defmodule GRPC.ChannelTest do
           GRPC.Stub.connect("https://#{unquote(addr)}:50051", adapter: ClientAdapter, cred: cred)
 
         assert %Channel{host: unquote(addr), port: 50051, scheme: "https", cred: ^cred} = channel
+
+        assert {:ok, _} = GRPC.Stub.disconnect(channel)
       end
     end
 
@@ -47,6 +53,8 @@ defmodule GRPC.ChannelTest do
       test "no cred uses http" do
         {:ok, channel} = GRPC.Stub.connect("#{unquote(addr)}:50051", adapter: ClientAdapter)
         assert %Channel{host: unquote(addr), port: 50051, scheme: "http", cred: nil} = channel
+
+        assert {:ok, _} = GRPC.Stub.disconnect(channel)
       end
 
       test "cred uses https" do
@@ -56,6 +64,8 @@ defmodule GRPC.ChannelTest do
           GRPC.Stub.connect("#{unquote(addr)}:50051", adapter: ClientAdapter, cred: cred)
 
         assert %Channel{host: unquote(addr), port: 50051, scheme: "https", cred: ^cred} = channel
+
+        assert {:ok, _} = GRPC.Stub.disconnect(channel)
       end
     end
   end
@@ -67,5 +77,7 @@ defmodule GRPC.ChannelTest do
       GRPC.Stub.connect("http://10.0.0.1:50051", adapter: ClientAdapter, headers: headers)
 
     assert %Channel{host: "10.0.0.1", port: 50051, headers: ^headers} = channel
+
+    assert {:ok, _} = GRPC.Stub.disconnect(channel)
   end
 end
