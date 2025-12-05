@@ -83,7 +83,7 @@ defmodule GRPC.Client.Connection do
 
   @type t :: %__MODULE__{
           virtual_channel: Channel.t(),
-          real_channels: %{String.t() => Channel.t()},
+          real_channels: %{String.t() => {:ok, Channel.t()} | {:error, any()}},
           lb_mod: module() | nil,
           lb_state: term() | nil,
           resolver: module() | nil,
@@ -446,7 +446,7 @@ defmodule GRPC.Client.Connection do
          %__MODULE__{
            base_state
            | virtual_channel: ch,
-             real_channels: %{"#{host}:#{port}" => ch}
+             real_channels: %{"#{host}:#{port}" => {:ok, ch}}
          }}
 
       {:error, reason} ->
