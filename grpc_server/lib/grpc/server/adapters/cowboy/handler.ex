@@ -12,6 +12,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
   @adapter GRPC.Server.Adapters.Cowboy
   @default_trailers HTTP2.server_trailers()
+  @trailers_flag 0b1000_0000
 
   @type init_state :: {
           endpoint :: atom(),
@@ -103,6 +104,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           handling_timer: timer_ref,
           pending_reader: nil,
           access_mode: access_mode,
+          codec: codec,
           exception_log_filter: exception_log_filter
         }
       }
@@ -481,7 +483,34 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   def info({:stream_trailers, trailers}, req, state) do
     metadata = Map.get(state, :resp_trailers, %{})
     metadata = GRPC.Transport.HTTP2.encode_metadata(metadata)
-    send_stream_trailers(req, Map.merge(metadata, trailers))
+    all_trailers = Map.merge(metadata, trailers)
+
+    req = check_sent_resp(req)
+
+    if state.access_mode === :grpcweb do
+      # grpc_web requires trailers be sent as the last
+      # message block rather than in the HTTP trailers
+      # as javascript runtimes do not propagate trailers
+      #
+      # trailers are instead denoted with the "trailer flag"
+      # which has the MSB set to 1.
+      {:ok, data, _length} =
+        all_trailers
+        |> Enum.map_join("\r\n", fn {k, v} -> "#{k}: #{v}" end)
+        |> GRPC.Message.to_data(message_flag: @trailers_flag)
+
+      packed =
+        if function_exported?(state.codec, :pack_for_channel, 1) do
+          state.codec.pack_for_channel(data)
+        else
+          data
+        end
+
+      :cowboy_req.stream_body(packed, :nofin, req)
+    end
+
+    :cowboy_req.stream_trailers(all_trailers, req)
+
     {:ok, req, state}
   end
 
@@ -614,11 +643,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       {:ok, data, req} -> {:ok, body <> data, req}
       {:more, data, req} -> read_full_body(req, body <> data, timer)
     end
-  end
-
-  defp send_stream_trailers(req, trailers) do
-    req = check_sent_resp(req)
-    :cowboy_req.stream_trailers(trailers, req)
   end
 
   defp check_sent_resp(%{has_sent_resp: _} = req) do

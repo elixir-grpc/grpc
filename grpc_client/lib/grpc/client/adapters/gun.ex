@@ -206,9 +206,15 @@ defmodule GRPC.Client.Adapters.Gun do
   defp handle_nofin_response(adapter_payload, payload, stream, headers, opts) do
     # Regular response: fetch body and trailers
     with {:ok, body, trailers} <- recv_body(adapter_payload, payload, opts),
-         {:ok, response} <- parse_response(stream, headers, body, trailers) do
+         {:ok, response, embedded_trailers} <- parse_response(stream, headers, body, trailers) do
       if opts[:return_headers] do
-        {:ok, response, %{headers: headers, trailers: trailers}}
+        all_trailers = Map.merge(trailers, embedded_trailers)
+
+        {
+          :ok,
+          response,
+          %{headers: headers, trailers: all_trailers}
+        }
       else
         {:ok, response}
       end
@@ -410,15 +416,26 @@ defmodule GRPC.Client.Adapters.Gun do
     end
   end
 
-  defp read_stream(%{buffer: buffer, need_more: false, response_mod: res_mod, codec: codec} = s) do
+  defp read_stream(
+         %{buffer: buffer, need_more: false, response_mod: res_mod, codec: codec, opts: opts} =
+           stream
+       ) do
     case GRPC.Message.get_message(buffer) do
+      {{:trailers, trailers}, rest} ->
+        new_stream =
+          stream
+          |> update_stream_with_trailers(trailers, opts[:return_headers])
+          |> Map.put(:buffer, rest)
+
+        {{:ok, trailers}, new_stream}
+
       {{_, message}, rest} ->
         reply = codec.decode(message, res_mod)
-        new_s = Map.put(s, :buffer, rest)
-        {{:ok, reply}, new_s}
+        new_stream = Map.put(stream, :buffer, rest)
+        {{:ok, reply}, new_stream}
 
       _ ->
-        read_stream(Map.put(s, :need_more, true))
+        read_stream(Map.put(stream, :need_more, true))
     end
   end
 
@@ -431,8 +448,17 @@ defmodule GRPC.Client.Adapters.Gun do
     with :ok <- parse_trailers(trailers),
          compressor <- get_compressor(headers, accepted_compressors),
          body <- get_body(codec, body),
-         {:ok, msg} <- GRPC.Message.from_data(%{compressor: compressor}, body) do
-      {:ok, codec.decode(msg, res_mod)}
+         {:ok, msg, remaining} <- GRPC.Message.from_data(%{compressor: compressor}, body) do
+      {:ok, codec.decode(msg, res_mod), check_for_trailers(remaining, compressor)}
+    end
+  end
+
+  defp check_for_trailers(<<>>, _compressor), do: %{}
+
+  defp check_for_trailers(body, compressor) do
+    case GRPC.Message.from_data(%{compressor: compressor}, body) do
+      {:trailers, trailers, <<>>} -> trailers
+      _ -> %{}
     end
   end
 
