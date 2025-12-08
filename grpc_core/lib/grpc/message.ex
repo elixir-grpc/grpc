@@ -143,7 +143,7 @@ defmodule GRPC.Message do
     data
     |> String.split("\r\n")
     |> Enum.reduce(%{}, fn line, acc ->
-      [k, v] = String.split(line, ":")
+      [k, v] = String.split(line, ":", parts: 2)
       Map.put(acc, k, String.trim(v))
     end)
   end
