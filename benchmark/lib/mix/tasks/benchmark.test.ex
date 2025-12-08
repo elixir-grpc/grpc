@@ -1,19 +1,22 @@
 defmodule Mix.Tasks.Benchmark.Test do
   @moduledoc """
   Runs a simple gRPC benchmark test.
-  
+
   This task starts a benchmark server and client, runs performance tests,
   and reports statistics.
-  
+
   ## Usage
-  
+
       mix benchmark.test
-  
+      mix benchmark.test --adapter=thousand_island
+      mix benchmark.test --adapter=cowboy
+
   ## Options
-  
+
     * `--port` - Server port (default: 10000)
     * `--requests` - Number of requests to send (default: 1000)
-  
+    * `--adapter` - Server adapter: cowboy or thousand_island (default: cowboy)
+
   """
   use Mix.Task
 
@@ -27,13 +30,27 @@ defmodule Mix.Tasks.Benchmark.Test do
 
     {parsed, _remaining, _invalid} =
       OptionParser.parse(args,
-        strict: [port: :integer, requests: :integer]
+        strict: [port: :integer, requests: :integer, adapter: :string]
       )
 
     port = Keyword.get(parsed, :port, 10000)
     num_requests = Keyword.get(parsed, :requests, 1000)
+    adapter_name = Keyword.get(parsed, :adapter, "cowboy")
 
-    Logger.info("Starting benchmark test on port #{port}")
+    adapter =
+      case String.downcase(adapter_name) do
+        "thousand_island" ->
+          GRPC.Server.Adapters.ThousandIsland
+
+        "cowboy" ->
+          GRPC.Server.Adapters.Cowboy
+
+        _ ->
+          Logger.error("Unknown adapter: #{adapter_name}. Using Cowboy.")
+          GRPC.Server.Adapters.Cowboy
+      end
+
+    Logger.info("Starting benchmark test on port #{port} with #{adapter_name} adapter")
 
     # Configure and start server
     server = %Grpc.Testing.ServerConfig{
@@ -48,7 +65,7 @@ defmodule Mix.Tasks.Benchmark.Test do
     }
 
     Logger.info("Starting server...")
-    server = Benchmark.ServerManager.start_server(server)
+    server = Benchmark.ServerManager.start_server(server, adapter: adapter)
     Logger.info("Server started: #{inspect(server)}")
 
     # Configure client
@@ -98,7 +115,7 @@ defmodule Mix.Tasks.Benchmark.Test do
     # Connect and warm up
     Logger.info("Connecting to server...")
     {:ok, ch} = GRPC.Stub.connect("localhost:#{port}")
-    
+
     Logger.info("Warming up...")
     Grpc.Testing.BenchmarkService.Stub.unary_call(ch, req)
 
@@ -132,6 +149,10 @@ defmodule Mix.Tasks.Benchmark.Test do
     IO.inspect(stats, label: "Stats", pretty: true)
     Logger.info("=" |> String.duplicate(60))
 
+    # Clean shutdown
+    Logger.info("Stopping server...")
+    Benchmark.ServerManager.stop_server(server, adapter: adapter)
+    Logger.info("Server stopped")
     :ok
   end
 end
