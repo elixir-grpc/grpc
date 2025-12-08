@@ -1,0 +1,275 @@
+defmodule GRPC.Server.Adapters.ThousandIsland.HTTP2 do
+  @moduledoc """
+  HTTP/2 frame handling for gRPC over ThousandIsland.
+
+  This module provides HTTP/2 protocol support using the chatterbox library,
+  handling frame parsing, stream management, and HPACK compression.
+  """
+
+  require Logger
+
+  @type stream_id :: non_neg_integer()
+  @type headers :: [{binary(), binary()}]
+  @type frame :: term()
+
+  @doc """
+  Initialize HTTP/2 connection state.
+  """
+  def init_connection do
+    # Initialize HTTP/2 connection settings
+    %{
+      streams: %{},
+      next_stream_id: 1,
+      settings: default_settings(),
+      header_table: :hpack.new_context(),
+      last_stream_id: 0
+    }
+  end
+
+  @doc """
+  Process incoming HTTP/2 frame data.
+  """
+  def handle_data(data, state) do
+    case parse_frame(data, state) do
+      {:ok, frames, rest, new_state} ->
+        {:ok, frames, rest, new_state}
+
+      {:error, reason} ->
+        {:error, reason}
+
+      {:more, new_state} ->
+        {:more, new_state}
+    end
+  end
+
+  @doc """
+  Parse HTTP/2 frames from binary data.
+  """
+  defp parse_frame(<<>>, state), do: {:more, state}
+
+  defp parse_frame(data, state) when byte_size(data) < 9 do
+    # Need at least frame header (9 bytes)
+    {:more, Map.put(state, :buffer, data)}
+  end
+
+  defp parse_frame(data, state) do
+    case :h2_frame.read(data) do
+      {:ok, frame, rest} ->
+        {frames, new_state} = process_frame(frame, state)
+
+        if byte_size(rest) > 0 do
+          case parse_frame(rest, new_state) do
+            {:ok, more_frames, final_rest, final_state} ->
+              {:ok, frames ++ more_frames, final_rest, final_state}
+
+            other ->
+              other
+          end
+        else
+          {:ok, frames, rest, new_state}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+
+      :incomplete ->
+        {:more, Map.put(state, :buffer, data)}
+    end
+  end
+
+  @doc """
+  Process a single HTTP/2 frame.
+  """
+  defp process_frame({:headers, stream_id, headers, flags}, state) do
+    Logger.debug("Received HEADERS frame for stream #{stream_id}")
+
+    # Decode HPACK-compressed headers
+    {:ok, decoded_headers, new_context} =
+      :hpack.decode(headers, state.header_table)
+
+    new_state = %{
+      state
+      | header_table: new_context,
+        last_stream_id: max(state.last_stream_id, stream_id)
+    }
+
+    # Check if END_HEADERS flag is set
+    end_headers? = :h2_frame.is_flag_set(:end_headers, flags)
+    end_stream? = :h2_frame.is_flag_set(:end_stream, flags)
+
+    stream_info = %{
+      stream_id: stream_id,
+      headers: decoded_headers,
+      end_headers: end_headers?,
+      end_stream: end_stream?,
+      state: if(end_stream?, do: :half_closed_remote, else: :open)
+    }
+
+    new_state = put_in(new_state, [:streams, stream_id], stream_info)
+
+    {[{:headers, stream_id, decoded_headers, flags}], new_state}
+  end
+
+  defp process_frame({:data, stream_id, data, flags}, state) do
+    Logger.debug("Received DATA frame for stream #{stream_id}: #{byte_size(data)} bytes")
+
+    end_stream? = :h2_frame.is_flag_set(:end_stream, flags)
+
+    if end_stream? do
+      # Update stream state
+      new_state =
+        update_in(state, [:streams, stream_id, :state], fn _ ->
+          :half_closed_remote
+        end)
+
+      {[{:data, stream_id, data, true}], new_state}
+    else
+      {[{:data, stream_id, data, false}], state}
+    end
+  end
+
+  defp process_frame({:settings, _stream_id, settings}, state) do
+    Logger.debug("Received SETTINGS frame: #{inspect(settings)}")
+
+    # Merge received settings with our settings
+    new_settings = Map.merge(state.settings, Enum.into(settings, %{}))
+    new_state = %{state | settings: new_settings}
+
+    # Must send SETTINGS ACK
+    ack_frame = encode_settings_ack()
+
+    {[{:settings, settings}, {:send, ack_frame}], new_state}
+  end
+
+  defp process_frame({:window_update, stream_id, increment}, state) do
+    Logger.debug("Received WINDOW_UPDATE for stream #{stream_id}: +#{increment}")
+
+    # Update flow control window
+    # TODO: Implement proper flow control
+    {[{:window_update, stream_id, increment}], state}
+  end
+
+  defp process_frame({:rst_stream, stream_id, error_code}, state) do
+    Logger.debug("Received RST_STREAM for stream #{stream_id}: #{error_code}")
+
+    # Remove stream from state
+    new_state =
+      update_in(state, [:streams], fn streams ->
+        Map.delete(streams, stream_id)
+      end)
+
+    {[{:rst_stream, stream_id, error_code}], new_state}
+  end
+
+  defp process_frame({:ping, _stream_id, opaque_data}, state) do
+    Logger.debug("Received PING frame")
+
+    # Must respond with PING ACK
+    pong_frame = encode_ping_ack(opaque_data)
+
+    {[{:ping, opaque_data}, {:send, pong_frame}], state}
+  end
+
+  defp process_frame({:goaway, _stream_id, last_stream_id, error_code, debug_data}, state) do
+    Logger.info("Received GOAWAY: last_stream=#{last_stream_id}, error=#{error_code}")
+
+    {[{:goaway, last_stream_id, error_code, debug_data}], state}
+  end
+
+  defp process_frame(frame, state) do
+    Logger.warning("Unhandled frame type: #{inspect(frame)}")
+    {[], state}
+  end
+
+  @doc """
+  Encode headers frame.
+  """
+  def encode_headers(stream_id, headers, end_stream?, context) do
+    {:ok, encoded_headers, new_context} = :hpack.encode(headers, context)
+
+    flags =
+      [:end_headers] ++
+        if end_stream?, do: [:end_stream], else: []
+
+    frame = :h2_frame.headers(stream_id, flags, encoded_headers)
+    {:ok, :h2_frame.to_binary(frame), new_context}
+  end
+
+  @doc """
+  Encode data frame.
+  """
+  def encode_data(stream_id, data, end_stream?) do
+    flags = if end_stream?, do: [:end_stream], else: []
+    frame = :h2_frame.data(stream_id, flags, data)
+    {:ok, :h2_frame.to_binary(frame)}
+  end
+
+  @doc """
+  Encode settings frame.
+  """
+  def encode_settings(settings) do
+    frame = :h2_frame.settings(0, [], settings)
+    :h2_frame.to_binary(frame)
+  end
+
+  @doc """
+  Encode settings ACK frame.
+  """
+  def encode_settings_ack do
+    frame = :h2_frame.settings(0, [:ack], [])
+    :h2_frame.to_binary(frame)
+  end
+
+  @doc """
+  Encode ping ACK frame.
+  """
+  def encode_ping_ack(opaque_data) do
+    frame = :h2_frame.ping(0, [:ack], opaque_data)
+    :h2_frame.to_binary(frame)
+  end
+
+  @doc """
+  Encode RST_STREAM frame.
+  """
+  def encode_rst_stream(stream_id, error_code) do
+    frame = :h2_frame.rst_stream(stream_id, error_code)
+    :h2_frame.to_binary(frame)
+  end
+
+  @doc """
+  Encode GOAWAY frame.
+  """
+  def encode_goaway(last_stream_id, error_code, debug_data \\ <<>>) do
+    frame = :h2_frame.goaway(0, last_stream_id, error_code, debug_data)
+    :h2_frame.to_binary(frame)
+  end
+
+  @doc """
+  Default HTTP/2 settings.
+  """
+  def default_settings do
+    %{
+      header_table_size: 4096,
+      enable_push: 0,
+      max_concurrent_streams: 100,
+      initial_window_size: 65535,
+      max_frame_size: 16384,
+      max_header_list_size: :infinity
+    }
+  end
+
+  @doc """
+  Validate HTTP/2 connection preface.
+  """
+  def validate_preface(<<"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n", rest::binary>>) do
+    {:ok, rest}
+  end
+
+  def validate_preface(data) when byte_size(data) < 24 do
+    {:more, data}
+  end
+
+  def validate_preface(_data) do
+    {:error, :invalid_preface}
+  end
+end

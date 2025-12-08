@@ -450,7 +450,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
       {:stop, req, state}
     else
-      case GRPC.Message.to_data(data, compressor: compressor, codec: opts[:codec]) do
+      case GRPC.Message.to_data(data, compressor: compressor, codec: opts[:codec], iolist: true) do
         {:ok, data, _size} ->
           req = check_sent_resp(req)
           :cowboy_req.stream_body(data, is_fin, req)

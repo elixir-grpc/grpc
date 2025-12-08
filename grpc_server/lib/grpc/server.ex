@@ -512,7 +512,7 @@ defmodule GRPC.Server do
   end
 
   @doc false
-  @spec servers_to_map(module() | [module()]) :: %{String.t() => [module()]}
+  @spec servers_to_map(module() | [module()]) :: %{String.t() => module()}
   def servers_to_map(servers) do
     Enum.reduce(List.wrap(servers), %{}, fn s, acc ->
       Map.put(acc, s.__meta__(:service).__meta__(:name), s)

@@ -67,7 +67,9 @@ expect(Req) ->
 %% Stream isn't waiting for data.
 data(StreamID, IsFin, Data, State=#state{
 		read_body_ref=undefined, read_body_buffer=Buffer, body_length=BodyLen}) ->
-	Commands = case byte_size(Data) of
+	% Optimization: calculate byte_size once and reuse
+	DataSize = byte_size(Data),
+	Commands = case DataSize of
 		0 ->
 			[];
 		Size ->
@@ -77,14 +79,16 @@ data(StreamID, IsFin, Data, State=#state{
 		expect=undefined,
 		read_body_is_fin=IsFin,
 		read_body_buffer= << Buffer/binary, Data/binary >>,
-		body_length=BodyLen + byte_size(Data)
+		body_length=BodyLen + DataSize
 	});
 %% Stream is waiting for data using auto mode.
 % GRPC: We don't pass auto, but treat it as auto
 data(StreamID, IsFin, Data, State=#state{read_body_pid=Pid, read_body_ref=Ref,
 		body_length=BodyLen}) ->
 	send_request_body(Pid, Ref, IsFin, BodyLen, Data),
-	Commands = case byte_size(Data) of
+	% Optimization: calculate byte_size once and reuse
+	DataSize = byte_size(Data),
+	Commands = case DataSize of
 		0 ->
 			[];
 		Size ->
