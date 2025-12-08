@@ -153,18 +153,18 @@ defmodule GRPC.Client.Connection do
   """
   @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(target, opts \\ []) do
-      case Process.whereis(GRPC.Client.Supervisor) do
-        nil ->
-          # For compatibility purposes only. In normal operation,
-          # the supervisor should be started by the application.
-          {:ok, pid} =
-            DynamicSupervisor.start_link(__MODULE__, [], name: GRPC.Client.Supervisor)
+    case Process.whereis(GRPC.Client.Supervisor) do
+      nil ->
+        # For compatibility purposes only. In normal operation,
+        # the supervisor should be started by the application.
+        {:ok, pid} =
+          DynamicSupervisor.start_link(__MODULE__, [], name: GRPC.Client.Supervisor)
 
-          pid
+        pid
 
-        pid ->
-          pid
-      end
+      pid ->
+        pid
+    end
 
     ref = make_ref()
 
