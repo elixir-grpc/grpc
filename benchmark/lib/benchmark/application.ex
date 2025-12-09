@@ -4,9 +4,7 @@ defmodule Benchmark.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [
-      {GRPC.Client.Supervisor, []}
-    ]
+    children = []
 
     opts = [strategy: :one_for_one, name: Benchmark.Supervisor]
     Supervisor.start_link(children, opts)
