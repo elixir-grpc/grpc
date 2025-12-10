@@ -3,7 +3,6 @@ defmodule Interop.App do
 
   def start(_type, _args) do
     children = [
-      GRPC.Client.Supervisor,
       {GRPC.Server.Supervisor, endpoint: Interop.Endpoint, port: 10000}
     ]
 
