@@ -1,7 +1,7 @@
-defmodule GRPC.HTTP2.FlowControlTest do
+defmodule GRPC.Transport.HTTP2.FlowControlTest do
   use ExUnit.Case, async: true
 
-  alias GRPC.HTTP2.FlowControl
+  alias GRPC.Transport.HTTP2.FlowControl
 
   import Bitwise
 

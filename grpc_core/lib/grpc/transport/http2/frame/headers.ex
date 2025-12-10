@@ -1,7 +1,7 @@
-defmodule GRPC.HTTP2.Frame.Headers do
+defmodule GRPC.Transport.HTTP2.Frame.Headers do
   @moduledoc false
 
-  import GRPC.HTTP2.Frame.Flags
+  import GRPC.Transport.HTTP2.Frame.Flags
 
   defstruct stream_id: nil,
             end_stream: false,
@@ -13,11 +13,11 @@ defmodule GRPC.HTTP2.Frame.Headers do
 
   @typedoc "An HTTP/2 HEADERS frame"
   @type t :: %__MODULE__{
-          stream_id: GRPC.HTTP2.Stream.stream_id(),
+          stream_id: GRPC.Transport.HTTP2.Stream.stream_id(),
           end_stream: boolean(),
           end_headers: boolean(),
           exclusive_dependency: boolean(),
-          stream_dependency: GRPC.HTTP2.Stream.stream_id() | nil,
+          stream_dependency: GRPC.Transport.HTTP2.Stream.stream_id() | nil,
           weight: non_neg_integer() | nil,
           fragment: iodata()
         }
@@ -27,10 +27,10 @@ defmodule GRPC.HTTP2.Frame.Headers do
   @padding_bit 3
   @priority_bit 5
 
-  @spec deserialize(GRPC.HTTP2.Frame.flags(), GRPC.HTTP2.Stream.stream_id(), iodata()) ::
-          {:ok, t()} | {:error, GRPC.HTTP2.Errors.error_code(), binary()}
+  @spec deserialize(GRPC.Transport.HTTP2.Frame.flags(), GRPC.Transport.HTTP2.Stream.stream_id(), iodata()) ::
+          {:ok, t()} | {:error, GRPC.Transport.HTTP2.Errors.error_code(), binary()}
   def deserialize(_flags, 0, _payload) do
-    {:error, GRPC.HTTP2.Errors.protocol_error(),
+    {:error, GRPC.Transport.HTTP2.Errors.protocol_error(),
      "HEADERS frame with zero stream_id (RFC9113§6.2)"}
   end
 
@@ -71,7 +71,7 @@ defmodule GRPC.HTTP2.Frame.Headers do
   # Any other case where padding is set
   def deserialize(flags, _stream_id, <<_padding_length::8, _rest::binary>>)
       when set?(flags, @padding_bit) do
-    {:error, GRPC.HTTP2.Errors.protocol_error(),
+    {:error, GRPC.Transport.HTTP2.Errors.protocol_error(),
      "HEADERS frame with invalid padding length (RFC9113§6.2)"}
   end
 
@@ -104,12 +104,12 @@ defmodule GRPC.HTTP2.Frame.Headers do
      }}
   end
 
-  defimpl GRPC.HTTP2.Frame.Serializable do
+  defimpl GRPC.Transport.HTTP2.Frame.Serializable do
     @end_stream_bit 0
     @end_headers_bit 2
 
     def serialize(
-          %GRPC.HTTP2.Frame.Headers{
+          %GRPC.Transport.HTTP2.Frame.Headers{
             exclusive_dependency: false,
             stream_dependency: nil,
             weight: nil
@@ -129,8 +129,8 @@ defmodule GRPC.HTTP2.Frame.Headers do
 
         [
           {0x1, set(flags), frame.stream_id, this_frame}
-          | GRPC.HTTP2.Frame.Serializable.serialize(
-              %GRPC.HTTP2.Frame.Continuation{stream_id: frame.stream_id, fragment: rest},
+          | GRPC.Transport.HTTP2.Frame.Serializable.serialize(
+              %GRPC.Transport.HTTP2.Frame.Continuation{stream_id: frame.stream_id, fragment: rest},
               max_frame_size
             )
         ]

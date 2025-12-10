@@ -1,7 +1,7 @@
-defmodule GRPC.HTTP2.ErrorsTest do
+defmodule GRPC.Transport.HTTP2.ErrorsTest do
   use ExUnit.Case, async: true
 
-  alias GRPC.HTTP2.Errors
+  alias GRPC.Transport.HTTP2.Errors
 
   describe "error codes" do
     test "no_error returns 0x0" do

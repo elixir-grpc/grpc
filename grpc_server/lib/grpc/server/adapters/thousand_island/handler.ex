@@ -7,8 +7,8 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
   use ThousandIsland.Handler
 
   alias GRPC.Server.HTTP2.Connection
-  alias GRPC.HTTP2.Frame
-  alias GRPC.HTTP2.Errors
+  alias GRPC.Transport.HTTP2.Frame
+  alias GRPC.Transport.HTTP2.Errors
   require Logger
 
   # HTTP/2 connection preface per RFC9113§3.4

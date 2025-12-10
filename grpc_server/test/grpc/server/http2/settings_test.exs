@@ -1,7 +1,7 @@
-defmodule GRPC.HTTP2.SettingsTest do
+defmodule GRPC.Transport.HTTP2.SettingsTest do
   use ExUnit.Case, async: true
 
-  alias GRPC.HTTP2.Settings
+  alias GRPC.Transport.HTTP2.Settings
 
   describe "default settings" do
     test "has correct default values" do

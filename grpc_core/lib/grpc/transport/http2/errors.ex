@@ -1,4 +1,4 @@
-defmodule GRPC.HTTP2.Errors do
+defmodule GRPC.Transport.HTTP2.Errors do
   @moduledoc false
   # Errors as defined in RFC9113§7
 

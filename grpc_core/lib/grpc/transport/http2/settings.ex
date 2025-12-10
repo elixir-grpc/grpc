@@ -1,4 +1,4 @@
-defmodule GRPC.HTTP2.Settings do
+defmodule GRPC.Transport.HTTP2.Settings do
   @moduledoc """
   Settings as defined in RFC9113§6.5.2
   """

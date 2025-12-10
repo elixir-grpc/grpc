@@ -2,7 +2,7 @@ defmodule GRPC.Server.HTTP2.ConnectionTest do
   use ExUnit.Case, async: true
 
   alias GRPC.Server.HTTP2.Connection
-  alias GRPC.HTTP2.{Frame, Settings, Errors}
+  alias GRPC.Transport.HTTP2.{Frame, Settings, Errors}
 
   # For now, we'll test without mocking the socket
   # Just test the logic of handle_frame functions

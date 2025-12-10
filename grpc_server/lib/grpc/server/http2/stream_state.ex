@@ -9,7 +9,7 @@ defmodule GRPC.Server.HTTP2.StreamState do
   - Manages stream lifecycle (HEADERS -> DATA -> trailers)
   """
 
-  alias GRPC.HTTP2.Frame
+  alias GRPC.Transport.HTTP2.Frame
 
   @type stream_id :: pos_integer()
   @type state :: :idle | :open | :half_closed_local | :half_closed_remote | :closed
@@ -246,7 +246,7 @@ defmodule GRPC.Server.HTTP2.StreamState do
   """
   @spec update_window(t(), integer()) :: {:ok, t()} | {:error, :flow_control_error}
   def update_window(stream, increment) do
-    case GRPC.HTTP2.FlowControl.update_window(stream.window_size, increment) do
+    case GRPC.Transport.HTTP2.FlowControl.update_window(stream.window_size, increment) do
       {:ok, new_size} ->
         {:ok, %{stream | window_size: new_size}}
 

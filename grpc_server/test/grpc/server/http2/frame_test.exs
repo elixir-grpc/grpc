@@ -1,7 +1,7 @@
-defmodule GRPC.HTTP2.FrameTest do
+defmodule GRPC.Transport.HTTP2.FrameTest do
   use ExUnit.Case, async: true
 
-  alias GRPC.HTTP2.{Frame, Errors}
+  alias GRPC.Transport.HTTP2.{Frame, Errors}
 
   describe "frame deserialization" do
     test "deserializes DATA frames" do

@@ -4,9 +4,9 @@ defmodule GRPC.Server.HTTP2.Connection do
   """
   require Logger
 
-  alias GRPC.HTTP2.Frame
-  alias GRPC.HTTP2.Settings
-  alias GRPC.HTTP2.Errors
+  alias GRPC.Transport.HTTP2.Frame
+  alias GRPC.Transport.HTTP2.Settings
+  alias GRPC.Transport.HTTP2.Errors
   alias GRPC.Server.HTTP2.StreamState
 
   # Inline hot path functions for performance
