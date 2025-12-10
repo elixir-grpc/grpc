@@ -101,6 +101,9 @@ end
 
 ## Endpoint with Interceptor
 
+Endpoints allow starting one or more servers via the `run` directive along with
+optional middleware which are registered using the `intercept` directive.
+
 ```elixir
 defmodule HelloEndpoint do
   use GRPC.Endpoint
@@ -109,6 +112,9 @@ defmodule HelloEndpoint do
   run(HelloServer)
 end
 ```
+
+Interceptors are called in the order they appear, allowing for pluggable logging,
+authentication, etc. to be applied to incoming requests.
 
 ---
 
@@ -121,6 +127,42 @@ Here we start the GRPC server under supervision at port `50051`.
   GRPC.Server.Supervisor.start_link(endpoint: HelloEndpoint, port: 50051)
 
 IO.puts("gRPC Server running on port 50051")
+```
+
+A TLS configuration can be defined by assigning a `%GRPC.Credential{}` struct, typically created by calling
+`GRPC.Credential.new/1`, to the `cred` key in the `adapter_opts` option. For example:
+
+```elixir
+  adapter_opts: [cred: GRPC.Credential.new(ssl: Application.get_env(:my_app, :ssl))]
+```
+
+### As part of a supervision tree
+
+Typically the server will be started as part of a supervision tree rather than started
+manually:
+
+```elixir
+defmodule Helloworld.Application do
+  @moduledoc false
+  use Application
+
+  @impl true
+  def start(_type, _args) do
+    children = [
+      {
+        GRPC.Server.Supervisor, [
+          endpoint: HelloEndpoint,
+          port: 50051,
+          start_server: true,
+          adapter_opts: [cred: GRPC.Credential.new(ssl: Application.get_env(:my_app, :ssl))]
+        ]
+      }
+    ]
+
+    opts = [strategy: :one_for_one, name: Helloworld.Supervisor]
+    Supervisor.start_link(children, opts)
+  end
+end
 ```
 
 ---
