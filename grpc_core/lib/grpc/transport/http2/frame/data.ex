@@ -17,10 +17,15 @@ defmodule GRPC.Transport.HTTP2.Frame.Data do
   @end_stream_bit 0
   @padding_bit 3
 
-  @spec deserialize(GRPC.Transport.HTTP2.Frame.flags(), GRPC.Transport.HTTP2.Stream.stream_id(), iodata()) ::
+  @spec deserialize(
+          GRPC.Transport.HTTP2.Frame.flags(),
+          GRPC.Transport.HTTP2.Stream.stream_id(),
+          iodata()
+        ) ::
           {:ok, t()} | {:error, GRPC.Transport.HTTP2.Errors.error_code(), binary()}
   def deserialize(_flags, 0, _payload) do
-    {:error, GRPC.Transport.HTTP2.Errors.protocol_error(), "DATA frame with zero stream_id (RFC9113§6.1)"}
+    {:error, GRPC.Transport.HTTP2.Errors.protocol_error(),
+     "DATA frame with zero stream_id (RFC9113§6.1)"}
   end
 
   def deserialize(flags, stream_id, <<padding_length::8, rest::binary>>)

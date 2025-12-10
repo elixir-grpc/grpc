@@ -13,7 +13,11 @@ defmodule GRPC.Transport.HTTP2.Frame.Ping do
 
   @ack_bit 0
 
-  @spec deserialize(GRPC.Transport.HTTP2.Frame.flags(), GRPC.Transport.HTTP2.Stream.stream_id(), iodata()) ::
+  @spec deserialize(
+          GRPC.Transport.HTTP2.Frame.flags(),
+          GRPC.Transport.HTTP2.Stream.stream_id(),
+          iodata()
+        ) ::
           {:ok, t()} | {:error, GRPC.Transport.HTTP2.Errors.error_code(), binary()}
   def deserialize(flags, 0, <<payload::binary-size(8)>>) when set?(flags, @ack_bit) do
     {:ok, %__MODULE__{ack: true, payload: payload}}
@@ -24,7 +28,8 @@ defmodule GRPC.Transport.HTTP2.Frame.Ping do
   end
 
   def deserialize(_flags, stream_id, _payload) when stream_id != 0 do
-    {:error, GRPC.Transport.HTTP2.Errors.protocol_error(), "Invalid stream ID in PING frame (RFC9113§6.7)"}
+    {:error, GRPC.Transport.HTTP2.Errors.protocol_error(),
+     "Invalid stream ID in PING frame (RFC9113§6.7)"}
   end
 
   def deserialize(_flags, _stream_id, _payload) do

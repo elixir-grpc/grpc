@@ -57,7 +57,8 @@ defmodule GRPC.Transport.HTTP2.Frame do
         max_frame_size
       )
       when length > max_frame_size do
-    {{:error, GRPC.Transport.HTTP2.Errors.frame_size_error(), "Payload size too large (RFC9113§4.2)"}, rest}
+    {{:error, GRPC.Transport.HTTP2.Errors.frame_size_error(),
+      "Payload size too large (RFC9113§4.2)"}, rest}
   end
 
   # nil is used to indicate for Stream.unfold/2 that the frame deserialization is finished

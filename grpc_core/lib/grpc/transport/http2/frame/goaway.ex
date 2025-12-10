@@ -10,7 +10,11 @@ defmodule GRPC.Transport.HTTP2.Frame.Goaway do
           debug_data: iodata()
         }
 
-  @spec deserialize(GRPC.Transport.HTTP2.Frame.flags(), GRPC.Transport.HTTP2.Stream.stream_id(), iodata()) ::
+  @spec deserialize(
+          GRPC.Transport.HTTP2.Frame.flags(),
+          GRPC.Transport.HTTP2.Stream.stream_id(),
+          iodata()
+        ) ::
           {:ok, t()} | {:error, GRPC.Transport.HTTP2.Errors.error_code(), binary()}
   def deserialize(
         _flags,

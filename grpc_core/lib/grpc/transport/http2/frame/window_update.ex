@@ -13,7 +13,11 @@ defmodule GRPC.Transport.HTTP2.Frame.WindowUpdate do
 
   @max_window_increment (1 <<< 31) - 1
 
-  @spec deserialize(GRPC.Transport.HTTP2.Frame.flags(), GRPC.Transport.HTTP2.Stream.stream_id(), iodata()) ::
+  @spec deserialize(
+          GRPC.Transport.HTTP2.Frame.flags(),
+          GRPC.Transport.HTTP2.Stream.stream_id(),
+          iodata()
+        ) ::
           {:ok, t()} | {:error, GRPC.Transport.HTTP2.Errors.error_code(), binary()}
   def deserialize(_flags, stream_id, <<_reserved::1, size_increment::31>>)
       when size_increment > 0 and size_increment <= @max_window_increment do
@@ -21,7 +25,8 @@ defmodule GRPC.Transport.HTTP2.Frame.WindowUpdate do
   end
 
   def deserialize(_flags, _stream_id, _payload) do
-    {:error, GRPC.Transport.HTTP2.Errors.frame_size_error(), "Invalid WINDOW_UPDATE frame (RFC9113§6.9)"}
+    {:error, GRPC.Transport.HTTP2.Errors.frame_size_error(),
+     "Invalid WINDOW_UPDATE frame (RFC9113§6.9)"}
   end
 
   defimpl GRPC.Transport.HTTP2.Frame.Serializable do

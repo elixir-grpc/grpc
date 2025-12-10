@@ -15,7 +15,11 @@ defmodule GRPC.Transport.HTTP2.Frame.Settings do
 
   @ack_bit 0
 
-  @spec deserialize(GRPC.Transport.HTTP2.Frame.flags(), GRPC.Transport.HTTP2.Stream.stream_id(), iodata()) ::
+  @spec deserialize(
+          GRPC.Transport.HTTP2.Frame.flags(),
+          GRPC.Transport.HTTP2.Stream.stream_id(),
+          iodata()
+        ) ::
           {:ok, t()} | {:error, GRPC.Transport.HTTP2.Errors.error_code(), binary()}
   def deserialize(flags, 0, payload) when clear?(flags, @ack_bit) do
     payload
@@ -33,25 +37,29 @@ defmodule GRPC.Transport.HTTP2.Frame.Settings do
 
       {:ok, {0x02, _value}}, {:ok, _acc} ->
         {:halt,
-         {:error, GRPC.Transport.HTTP2.Errors.protocol_error(), "Invalid enable_push value (RFC9113§6.5)"}}
+         {:error, GRPC.Transport.HTTP2.Errors.protocol_error(),
+          "Invalid enable_push value (RFC9113§6.5)"}}
 
       {:ok, {0x03, value}}, {:ok, acc} ->
         {:cont, {:ok, Map.put(acc, :max_concurrent_streams, value)}}
 
       {:ok, {0x04, value}}, {:ok, _acc} when value > @max_window_size ->
         {:halt,
-         {:error, GRPC.Transport.HTTP2.Errors.flow_control_error(), "Invalid window_size (RFC9113§6.5)"}}
+         {:error, GRPC.Transport.HTTP2.Errors.flow_control_error(),
+          "Invalid window_size (RFC9113§6.5)"}}
 
       {:ok, {0x04, value}}, {:ok, acc} ->
         {:cont, {:ok, Map.put(acc, :initial_window_size, value)}}
 
       {:ok, {0x05, value}}, {:ok, _acc} when value < @min_frame_size ->
         {:halt,
-         {:error, GRPC.Transport.HTTP2.Errors.frame_size_error(), "Invalid max_frame_size (RFC9113§6.5)"}}
+         {:error, GRPC.Transport.HTTP2.Errors.frame_size_error(),
+          "Invalid max_frame_size (RFC9113§6.5)"}}
 
       {:ok, {0x05, value}}, {:ok, _acc} when value > @max_frame_size ->
         {:halt,
-         {:error, GRPC.Transport.HTTP2.Errors.frame_size_error(), "Invalid max_frame_size (RFC9113§6.5)"}}
+         {:error, GRPC.Transport.HTTP2.Errors.frame_size_error(),
+          "Invalid max_frame_size (RFC9113§6.5)"}}
 
       {:ok, {0x05, value}}, {:ok, acc} ->
         {:cont, {:ok, Map.put(acc, :max_frame_size, value)}}
@@ -64,7 +72,8 @@ defmodule GRPC.Transport.HTTP2.Frame.Settings do
 
       {:error, _rest}, _acc ->
         {:halt,
-         {:error, GRPC.Transport.HTTP2.Errors.frame_size_error(), "Invalid SETTINGS size (RFC9113§6.5)"}}
+         {:error, GRPC.Transport.HTTP2.Errors.frame_size_error(),
+          "Invalid SETTINGS size (RFC9113§6.5)"}}
     end)
     |> case do
       {:ok, settings} -> {:ok, %__MODULE__{ack: false, settings: settings}}

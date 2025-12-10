@@ -27,7 +27,11 @@ defmodule GRPC.Transport.HTTP2.Frame.Headers do
   @padding_bit 3
   @priority_bit 5
 
-  @spec deserialize(GRPC.Transport.HTTP2.Frame.flags(), GRPC.Transport.HTTP2.Stream.stream_id(), iodata()) ::
+  @spec deserialize(
+          GRPC.Transport.HTTP2.Frame.flags(),
+          GRPC.Transport.HTTP2.Stream.stream_id(),
+          iodata()
+        ) ::
           {:ok, t()} | {:error, GRPC.Transport.HTTP2.Errors.error_code(), binary()}
   def deserialize(_flags, 0, _payload) do
     {:error, GRPC.Transport.HTTP2.Errors.protocol_error(),
@@ -130,7 +134,10 @@ defmodule GRPC.Transport.HTTP2.Frame.Headers do
         [
           {0x1, set(flags), frame.stream_id, this_frame}
           | GRPC.Transport.HTTP2.Frame.Serializable.serialize(
-              %GRPC.Transport.HTTP2.Frame.Continuation{stream_id: frame.stream_id, fragment: rest},
+              %GRPC.Transport.HTTP2.Frame.Continuation{
+                stream_id: frame.stream_id,
+                fragment: rest
+              },
               max_frame_size
             )
         ]

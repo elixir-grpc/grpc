@@ -9,7 +9,11 @@ defmodule GRPC.Transport.HTTP2.Frame.RstStream do
           error_code: GRPC.Transport.HTTP2.Errors.error_code()
         }
 
-  @spec deserialize(GRPC.Transport.HTTP2.Frame.flags(), GRPC.Transport.HTTP2.Stream.stream_id(), iodata()) ::
+  @spec deserialize(
+          GRPC.Transport.HTTP2.Frame.flags(),
+          GRPC.Transport.HTTP2.Stream.stream_id(),
+          iodata()
+        ) ::
           {:ok, t()} | {:error, GRPC.Transport.HTTP2.Errors.error_code(), binary()}
   def deserialize(_flags, 0, _payload) do
     {:error, GRPC.Transport.HTTP2.Errors.protocol_error(),

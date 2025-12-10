@@ -19,7 +19,11 @@ defmodule GRPC.Transport.HTTP2.Frame.PushPromise do
   @end_headers_bit 2
   @padding_bit 3
 
-  @spec deserialize(GRPC.Transport.HTTP2.Frame.flags(), GRPC.Transport.HTTP2.Stream.stream_id(), iodata()) ::
+  @spec deserialize(
+          GRPC.Transport.HTTP2.Frame.flags(),
+          GRPC.Transport.HTTP2.Stream.stream_id(),
+          iodata()
+        ) ::
           {:ok, t()} | {:error, GRPC.Transport.HTTP2.Errors.error_code(), binary()}
   def deserialize(_flags, 0, _payload) do
     {:error, GRPC.Transport.HTTP2.Errors.protocol_error(),
