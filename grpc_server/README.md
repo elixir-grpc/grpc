@@ -98,7 +98,7 @@ defmodule HelloworldStreams.Server do
   def say_unary_hello(request, materializer) do
     request
     |> GRPC.Stream.unary(materializer: materializer)
-    |> GRPC.Stream.map(fn %HelloReply{} = reply ->
+    |> GRPC.Stream.map(fn %HelloRequest{} = reply ->
       %HelloReply{message: "[Reply] #{reply.message}"}
     end)
     |> GRPC.Stream.run()
@@ -195,7 +195,7 @@ iex> GRPC.Stream.from([1, 2])
 ...>   {:error, {:exception, _reason}} ->
 ...>     {:error, GRPC.RPCError.exception(message: "Booomm")}
 ...> end)
-``` 
+```
 
 In this example:
 
@@ -223,7 +223,7 @@ def say_unary_hello(request, _materializer) do
 
     {:error, reason} ->
       {:error, GRPC.RPCError.exception(message: "error calling external process: #{inspect(reason)}")}
-    
+
     error ->
       Logger.error("Unknown error")
       error
@@ -287,12 +287,12 @@ children = [
 
 opts = [strategy: :one_for_one, name: MyApp.Supervisor]
 Supervisor.start_link(children, opts)
-``` 
+```
 
 You can also start it manually in scripts or test environments:
 ```elixir
 {:ok, _pid} = DynamicSupervisor.start_link(strategy: :one_for_one, name: GRPC.Client.Supervisor)
-``` 
+```
 
 Then connect with gRPC server:
 
@@ -321,7 +321,7 @@ iex> {:ok, reply} = channel |> Helloworld.GreetingServer.Stub.say_unary_hello(re
 
 ## Target Schemes and Resolvers
 
-The `connect/2` function supports URI-like targets that are resolved via the internal **gRPC** [Resolver](lib/grpc/client/resolver.ex).  
+The `connect/2` function supports URI-like targets that are resolved via the internal **gRPC** [Resolver](lib/grpc/client/resolver.ex).
 You can connect using `DNS`, `Unix Domain sockets`, `IPv4/IPv6`, or even `xDS-based endpoints`.
 
 ### Supported formats:
@@ -367,7 +367,7 @@ iex> {:ok, channel} =
 
 ## Client Adapters
 
-By default, `GRPC.Stub.connect/2` uses the **Gun** adapter.  
+By default, `GRPC.Stub.connect/2` uses the **Gun** adapter.
 You can switch to **Mint** (pure Elixir HTTP/2) or other adapters as needed.
 
 ### Using Mint Adapter
