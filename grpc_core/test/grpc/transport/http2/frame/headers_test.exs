@@ -34,7 +34,9 @@ defmodule GRPC.Transport.HTTP2.Frame.HeadersTest do
       # Flags: PRIORITY (0x20) + END_HEADERS (0x4) = 0x24
       # Priority: exclusive=1, dependency=5, weight=10
       priority = <<1::1, 5::31, 10::8>>
-      data = <<byte_size(priority <> "hdr")::24, 1::8, 0x24::8, 0::1, 1::31, priority::binary, "hdr">>
+
+      data =
+        <<byte_size(priority <> "hdr")::24, 1::8, 0x24::8, 0::1, 1::31, priority::binary, "hdr">>
 
       assert {{:ok,
                %Frame.Headers{
@@ -144,7 +146,9 @@ defmodule GRPC.Transport.HTTP2.Frame.HeadersTest do
       end
 
       # Last CONTINUATION: END_HEADERS (0x4)
-      [[<<_::24, 9::8, last_flags::8, _::binary>>, _]] = Enum.slice(continuation_frames, -1..-1//1)
+      [[<<_::24, 9::8, last_flags::8, _::binary>>, _]] =
+        Enum.slice(continuation_frames, -1..-1//1)
+
       assert last_flags == 0x4
     end
 

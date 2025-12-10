@@ -9,16 +9,16 @@ defmodule GRPC.Transport.HTTP2.Frame.ContinuationTest do
       # CONTINUATION with END_HEADERS flag
       data = <<3::24, 9::8, 0x4::8, 0::1, 1::31, "hdr">>
 
-      assert {{:ok, %Frame.Continuation{stream_id: 1, end_headers: true, fragment: "hdr"}},
-              <<>>} = Frame.deserialize(data, 16_384)
+      assert {{:ok, %Frame.Continuation{stream_id: 1, end_headers: true, fragment: "hdr"}}, <<>>} =
+               Frame.deserialize(data, 16_384)
     end
 
     test "deserializes CONTINUATION without END_HEADERS" do
       # More CONTINUATION frames will follow
       data = <<3::24, 9::8, 0x0::8, 0::1, 1::31, "hdr">>
 
-      assert {{:ok, %Frame.Continuation{stream_id: 1, end_headers: false, fragment: "hdr"}},
-              <<>>} = Frame.deserialize(data, 16_384)
+      assert {{:ok, %Frame.Continuation{stream_id: 1, end_headers: false, fragment: "hdr"}}, <<>>} =
+               Frame.deserialize(data, 16_384)
     end
 
     test "deserializes CONTINUATION with large fragment" do
@@ -41,8 +41,8 @@ defmodule GRPC.Transport.HTTP2.Frame.ContinuationTest do
       # Edge case: CONTINUATION with no payload (unusual but valid)
       data = <<0::24, 9::8, 0x4::8, 0::1, 1::31>>
 
-      assert {{:ok, %Frame.Continuation{stream_id: 1, end_headers: true, fragment: <<>>}},
-              <<>>} = Frame.deserialize(data, 16_384)
+      assert {{:ok, %Frame.Continuation{stream_id: 1, end_headers: true, fragment: <<>>}}, <<>>} =
+               Frame.deserialize(data, 16_384)
     end
   end
 
@@ -91,9 +91,10 @@ defmodule GRPC.Transport.HTTP2.Frame.ContinuationTest do
 
       # Serialize with small frame size to force split
       frames_io = Frame.serialize(headers, 20)
-      
+
       # Should produce [HEADERS, CONTINUATION]
-      assert length(frames_io) == 3 # 3 frames for 51 bytes with 20 byte limit
+      # 3 frames for 51 bytes with 20 byte limit
+      assert length(frames_io) == 3
 
       # Deserialize first frame (HEADERS)
       [h_io, c1_io, c2_io] = frames_io
@@ -106,9 +107,11 @@ defmodule GRPC.Transport.HTTP2.Frame.ContinuationTest do
       {{:ok, c2_frame}, <<>>} = Frame.deserialize(c2_binary, 16_384)
 
       # Reconstruct full header block
-      reconstructed = IO.iodata_to_binary([h_frame.fragment, c1_frame.fragment, c2_frame.fragment])
+      reconstructed =
+        IO.iodata_to_binary([h_frame.fragment, c1_frame.fragment, c2_frame.fragment])
+
       assert reconstructed == full_headers
-      
+
       # First HEADERS should not have END_HEADERS
       assert h_frame.end_headers == false
       # Middle CONTINUATION should not have END_HEADERS
@@ -125,12 +128,12 @@ defmodule GRPC.Transport.HTTP2.Frame.ContinuationTest do
 
       # Serialize with small max_frame_size
       frames_io = Frame.serialize(headers, 5)
-      
+
       # Should split into multiple frames
       assert length(frames_io) == 3
 
       [h_io, c1_io, c2_io] = frames_io
-      
+
       h_bin = IO.iodata_to_binary(h_io)
       c1_bin = IO.iodata_to_binary(c1_io)
       c2_bin = IO.iodata_to_binary(c2_io)
@@ -179,7 +182,14 @@ defmodule GRPC.Transport.HTTP2.Frame.ContinuationTest do
 
       chunks =
         if remainder_size > 0 do
-          chunks ++ [binary_part(metadata_headers, byte_size(metadata_headers) - remainder_size, remainder_size)]
+          chunks ++
+            [
+              binary_part(
+                metadata_headers,
+                byte_size(metadata_headers) - remainder_size,
+                remainder_size
+              )
+            ]
         else
           chunks
         end
