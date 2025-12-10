@@ -82,66 +82,99 @@ defmodule GRPC.Server.HTTP2.Connection do
   Send headers for streaming response.
   """
   def send_headers(socket, stream_id, headers, connection) do
-    # Encode headers using HPAX - convert map to list of tuples
-    Logger.debug("[send_headers] stream_id=#{stream_id}, headers=#{inspect(headers)}")
-    headers_list = if is_map(headers), do: Map.to_list(headers), else: headers
-    {header_block, _new_hpack} = HPAX.encode(:no_store, headers_list, connection.send_hpack_state)
+    # Check if stream still exists (may have been closed by RST_STREAM)
+    unless Map.has_key?(connection.streams, stream_id) do
+      Logger.warning(
+        "[send_headers] SKIPPED - stream=#{stream_id} no longer exists (likely cancelled by client)"
+      )
 
-    # Send HEADERS frame without END_STREAM
-    frame = %Frame.Headers{
-      stream_id: stream_id,
-      fragment: header_block,
-      end_stream: false,
-      end_headers: true
-    }
+      connection
+    else
+      # Encode headers using HPAX - convert map to list of tuples
+      Logger.debug("[send_headers] stream_id=#{stream_id}, headers=#{inspect(headers)}")
+      headers_list = if is_map(headers), do: Map.to_list(headers), else: headers
 
-    send_frame(frame, socket, connection)
+      {header_block, _new_hpack} =
+        HPAX.encode(:no_store, headers_list, connection.send_hpack_state)
+
+      # Send HEADERS frame without END_STREAM
+      frame = %Frame.Headers{
+        stream_id: stream_id,
+        fragment: header_block,
+        end_stream: false,
+        end_headers: true
+      }
+
+      send_frame(frame, socket, connection)
+    end
   end
 
   @doc """
   Send data frame for streaming response.
   """
   def send_data(socket, stream_id, data, end_stream, connection) do
-    # Send DATA frame
-    frame = %Frame.Data{
-      stream_id: stream_id,
-      data: data,
-      end_stream: end_stream
-    }
+    # Check if stream still exists (may have been closed by RST_STREAM)
+    unless Map.has_key?(connection.streams, stream_id) do
+      Logger.warning(
+        "[send_data] SKIPPED - stream=#{stream_id} no longer exists (likely cancelled by client)"
+      )
 
-    send_frame(frame, socket, connection)
+      connection
+    else
+      # Send DATA frame
+      frame = %Frame.Data{
+        stream_id: stream_id,
+        data: data,
+        end_stream: end_stream
+      }
+
+      send_frame(frame, socket, connection)
+    end
   end
 
   @doc """
   Send trailers (headers with END_STREAM) for streaming response.
   """
   def send_trailers(socket, stream_id, trailers, connection) do
-    # Encode custom metadata (handles -bin suffix base64 encoding)
-    # Note: encode_metadata filters out reserved headers like grpc-status
-    encoded_custom = GRPC.Transport.HTTP2.encode_metadata(trailers)
-
-    # Re-add reserved headers (grpc-status, etc) that were filtered out
-    encoded_trailers =
-      Map.merge(
-        Map.take(trailers, ["grpc-status", "grpc-message"]),
-        encoded_custom
+    # Check if stream still exists (may have been closed by RST_STREAM)
+    unless Map.has_key?(connection.streams, stream_id) do
+      Logger.warning(
+        "[send_trailers] SKIPPED - stream=#{stream_id} no longer exists (likely cancelled by client)"
       )
 
-    # Convert map to list
-    trailer_list = Map.to_list(encoded_trailers)
+      connection
+    else
+      # Encode custom metadata (handles -bin suffix base64 encoding)
+      # Note: encode_metadata filters out reserved headers like grpc-status
+      encoded_custom = GRPC.Transport.HTTP2.encode_metadata(trailers)
 
-    {trailer_block, _new_hpack} =
-      HPAX.encode(:no_store, trailer_list, connection.send_hpack_state)
+      # Re-add reserved headers (grpc-status, etc) that were filtered out
+      encoded_trailers =
+        Map.merge(
+          Map.take(trailers, ["grpc-status", "grpc-message"]),
+          encoded_custom
+        )
 
-    # Send HEADERS frame with END_STREAM
-    frame = %Frame.Headers{
-      stream_id: stream_id,
-      fragment: trailer_block,
-      end_stream: true,
-      end_headers: true
-    }
+      # Convert map to list
+      trailer_list = Map.to_list(encoded_trailers)
 
-    send_frame(frame, socket, connection)
+      {trailer_block, _new_hpack} =
+        HPAX.encode(:no_store, trailer_list, connection.send_hpack_state)
+
+      # Send HEADERS frame with END_STREAM
+      frame = %Frame.Headers{
+        stream_id: stream_id,
+        fragment: trailer_block,
+        end_stream: true,
+        end_headers: true
+      }
+
+      connection = send_frame(frame, socket, connection)
+
+      # Remove stream after sending END_STREAM (RFC 7540: stream transitions to closed)
+      Logger.debug("[send_trailers] Removing stream #{stream_id} after sending END_STREAM")
+      %{connection | streams: Map.delete(connection.streams, stream_id)}
+    end
   end
 
   @doc """
@@ -421,43 +454,68 @@ defmodule GRPC.Server.HTTP2.Connection do
   defp handle_headers_frame(frame, _socket, connection) do
     Logger.info("[handle_headers_frame] Decoding HPACK for stream #{frame.stream_id}")
 
-    case HPAX.decode(frame.fragment, connection.recv_hpack_state) do
-      {:ok, headers, new_hpack_state} ->
-        Logger.info(
-          "[handle_headers_frame] Decoded headers for stream #{frame.stream_id}: #{inspect(headers)}"
-        )
+    # Check if this is trailers for an existing stream
+    case Map.get(connection.streams, frame.stream_id) do
+      nil ->
+        # New stream - decode headers and create stream state
+        case HPAX.decode(frame.fragment, connection.recv_hpack_state) do
+          {:ok, headers, new_hpack_state} ->
+            Logger.info(
+              "[handle_headers_frame] Decoded headers for stream #{frame.stream_id}: #{inspect(headers)}"
+            )
 
-        # Create stream state from headers
-        stream_state =
-          StreamState.from_headers(
-            frame.stream_id,
-            headers,
-            connection.local_settings.initial_window_size
-          )
+            # Create stream state from headers
+            stream_state =
+              StreamState.from_headers(
+                frame.stream_id,
+                headers,
+                connection.local_settings.initial_window_size
+              )
 
-        # Add handler_pid for streaming support
-        stream_state = %{stream_state | handler_pid: connection.handler_pid}
+            # Add handler_pid for streaming support
+            stream_state = %{stream_state | handler_pid: connection.handler_pid}
 
-        # Check if this is bidirectional streaming
-        # For bidi, we need to process messages as they arrive (not wait for END_STREAM)
-        is_bidi =
-          GRPC.Server.HTTP2.Dispatcher.is_bidi_streaming?(stream_state.path, connection.servers)
+            # Check if this is bidirectional streaming
+            # For bidi, we need to process messages as they arrive (not wait for END_STREAM)
+            is_bidi =
+              GRPC.Server.HTTP2.Dispatcher.is_bidi_streaming?(stream_state.path, connection.servers)
 
-        stream_state = %{stream_state | is_bidi_streaming: is_bidi}
+            stream_state = %{stream_state | is_bidi_streaming: is_bidi}
 
-        if is_bidi do
-          Logger.info(
-            "[handle_headers_frame] Stream #{frame.stream_id} is bidirectional streaming"
-          )
+            if is_bidi do
+              Logger.info(
+                "[handle_headers_frame] Stream #{frame.stream_id} is bidirectional streaming"
+              )
+            end
+
+            # Store stream in connection
+            streams = Map.put(connection.streams, frame.stream_id, stream_state)
+
+            %{connection | recv_hpack_state: new_hpack_state, streams: streams}
+
+          {:error, reason} ->
+            connection_error!("HPACK decode error: #{inspect(reason)}")
         end
 
-        # Store stream in connection
-        streams = Map.put(connection.streams, frame.stream_id, stream_state)
+      _stream_state ->
+        # Trailers for existing stream - just decode but don't create new stream
+        # This can happen when client sends trailers after we've sent response/error
+        Logger.info(
+          "[handle_headers_frame] Ignoring trailers for stream #{frame.stream_id} (stream already processed)"
+        )
 
-        %{connection | recv_hpack_state: new_hpack_state, streams: streams}
+        case HPAX.decode(frame.fragment, connection.recv_hpack_state) do
+          {:ok, _headers, new_hpack_state} ->
+            %{connection | recv_hpack_state: new_hpack_state}
 
-      {:error, reason} ->
-        connection_error!("HPACK decode error: #{inspect(reason)}")
+          {:error, reason} ->
+            Logger.warning(
+              "[handle_headers_frame] Failed to decode trailers for stream #{frame.stream_id}: #{inspect(reason)}"
+            )
+
+            # Continue without updating HPACK state to avoid connection error
+            connection
+        end
     end
   end
 
@@ -518,7 +576,7 @@ defmodule GRPC.Server.HTTP2.Connection do
       ThousandIsland.Socket.send(socket, iodata)
     end
 
-    :ok
+    connection
   end
 
   defp connection_error!(message) do
@@ -690,13 +748,22 @@ defmodule GRPC.Server.HTTP2.Connection do
             end
           end
 
-          # Remove stream from connection
-          Logger.debug("[process_grpc_request] Removing stream #{stream_state.stream_id}")
+          # DON'T remove stream here for ThousandIsland adapter!
+          # The adapter sends async messages ({:grpc_send_data}, {:grpc_send_trailers})
+          # that will be processed later by handle_info in the Handler.
+          # The stream will be removed when send_grpc_trailers is called (which sends END_STREAM).
+          # 
+          # For Cowboy adapter (synchronous), the response is sent immediately during dispatch,
+          # so the stream can be removed here. But for ThousandIsland, we need to wait for
+          # the async messages to be processed.
+          #
+          # TODO: Add a flag to StreamState to indicate if response was fully sent,
+          # or let the trailers handler remove the stream after sending END_STREAM.
+          Logger.debug(
+            "[process_grpc_request] Keeping stream #{stream_state.stream_id} alive for async response (will be removed after trailers)"
+          )
 
-          %{
-            updated_connection
-            | streams: Map.delete(updated_connection.streams, stream_state.stream_id)
-          }
+          updated_connection
         end
       end
     rescue
@@ -732,28 +799,38 @@ defmodule GRPC.Server.HTTP2.Connection do
   end
 
   defp send_grpc_trailers(socket, stream_id, trailers, connection) do
-    Logger.debug(
-      "[send_grpc_trailers] Sending trailers for stream #{stream_id}: #{inspect(trailers)}"
-    )
+    # Check if stream still exists (may have been closed by RST_STREAM)
+    unless Map.has_key?(connection.streams, stream_id) do
+      Logger.warning(
+        "[send_grpc_trailers] SKIPPED - stream=#{stream_id} no longer exists (likely cancelled by client)"
+      )
 
-    # Convert map to list of tuples for HPAX
-    trailer_list = Map.to_list(trailers)
+      connection
+    else
+      Logger.debug(
+        "[send_grpc_trailers] Sending trailers for stream #{stream_id}: #{inspect(trailers)}"
+      )
 
-    # Encode trailers using HPACK
-    {trailer_block, new_hpack} = HPAX.encode(:no_store, trailer_list, connection.send_hpack_state)
+      # Convert map to list of tuples for HPAX
+      trailer_list = Map.to_list(trailers)
 
-    # Send HEADERS frame with END_STREAM flag
-    headers_frame = %Frame.Headers{
-      stream_id: stream_id,
-      fragment: trailer_block,
-      end_stream: true,
-      end_headers: true
-    }
+      # Encode trailers using HPACK
+      {trailer_block, new_hpack} =
+        HPAX.encode(:no_store, trailer_list, connection.send_hpack_state)
 
-    send_frame(headers_frame, socket, connection)
+      # Send HEADERS frame with END_STREAM flag
+      headers_frame = %Frame.Headers{
+        stream_id: stream_id,
+        fragment: trailer_block,
+        end_stream: true,
+        end_headers: true
+      }
 
-    # Return updated connection with new HPACK state
-    %{connection | send_hpack_state: new_hpack}
+      send_frame(headers_frame, socket, connection)
+
+      # Return updated connection with new HPACK state
+      %{connection | send_hpack_state: new_hpack}
+    end
   end
 
   # OPTIMIZATION: Send headers + data + trailers in one syscall (Bandit-style batching)
@@ -923,20 +1000,29 @@ defmodule GRPC.Server.HTTP2.Connection do
               headers = %{":status" => "200", "content-type" => "application/grpc+proto"}
               send_headers(socket, stream_id, headers, connection)
 
-              # Mark headers as sent in the stream state
-              updated_stream = %{stream_state | headers_sent: true}
-              updated_conn = put_in(connection.streams[stream_id], updated_stream)
+              # Verify stream still exists after send_headers (may have been closed by RST_STREAM)
+              if Map.has_key?(connection.streams, stream_id) do
+                # Mark headers as sent in the stream state
+                updated_stream = %{stream_state | headers_sent: true}
+                updated_conn = put_in(connection.streams[stream_id], updated_stream)
 
-              trailers = %{
-                "grpc-status" => to_string(status_code),
-                "grpc-message" => message
-              }
+                trailers = %{
+                  "grpc-status" => to_string(status_code),
+                  "grpc-message" => message
+                }
 
-              Logger.warning(
-                "[SEND_GRPC_ERROR] Sending TRAILERS with END_STREAM for stream=#{stream_id}"
-              )
+                Logger.warning(
+                  "[SEND_GRPC_ERROR] Sending TRAILERS with END_STREAM for stream=#{stream_id}"
+                )
 
-              send_grpc_trailers(socket, stream_id, trailers, updated_conn)
+                send_grpc_trailers(socket, stream_id, trailers, updated_conn)
+              else
+                Logger.warning(
+                  "[SEND_GRPC_ERROR] SKIPPED trailers - stream=#{stream_id} was closed after sending headers"
+                )
+
+                connection
+              end
             else
               # If headers were sent OR stream received END_STREAM, just send trailers
               if end_stream_received && !headers_sent do
@@ -957,11 +1043,20 @@ defmodule GRPC.Server.HTTP2.Connection do
               send_grpc_trailers(socket, stream_id, trailers, connection)
             end
 
-          # Marcar que já enviamos erro (RFC 7540: após END_STREAM, o stream está closed)
+          # Verify stream still exists before marking error_sent (may have been closed by RST_STREAM)
           updated_connection =
-            update_in(updated_connection.streams[stream_id], fn s ->
-              if s, do: %{s | error_sent: true}, else: nil
-            end)
+            if Map.has_key?(updated_connection.streams, stream_id) do
+              # Marcar que já enviamos erro (RFC 7540: após END_STREAM, o stream está closed)
+              update_in(updated_connection.streams[stream_id], fn s ->
+                if s, do: %{s | error_sent: true}, else: nil
+              end)
+            else
+              Logger.warning(
+                "[SEND_GRPC_ERROR] SKIPPED marking error_sent - stream=#{stream_id} was already closed"
+              )
+
+              updated_connection
+            end
 
           # RFC 7540: Após enviar END_STREAM, o stream transiciona para "closed"
           # Remover imediatamente para evitar processar mais mensagens neste stream

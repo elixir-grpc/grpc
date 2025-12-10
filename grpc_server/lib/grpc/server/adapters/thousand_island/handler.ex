@@ -124,15 +124,22 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
 
     new_state =
       if map_size(accumulated) > 0 do
-        Connection.send_headers(socket, stream_id, accumulated, state.connection)
+        updated_conn = Connection.send_headers(socket, stream_id, accumulated, state.connection)
         # Clear accumulated headers for this stream
-        %{state | accumulated_headers: Map.delete(state.accumulated_headers, stream_id)}
+        %{
+          state
+          | accumulated_headers: Map.delete(state.accumulated_headers, stream_id),
+            connection: updated_conn
+        }
       else
         state
       end
 
     # Send trailers (headers with END_STREAM) for streaming
-    Connection.send_trailers(socket, stream_id, trailers, new_state.connection)
+    # This will also remove the stream from the connection
+    updated_connection = Connection.send_trailers(socket, stream_id, trailers, new_state.connection)
+    
+    new_state = %{new_state | connection: updated_connection}
     {:noreply, {socket, new_state}}
   end
 
