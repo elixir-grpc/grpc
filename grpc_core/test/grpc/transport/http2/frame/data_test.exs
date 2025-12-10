@@ -134,9 +134,7 @@ defmodule GRPC.Transport.HTTP2.Frame.DataTest do
 
       result = Frame.serialize(frame, 16_384)
 
-      # Result should be iodata (list)
       assert is_list(result)
-      # But should flatten correctly
       assert IO.iodata_to_binary(result) =~ "hello world"
     end
   end
