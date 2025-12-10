@@ -269,6 +269,20 @@ defmodule Helloworld.Application do
 end
 ```
 
+A TLS configuration can be defined by assigning a `%GRPC.Credential{}` struct, typically created by calling
+`GRPC.Credential.new/1`, to the `cred` key in the `adapter_opts` option. For example:
+
+```elixir
+  {
+    GRPC.Server.Supervisor, [
+      endpoint: Helloworld.Endpoint,
+      port: 50051,
+      start_server: true,
+      adapter_opts: [cred: GRPC.Credential.new(ssl: Application.get_env(:my_app, :ssl))]
+    ]
+  }
+```
+
 # Client Usage
 
 This section demonstrates how to establish client connections and perform RPC calls using the Elixir gRPC client.
