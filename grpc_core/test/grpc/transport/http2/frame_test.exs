@@ -186,7 +186,8 @@ defmodule GRPC.Transport.HTTP2.FrameTest do
     test "set?/2 guard works correctly" do
       require Frame.Flags
 
-      flags = 0b00000101  # bits 0 and 2 set
+      # bits 0 and 2 set
+      flags = 0b00000101
 
       assert Frame.Flags.set?(flags, 0)
       refute Frame.Flags.set?(flags, 1)
@@ -197,7 +198,8 @@ defmodule GRPC.Transport.HTTP2.FrameTest do
     test "clear?/2 guard works correctly" do
       require Frame.Flags
 
-      flags = 0b00000101  # bits 0 and 2 set
+      # bits 0 and 2 set
+      flags = 0b00000101
 
       refute Frame.Flags.clear?(flags, 0)
       assert Frame.Flags.clear?(flags, 1)
@@ -236,22 +238,32 @@ defmodule GRPC.Transport.HTTP2.FrameTest do
       # Types 1-9 can be tested with stream_id=0 (except some need valid payload)
       for type <- 1..9 do
         # Use appropriate payloads for each type
-        {stream_id, payload} = case type do
-          1 -> {1, <<0, 0, 0, 0>>}  # HEADERS needs priority data
-          2 -> {1, <<0, 0, 0, 0, 0>>}  # PRIORITY needs 5 bytes
-          3 -> {1, <<0, 0, 0, 0>>}  # RST_STREAM needs 4 bytes
-          4 -> {0, <<>>}  # SETTINGS
-          5 -> {1, <<0, 0, 0, 0>>}  # PUSH_PROMISE needs promised stream id
-          6 -> {0, <<0, 0, 0, 0, 0, 0, 0, 0>>}  # PING needs 8 bytes
-          7 -> {0, <<0, 0, 0, 0, 0, 0, 0, 0>>}  # GOAWAY needs 8 bytes
-          8 -> {1, <<0, 0, 0, 100>>}  # WINDOW_UPDATE needs 4 bytes
-          9 -> {1, <<>>}  # CONTINUATION
-        end
-        
+        {stream_id, payload} =
+          case type do
+            # HEADERS needs priority data
+            1 -> {1, <<0, 0, 0, 0>>}
+            # PRIORITY needs 5 bytes
+            2 -> {1, <<0, 0, 0, 0, 0>>}
+            # RST_STREAM needs 4 bytes
+            3 -> {1, <<0, 0, 0, 0>>}
+            # SETTINGS
+            4 -> {0, <<>>}
+            # PUSH_PROMISE needs promised stream id
+            5 -> {1, <<0, 0, 0, 0>>}
+            # PING needs 8 bytes
+            6 -> {0, <<0, 0, 0, 0, 0, 0, 0, 0>>}
+            # GOAWAY needs 8 bytes
+            7 -> {0, <<0, 0, 0, 0, 0, 0, 0, 0>>}
+            # WINDOW_UPDATE needs 4 bytes
+            8 -> {1, <<0, 0, 0, 100>>}
+            # CONTINUATION
+            9 -> {1, <<>>}
+          end
+
         length = byte_size(payload)
         data = <<length::24, type::8, 0::8, 0::1, stream_id::31, payload::binary>>
         result = Frame.deserialize(data, 16_384)
-        
+
         # Should not return Unknown frame for types 0-9
         assert {{:ok, frame}, _} = result
         refute match?(%Frame.Unknown{}, frame), "Type #{type} returned Unknown frame"
