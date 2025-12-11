@@ -42,7 +42,7 @@ defmodule GRPC.Server.HTTP2.Dispatcher do
   @spec dispatch(StreamState.t(), map(), atom(), GRPC.Server.HTTP2.Connection.t()) ::
           {:ok, list(), binary(), map()} | {:error, GRPC.RPCError.t()}
   def dispatch(%StreamState{} = stream_state, servers, endpoint, connection) do
-    Logger.info(
+    Logger.debug(
       "[dispatch] path=#{stream_state.path}, messages=#{length(stream_state.message_buffer)}"
     )
 
@@ -50,7 +50,7 @@ defmodule GRPC.Server.HTTP2.Dispatcher do
     if StreamState.deadline_exceeded?(stream_state) do
       now = System.monotonic_time(:microsecond)
 
-      Logger.warning(
+      Logger.debug(
         "[dispatch] Deadline exceeded for path=#{stream_state.path}, deadline=#{stream_state.deadline}, now=#{now}, diff=#{now - (stream_state.deadline || now)}us"
       )
 
@@ -696,7 +696,7 @@ defmodule GRPC.Server.HTTP2.Dispatcher do
 
     if res_stream? do
       # This path shouldn't be reached anymore (streaming handled in call_server_streaming)
-      Logger.warning("Unexpected: encode_responses called with streaming response")
+      Logger.debug("Unexpected: encode_responses called with streaming response")
       {:ok, :streaming_done}
     else
       # Unary - encode single response with custom headers/trailers from stream_state

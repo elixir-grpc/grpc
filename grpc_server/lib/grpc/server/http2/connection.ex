@@ -21,9 +21,7 @@ defmodule GRPC.Server.HTTP2.Connection do
             send_window_size: 65_535,
             recv_window_size: 65_535,
             streams: %{},
-            # Map of stream_id => stream_state
             next_stream_id: 2,
-            # Client streams are odd, server push is even
             endpoint: nil,
             servers: %{},
             socket: nil,
@@ -84,7 +82,7 @@ defmodule GRPC.Server.HTTP2.Connection do
   def send_headers(socket, stream_id, headers, connection) do
     # Check if stream still exists (may have been closed by RST_STREAM)
     unless Map.has_key?(connection.streams, stream_id) do
-      Logger.warning(
+      Logger.debug(
         "[send_headers] SKIPPED - stream=#{stream_id} no longer exists (likely cancelled by client)"
       )
 
@@ -115,7 +113,7 @@ defmodule GRPC.Server.HTTP2.Connection do
   def send_data(socket, stream_id, data, end_stream, connection) do
     # Check if stream still exists (may have been closed by RST_STREAM)
     unless Map.has_key?(connection.streams, stream_id) do
-      Logger.warning(
+      Logger.debug(
         "[send_data] SKIPPED - stream=#{stream_id} no longer exists (likely cancelled by client)"
       )
 
@@ -138,7 +136,7 @@ defmodule GRPC.Server.HTTP2.Connection do
   def send_trailers(socket, stream_id, trailers, connection) do
     # Check if stream still exists (may have been closed by RST_STREAM)
     unless Map.has_key?(connection.streams, stream_id) do
-      Logger.warning(
+      Logger.debug(
         "[send_trailers] SKIPPED - stream=#{stream_id} no longer exists (likely cancelled by client)"
       )
 
@@ -327,7 +325,7 @@ defmodule GRPC.Server.HTTP2.Connection do
 
     case Map.get(connection.streams, stream_id) do
       nil ->
-        Logger.warning(
+        Logger.debug(
           "[IGNORE_DATA] stream=#{stream_id} not found, size=#{byte_size(frame.data)} (stream already closed)"
         )
 
@@ -478,7 +476,10 @@ defmodule GRPC.Server.HTTP2.Connection do
             # Check if this is bidirectional streaming
             # For bidi, we need to process messages as they arrive (not wait for END_STREAM)
             is_bidi =
-              GRPC.Server.HTTP2.Dispatcher.is_bidi_streaming?(stream_state.path, connection.servers)
+              GRPC.Server.HTTP2.Dispatcher.is_bidi_streaming?(
+                stream_state.path,
+                connection.servers
+              )
 
             stream_state = %{stream_state | is_bidi_streaming: is_bidi}
 
@@ -509,7 +510,7 @@ defmodule GRPC.Server.HTTP2.Connection do
             %{connection | recv_hpack_state: new_hpack_state}
 
           {:error, reason} ->
-            Logger.warning(
+            Logger.debug(
               "[handle_headers_frame] Failed to decode trailers for stream #{frame.stream_id}: #{inspect(reason)}"
             )
 
@@ -713,7 +714,7 @@ defmodule GRPC.Server.HTTP2.Connection do
                 | streams: Map.delete(updated_connection.streams, stream_state.stream_id)
               }
             else
-              Logger.warning(
+              Logger.debug(
                 "[process_grpc_request] Stream #{stream_state.stream_id} already removed, skipping error send"
               )
 
@@ -789,7 +790,7 @@ defmodule GRPC.Server.HTTP2.Connection do
             | streams: Map.delete(updated_connection.streams, stream_state.stream_id)
           }
         else
-          Logger.warning(
+          Logger.debug(
             "[process_grpc_request] Stream #{stream_state.stream_id} already removed in rescue, skipping error send"
           )
 
@@ -801,7 +802,7 @@ defmodule GRPC.Server.HTTP2.Connection do
   defp send_grpc_trailers(socket, stream_id, trailers, connection) do
     # Check if stream still exists (may have been closed by RST_STREAM)
     unless Map.has_key?(connection.streams, stream_id) do
-      Logger.warning(
+      Logger.debug(
         "[send_grpc_trailers] SKIPPED - stream=#{stream_id} no longer exists (likely cancelled by client)"
       )
 
@@ -811,14 +812,11 @@ defmodule GRPC.Server.HTTP2.Connection do
         "[send_grpc_trailers] Sending trailers for stream #{stream_id}: #{inspect(trailers)}"
       )
 
-      # Convert map to list of tuples for HPAX
       trailer_list = Map.to_list(trailers)
 
-      # Encode trailers using HPACK
       {trailer_block, new_hpack} =
         HPAX.encode(:no_store, trailer_list, connection.send_hpack_state)
 
-      # Send HEADERS frame with END_STREAM flag
       headers_frame = %Frame.Headers{
         stream_id: stream_id,
         fragment: trailer_block,
@@ -828,7 +826,6 @@ defmodule GRPC.Server.HTTP2.Connection do
 
       send_frame(headers_frame, socket, connection)
 
-      # Return updated connection with new HPACK state
       %{connection | send_hpack_state: new_hpack}
     end
   end
@@ -865,7 +862,6 @@ defmodule GRPC.Server.HTTP2.Connection do
         {[], connection.send_hpack_state}
       end
 
-    # Encode data frame
     data_frame = %Frame.Data{
       stream_id: stream_id,
       data: response_data,
@@ -874,7 +870,6 @@ defmodule GRPC.Server.HTTP2.Connection do
 
     data_iodata = Frame.serialize(data_frame, max_frame_size)
 
-    # Encode trailers frame
     trailer_list = Map.to_list(trailers)
     {trailer_block, final_hpack} = HPAX.encode(:no_store, trailer_list, hpack_after_headers)
 
@@ -895,13 +890,12 @@ defmodule GRPC.Server.HTTP2.Connection do
       ThousandIsland.Socket.send(socket, combined_iodata)
     end
 
-    # Return updated connection with new HPACK state
     %{connection | send_hpack_state: final_hpack}
   end
 
   defp extract_messages_from_buffer(stream_state) do
     # Extract 5-byte length-prefixed messages from data_buffer
-    Logger.info(
+    Logger.debug(
       "[Connection] Extracting messages from data_buffer (#{byte_size(stream_state.data_buffer)} bytes)"
     )
 
@@ -909,7 +903,7 @@ defmodule GRPC.Server.HTTP2.Connection do
     # Reverse since we build list backwards for performance
     extracted_count = length(messages)
 
-    Logger.info(
+    Logger.debug(
       "[Connection] Extracted #{extracted_count} messages, #{byte_size(remaining)} bytes remaining"
     )
 
@@ -963,17 +957,17 @@ defmodule GRPC.Server.HTTP2.Connection do
 
     # Se o stream não existe OU já enviamos erro, não fazer nada
     if !stream_state do
-      Logger.warning("[SEND_GRPC_ERROR] stream=#{stream_id} SKIPPED - stream not found")
+      Logger.debug("[SEND_GRPC_ERROR] stream=#{stream_id} SKIPPED - stream not found")
       connection
     else
       if stream_state.error_sent do
-        Logger.warning("[SEND_GRPC_ERROR] stream=#{stream_id} SKIPPED - error already sent")
+        Logger.debug("[SEND_GRPC_ERROR] stream=#{stream_id} SKIPPED - error already sent")
         connection
       else
         headers_sent = stream_state.headers_sent
         end_stream_received = stream_state.end_stream_received
 
-        Logger.warning(
+        Logger.debug(
           "[SEND_GRPC_ERROR] stream=#{stream_id}, status=#{status_code}, message=#{message}, headers_sent=#{headers_sent}, end_stream_received=#{end_stream_received}"
         )
 
@@ -981,19 +975,18 @@ defmodule GRPC.Server.HTTP2.Connection do
         # o stream está "closed" e NÃO podemos enviar mais frames (exceto PRIORITY)
         # Nesse caso, apenas remover o stream e não enviar nada
         if headers_sent && end_stream_received do
-          Logger.warning(
+          Logger.debug(
             "[SEND_GRPC_ERROR] stream=#{stream_id} SKIPPED - stream is fully closed (both sides sent END_STREAM)"
           )
 
           %{connection | streams: Map.delete(connection.streams, stream_id)}
         else
           # Check if headers were already sent for this stream
-
           # ALWAYS send headers first if not sent yet, even if stream received END_STREAM
           # HTTP/2 requires :status pseudo-header before trailers
           updated_connection =
             if !headers_sent do
-              Logger.warning(
+              Logger.debug(
                 "[SEND_GRPC_ERROR] Sending HTTP/2 headers first for stream=#{stream_id}"
               )
 
@@ -1011,13 +1004,13 @@ defmodule GRPC.Server.HTTP2.Connection do
                   "grpc-message" => message
                 }
 
-                Logger.warning(
+                Logger.debug(
                   "[SEND_GRPC_ERROR] Sending TRAILERS with END_STREAM for stream=#{stream_id}"
                 )
 
                 send_grpc_trailers(socket, stream_id, trailers, updated_conn)
               else
-                Logger.warning(
+                Logger.debug(
                   "[SEND_GRPC_ERROR] SKIPPED trailers - stream=#{stream_id} was closed after sending headers"
                 )
 
@@ -1030,7 +1023,7 @@ defmodule GRPC.Server.HTTP2.Connection do
                 "grpc-message" => message
               }
 
-              Logger.warning(
+              Logger.debug(
                 "[SEND_GRPC_ERROR] Sending TRAILERS with END_STREAM for stream=#{stream_id}"
               )
 
@@ -1045,7 +1038,7 @@ defmodule GRPC.Server.HTTP2.Connection do
                 if s, do: %{s | error_sent: true}, else: nil
               end)
             else
-              Logger.warning(
+              Logger.debug(
                 "[SEND_GRPC_ERROR] SKIPPED marking error_sent - stream=#{stream_id} was already closed"
               )
 

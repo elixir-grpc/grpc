@@ -365,10 +365,8 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
   """
   @impl true
   def start(endpoint, servers, port, opts) do
-    # Initialize ETS cache for codecs/compressors lookup
     GRPC.Server.Cache.init()
 
-    # Ensure Task.Supervisor is started (for direct start_link calls outside supervision tree)
     case Process.whereis(GRPC.Server.StreamTaskSupervisor) do
       nil ->
         {:ok, _} = Task.Supervisor.start_link(name: GRPC.Server.StreamTaskSupervisor)
@@ -381,7 +379,6 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
 
     case ThousandIsland.start_link(server_opts) do
       {:ok, pid} ->
-        # Get actual port (important when port=0 for random port)
         actual_port = get_actual_port(pid, port)
         {:ok, pid, actual_port}
 
@@ -414,7 +411,6 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
   def child_spec(endpoint, servers, port, opts) do
     server_opts = build_server_opts(endpoint, servers, port, opts)
 
-    # Initialize ETS cache for codecs/compressors lookup
     GRPC.Server.Cache.init()
 
     scheme = if cred_opts(opts), do: :https, else: :http
@@ -425,7 +421,6 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
 
     server_name = servers_name(endpoint, servers)
 
-    # Create children for the supervisor
     children = [
       {Task.Supervisor, name: GRPC.Server.StreamTaskSupervisor},
       %{
@@ -455,7 +450,6 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
 
   @spec read_body(GRPC.Server.Adapter.state()) :: {:ok, binary()}
   def read_body(%{data: data}) do
-    # Data is already in payload, return it directly
     {:ok, data}
   end
 
@@ -475,7 +469,6 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
   end
 
   def set_headers(%{handler_pid: pid, stream_id: stream_id}, headers) do
-    # Send message to accumulate headers in handler state
     send(pid, {:grpc_accumulate_headers, stream_id, headers})
     :ok
   end
@@ -488,12 +481,10 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
   end
 
   def get_headers(%{headers: headers}) do
-    # Return request headers from payload
     headers
   end
 
   def get_headers(%{connection: connection}) do
-    # Fallback: Return request headers from connection metadata
     connection.metadata || %{}
   end
 
@@ -508,7 +499,6 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
   end
 
   def get_cert(%{socket: socket}) do
-    # Get SSL certificate if available
     case ThousandIsland.Socket.peercert(socket) do
       {:ok, cert} -> {:ok, cert}
       {:error, _} -> {:error, :no_peercert}
@@ -558,11 +548,9 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
     :ok
   end
 
-  # Fallback for non-streaming
   def send_headers(_payload, _headers), do: :ok
 
   def send_trailers(%{handler_pid: pid, stream_id: stream_id}, trailers) do
-    # Send trailers for streaming to handler process
     send(pid, {:grpc_send_trailers, stream_id, trailers})
     :ok
   end

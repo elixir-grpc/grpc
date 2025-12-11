@@ -34,7 +34,6 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
          Keyword.get(handler_options, :opts, [])}
       end
 
-    # Convert servers list/map to standardized map format
     servers =
       cond do
         is_map(servers_list) and not is_struct(servers_list) -> servers_list
@@ -52,7 +51,6 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
       connection: nil,
       buffer: <<>>,
       preface_received: false,
-      # Map of stream_id => headers
       accumulated_headers: %{}
     }
 
@@ -82,10 +80,6 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
     {:close, state}
   end
 
-  # Streaming message handlers (GenServer callbacks)
-  # ThousandIsland passes state as {socket, user_state}
-
-  # Accumulate headers without sending
   def handle_info({:grpc_accumulate_headers, stream_id, headers}, {socket, state}) do
     current_headers = Map.get(state.accumulated_headers, stream_id, %{})
     updated_headers = Map.merge(current_headers, headers)
@@ -94,38 +88,32 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
   end
 
   def handle_info({:grpc_send_headers, stream_id, headers}, {socket, state}) do
-    # Send headers frame for streaming
     Logger.debug("[Streaming] Sending headers for stream #{stream_id}")
     Connection.send_headers(socket, stream_id, headers, state.connection)
     {:noreply, {socket, state}}
   end
 
   def handle_info({:grpc_send_data, stream_id, data}, {socket, state}) do
-    # Check if we need to send accumulated headers first
     accumulated = Map.get(state.accumulated_headers, stream_id, %{})
 
     new_state =
       if map_size(accumulated) > 0 do
         Connection.send_headers(socket, stream_id, accumulated, state.connection)
-        # Clear accumulated headers for this stream
         %{state | accumulated_headers: Map.delete(state.accumulated_headers, stream_id)}
       else
         state
       end
 
-    # Send data frame for streaming
     Connection.send_data(socket, stream_id, data, false, new_state.connection)
     {:noreply, {socket, new_state}}
   end
 
   def handle_info({:grpc_send_trailers, stream_id, trailers}, {socket, state}) do
-    # Check if we need to send accumulated headers first (for empty streams)
     accumulated = Map.get(state.accumulated_headers, stream_id, %{})
 
     new_state =
       if map_size(accumulated) > 0 do
         updated_conn = Connection.send_headers(socket, stream_id, accumulated, state.connection)
-        # Clear accumulated headers for this stream
         %{
           state
           | accumulated_headers: Map.delete(state.accumulated_headers, stream_id),
@@ -137,15 +125,15 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
 
     # Send trailers (headers with END_STREAM) for streaming
     # This will also remove the stream from the connection
-    updated_connection = Connection.send_trailers(socket, stream_id, trailers, new_state.connection)
-    
+    updated_connection =
+      Connection.send_trailers(socket, stream_id, trailers, new_state.connection)
+
     new_state = %{new_state | connection: updated_connection}
     {:noreply, {socket, new_state}}
   end
 
   def handle_info({:update_stream_state, stream_id, updated_stream_state}, {socket, state}) do
-    # Update the stream_state in the connection for bidi streaming
-    Logger.info(
+    Logger.debug(
       "[Handler] Updating stream_state for stream #{stream_id}, bidi_pid=#{inspect(updated_stream_state.bidi_stream_pid)}"
     )
 
@@ -171,7 +159,6 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
   defp handle_preface(<<@connection_preface, remaining::binary>>, socket, state) do
     # Valid preface, initialize connection  
     try do
-      # Pass handler PID for streaming support
       opts = Keyword.put(state.opts, :handler_pid, self())
       connection = Connection.init(socket, state.endpoint, state.servers, opts)
       new_state = %{state | connection: connection, preface_received: true, buffer: <<>>}
@@ -192,8 +179,7 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
   end
 
   defp handle_preface(_buffer, _socket, state) do
-    # Invalid preface
-    Logger.error("Invalid HTTP/2 preface")
+    Logger.debug("Invalid HTTP/2 preface")
     {:close, state}
   end
 
@@ -207,7 +193,6 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
     )
   end
 
-  # Optimized tail-recursive frame processing
   defp handle_frames_loop(buffer, socket, connection, max_frame_size, original_state) do
     case Frame.deserialize(buffer, max_frame_size) do
       {{:ok, frame}, rest} ->
@@ -223,11 +208,11 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
           end
         rescue
           e in Errors.ConnectionError ->
-            Logger.error("Connection error: #{e.message}")
+            Logger.debug("Connection error: #{e.message}")
             {:close, original_state}
 
           e in Errors.StreamError ->
-            Logger.error("Stream error: #{e.message}")
+            Logger.debug("Stream error: #{e.message}")
             {:continue, %{original_state | connection: connection, buffer: rest}}
         end
 
@@ -236,7 +221,7 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
         {:continue, %{original_state | connection: connection, buffer: buffer}}
 
       {{:error, error_code, reason}, _rest} ->
-        Logger.error("Frame deserialization error: #{reason} (code: #{error_code})")
+        Logger.debug("Frame deserialization error: #{reason} (code: #{error_code})")
         {:close, original_state}
 
       nil ->
@@ -244,8 +229,6 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
         {:continue, %{original_state | connection: connection, buffer: <<>>}}
     end
   end
-
-  # API functions called by the adapter
 
   def read_full_body(pid) do
     GenServer.call(pid, :read_full_body)
