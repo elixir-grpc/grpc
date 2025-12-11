@@ -26,7 +26,7 @@ server_adapters = case server_adapter_name do
   "cowboy" -> [GRPC.Server.Adapters.Cowboy]
   "thousand_island" -> [GRPC.Server.Adapters.ThousandIsland]
   "both" -> [GRPC.Server.Adapters.Cowboy, GRPC.Server.Adapters.ThousandIsland]
-  _ -> 
+  _ ->
     IO.puts("Unknown adapter: #{server_adapter_name}. Using both.")
     [GRPC.Server.Adapters.Cowboy, GRPC.Server.Adapters.ThousandIsland]
 end
@@ -82,12 +82,12 @@ for server_adapter <- server_adapters do
   Logger.info("========================================")
   Logger.info("Testing with SERVER ADAPTER: #{server_name}")
   Logger.info("========================================")
-  
+
   {:ok, _pid, test_port} = GRPC.Server.start_endpoint(Interop.Endpoint, port, adapter: server_adapter)
   Logger.info("Server started on port #{test_port}")
   # Give server time to fully initialize
   Process.sleep(100)
-  
+
   for client_adapter <- client_adapters do
     client_name = client_adapter |> Module.split() |> List.last()
     Logger.info("Starting run for client adapter: #{client_name}")
@@ -98,7 +98,7 @@ for server_adapter <- server_adapters do
     |> Task.async_stream(InteropTestRunner, :run, args, stream_opts)
     |> Enum.to_list()
   end
-  
+
   :ok = GRPC.Server.stop_endpoint(Interop.Endpoint, adapter: server_adapter)
   Logger.info("Completed tests for #{server_name}")
 end

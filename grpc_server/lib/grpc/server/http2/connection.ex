@@ -989,10 +989,10 @@ defmodule GRPC.Server.HTTP2.Connection do
         else
           # Check if headers were already sent for this stream
 
-          # If headers not sent yet AND stream hasn't received END_STREAM, send HTTP/2 headers first
-          # If stream received END_STREAM, it's half-closed remote - we can only send TRAILERS
+          # ALWAYS send headers first if not sent yet, even if stream received END_STREAM
+          # HTTP/2 requires :status pseudo-header before trailers
           updated_connection =
-            if !headers_sent && !end_stream_received do
+            if !headers_sent do
               Logger.warning(
                 "[SEND_GRPC_ERROR] Sending HTTP/2 headers first for stream=#{stream_id}"
               )
@@ -1024,13 +1024,7 @@ defmodule GRPC.Server.HTTP2.Connection do
                 connection
               end
             else
-              # If headers were sent OR stream received END_STREAM, just send trailers
-              if end_stream_received && !headers_sent do
-                Logger.warning(
-                  "[SEND_GRPC_ERROR] Stream #{stream_id} received END_STREAM, skipping HEADERS, sending only TRAILERS"
-                )
-              end
-
+              # Headers already sent, just send trailers with error
               trailers = %{
                 "grpc-status" => to_string(status_code),
                 "grpc-message" => message
