@@ -25,7 +25,7 @@ jobs:
           path: deps
           key: v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
       - name: Install Dependencies
-        run: mix deps.get 1>/dev/null
+        run: mix setup 1>/dev/null
       - name: Check format
         run: mix format --check-formatted
   tests:
