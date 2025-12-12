@@ -7,7 +7,7 @@ defmodule GRPC.Client.Application do
       {GRPC.Client.Supervisor, [name: GRPC.Client.Supervisor]}
     ]
 
-    opts = [strategy: :one_for_one, name: Grpc.Supervisor]
+    opts = [strategy: :one_for_one, name: GRPC.Supervisor]
     Supervisor.start_link(children, opts)
   end
 end
