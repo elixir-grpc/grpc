@@ -51,7 +51,8 @@ defmodule GRPC.RPCError do
   See `GRPC.Status` for more details on possible statuses.
   """
 
-  defexception [:status, :message, :details]
+  @enforce_keys [:status]
+  defexception [:message, :details, status: :unknown]
 
   defguard is_rpc_error(e, status) when is_struct(e, __MODULE__) and e.status == status
 
@@ -70,7 +71,7 @@ defmodule GRPC.RPCError do
 
   @spec exception(args :: list()) :: t()
   def exception(args) when is_list(args) do
-    error = parse_args(args, %__MODULE__{})
+    error = parse_args(args, %__MODULE__{status: :unknown})
 
     %{
       error

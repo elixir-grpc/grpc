@@ -260,7 +260,7 @@ defmodule GRPC.StreamTest do
                   __exception__: true,
                   details: nil,
                   message: ":mapped_error",
-                  status: nil
+                  status: :unknown
                 }}
              ]
     end
@@ -287,7 +287,7 @@ defmodule GRPC.StreamTest do
                  1,
                  {:error,
                   %GRPC.RPCError{
-                    status: nil,
+                    status: :unknown,
                     message: "{:exception, %RuntimeError{message: \"boom\"}}",
                     details: nil
                   }}
