@@ -70,6 +70,11 @@ defmodule GRPC.Server.Stream do
     do_send_reply(stream, [], opts)
   end
 
+  def send_reply(%{adapter: adapter} = stream, {:error, %GRPC.RPCError{} = error}, _opts) do
+    adapter.send_error(stream.payload, error)
+    stream
+  end
+
   def send_reply(
         %{grpc_type: :server_stream, codec: codec, access_mode: :http_transcoding, rpc: rpc} =
           stream,

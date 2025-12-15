@@ -17,6 +17,10 @@ defmodule GRPC.Test.ServerAdapter do
     {stream, data}
   end
 
+  def send_error(stream, _data) do
+    stream
+  end
+
   def send_headers(stream, _headers) do
     stream
   end

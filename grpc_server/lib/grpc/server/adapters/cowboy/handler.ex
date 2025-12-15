@@ -222,6 +222,13 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   @doc """
+  Asynchronously send an error to the client.
+  """
+  def send_error(pid, error) do
+    send(pid, {:send_error, error})
+  end
+
+  @doc """
   Asynchronously send back to client a chunk of `data`, when `http_transcode?` is true, the
   data is sent back as it's, with no transformation of protobuf binaries to http2 data frames.
   """
@@ -485,6 +492,16 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     {:ok, req, state}
   end
 
+  def info({:send_error, error}, req, state) do
+    req = send_error(req, error, state, :rpc_error)
+
+    [req: req]
+    |> ReportException.new(error)
+    |> maybe_log_error(state.exception_log_filter)
+
+    {:stop, req, state}
+  end
+
   def info({:handling_timeout, _}, req, state) do
     error = %RPCError{status: GRPC.Status.deadline_exceeded(), message: "Deadline expired"}
     req = send_error(req, error, state, :timeout)
@@ -525,13 +542,13 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
   # unknown error raised from rpc
   def info({:EXIT, pid, {:handle_error, error}}, req, state = %{pid: pid}) do
-    %{kind: kind, reason: reason, stack: stack} = error
+    %{kind: kind, reason: reason, stack: stacktrace} = error
     rpc_error = %RPCError{status: GRPC.Status.unknown(), message: "Internal Server Error"}
     req = send_error(req, rpc_error, state, :error)
 
     [req: req]
-    |> ReportException.new(reason, stack, kind)
-    |> maybe_log_error(state.exception_log_filter, stack)
+    |> ReportException.new(reason, stacktrace, kind)
+    |> maybe_log_error(state.exception_log_filter, stacktrace)
 
     {:stop, req, state}
   end
@@ -631,6 +648,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
   defp send_error_trailers(%{has_sent_resp: _} = req, _, trailers) do
     :cowboy_req.stream_trailers(trailers, req)
+    req
   end
 
   defp send_error_trailers(req, status, trailers) do

@@ -168,6 +168,11 @@ defmodule GRPC.Server.Adapters.Cowboy do
     Handler.set_resp_trailers(pid, trailers)
   end
 
+  @impl true
+  def send_error(%{pid: pid}, error) do
+    Handler.send_error(pid, error)
+  end
+
   def send_trailers(%{pid: pid}, trailers) do
     Handler.stream_trailers(pid, trailers)
   end

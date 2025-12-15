@@ -268,7 +268,7 @@ defmodule GRPC.Integration.ServerTest do
         end)
       end)
 
-    assert logs =~ "Exception raised while handling /helloworld.Greeter/SayHello"
+    assert logs =~ "(GRPC.RPCError) Please authenticate"
   end
 
   test "return errors for unknown errors" do
@@ -284,7 +284,7 @@ defmodule GRPC.Integration.ServerTest do
         end)
       end)
 
-    assert logs =~ "Exception raised while handling /helloworld.Greeter/SayHello"
+    assert logs =~ "unknown error(This is a test, please ignore it)"
   end
 
   test "logs error if exception_log_filter returns true" do
@@ -329,7 +329,6 @@ defmodule GRPC.Integration.ServerTest do
 
       {pid, ref} = :erlang.binary_to_term(data)
       send(pid, {:exception_log_filter, ref, exception})
-
       true
     end
   end
@@ -396,6 +395,7 @@ defmodule GRPC.Integration.ServerTest do
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
       rect = %Routeguide.Rectangle{}
       error = %GRPC.RPCError{message: "Please authenticate", status: 16}
+
       assert {:error, ^error} = channel |> Routeguide.RouteGuide.Stub.list_features(rect)
     end)
   end

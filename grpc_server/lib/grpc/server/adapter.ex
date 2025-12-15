@@ -24,4 +24,6 @@ defmodule GRPC.Server.Adapter do
   @callback send_reply(state, content :: binary(), opts :: keyword()) :: any()
 
   @callback send_headers(state, headers :: map()) :: any()
+
+  @callback send_error(state, headers :: map()) :: any()
 end
