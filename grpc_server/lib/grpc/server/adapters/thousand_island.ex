@@ -608,7 +608,7 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
   defp maybe_add_ssl(transport_opts, nil), do: transport_opts
 
   defp maybe_add_ssl(transport_opts, cred_opts) do
-    transport_opts ++ cred_opts.ssl
+    Keyword.merge(transport_opts, cred_opts.ssl)
   end
 
   defp transport_module(opts) do
