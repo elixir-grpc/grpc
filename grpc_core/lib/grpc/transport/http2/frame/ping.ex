@@ -19,12 +19,8 @@ defmodule GRPC.Transport.HTTP2.Frame.Ping do
           iodata()
         ) ::
           {:ok, t()} | {:error, GRPC.Transport.HTTP2.Errors.error_code(), binary()}
-  def deserialize(flags, 0, <<payload::binary-size(8)>>) when set?(flags, @ack_bit) do
-    {:ok, %__MODULE__{ack: true, payload: payload}}
-  end
-
-  def deserialize(flags, 0, <<payload::binary-size(8)>>) when not set?(flags, @ack_bit) do
-    {:ok, %__MODULE__{ack: false, payload: payload}}
+  def deserialize(flags, 0, <<payload::binary-size(8)>>) do
+    {:ok, %__MODULE__{ack: set?(flags, @ack_bit), payload: payload}}
   end
 
   def deserialize(_flags, stream_id, _payload) when stream_id != 0 do

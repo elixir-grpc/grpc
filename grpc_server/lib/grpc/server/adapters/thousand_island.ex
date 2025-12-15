@@ -10,7 +10,6 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
 
   ## Advantages over Cowboy
 
-  - **Pure Elixir**: No Erlang dependencies, better integration
   - **Built-in pooling**: Native connection pool management
   - **Lower overhead**: Simpler architecture, fewer layers
   - **Modern design**: Built with current Elixir best practices
@@ -62,18 +61,19 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
 
   ### Process Hierarchy
 
-  ```
-  ThousandIsland Supervisor
-  └── Handler Process (one per connection)
-      ├── Connection State (HTTP2.Connection)
-      │   └── Stream States (HTTP2.StreamState per stream_id)
-      └── User Handler Tasks (spawned per RPC)
-          └── BidiStream GenServer (only for bidi streaming)
+  ```mermaid
+  graph TD
+    A[ThousandIsland Supervisor] --> B[Handler Process]
+    B --> C[Connection State<br/>HTTP2.Connection]
+    C --> D[Stream States<br/>HTTP2.StreamState per stream_id]
+    B --> E[User Handler Tasks<br/>spawned per RPC]
+    E --> F[BidiStream GenServer<br/>only for bidi streaming]
   ```
 
   ### 1. Unary RPC (request -> response)
 
   #### Request Path
+
   1. **Client sends HTTP/2 frames** → TCP socket
   2. **Handler.handle_data/3** receives raw bytes
      - Buffers until complete frames available
@@ -90,6 +90,7 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
      - Handler runs **synchronously** in Handler process
 
   #### Response Path
+
   1. **Handler returns response** (or calls `GRPC.Server.send_reply/2`)
   2. **Dispatcher** sends response headers + data + trailers
      - Headers: `{":status" => "200", "content-type" => "application/grpc+proto"}`
@@ -108,6 +109,7 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
   ### 2. Client Streaming RPC (stream of requests -> response)
 
   #### Request Path
+
   1. **Client sends multiple DATA frames** (END_STREAM on last)
   2. **Handler.handle_data/3** → **Connection.handle_frame/3**
      - Each DATA frame appends to StreamState.data_buffer
@@ -120,6 +122,7 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
      - Handler **synchronously** consumes stream
 
   #### Response Path
+
   Same as Unary (single response at end)
 
   **Process Model**: Single Handler process, synchronous handler execution
@@ -127,9 +130,11 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
   ### 3. Server Streaming RPC (request -> stream of responses)
 
   #### Request Path
+
   Same as Unary (single request)
 
   #### Response Path
+
   1. **Handler calls `GRPC.Server.send_reply/2` multiple times**
   2. **This adapter's `send_reply/3`** sends async message:
      - `send(handler_pid, {:grpc_send_data, stream_id, framed_data})`
@@ -141,6 +146,7 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
      - Handler sends final HEADERS frame with END_STREAM
 
   **Process Model**: 
+
   - Handler spawns **Task** to run user handler asynchronously
   - Handler process receives messages from Task and sends frames
   - Task communicates via messages to Handler process
@@ -151,22 +157,25 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
 
   #### Process Model
 
-  ```
-  Handler Process (#PID<0.545.0>)
-  ├── State: %{accumulated_headers: %{stream_id => headers}, ...}
-  ├── Receives: HTTP/2 frames from client
-  ├── Receives: {:grpc_send_data, ...} from User Task
-  └── Sends: HTTP/2 frames to client
-
-  User Handler Task (#PID<0.XXX.0>)
-  ├── Runs: MyServer.full_duplex_call(request_enum, stream)
-  ├── Consumes: request_enum (lazy, pulls from BidiStream)
-  └── Sends: {:grpc_send_data, ...} messages to Handler
-
-  BidiStream GenServer (#PID<0.YYY.0>)
-  ├── Queue: Buffered incoming requests
-  ├── Receives: {:add_message, msg} from Handler (when DATA arrives)
-  └── Provides: Lazy enumerable to User Task
+  ```mermaid
+  graph LR
+    subgraph HP["Handler Process (#PID<0.545.0>)"]
+      HS["State: accumulated_headers<br/>stream_id => headers"]
+    end
+    
+    subgraph UT["User Handler Task (#PID<0.XXX.0>)"]
+      UTR["Runs: MyServer.full_duplex_call<br/>request_enum, stream"]
+    end
+    
+    subgraph BS["BidiStream GenServer (#PID<0.YYY.0>)"]
+      BSQ["Queue: Buffered incoming requests"]
+    end
+    
+    Client -->|HTTP/2 frames| HP
+    HP -->|HTTP/2 frames| Client
+    UT -->|:grpc_send_data| HP
+    HP -->|:add_message| BS
+    BS -->|request_enum<br/>lazy pull| UT
   ```
 
   #### Request Path (Incoming)
@@ -281,43 +290,46 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
 
   ## Message Flow Diagram (Bidi Streaming)
 
-  ```
-  Client                Handler Process              User Task              BidiStream
-    │                         │                          │                       │
-    ├─── HEADERS ────────────>│                          │                       │
-    │                         ├─ create StreamState      │                       │
-    │                         ├─ start BidiStream ───────┼──────────────────────>│
-    │                         ├─ accumulate headers      │                       │
-    │                         ├─ spawn Task ────────────>│                       │
-    │                         │                          ├─ request_enum         │
-    │                         │                          │  (lazy, blocks)       │
-    ├─── DATA(req1) ─────────>│                          │                       │
-    │                         ├─ decode message          │                       │
-    │                         ├─ add_message ────────────┼──────────────────────>│
-    │                         │                          │<──── pull next ───────┤
-    │                         │                          │       (req1)          │
-    │                         │                          ├─ process req1         │
-    │                         │                          ├─ send_reply(resp1)    │
-    │                         │<── :grpc_send_data ──────┤                       │
-    │                         ├─ send headers (1st!)     │                       │
-    │<─── HEADERS ────────────┤                          │                       │
-    │<─── DATA(resp1) ────────┤                          │                       │
-    ├─── DATA(req2) ─────────>│                          │                       │
-    │                         ├─ add_message ────────────┼──────────────────────>│
-    │                         │                          │<──── pull next ───────┤
-    │                         │                          │       (req2)          │
-    │                         │                          ├─ process req2         │
-    │                         │                          ├─ send_reply(resp2)    │
-    │                         │<── :grpc_send_data ──────┤                       │
-    │<─── DATA(resp2) ────────┤                          │                       │
-    ├─── DATA (END_STREAM) ──>│                          │                       │
-    │                         ├─ finish stream ──────────┼──────────────────────>│
-    │                         │                          │<──── nil (done) ──────┤
-    │                         │                          ├─ handler finishes     │
-    │                         │                          ├─ send_trailers        │
-    │                         │<── :grpc_send_trailers ──┤                       │
-    │<─── HEADERS(trailers) ──┤                          │                       │
-    │    (END_STREAM)         │                          x                       x
+  ```mermaid
+  sequenceDiagram
+    participant Client
+    participant Handler as Handler Process
+    participant Task as User Task
+    participant Bidi as BidiStream
+    
+    Client->>Handler: HEADERS
+    Handler->>Handler: create StreamState
+    Handler->>Bidi: start BidiStream
+    Handler->>Handler: accumulate headers
+    Handler->>Task: spawn Task
+    Task->>Task: request_enum (lazy, blocks)
+    
+    Client->>Handler: DATA(req1)
+    Handler->>Handler: decode message
+    Handler->>Bidi: add_message
+    Bidi->>Task: pull next (req1)
+    Task->>Task: process req1
+    Task->>Task: send_reply(resp1)
+    Task->>Handler: :grpc_send_data
+    Handler->>Handler: send headers (1st!)
+    Handler->>Client: HEADERS
+    Handler->>Client: DATA(resp1)
+    
+    Client->>Handler: DATA(req2)
+    Handler->>Bidi: add_message
+    Bidi->>Task: pull next (req2)
+    Task->>Task: process req2
+    Task->>Task: send_reply(resp2)
+    Task->>Handler: :grpc_send_data
+    Handler->>Client: DATA(resp2)
+    
+    Client->>Handler: DATA (END_STREAM)
+    Handler->>Bidi: finish stream
+    Bidi->>Task: nil (done)
+    Task->>Task: handler finishes
+    Task->>Task: send_trailers
+    Task->>Handler: :grpc_send_trailers
+    Handler->>Client: HEADERS(trailers)<br/>END_STREAM
   ```
 
   ## Key Design Patterns

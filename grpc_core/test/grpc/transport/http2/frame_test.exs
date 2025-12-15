@@ -195,16 +195,16 @@ defmodule GRPC.Transport.HTTP2.FrameTest do
       refute Frame.Flags.set?(flags, 3)
     end
 
-    test "clear?/2 guard works correctly" do
+    test "not set?/2 works correctly with guard" do
       require Frame.Flags
 
       # bits 0 and 2 set
       flags = 0b00000101
 
-      refute Frame.Flags.clear?(flags, 0)
-      assert Frame.Flags.clear?(flags, 1)
-      refute Frame.Flags.clear?(flags, 2)
-      assert Frame.Flags.clear?(flags, 3)
+      refute not Frame.Flags.set?(flags, 0)
+      assert not Frame.Flags.set?(flags, 1)
+      refute not Frame.Flags.set?(flags, 2)
+      assert not Frame.Flags.set?(flags, 3)
     end
   end
 
