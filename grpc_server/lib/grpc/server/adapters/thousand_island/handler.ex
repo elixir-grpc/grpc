@@ -114,6 +114,7 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
     new_state =
       if map_size(accumulated) > 0 do
         updated_conn = Connection.send_headers(socket, stream_id, accumulated, state.connection)
+
         %{
           state
           | accumulated_headers: Map.delete(state.accumulated_headers, stream_id),

@@ -271,7 +271,10 @@ defmodule GRPC.Server.HTTP2.Dispatcher do
         Logger.info("[call_unary] Response received, sending via send_reply")
 
         # Send response using async message (this will send accumulated headers first)
-        GRPC.Server.send_reply(stream, response)
+        # :noreply means GRPC.Stream.run() already sent the response
+        if response != :noreply do
+          GRPC.Server.send_reply(stream, response)
+        end
 
         # Get custom trailers from process dictionary (set by handler via set_trailers)
         stream_id = stream.payload.stream_id
@@ -521,21 +524,29 @@ defmodule GRPC.Server.HTTP2.Dispatcher do
     end
   end
 
-  defp call_bidi_streaming(server, func_name, requests, stream, _connection) do
+  defp call_bidi_streaming(server, rpc, func_name, stream_state, stream, _connection) do
     # Check if function is implemented
     if function_exported?(server, func_name, 2) do
-      stream_id = stream.payload.stream_state.stream_id
+      stream_id = stream_state.stream_id
+      message_buffer = stream_state.message_buffer
 
       Logger.info(
-        "[call_bidi_streaming] Starting bidi stream #{stream_id} with #{length(requests)} initial requests"
+        "[call_bidi_streaming] Starting bidi stream #{stream_id} with #{length(message_buffer)} initial requests"
       )
 
       try do
         # Mark as streaming mode so send_headers will send immediately
         Process.put(:grpc_streaming_mode, true)
 
-        # Start BidiStream Task with initial messages
-        {:ok, bidi_pid} = GRPC.Server.BidiStream.start_link(stream_id, requests)
+        # Convert initial messages to {flag, data} format
+        initial_messages =
+          Enum.map(message_buffer, fn %{compressed: compressed?, data: data} ->
+            flag = if compressed?, do: 1, else: 0
+            {flag, data}
+          end)
+
+        # Start BidiStream Task with initial messages in {flag, data} format
+        {:ok, bidi_pid} = GRPC.Server.BidiStream.start_link(stream_id, initial_messages)
 
         Logger.info(
           "[call_bidi_streaming] BidiStream task started for stream #{stream_id}, pid=#{inspect(bidi_pid)}"
@@ -570,9 +581,6 @@ defmodule GRPC.Server.HTTP2.Dispatcher do
         Process.put({:bidi_stream_pid, stream_id}, bidi_pid)
         Process.put({:bidi_stream_state, stream_id}, updated_stream_state)
 
-        # Create lazy enumerable from BidiStream
-        request_enum = GRPC.Server.BidiStream.to_enum(bidi_pid)
-
         # Accumulate base headers (don't send yet - handler may add custom headers)
         base_headers = %{
           ":status" => "200",
@@ -590,23 +598,39 @@ defmodule GRPC.Server.HTTP2.Dispatcher do
         # Accumulate base headers without sending
         GRPC.Server.set_headers(stream, base_headers)
 
+        # Update the stream's payload to include bidi_stream_pid so adapter.reading_stream() can access it
+        updated_stream = %{
+          stream
+          | payload: %{stream.payload | stream_state: updated_stream_state}
+        }
+
         # CRITICAL: Run handler in a separate task to not block the connection handler
         # The connection handler MUST continue processing incoming DATA frames
         # and feed them to the BidiStream while the handler is consuming messages
         Task.start(fn ->
           try do
-            # Handler receives lazy request stream and sends responses via stream
-            result = apply(server, func_name, [request_enum, stream])
+            # Use GRPC.Server.call to properly handle the request
+            # This ensures the reading_stream is created correctly via adapter.reading_stream
+            result = GRPC.Server.call(server, updated_stream, rpc, func_name)
             Logger.info("[call_bidi_streaming] Handler returned: #{inspect(result)}")
 
-            # Get custom trailers from process dictionary (set by handler via set_trailers)
-            custom_trailers = Process.get({:grpc_custom_trailers, stream_id}, %{})
+            case result do
+              {:ok, stream} ->
+                # Get custom trailers from process dictionary
+                custom_trailers = Process.get({:grpc_custom_trailers, stream_id}, %{})
+                trailers = Map.merge(%{"grpc-status" => "0"}, custom_trailers)
+                GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, trailers)
 
-            # Merge with mandatory grpc-status
-            trailers = Map.merge(%{"grpc-status" => "0"}, custom_trailers)
+              {:error, error} ->
+                Logger.error("[call_bidi_streaming] Handler error result: #{inspect(error)}")
 
-            # Send trailers at the end with END_STREAM
-            GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, trailers)
+                trailers = %{
+                  "grpc-status" => "#{error.status || 2}",
+                  "grpc-message" => error.message || "Handler error"
+                }
+
+                GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, trailers)
+            end
           rescue
             e in GRPC.RPCError ->
               Logger.error("[call_bidi_streaming] Handler RPC Error: #{inspect(e)}")
@@ -780,6 +804,9 @@ defmodule GRPC.Server.HTTP2.Dispatcher do
     {_name, {req_mod, req_stream?}, {res_mod, res_stream?}, _opts} = rpc
     func_name = Macro.underscore(method_name) |> String.to_atom()
 
+    # Determine gRPC type based on streaming flags
+    grpc_type = GRPC.Service.grpc_type(rpc)
+
     # Create a payload struct with metadata and handler info for streaming
     payload = %{
       headers: stream_state.metadata,
@@ -791,6 +818,7 @@ defmodule GRPC.Server.HTTP2.Dispatcher do
     grpc_stream = %GRPC.Server.Stream{
       server: server,
       endpoint: endpoint,
+      grpc_type: grpc_type,
       request_mod: req_mod,
       response_mod: res_mod,
       rpc: rpc,
@@ -813,7 +841,7 @@ defmodule GRPC.Server.HTTP2.Dispatcher do
         call_server_streaming(server, func_name, request, grpc_stream)
 
       {true, true} ->
-        call_bidi_streaming(server, func_name, requests, grpc_stream, connection)
+        call_bidi_streaming(server, rpc, func_name, stream_state, grpc_stream, connection)
     end
   end
 end

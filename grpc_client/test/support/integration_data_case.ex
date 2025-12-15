@@ -22,15 +22,17 @@ defmodule GRPC.Integration.TestCase do
     try do
       func.(port)
     after
-      :ok = GRPC.Server.stop(servers)
+      # GRPC.Server.stop only accepts :adapter option
+      stop_opts = Keyword.take(opts, [:adapter])
+      :ok = GRPC.Server.stop(servers, stop_opts)
     end
   end
 
-  def run_endpoint(endpoint, func, port \\ 0) do
+  def run_endpoint(endpoint, func, port \\ 0, opts \\ []) do
     {:ok, _pid, port} =
       start_supervised(%{
         id: {GRPC.Server, System.unique_integer([:positive])},
-        start: {GRPC.Server, :start_endpoint, [endpoint, port]},
+        start: {GRPC.Server, :start_endpoint, [endpoint, port, opts]},
         type: :worker,
         restart: :permanent,
         shutdown: 500
@@ -39,7 +41,9 @@ defmodule GRPC.Integration.TestCase do
     try do
       func.(port)
     after
-      :ok = GRPC.Server.stop_endpoint(endpoint, [])
+      # GRPC.Server.stop_endpoint only accepts :adapter option
+      stop_opts = Keyword.take(opts, [:adapter])
+      :ok = GRPC.Server.stop_endpoint(endpoint, stop_opts)
     end
   end
 

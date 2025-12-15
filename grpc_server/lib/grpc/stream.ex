@@ -542,7 +542,11 @@ defmodule GRPC.Stream do
     dry_run? = Keyword.get(opts, :dry_run, false)
 
     if not dry_run? do
-      GRPC.Server.send_reply(from, msg)
+      # RPCError should be raised, not sent as reply
+      case msg do
+        %GRPC.RPCError{} -> raise msg
+        _ -> GRPC.Server.send_reply(from, msg)
+      end
     end
   end
 end

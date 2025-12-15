@@ -454,6 +454,11 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
   end
 
   @spec reading_stream(GRPC.Server.Adapter.state()) :: Enumerable.t()
+  def reading_stream(%{stream_state: %{bidi_stream_pid: bidi_pid}}) when not is_nil(bidi_pid) do
+    # For bidi streaming, return the lazy stream from BidiStream
+    GRPC.Server.BidiStream.to_enum(bidi_pid)
+  end
+
   def reading_stream(%{data: data}) do
     # Create a stream that yields the data once
     Stream.unfold({data, false}, fn
