@@ -15,7 +15,7 @@ defmodule GRPC.Message do
 
   @max_message_length Bitwise.bsl(1, 32 - 1)
 
-  # Inline hot path functions
+  # Inline hot path functions, this reduces between 07-10% of overhead in benchmarks
   @compile {:inline, to_data: 2, from_data: 1}
 
   @doc """
