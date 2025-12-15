@@ -620,7 +620,7 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
   end
 
   defp cred_opts(opts) do
-    Kernel.get_in(opts, [:cred])
+    opts[:cred]
   end
 
   defp servers_name(nil, servers) do
