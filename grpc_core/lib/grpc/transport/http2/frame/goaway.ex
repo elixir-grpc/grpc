@@ -33,7 +33,7 @@ defmodule GRPC.Transport.HTTP2.Frame.Goaway do
   defimpl GRPC.Transport.HTTP2.Frame.Serializable do
     def serialize(%GRPC.Transport.HTTP2.Frame.Goaway{} = frame, _max_frame_size) do
       payload = <<0::1, frame.last_stream_id::31, frame.error_code::32, frame.debug_data::binary>>
-      [{0x7, 0x0, 0, payload}]
+      [{7, 0, 0, payload}]
     end
   end
 end

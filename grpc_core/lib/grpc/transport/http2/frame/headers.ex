@@ -52,7 +52,7 @@ defmodule GRPC.Transport.HTTP2.Frame.Headers do
        stream_id: stream_id,
        end_stream: set?(flags, @end_stream_bit),
        end_headers: set?(flags, @end_headers_bit),
-       exclusive_dependency: exclusive_dependency == 0x01,
+       exclusive_dependency: exclusive_dependency == 1,
        stream_dependency: stream_dependency,
        weight: weight,
        fragment: binary_part(rest, 0, byte_size(rest) - padding_length)
@@ -61,7 +61,7 @@ defmodule GRPC.Transport.HTTP2.Frame.Headers do
 
   # Padding but not priority
   def deserialize(flags, stream_id, <<padding_length::8, rest::binary>>)
-      when set?(flags, @padding_bit) and clear?(flags, @priority_bit) and
+      when set?(flags, @padding_bit) and not set?(flags, @priority_bit) and
              byte_size(rest) >= padding_length do
     {:ok,
      %__MODULE__{
@@ -90,7 +90,7 @@ defmodule GRPC.Transport.HTTP2.Frame.Headers do
        stream_id: stream_id,
        end_stream: set?(flags, @end_stream_bit),
        end_headers: set?(flags, @end_headers_bit),
-       exclusive_dependency: exclusive_dependency == 0x01,
+       exclusive_dependency: exclusive_dependency == 1,
        stream_dependency: stream_dependency,
        weight: weight,
        fragment: fragment
@@ -98,7 +98,7 @@ defmodule GRPC.Transport.HTTP2.Frame.Headers do
   end
 
   def deserialize(flags, stream_id, <<fragment::binary>>)
-      when clear?(flags, @priority_bit) and clear?(flags, @padding_bit) do
+      when not set?(flags, @priority_bit) and not set?(flags, @padding_bit) do
     {:ok,
      %__MODULE__{
        stream_id: stream_id,
@@ -126,13 +126,13 @@ defmodule GRPC.Transport.HTTP2.Frame.Headers do
       fragment_length = IO.iodata_length(frame.fragment)
 
       if fragment_length <= max_frame_size do
-        [{0x1, set([@end_headers_bit | flags]), frame.stream_id, frame.fragment}]
+        [{1, set([@end_headers_bit | flags]), frame.stream_id, frame.fragment}]
       else
         <<this_frame::binary-size(max_frame_size), rest::binary>> =
           IO.iodata_to_binary(frame.fragment)
 
         [
-          {0x1, set(flags), frame.stream_id, this_frame}
+          {1, set(flags), frame.stream_id, this_frame}
           | GRPC.Transport.HTTP2.Frame.Serializable.serialize(
               %GRPC.Transport.HTTP2.Frame.Continuation{
                 stream_id: frame.stream_id,

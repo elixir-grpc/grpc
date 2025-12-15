@@ -55,31 +55,30 @@ defmodule GRPC.Message do
 
     length = IO.iodata_length(compressed_message)
 
-    case length > max_length do
-      true ->
-        {:error, "Encoded message is too large (#{length} bytes)"}
+    if length <= max_length do
+      result = [compress_flag, <<length::size(4)-unit(8)>>, compressed_message]
 
-      false ->
-        result = [compress_flag, <<length::size(4)-unit(8)>>, compressed_message]
+      result =
+        if opts[:codec] != nil and is_atom(opts[:codec]) do
+          codec = opts[:codec]
 
-        result =
-          case opts[:codec] do
-            nil ->
-              result
+          if function_exported?(codec, :pack_for_channel, 1),
+            do: codec.pack_for_channel(result),
+            else: result
+        else
+          result
+        end
 
-            codec when is_atom(codec) ->
-              if function_exported?(codec, :pack_for_channel, 1),
-                do: codec.pack_for_channel(result),
-                else: result
-          end
+      result =
+        if opts[:iolist] == true do
+          result
+        else
+          IO.iodata_to_binary(result)
+        end
 
-        result =
-          case opts[:iolist] do
-            true -> result
-            _ -> IO.iodata_to_binary(result)
-          end
-
-        {:ok, result, length + 5}
+      {:ok, result, length + 5}
+    else
+      {:error, "Encoded message is too large (#{length} bytes)"}
     end
   end
 

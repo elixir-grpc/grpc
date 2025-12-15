@@ -31,7 +31,7 @@ defmodule GRPC.Transport.HTTP2.Frame.WindowUpdate do
 
   defimpl GRPC.Transport.HTTP2.Frame.Serializable do
     def serialize(%GRPC.Transport.HTTP2.Frame.WindowUpdate{} = frame, _max_frame_size) do
-      [{0x8, 0x0, frame.stream_id, <<0::1, frame.size_increment::31>>}]
+      [{8, 0, frame.stream_id, <<0::1, frame.size_increment::31>>}]
     end
   end
 end

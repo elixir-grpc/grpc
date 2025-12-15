@@ -32,21 +32,7 @@ defmodule GRPC.Transport.HTTP2.Frame do
         max_frame_size
       )
       when length <= max_frame_size do
-    type
-    |> case do
-      0x0 -> GRPC.Transport.HTTP2.Frame.Data.deserialize(flags, stream_id, payload)
-      0x1 -> GRPC.Transport.HTTP2.Frame.Headers.deserialize(flags, stream_id, payload)
-      0x2 -> GRPC.Transport.HTTP2.Frame.Priority.deserialize(flags, stream_id, payload)
-      0x3 -> GRPC.Transport.HTTP2.Frame.RstStream.deserialize(flags, stream_id, payload)
-      0x4 -> GRPC.Transport.HTTP2.Frame.Settings.deserialize(flags, stream_id, payload)
-      0x5 -> GRPC.Transport.HTTP2.Frame.PushPromise.deserialize(flags, stream_id, payload)
-      0x6 -> GRPC.Transport.HTTP2.Frame.Ping.deserialize(flags, stream_id, payload)
-      0x7 -> GRPC.Transport.HTTP2.Frame.Goaway.deserialize(flags, stream_id, payload)
-      0x8 -> GRPC.Transport.HTTP2.Frame.WindowUpdate.deserialize(flags, stream_id, payload)
-      0x9 -> GRPC.Transport.HTTP2.Frame.Continuation.deserialize(flags, stream_id, payload)
-      _unknown -> GRPC.Transport.HTTP2.Frame.Unknown.deserialize(type, flags, stream_id, payload)
-    end
-    |> case do
+    case deserialize_frame_by_type(type, flags, stream_id, payload) do
       {:ok, frame} -> {{:ok, frame}, rest}
       {:error, error_code, reason} -> {{:error, error_code, reason}, rest}
     end
@@ -70,17 +56,20 @@ defmodule GRPC.Transport.HTTP2.Frame do
     {{:more, msg}, <<>>}
   end
 
-  defmodule Flags do
-    @moduledoc false
-
-    import Bitwise
-
-    defguard set?(flags, bit) when band(flags, bsl(1, bit)) != 0
-    defguard clear?(flags, bit) when band(flags, bsl(1, bit)) == 0
-
-    @spec set([0..255]) :: 0..255
-    def set([]), do: 0x0
-    def set([bit | rest]), do: bor(bsl(1, bit), set(rest))
+  defp deserialize_frame_by_type(type, flags, stream_id, payload) do
+    case type do
+      0 -> GRPC.Transport.HTTP2.Frame.Data.deserialize(flags, stream_id, payload)
+      1 -> GRPC.Transport.HTTP2.Frame.Headers.deserialize(flags, stream_id, payload)
+      2 -> GRPC.Transport.HTTP2.Frame.Priority.deserialize(flags, stream_id, payload)
+      3 -> GRPC.Transport.HTTP2.Frame.RstStream.deserialize(flags, stream_id, payload)
+      4 -> GRPC.Transport.HTTP2.Frame.Settings.deserialize(flags, stream_id, payload)
+      5 -> GRPC.Transport.HTTP2.Frame.PushPromise.deserialize(flags, stream_id, payload)
+      6 -> GRPC.Transport.HTTP2.Frame.Ping.deserialize(flags, stream_id, payload)
+      7 -> GRPC.Transport.HTTP2.Frame.Goaway.deserialize(flags, stream_id, payload)
+      8 -> GRPC.Transport.HTTP2.Frame.WindowUpdate.deserialize(flags, stream_id, payload)
+      9 -> GRPC.Transport.HTTP2.Frame.Continuation.deserialize(flags, stream_id, payload)
+      _unknown -> GRPC.Transport.HTTP2.Frame.Unknown.deserialize(type, flags, stream_id, payload)
+    end
   end
 
   defprotocol Serializable do

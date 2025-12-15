@@ -46,7 +46,7 @@ defmodule GRPC.Transport.HTTP2.Frame.PushPromise do
   end
 
   def deserialize(flags, stream_id, <<_reserved::1, promised_stream_id::31, fragment::binary>>)
-      when clear?(flags, @padding_bit) do
+      when not set?(flags, @padding_bit) do
     {:ok,
      %__MODULE__{
        stream_id: stream_id,
@@ -67,7 +67,7 @@ defmodule GRPC.Transport.HTTP2.Frame.PushPromise do
 
     def serialize(%GRPC.Transport.HTTP2.Frame.PushPromise{} = frame, _max_frame_size) do
       payload = <<0::1, frame.promised_stream_id::31, frame.fragment::binary>>
-      [{0x5, set([@end_headers_bit]), frame.stream_id, payload}]
+      [{5, set([@end_headers_bit]), frame.stream_id, payload}]
     end
   end
 end

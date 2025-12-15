@@ -33,7 +33,7 @@ defmodule GRPC.Transport.HTTP2.Frame.Priority do
     {:ok,
      %__MODULE__{
        stream_id: stream_id,
-       exclusive_dependency: exclusive_dependency == 0x01,
+       exclusive_dependency: exclusive_dependency == 1,
        stream_dependency: stream_dependency,
        weight: weight
      }}

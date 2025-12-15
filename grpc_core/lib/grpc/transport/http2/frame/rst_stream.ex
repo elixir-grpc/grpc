@@ -31,7 +31,7 @@ defmodule GRPC.Transport.HTTP2.Frame.RstStream do
 
   defimpl GRPC.Transport.HTTP2.Frame.Serializable do
     def serialize(%GRPC.Transport.HTTP2.Frame.RstStream{} = frame, _max_frame_size) do
-      [{0x3, 0x0, frame.stream_id, <<frame.error_code::32>>}]
+      [{3, 0, frame.stream_id, <<frame.error_code::32>>}]
     end
   end
 end

@@ -21,7 +21,7 @@ defmodule GRPC.Transport.HTTP2.Frame.Settings do
           iodata()
         ) ::
           {:ok, t()} | {:error, GRPC.Transport.HTTP2.Errors.error_code(), binary()}
-  def deserialize(flags, 0, payload) when clear?(flags, @ack_bit) do
+  def deserialize(flags, 0, payload) when not set?(flags, @ack_bit) do
     payload
     |> Stream.unfold(fn
       <<>> -> nil
@@ -29,42 +29,42 @@ defmodule GRPC.Transport.HTTP2.Frame.Settings do
       <<rest::binary>> -> {{:error, rest}, <<>>}
     end)
     |> Enum.reduce_while({:ok, %{}}, fn
-      {:ok, {0x01, value}}, {:ok, acc} ->
+      {:ok, {1, value}}, {:ok, acc} ->
         {:cont, {:ok, Map.put(acc, :header_table_size, value)}}
 
-      {:ok, {0x02, val}}, {:ok, acc} when val in [0x00, 0x01] ->
+      {:ok, {2, val}}, {:ok, acc} when val in [0, 1] ->
         {:cont, {:ok, acc}}
 
-      {:ok, {0x02, _value}}, {:ok, _acc} ->
+      {:ok, {2, _value}}, {:ok, _acc} ->
         {:halt,
          {:error, GRPC.Transport.HTTP2.Errors.protocol_error(),
           "Invalid enable_push value (RFC9113§6.5)"}}
 
-      {:ok, {0x03, value}}, {:ok, acc} ->
+      {:ok, {3, value}}, {:ok, acc} ->
         {:cont, {:ok, Map.put(acc, :max_concurrent_streams, value)}}
 
-      {:ok, {0x04, value}}, {:ok, _acc} when value > @max_window_size ->
+      {:ok, {4, value}}, {:ok, _acc} when value > @max_window_size ->
         {:halt,
          {:error, GRPC.Transport.HTTP2.Errors.flow_control_error(),
           "Invalid window_size (RFC9113§6.5)"}}
 
-      {:ok, {0x04, value}}, {:ok, acc} ->
+      {:ok, {4, value}}, {:ok, acc} ->
         {:cont, {:ok, Map.put(acc, :initial_window_size, value)}}
 
-      {:ok, {0x05, value}}, {:ok, _acc} when value < @min_frame_size ->
+      {:ok, {5, value}}, {:ok, _acc} when value < @min_frame_size ->
         {:halt,
          {:error, GRPC.Transport.HTTP2.Errors.frame_size_error(),
           "Invalid max_frame_size (RFC9113§6.5)"}}
 
-      {:ok, {0x05, value}}, {:ok, _acc} when value > @max_frame_size ->
+      {:ok, {5, value}}, {:ok, _acc} when value > @max_frame_size ->
         {:halt,
          {:error, GRPC.Transport.HTTP2.Errors.frame_size_error(),
           "Invalid max_frame_size (RFC9113§6.5)"}}
 
-      {:ok, {0x05, value}}, {:ok, acc} ->
+      {:ok, {5, value}}, {:ok, acc} ->
         {:cont, {:ok, Map.put(acc, :max_frame_size, value)}}
 
-      {:ok, {0x06, value}}, {:ok, acc} ->
+      {:ok, {6, value}}, {:ok, acc} ->
         {:cont, {:ok, Map.put(acc, :max_header_list_size, value)}}
 
       {:ok, {_setting, _value}}, {:ok, acc} ->
@@ -98,7 +98,7 @@ defmodule GRPC.Transport.HTTP2.Frame.Settings do
     @ack_bit 0
 
     def serialize(%GRPC.Transport.HTTP2.Frame.Settings{ack: true}, _max_frame_size),
-      do: [{0x4, set([@ack_bit]), 0, <<>>}]
+      do: [{4, set([@ack_bit]), 0, <<>>}]
 
     def serialize(%GRPC.Transport.HTTP2.Frame.Settings{ack: false} = frame, _max_frame_size) do
       payload =
@@ -106,18 +106,18 @@ defmodule GRPC.Transport.HTTP2.Frame.Settings do
         |> Enum.uniq_by(fn {setting, _} -> setting end)
         |> Enum.map(fn
           {:header_table_size, 4_096} -> <<>>
-          {:header_table_size, value} -> <<0x01::16, value::32>>
+          {:header_table_size, value} -> <<1::16, value::32>>
           {:max_concurrent_streams, :infinity} -> <<>>
-          {:max_concurrent_streams, value} -> <<0x03::16, value::32>>
+          {:max_concurrent_streams, value} -> <<3::16, value::32>>
           {:initial_window_size, 65_535} -> <<>>
-          {:initial_window_size, value} -> <<0x04::16, value::32>>
+          {:initial_window_size, value} -> <<4::16, value::32>>
           {:max_frame_size, 16_384} -> <<>>
-          {:max_frame_size, value} -> <<0x05::16, value::32>>
+          {:max_frame_size, value} -> <<5::16, value::32>>
           {:max_header_list_size, :infinity} -> <<>>
-          {:max_header_list_size, value} -> <<0x06::16, value::32>>
+          {:max_header_list_size, value} -> <<6::16, value::32>>
         end)
 
-      [{0x4, 0x0, 0, payload}]
+      [{4, 0, 0, payload}]
     end
   end
 end

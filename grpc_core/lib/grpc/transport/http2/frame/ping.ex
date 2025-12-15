@@ -23,7 +23,7 @@ defmodule GRPC.Transport.HTTP2.Frame.Ping do
     {:ok, %__MODULE__{ack: true, payload: payload}}
   end
 
-  def deserialize(flags, 0, <<payload::binary-size(8)>>) when clear?(flags, @ack_bit) do
+  def deserialize(flags, 0, <<payload::binary-size(8)>>) when not set?(flags, @ack_bit) do
     {:ok, %__MODULE__{ack: false, payload: payload}}
   end
 
@@ -41,9 +41,9 @@ defmodule GRPC.Transport.HTTP2.Frame.Ping do
     @ack_bit 0
 
     def serialize(%GRPC.Transport.HTTP2.Frame.Ping{ack: true} = frame, _max_frame_size),
-      do: [{0x6, set([@ack_bit]), 0, frame.payload}]
+      do: [{6, set([@ack_bit]), 0, frame.payload}]
 
     def serialize(%GRPC.Transport.HTTP2.Frame.Ping{ack: false} = frame, _max_frame_size),
-      do: [{0x6, 0x0, 0, frame.payload}]
+      do: [{6, 0, 0, frame.payload}]
   end
 end
