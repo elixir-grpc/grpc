@@ -481,34 +481,15 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   def info({:stream_trailers, trailers}, req, state) do
-    metadata = Map.get(state, :resp_trailers, %{})
-    metadata = GRPC.Transport.HTTP2.encode_metadata(metadata)
-    all_trailers = Map.merge(metadata, trailers)
+    metadata =
+      state
+      |> Map.get(:resp_trailers, %{})
+      |> GRPC.Transport.HTTP2.encode_metadata()
+
+    all_trailers = Map.merge(trailers, metadata)
 
     req = check_sent_resp(req)
-
-    if state.access_mode === :grpcweb do
-      # grpc_web requires trailers be sent as the last
-      # message block rather than in the HTTP trailers
-      # as javascript runtimes do not propagate trailers
-      #
-      # trailers are instead denoted with the "trailer flag"
-      # which has the MSB set to 1.
-      {:ok, data, _length} =
-        all_trailers
-        |> Enum.map_join("\r\n", fn {k, v} -> "#{k}: #{v}" end)
-        |> GRPC.Message.to_data(message_flag: @trailers_flag)
-
-      packed =
-        if function_exported?(state.codec, :pack_for_channel, 1) do
-          state.codec.pack_for_channel(data)
-        else
-          data
-        end
-
-      :cowboy_req.stream_body(packed, :nofin, req)
-    end
-
+    stream_grpcweb_trailers(req, all_trailers, state)
     :cowboy_req.stream_trailers(all_trailers, req)
 
     {:ok, req, state}
@@ -781,4 +762,28 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
     :ok
   end
+
+  defp stream_grpcweb_trailers(req, trailers, %{access_mode: :grpcweb} = state) do
+    # grpc_web requires trailers be sent as the last
+    # message block rather than in the HTTP trailers
+    # as javascript runtimes do not propagate trailers
+    #
+    # trailers are instead denoted with the "trailer flag"
+    # which has the MSB set to 1.
+    {:ok, data, _length} =
+      trailers
+      |> Enum.map_join("\r\n", fn {k, v} -> "#{k}: #{v}" end)
+      |> GRPC.Message.to_data(message_flag: @trailers_flag)
+
+    packed =
+      if function_exported?(state.codec, :pack_for_channel, 1) do
+        state.codec.pack_for_channel(data)
+      else
+        data
+      end
+
+    :cowboy_req.stream_body(packed, :nofin, req)
+  end
+
+  defp stream_grpcweb_trailers(req, _trailers, _not_grpcweb), do: req
 end
