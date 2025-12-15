@@ -624,7 +624,7 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
   end
 
   defp servers_name(nil, servers) do
-    servers |> Map.values() |> Enum.map(fn s -> inspect(s) end) |> Enum.join(",")
+    Enum.map_join(servers, ",", fn _k, s -> inspect(s) end)
   end
 
   defp servers_name(endpoint, _) do
