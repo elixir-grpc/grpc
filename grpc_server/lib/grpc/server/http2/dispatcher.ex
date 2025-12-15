@@ -104,8 +104,6 @@ defmodule GRPC.Server.HTTP2.Dispatcher do
           {:error, GRPC.RPCError.exception(status: :internal, message: "Internal server error")}
       end
     end
-
-    # Fecha o if deadline_exceeded?
   end
 
   @doc """
