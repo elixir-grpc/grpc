@@ -89,9 +89,6 @@ defmodule GRPC.Server.Adapters.Cowboy do
   @spec start_link(atom(), atom(), %{String.t() => [module()]}, any()) ::
           {:ok, pid()} | {:error, any()}
   def start_link(scheme, endpoint, servers, {m, f, [ref | _] = a}) do
-    # Initialize ETS cache for codecs/compressors lookup
-    GRPC.Server.Cache.init()
-
     case apply(m, f, a) do
       {:ok, pid} ->
         Logger.info(running_info(scheme, endpoint, servers, ref))

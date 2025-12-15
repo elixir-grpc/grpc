@@ -9,8 +9,18 @@ defmodule GRPC.Server.SupervisorTest do
 
   describe "init/1" do
     test "does not start children if opts sets false" do
-      assert {:ok, {%{strategy: :one_for_one}, []}} =
-               Supervisor.init(endpoint: MockEndpoint, port: 1234, start_server: false)
+      assert {
+               :ok,
+               {%{strategy: :one_for_one},
+                [
+                  %{
+                    id: GRPC.Server.StreamTaskSupervisor,
+                    start:
+                      {Task.Supervisor, :start_link, [[name: GRPC.Server.StreamTaskSupervisor]]},
+                    type: :supervisor
+                  }
+                ]}
+             } = Supervisor.init(endpoint: MockEndpoint, port: 1234, start_server: false)
     end
 
     test "fails if a tuple is passed" do
@@ -35,6 +45,12 @@ defmodule GRPC.Server.SupervisorTest do
                {
                  %{strategy: :one_for_one, auto_shutdown: :never, intensity: 3, period: 5},
                  [
+                   %{
+                     id: GRPC.Server.StreamTaskSupervisor,
+                     start:
+                       {Task.Supervisor, :start_link, [[name: GRPC.Server.StreamTaskSupervisor]]},
+                     type: :supervisor
+                   },
                    %{
                      id: {:ranch_embedded_sup, ^endpoint_str},
                      start:

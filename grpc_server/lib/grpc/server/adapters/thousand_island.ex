@@ -377,16 +377,6 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
   """
   @impl true
   def start(endpoint, servers, port, opts) do
-    GRPC.Server.Cache.init()
-
-    case Process.whereis(GRPC.Server.StreamTaskSupervisor) do
-      nil ->
-        {:ok, _} = Task.Supervisor.start_link(name: GRPC.Server.StreamTaskSupervisor)
-
-      _pid ->
-        :ok
-    end
-
     server_opts = build_server_opts(endpoint, servers, port, opts)
 
     case ThousandIsland.start_link(server_opts) do
@@ -423,8 +413,6 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
   def child_spec(endpoint, servers, port, opts) do
     server_opts = build_server_opts(endpoint, servers, port, opts)
 
-    GRPC.Server.Cache.init()
-
     scheme = if cred_opts(opts), do: :https, else: :http
 
     Logger.info(
@@ -433,20 +421,9 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
 
     server_name = servers_name(endpoint, servers)
 
-    children = [
-      {Task.Supervisor, name: GRPC.Server.StreamTaskSupervisor},
-      %{
-        id: :thousand_island,
-        start: {ThousandIsland, :start_link, [server_opts]},
-        type: :supervisor,
-        restart: :permanent,
-        shutdown: :infinity
-      }
-    ]
-
     %{
       id: server_name,
-      start: {Supervisor, :start_link, [children, [strategy: :rest_for_one]]},
+      start: {ThousandIsland, :start_link, [server_opts]},
       type: :supervisor,
       restart: :permanent,
       shutdown: :infinity
@@ -490,10 +467,10 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
     :ok
   end
 
-  def set_resp_trailers(%{handler_pid: _pid, stream_id: stream_id}, trailers) do
-    # Store in process dictionary (runs in handler context during dispatch)
-    current_custom_trailers = Process.get({:grpc_custom_trailers, stream_id}, %{})
-    Process.put({:grpc_custom_trailers, stream_id}, Map.merge(current_custom_trailers, trailers))
+  def set_resp_trailers(%{handler_pid: pid, stream_id: stream_id}, trailers) do
+    # Send message to accumulate trailers in handler state
+    # They will be merged with final trailers when stream completes
+    send(pid, {:grpc_accumulate_trailers, stream_id, trailers})
     :ok
   end
 

@@ -7,33 +7,21 @@ defmodule GRPC.Server.Adapters.ThousandIslandTest do
     test "returns valid child spec" do
       spec = Adapter.child_spec(:test_endpoint, [], 50051, [])
 
-      # The spec should be a supervisor child spec that wraps ThousandIsland + Task.Supervisor
+      # After moving Task.Supervisor to GRPC.Server.Supervisor,
+      # the spec now returns ThousandIsland's child spec directly
       assert is_map(spec)
       assert spec.type == :supervisor
-      assert {Supervisor, :start_link, [children, _opts]} = spec.start
-      assert is_list(children)
-
-      # Should have Task.Supervisor and ThousandIsland children
-      assert length(children) == 2
-      [task_sup, ti_child] = children
-
-      # First child is Task.Supervisor
-      assert {Task.Supervisor, [name: GRPC.Server.StreamTaskSupervisor]} = task_sup
-
-      # Second child is ThousandIsland
-      assert ti_child.id == :thousand_island
-      assert {ThousandIsland, :start_link, [args]} = ti_child.start
+      assert {ThousandIsland, :start_link, [args]} = spec.start
       assert is_list(args)
       assert args[:port] == 50051
+      assert args[:handler_module] == GRPC.Server.Adapters.ThousandIsland.Handler
     end
 
     test "includes adapter options in child spec" do
       opts = [num_acceptors: 5, num_connections: 50]
       spec = Adapter.child_spec(:test_endpoint, [], 50051, opts)
 
-      {Supervisor, :start_link, [children, _opts]} = spec.start
-      [_task_sup, ti_child] = children
-      {ThousandIsland, :start_link, [args]} = ti_child.start
+      {ThousandIsland, :start_link, [args]} = spec.start
 
       assert args[:num_acceptors] == 5
       assert args[:num_connections] == 50

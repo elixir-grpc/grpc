@@ -51,7 +51,9 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
       connection: nil,
       buffer: <<>>,
       preface_received: false,
-      accumulated_headers: %{}
+      accumulated_headers: %{},
+      accumulated_trailers: %{},
+      stream_tasks: %{}
     }
 
     {:continue, new_state}
@@ -85,6 +87,19 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
     updated_headers = Map.merge(current_headers, headers)
     new_accumulated = Map.put(state.accumulated_headers, stream_id, updated_headers)
     {:noreply, {socket, %{state | accumulated_headers: new_accumulated}}}
+  end
+
+  def handle_info({:grpc_accumulate_trailers, stream_id, trailers}, {socket, state}) do
+    current_trailers = Map.get(state.accumulated_trailers, stream_id, %{})
+    updated_trailers = Map.merge(current_trailers, trailers)
+    new_accumulated = Map.put(state.accumulated_trailers, stream_id, updated_trailers)
+    {:noreply, {socket, %{state | accumulated_trailers: new_accumulated}}}
+  end
+
+  def handle_info({:register_stream_task, stream_id, task_pid, task_ref}, {socket, state}) do
+    Logger.debug("[Handler] Registering stream task for stream #{stream_id}, pid=#{inspect(task_pid)}")
+    new_stream_tasks = Map.put(state.stream_tasks, stream_id, {task_pid, task_ref})
+    {:noreply, {socket, %{state | stream_tasks: new_stream_tasks}}}
   end
 
   def handle_info({:grpc_send_headers, stream_id, headers}, {socket, state}) do
@@ -124,12 +139,22 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
         state
       end
 
+    # Merge accumulated custom trailers with final trailers
+    accumulated_trailers = Map.get(state.accumulated_trailers, stream_id, %{})
+    final_trailers = Map.merge(trailers, accumulated_trailers)
+
     # Send trailers (headers with END_STREAM) for streaming
     # This will also remove the stream from the connection
     updated_connection =
-      Connection.send_trailers(socket, stream_id, trailers, new_state.connection)
+      Connection.send_trailers(socket, stream_id, final_trailers, new_state.connection)
 
-    new_state = %{new_state | connection: updated_connection}
+    new_state = %{
+      new_state
+      | connection: updated_connection,
+        accumulated_trailers: Map.delete(new_state.accumulated_trailers, stream_id),
+        stream_tasks: Map.delete(new_state.stream_tasks, stream_id)
+    }
+
     {:noreply, {socket, new_state}}
   end
 
@@ -146,6 +171,56 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
     }
 
     {:noreply, {socket, %{state | connection: updated_connection}}}
+  end
+
+  def handle_info({:DOWN, _ref, :process, pid, reason}, {socket, state}) do
+    # Task crashed - find which stream it belongs to and send error trailers
+    case Enum.find(state.stream_tasks, fn {_stream_id, {task_pid, _ref}} -> task_pid == pid end) do
+      {stream_id, _} ->
+        Logger.error("[Handler] Stream #{stream_id} task crashed: #{inspect(reason)}")
+
+        # Send error trailers to client
+        error_trailers = %{
+          "grpc-status" => "13",
+          # INTERNAL
+          "grpc-message" => "Stream handler crashed: #{inspect(reason)}"
+        }
+
+        # Check if we have unsent accumulated headers (stream never sent data)
+        accumulated = Map.get(state.accumulated_headers, stream_id, %{})
+
+        new_state =
+          if map_size(accumulated) > 0 do
+            updated_conn =
+              Connection.send_headers(socket, stream_id, accumulated, state.connection)
+
+            %{
+              state
+              | accumulated_headers: Map.delete(state.accumulated_headers, stream_id),
+                connection: updated_conn
+            }
+          else
+            state
+          end
+
+        # Send error trailers
+        updated_connection =
+          Connection.send_trailers(socket, stream_id, error_trailers, new_state.connection)
+
+        new_state = %{
+          new_state
+          | connection: updated_connection,
+            accumulated_trailers: Map.delete(new_state.accumulated_trailers, stream_id),
+            stream_tasks: Map.delete(new_state.stream_tasks, stream_id)
+        }
+
+        {:noreply, {socket, new_state}}
+
+      nil ->
+        # Task not found in our tracking - ignore silently
+        # This can happen for tasks spawned outside our control
+        {:noreply, {socket, state}}
+    end
   end
 
   def handle_info(_msg, {socket, state}) do

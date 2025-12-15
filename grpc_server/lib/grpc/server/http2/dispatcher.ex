@@ -276,14 +276,9 @@ defmodule GRPC.Server.HTTP2.Dispatcher do
           GRPC.Server.send_reply(stream, response)
         end
 
-        # Get custom trailers from process dictionary (set by handler via set_trailers)
-        stream_id = stream.payload.stream_id
-        custom_trailers = Process.get({:grpc_custom_trailers, stream_id}, %{})
-
-        # Merge with mandatory grpc-status
-        trailers = Map.merge(%{"grpc-status" => "0"}, custom_trailers)
-
         # Send trailers at the end with END_STREAM
+        # Custom trailers already accumulated in Handler via set_resp_trailers
+        trailers = %{"grpc-status" => "0"}
         GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, trailers)
 
         # Return special marker for async handling (like server_streaming)
@@ -291,19 +286,16 @@ defmodule GRPC.Server.HTTP2.Dispatcher do
       rescue
         e in GRPC.RPCError ->
           # Send error as trailers (headers already accumulated, will be sent with trailers)
-          stream_id = stream.payload.stream_id
+          _stream_id = stream.payload.stream_id
 
           error_trailers = %{
             "grpc-status" => "#{e.status}",
             "grpc-message" => e.message || ""
           }
 
-          # Get custom trailers from process dictionary
-          custom_trailers = Process.get({:grpc_custom_trailers, stream_id}, %{})
-          trailers = Map.merge(error_trailers, custom_trailers)
-
           # Send trailers with error (will send accumulated headers first if not sent yet)
-          GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, trailers)
+          # Custom trailers already accumulated in Handler via set_resp_trailers
+          GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, error_trailers)
 
           # Return streaming_done (error already sent)
           {:ok, :streaming_done}
@@ -317,7 +309,6 @@ defmodule GRPC.Server.HTTP2.Dispatcher do
             "grpc-message" => Exception.message(e)
           }
 
-          # Send trailers with error
           GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, error_trailers)
 
           # Return streaming_done (error already sent)
@@ -375,31 +366,22 @@ defmodule GRPC.Server.HTTP2.Dispatcher do
         # Send response using async message (this will send accumulated headers first)
         GRPC.Server.send_reply(stream, response)
 
-        # Get custom trailers from process dictionary (set by handler via set_trailers)
-        stream_id = stream.payload.stream_id
-        custom_trailers = Process.get({:grpc_custom_trailers, stream_id}, %{})
-
-        # Merge with mandatory grpc-status
-        trailers = Map.merge(%{"grpc-status" => "0"}, custom_trailers)
-
         # Send trailers at the end with END_STREAM
+        # Custom trailers already accumulated in Handler via set_resp_trailers
+        trailers = %{"grpc-status" => "0"}
         GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, trailers)
 
         # Return special marker for async handling (like server_streaming)
         {:ok, :streaming_done}
       rescue
         e in GRPC.RPCError ->
-          # Send error as trailers
-          stream_id = stream.payload.stream_id
-
+          # Send error as trailers (headers already accumulated, will be sent with trailers)
           error_trailers = %{
             "grpc-status" => "#{e.status}",
             "grpc-message" => e.message || ""
           }
 
-          custom_trailers = Process.get({:grpc_custom_trailers, stream_id}, %{})
-          trailers = Map.merge(error_trailers, custom_trailers)
-          GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, trailers)
+          GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, error_trailers)
           {:ok, :streaming_done}
 
         e ->
@@ -461,14 +443,9 @@ defmodule GRPC.Server.HTTP2.Dispatcher do
         # Handler calls GRPC.Server.send_reply for each response
         apply(server, func_name, [request, stream])
 
-        # Get custom trailers from process dictionary (set by handler via set_trailers)
-        stream_id = stream.payload.stream_id
-        custom_trailers = Process.get({:grpc_custom_trailers, stream_id}, %{})
-
-        # Merge with mandatory grpc-status
-        trailers = Map.merge(%{"grpc-status" => "0"}, custom_trailers)
-
         # Send trailers at the end with END_STREAM
+        # Custom trailers already accumulated in Handler via set_resp_trailers
+        trailers = %{"grpc-status" => "0"}
         GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, trailers)
 
         # Return special marker for streaming (not data to send)
@@ -476,16 +453,12 @@ defmodule GRPC.Server.HTTP2.Dispatcher do
       rescue
         e in GRPC.RPCError ->
           # Send error as trailers
-          stream_id = stream.payload.stream_id
-
           error_trailers = %{
             "grpc-status" => "#{e.status}",
             "grpc-message" => e.message || ""
           }
 
-          custom_trailers = Process.get({:grpc_custom_trailers, stream_id}, %{})
-          trailers = Map.merge(error_trailers, custom_trailers)
-          GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, trailers)
+          GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, error_trailers)
           {:ok, :streaming_done}
 
         e ->
@@ -604,57 +577,66 @@ defmodule GRPC.Server.HTTP2.Dispatcher do
           | payload: %{stream.payload | stream_state: updated_stream_state}
         }
 
-        # CRITICAL: Run handler in a separate task to not block the connection handler
+        # Get handler_pid to send task monitoring info
+        handler_pid = stream.payload.handler_pid
+
+        # CRITICAL: Run handler in a separate supervised task to not block the connection handler
         # The connection handler MUST continue processing incoming DATA frames
         # and feed them to the BidiStream while the handler is consuming messages
-        Task.start(fn ->
-          try do
-            # Use GRPC.Server.call to properly handle the request
-            # This ensures the reading_stream is created correctly via adapter.reading_stream
-            result = GRPC.Server.call(server, updated_stream, rpc, func_name)
-            Logger.info("[call_bidi_streaming] Handler returned: #{inspect(result)}")
+        # Use async_nolink to avoid taking down the supervisor if task crashes
+        task =
+          Task.Supervisor.async_nolink(GRPC.Server.StreamTaskSupervisor, fn ->
+            try do
+              # Use GRPC.Server.call to properly handle the request
+              # This ensures the reading_stream is created correctly via adapter.reading_stream
+              result = GRPC.Server.call(server, updated_stream, rpc, func_name)
+              Logger.info("[call_bidi_streaming] Handler returned: #{inspect(result)}")
 
-            case result do
-              {:ok, stream} ->
-                # Get custom trailers from process dictionary
-                custom_trailers = Process.get({:grpc_custom_trailers, stream_id}, %{})
-                trailers = Map.merge(%{"grpc-status" => "0"}, custom_trailers)
-                GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, trailers)
+              case result do
+                {:ok, stream} ->
+                  # Send trailers with success status
+                  # Custom trailers already accumulated in Handler via set_resp_trailers
+                  trailers = %{"grpc-status" => "0"}
+                  GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, trailers)
 
-              {:error, error} ->
-                Logger.error("[call_bidi_streaming] Handler error result: #{inspect(error)}")
+                {:error, error} ->
+                  Logger.error("[call_bidi_streaming] Handler error result: #{inspect(error)}")
+
+                  trailers = %{
+                    "grpc-status" => "#{error.status || 2}",
+                    "grpc-message" => error.message || "Handler error"
+                  }
+
+                  GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, trailers)
+              end
+            rescue
+              e in GRPC.RPCError ->
+                Logger.error("[call_bidi_streaming] Handler RPC Error: #{inspect(e)}")
 
                 trailers = %{
-                  "grpc-status" => "#{error.status || 2}",
-                  "grpc-message" => error.message || "Handler error"
+                  "grpc-status" => "#{e.status}",
+                  "grpc-message" => e.message || ""
+                }
+
+                GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, trailers)
+
+              e ->
+                Logger.error(
+                  "[call_bidi_streaming] Handler error: #{Exception.message(e)}\n#{Exception.format_stacktrace(__STACKTRACE__)}"
+                )
+
+                trailers = %{
+                  "grpc-status" => "2",
+                  "grpc-message" => Exception.message(e)
                 }
 
                 GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, trailers)
             end
-          rescue
-            e in GRPC.RPCError ->
-              Logger.error("[call_bidi_streaming] Handler RPC Error: #{inspect(e)}")
+          end)
 
-              trailers = %{
-                "grpc-status" => "#{e.status}",
-                "grpc-message" => e.message || ""
-              }
-
-              GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, trailers)
-
-            e ->
-              Logger.error(
-                "[call_bidi_streaming] Handler error: #{Exception.message(e)}\n#{Exception.format_stacktrace(__STACKTRACE__)}"
-              )
-
-              trailers = %{
-                "grpc-status" => "2",
-                "grpc-message" => Exception.message(e)
-              }
-
-              GRPC.Server.Adapters.ThousandIsland.send_trailers(stream.payload, trailers)
-          end
-        end)
+        # Register task in handler for monitoring
+        # Handler will monitor the task and send error trailers if it crashes unexpectedly
+        send(handler_pid, {:register_stream_task, stream_id, task.pid, task.ref})
 
         # Return special marker for streaming (not data to send)
         {:ok, :streaming_done}
