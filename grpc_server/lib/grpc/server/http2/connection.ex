@@ -596,16 +596,20 @@ defmodule GRPC.Server.HTTP2.Connection do
       Logger.debug("[process_grpc_request] Bidi stream already started, feeding new messages")
       stream_state = extract_messages_from_buffer(stream_state)
 
-      # Feed messages to the BidiStream Task after decoding them
+      # Feed messages to the BidiStream Task in {flag, data} format (not decoded yet)
       if length(stream_state.message_buffer) > 0 and stream_state.bidi_stream_pid do
         Logger.info(
-          "[Connection] Decoding and feeding #{length(stream_state.message_buffer)} messages to BidiStream #{stream_state.stream_id}, pid=#{inspect(stream_state.bidi_stream_pid)}"
+          "[Connection] Feeding #{length(stream_state.message_buffer)} messages to BidiStream #{stream_state.stream_id}, pid=#{inspect(stream_state.bidi_stream_pid)}"
         )
 
-        # Decode the messages using codec, compressor, and RPC from stream_state
-        decoded_messages = decode_stream_messages(stream_state.message_buffer, stream_state)
+        # Convert messages to {flag, data} format expected by GRPC.Server.do_handle_request
+        messages_as_tuples =
+          Enum.map(stream_state.message_buffer, fn %{compressed: compressed?, data: data} ->
+            flag = if compressed?, do: 1, else: 0
+            {flag, data}
+          end)
 
-        GRPC.Server.BidiStream.put_messages(stream_state.bidi_stream_pid, decoded_messages)
+        GRPC.Server.BidiStream.put_messages(stream_state.bidi_stream_pid, messages_as_tuples)
         # Clear both message_buffer and data_buffer after feeding
         _stream_state = %{stream_state | message_buffer: [], data_buffer: <<>>}
       end
@@ -924,27 +928,6 @@ defmodule GRPC.Server.HTTP2.Connection do
     {acc, buffer}
   end
 
-  defp decode_stream_messages(message_buffer, stream_state) do
-    # Extract request type from RPC definition
-    # RPC format: {name, {request_module, is_stream?}, {reply_module, is_stream?}, options}
-    {_name, {request_module, _is_stream?}, _reply, _options} = stream_state.rpc
-    codec = stream_state.codec
-    compressor = stream_state.compressor
-
-    Enum.map(message_buffer, fn %{compressed: compressed?, data: data} ->
-      # Decompress if needed
-      data =
-        if compressed? and compressor do
-          compressor.decompress(data)
-        else
-          data
-        end
-
-      # Decode protobuf with the request module
-      codec.decode(data, request_module)
-    end)
-  end
-
   # Made public so Handler can call it when deadline exceeded during send_reply
   def send_grpc_error(socket, stream_id, error, connection) do
     status = Map.get(error, :status, :unknown)
@@ -955,7 +938,6 @@ defmodule GRPC.Server.HTTP2.Connection do
 
     stream_state = Map.get(connection.streams, stream_id)
 
-    # Se o stream não existe OU já enviamos erro, não fazer nada
     if !stream_state do
       Logger.debug("[SEND_GRPC_ERROR] stream=#{stream_id} SKIPPED - stream not found")
       connection
@@ -971,9 +953,9 @@ defmodule GRPC.Server.HTTP2.Connection do
           "[SEND_GRPC_ERROR] stream=#{stream_id}, status=#{status_code}, message=#{message}, headers_sent=#{headers_sent}, end_stream_received=#{end_stream_received}"
         )
 
-        # RFC 7540 Section 5.1: Se já enviamos END_STREAM (via headers_sent=true em resposta anterior),
-        # o stream está "closed" e NÃO podemos enviar mais frames (exceto PRIORITY)
-        # Nesse caso, apenas remover o stream e não enviar nada
+        # RFC 7540 Section 5.1: If we already sent END_STREAM (via headers_sent=true in previous response),
+        # the stream is "closed" and we CANNOT send more frames (except PRIORITY)
+        # In this case, just remove the stream and don't send anything
         if headers_sent && end_stream_received do
           Logger.debug(
             "[SEND_GRPC_ERROR] stream=#{stream_id} SKIPPED - stream is fully closed (both sides sent END_STREAM)"
@@ -1033,7 +1015,7 @@ defmodule GRPC.Server.HTTP2.Connection do
           # Verify stream still exists before marking error_sent (may have been closed by RST_STREAM)
           updated_connection =
             if Map.has_key?(updated_connection.streams, stream_id) do
-              # Marcar que já enviamos erro (RFC 7540: após END_STREAM, o stream está closed)
+              # Mark that we already sent error (RFC 7540: after END_STREAM, the stream is closed)
               update_in(updated_connection.streams[stream_id], fn s ->
                 if s, do: %{s | error_sent: true}, else: nil
               end)
@@ -1045,8 +1027,8 @@ defmodule GRPC.Server.HTTP2.Connection do
               updated_connection
             end
 
-          # RFC 7540: Após enviar END_STREAM, o stream transiciona para "closed"
-          # Remover imediatamente para evitar processar mais mensagens neste stream
+          # RFC 7540: After sending END_STREAM, the stream transitions to "closed"
+          # Remove immediately to avoid processing more messages on this stream
           Logger.warning("[REMOVE_STREAM] stream=#{stream_id} - removed after sending error")
           %{updated_connection | streams: Map.delete(updated_connection.streams, stream_id)}
         end
