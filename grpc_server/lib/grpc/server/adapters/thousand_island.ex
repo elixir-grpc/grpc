@@ -385,12 +385,12 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
         {:ok, pid, actual_port}
 
       {:error, {:already_started, pid}} ->
-        Logger.warning("Failed to start #{servers_name(endpoint, servers)}: already started")
+        Logger.warning("Failed to start #{server_names(endpoint, servers)}: already started")
         actual_port = get_actual_port(pid, port)
         {:ok, pid, actual_port}
 
       {:error, :eaddrinuse} = error ->
-        Logger.error("Failed to start #{servers_name(endpoint, servers)}: port already in use")
+        Logger.error("Failed to start #{server_names(endpoint, servers)}: port already in use")
         error
 
       {:error, _} = error ->
@@ -416,10 +416,10 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
     scheme = if cred_opts(opts), do: :https, else: :http
 
     Logger.info(
-      "Starting #{servers_name(endpoint, servers)} with ThousandIsland using #{scheme}://0.0.0.0:#{port}"
+      "Starting #{server_names(endpoint, servers)} with ThousandIsland using #{scheme}://0.0.0.0:#{port}"
     )
 
-    server_name = servers_name(endpoint, servers)
+    server_name = server_names(endpoint, servers)
 
     %{
       id: server_name,
@@ -623,11 +623,11 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
     opts[:cred]
   end
 
-  defp servers_name(nil, servers) do
+  defp server_names(nil, servers) do
     Enum.map_join(servers, ",", fn _k, s -> inspect(s) end)
   end
 
-  defp servers_name(endpoint, _) do
+  defp server_names(endpoint, _) do
     inspect(endpoint)
   end
 end
