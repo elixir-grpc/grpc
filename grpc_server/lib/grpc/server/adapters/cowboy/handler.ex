@@ -640,6 +640,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     req = check_sent_resp(req, status)
     stream_grpcweb_trailers(req, trailers, state)
     :cowboy_req.stream_trailers(trailers, req)
+    req
   end
 
   def exit_handler(pid, reason) do
