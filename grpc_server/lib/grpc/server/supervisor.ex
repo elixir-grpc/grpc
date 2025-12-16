@@ -104,7 +104,7 @@ defmodule GRPC.Server.Supervisor do
       end
 
     GRPC.Server.Cache.init()
-    
+
     children =
       [{Task.Supervisor, name: GRPC.Server.StreamTaskSupervisor}] ++
         if opts[:start_server] do

@@ -97,7 +97,10 @@ defmodule GRPC.Server.Adapters.ThousandIsland.Handler do
   end
 
   def handle_info({:register_stream_task, stream_id, task_pid, task_ref}, {socket, state}) do
-    Logger.debug("[Handler] Registering stream task for stream #{stream_id}, pid=#{inspect(task_pid)}")
+    Logger.debug(
+      "[Handler] Registering stream task for stream #{stream_id}, pid=#{inspect(task_pid)}"
+    )
+
     new_stream_tasks = Map.put(state.stream_tasks, stream_id, {task_pid, task_ref})
     {:noreply, {socket, %{state | stream_tasks: new_stream_tasks}}}
   end
