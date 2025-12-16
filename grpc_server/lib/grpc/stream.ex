@@ -544,7 +544,8 @@ defmodule GRPC.Stream do
     if not dry_run? do
       # RPCError should be raised, not sent as reply
       case msg do
-        %GRPC.RPCError{} -> raise msg
+        %GRPC.RPCError{} = rpc_error -> raise rpc_error
+        {:error, %GRPC.RPCError{} = rpc_error} -> raise rpc_error
         _ -> GRPC.Server.send_reply(from, msg)
       end
     end
