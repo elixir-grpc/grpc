@@ -51,7 +51,8 @@ defmodule GRPC.StreamTest do
         |> GRPC.Stream.map_error(fn error ->
           case error do
             {:error, {:exception, %{message: msg}}} ->
-              {:error, GRPC.RPCError.exception(status: :invalid_argument, message: "Error: #{msg}")}
+              {:error,
+               GRPC.RPCError.exception(status: :invalid_argument, message: "Error: #{msg}")}
 
             other ->
               # Not an error, return as-is to continue the flow
@@ -118,19 +119,35 @@ defmodule GRPC.StreamTest do
               # Validate that we have the expected exception structure
               message = Map.get(exception_data, :message)
               kind = Map.get(exception_data, :kind, :error)
-              
+
               cond do
                 is_binary(message) and message =~ "Runtime error" ->
-                  {:error, GRPC.RPCError.exception(status: :internal, message: "Validated: RuntimeError - #{message}")}
+                  {:error,
+                   GRPC.RPCError.exception(
+                     status: :internal,
+                     message: "Validated: RuntimeError - #{message}"
+                   )}
 
                 is_binary(message) and message =~ "Argument is invalid" ->
-                  {:error, GRPC.RPCError.exception(status: :invalid_argument, message: "Validated: ArgumentError - #{message}")}
+                  {:error,
+                   GRPC.RPCError.exception(
+                     status: :invalid_argument,
+                     message: "Validated: ArgumentError - #{message}"
+                   )}
 
                 is_binary(message) ->
-                  {:error, GRPC.RPCError.exception(status: :unknown, message: "Validated: #{kind} - #{message}")}
+                  {:error,
+                   GRPC.RPCError.exception(
+                     status: :unknown,
+                     message: "Validated: #{kind} - #{message}"
+                   )}
 
                 true ->
-                  {:error, GRPC.RPCError.exception(status: :unknown, message: "Validated but no message found")}
+                  {:error,
+                   GRPC.RPCError.exception(
+                     status: :unknown,
+                     message: "Validated but no message found"
+                   )}
               end
 
             other ->
@@ -167,13 +184,22 @@ defmodule GRPC.StreamTest do
             {:error, {:exception, %{message: msg}}} when is_binary(msg) ->
               cond do
                 msg =~ "latitude" ->
-                  {:error, GRPC.RPCError.exception(status: :invalid_argument, message: "Latitude error: #{msg}")}
+                  {:error,
+                   GRPC.RPCError.exception(
+                     status: :invalid_argument,
+                     message: "Latitude error: #{msg}"
+                   )}
 
                 msg =~ "longitude" ->
-                  {:error, GRPC.RPCError.exception(status: :invalid_argument, message: "Longitude error: #{msg}")}
+                  {:error,
+                   GRPC.RPCError.exception(
+                     status: :invalid_argument,
+                     message: "Longitude error: #{msg}"
+                   )}
 
                 true ->
-                  {:error, GRPC.RPCError.exception(status: :unknown, message: "Unknown error: #{msg}")}
+                  {:error,
+                   GRPC.RPCError.exception(status: :unknown, message: "Unknown error: #{msg}")}
               end
 
             other ->
@@ -193,7 +219,8 @@ defmodule GRPC.StreamTest do
         # Test with invalid latitude (0) - should trigger error
         invalid_point = %Routeguide.Point{latitude: 0, longitude: -746_188_906}
 
-        result = Routeguide.RouteGuide.Stub.get_feature(channel, invalid_point, return_headers: true)
+        result =
+          Routeguide.RouteGuide.Stub.get_feature(channel, invalid_point, return_headers: true)
 
         # Should receive error response with custom message
         assert {:error, error} = result
@@ -212,7 +239,8 @@ defmodule GRPC.StreamTest do
         # Test with valid latitude (non-zero) - should succeed
         valid_point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
 
-        result = Routeguide.RouteGuide.Stub.get_feature(channel, valid_point, return_headers: true)
+        result =
+          Routeguide.RouteGuide.Stub.get_feature(channel, valid_point, return_headers: true)
 
         assert {:ok, response, _metadata} = result
         assert response.location == valid_point
@@ -228,7 +256,8 @@ defmodule GRPC.StreamTest do
         # Test with negative latitude - should trigger error
         negative_point = %Routeguide.Point{latitude: -50, longitude: 100}
 
-        result = Routeguide.RouteGuide.Stub.get_feature(channel, negative_point, return_headers: true)
+        result =
+          Routeguide.RouteGuide.Stub.get_feature(channel, negative_point, return_headers: true)
 
         # Should receive error response with custom message
         assert {:error, error} = result
@@ -247,7 +276,8 @@ defmodule GRPC.StreamTest do
         # Test with positive latitude - should succeed
         valid_point = %Routeguide.Point{latitude: 50, longitude: 100}
 
-        result = Routeguide.RouteGuide.Stub.get_feature(channel, valid_point, return_headers: true)
+        result =
+          Routeguide.RouteGuide.Stub.get_feature(channel, valid_point, return_headers: true)
 
         assert {:ok, response, _metadata} = result
         assert response.location == valid_point
@@ -263,19 +293,22 @@ defmodule GRPC.StreamTest do
         # Test latitude error
         lat_error_point = %Routeguide.Point{latitude: 0, longitude: 100}
         assert {:error, error} = Routeguide.RouteGuide.Stub.get_feature(channel, lat_error_point)
-        assert error.status == 3  # INVALID_ARGUMENT
+        # INVALID_ARGUMENT
+        assert error.status == 3
         assert error.message =~ "Latitude error"
 
         # Test longitude error
         long_error_point = %Routeguide.Point{latitude: 100, longitude: 0}
         assert {:error, error} = Routeguide.RouteGuide.Stub.get_feature(channel, long_error_point)
-        assert error.status == 3  # INVALID_ARGUMENT
+        # INVALID_ARGUMENT
+        assert error.status == 3
         assert error.message =~ "Longitude error"
 
         # Test ArgumentError (negative latitude) - falls into "Unknown error" branch
         arg_error_point = %Routeguide.Point{latitude: -100, longitude: 100}
         assert {:error, error} = Routeguide.RouteGuide.Stub.get_feature(channel, arg_error_point)
-        assert error.status == 2  # UNKNOWN (because message contains "Latitude must be positive")
+        # UNKNOWN (because message contains "Latitude must be positive")
+        assert error.status == 2
         assert error.message =~ "Latitude must be positive"
       end)
     end
@@ -287,22 +320,31 @@ defmodule GRPC.StreamTest do
 
         # Test RuntimeError - should validate and transform to INTERNAL
         runtime_error_point = %Routeguide.Point{latitude: 999, longitude: 100}
-        assert {:error, error} = Routeguide.RouteGuide.Stub.get_feature(channel, runtime_error_point)
-        assert error.status == 13  # INTERNAL
+
+        assert {:error, error} =
+                 Routeguide.RouteGuide.Stub.get_feature(channel, runtime_error_point)
+
+        # INTERNAL
+        assert error.status == 13
         assert error.message =~ "Validated: RuntimeError"
         assert error.message =~ "Runtime error occurred"
 
         # Test ArgumentError - should validate and transform to INVALID_ARGUMENT
         arg_error_point = %Routeguide.Point{latitude: 888, longitude: 100}
         assert {:error, error} = Routeguide.RouteGuide.Stub.get_feature(channel, arg_error_point)
-        assert error.status == 3  # INVALID_ARGUMENT
+        # INVALID_ARGUMENT
+        assert error.status == 3
         assert error.message =~ "Validated: ArgumentError"
         assert error.message =~ "Argument is invalid"
 
         # Test simple string error - should validate and transform to UNKNOWN
         string_error_point = %Routeguide.Point{latitude: 777, longitude: 100}
-        assert {:error, error} = Routeguide.RouteGuide.Stub.get_feature(channel, string_error_point)
-        assert error.status == 2  # UNKNOWN
+
+        assert {:error, error} =
+                 Routeguide.RouteGuide.Stub.get_feature(channel, string_error_point)
+
+        # UNKNOWN
+        assert error.status == 2
         assert error.message =~ "Validated:"
         assert error.message =~ "Simple string error"
 
