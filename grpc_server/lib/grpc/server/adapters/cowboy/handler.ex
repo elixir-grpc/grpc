@@ -112,7 +112,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       {:error, error} ->
         Logger.error(fn -> inspect(error) end)
         trailers = HTTP2.server_trailers(error.status, error.message)
-        req = send_error_trailers(req, 200, trailers)
+        req = send_error_trailers(req, 200, trailers, state)
         {:ok, req, state}
     end
   end
@@ -626,20 +626,20 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  defp check_sent_resp(%{has_sent_resp: _} = req) do
+  defp check_sent_resp(req, status \\ 200)
+
+  defp check_sent_resp(%{has_sent_resp: _} = req, status) do
     req
   end
 
-  defp check_sent_resp(req) do
-    :cowboy_req.stream_reply(200, req)
+  defp check_sent_resp(req, status) do
+    :cowboy_req.stream_reply(status, req)
   end
 
-  defp send_error_trailers(%{has_sent_resp: _} = req, _, trailers) do
+  defp send_error_trailers(req, status, trailers, state) do
+    req = check_sent_resp(req, status)
+    stream_grpcweb_trailers(req, trailers, state)
     :cowboy_req.stream_trailers(trailers, req)
-  end
-
-  defp send_error_trailers(req, status, trailers) do
-    :cowboy_req.reply(status, trailers, req)
   end
 
   def exit_handler(pid, reason) do
@@ -712,7 +712,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       exit_handler(pid, reason)
     end
 
-    send_error_trailers(req, status, trailers)
+    send_error_trailers(req, status, trailers, state)
   end
 
   # Similar with cowboy's read_body, but we need to receive the message
