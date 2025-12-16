@@ -22,6 +22,7 @@ defmodule GrpcClient.MixProject do
 
   def application do
     [
+      mod: {GRPC.Client.Application, []},
       extra_applications: [:logger]
     ]
   end

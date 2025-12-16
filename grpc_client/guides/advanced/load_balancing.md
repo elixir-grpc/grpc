@@ -27,7 +27,6 @@ You can connect using `DNS`, `Unix Domain sockets`, and `IPv4/IPv6` for now.
 ### DNS
 
 ```elixir
-iex> {:ok, _pid} = GRPC.Client.Supervisor.start_link()
 iex> {:ok, channel} = GRPC.Stub.connect("dns://orders.prod.svc.cluster.local:50051")
 iex> request = Orders.GetOrderRequest.new(id: "123")
 iex> {:ok, reply} = channel |> Orders.OrderService.Stub.get_order(request)

@@ -15,7 +15,6 @@ defmodule Benchmark.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {Benchmark.Application, []}
     ]
   end
 
