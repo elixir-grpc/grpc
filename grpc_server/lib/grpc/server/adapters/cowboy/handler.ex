@@ -648,12 +648,12 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     # append the trailers by calling `stream_trailers`.
     # otherwise, a full reply must be initiated.
     case stream_grpcweb_trailers(req, trailers, state) do
-     %{has_sent_resp: _} = req ->
-      :cowboy_req.stream_trailers(trailers, req)
-      req
+      %{has_sent_resp: _} = req ->
+        :cowboy_req.stream_trailers(trailers, req)
+        req
 
-     req ->
-      :cowboy_req.reply(status, trailers, req)
+      req ->
+        :cowboy_req.reply(status, trailers, req)
     end
   end
 
