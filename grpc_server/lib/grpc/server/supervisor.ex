@@ -106,12 +106,11 @@ defmodule GRPC.Server.Supervisor do
     GRPC.Server.Cache.init()
 
     children =
-      [{Task.Supervisor, name: GRPC.Server.StreamTaskSupervisor}] ++
-        if opts[:start_server] do
-          [child_spec(endpoint_or_servers, opts[:port], opts)]
-        else
-          []
-        end
+      if opts[:start_server] do
+        [child_spec(endpoint_or_servers, opts[:port], opts)]
+      else
+        []
+      end
 
     Supervisor.init(children, strategy: :one_for_one)
   end

@@ -404,13 +404,6 @@ defmodule GRPC.Server do
   @spec start(module() | [module()], non_neg_integer(), Keyword.t()) ::
           {atom(), any(), non_neg_integer()} | {:error, any()}
   def start(servers, port, opts \\ []) do
-    # Ensure Task.Supervisor is started for streaming RPCs
-    # (When using Supervisor, it's started there; when using start/3 directly, we need it here)
-    case Task.Supervisor.start_link(name: GRPC.Server.StreamTaskSupervisor) do
-      {:ok, _pid} -> :ok
-      {:error, {:already_started, _pid}} -> :ok
-    end
-
     adapter = Keyword.get(opts, :adapter) || GRPC.Server.Adapters.Cowboy
     servers = GRPC.Server.servers_to_map(servers)
     adapter.start(nil, servers, port, opts)
@@ -420,12 +413,6 @@ defmodule GRPC.Server do
   @spec start_endpoint(atom(), non_neg_integer(), Keyword.t()) ::
           {atom(), any(), non_neg_integer()}
   def start_endpoint(endpoint, port, opts \\ []) do
-    # Ensure Task.Supervisor is started for streaming RPCs
-    case Task.Supervisor.start_link(name: GRPC.Server.StreamTaskSupervisor) do
-      {:ok, _pid} -> :ok
-      {:error, {:already_started, _pid}} -> :ok
-    end
-
     opts = Keyword.validate!(opts, adapter: GRPC.Server.Adapters.Cowboy)
     adapter = opts[:adapter]
     servers = endpoint.__meta__(:servers)

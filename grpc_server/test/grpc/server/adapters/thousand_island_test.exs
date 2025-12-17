@@ -7,24 +7,26 @@ defmodule GRPC.Server.Adapters.ThousandIslandTest do
     test "returns valid child spec" do
       spec = Adapter.child_spec(:test_endpoint, [], 50051, [])
 
-      # After moving Task.Supervisor to GRPC.Server.Supervisor,
-      # the spec now returns ThousandIsland's child spec directly
       assert is_map(spec)
+      assert spec.id == Adapter.Supervisor
       assert spec.type == :supervisor
-      assert {ThousandIsland, :start_link, [args]} = spec.start
-      assert is_list(args)
-      assert args[:port] == 50051
-      assert args[:handler_module] == GRPC.Server.Adapters.ThousandIsland.Handler
+      assert {Adapter.Supervisor, :start_link, [opts_list]} = spec.start
+      assert is_list(opts_list)
+      assert Keyword.get(opts_list, :endpoint) == :test_endpoint
+      assert Keyword.get(opts_list, :servers) == []
+      assert Keyword.get(opts_list, :port) == 50051
+      assert Keyword.get(opts_list, :adapter_opts) == []
+      assert Keyword.get(opts_list, :cred) == nil
     end
 
     test "includes adapter options in child spec" do
-      opts = [num_acceptors: 5, num_connections: 50]
-      spec = Adapter.child_spec(:test_endpoint, [], 50051, opts)
+      adapter_opts = [num_acceptors: 5, num_connections: 50]
+      spec = Adapter.child_spec(:test_endpoint, [], 50051, adapter_opts: adapter_opts)
 
-      {ThousandIsland, :start_link, [args]} = spec.start
-
-      assert args[:num_acceptors] == 5
-      assert args[:num_connections] == 50
+      {Adapter.Supervisor, :start_link, [opts_list]} = spec.start
+      adapter_opts_kw = Keyword.get(opts_list, :adapter_opts)
+      assert Keyword.get(adapter_opts_kw, :num_acceptors) == 5
+      assert Keyword.get(adapter_opts_kw, :num_connections) == 50
     end
   end
 

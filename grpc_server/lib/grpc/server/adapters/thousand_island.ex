@@ -377,6 +377,17 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
   """
   @impl true
   def start(endpoint, servers, port, opts) do
+    case Process.whereis(GRPC.Server.StreamTaskSupervisor) do
+      nil ->
+        case Task.Supervisor.start_link(name: GRPC.Server.StreamTaskSupervisor) do
+          {:ok, _pid} -> :ok
+          {:error, {:already_started, _pid}} -> :ok
+        end
+
+      _pid ->
+        :ok
+    end
+
     server_opts = build_server_opts(endpoint, servers, port, opts)
 
     case ThousandIsland.start_link(server_opts) do
@@ -411,19 +422,17 @@ defmodule GRPC.Server.Adapters.ThousandIsland do
   @spec child_spec(atom(), %{String.t() => [module()]}, non_neg_integer(), Keyword.t()) ::
           Supervisor.child_spec()
   def child_spec(endpoint, servers, port, opts) do
-    server_opts = build_server_opts(endpoint, servers, port, opts)
-
-    scheme = if cred_opts(opts), do: :https, else: :http
-
-    Logger.info(
-      "Starting #{server_names(endpoint, servers)} with ThousandIsland using #{scheme}://0.0.0.0:#{port}"
-    )
-
-    server_name = server_names(endpoint, servers)
+    supervisor_opts = [
+      endpoint: endpoint,
+      servers: servers,
+      port: port,
+      adapter_opts: Keyword.get(opts, :adapter_opts, []),
+      cred: opts[:cred]
+    ]
 
     %{
-      id: server_name,
-      start: {ThousandIsland, :start_link, [server_opts]},
+      id: __MODULE__.Supervisor,
+      start: {__MODULE__.Supervisor, :start_link, [supervisor_opts]},
       type: :supervisor,
       restart: :permanent,
       shutdown: :infinity

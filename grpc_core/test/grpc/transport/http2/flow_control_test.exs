@@ -68,7 +68,7 @@ defmodule GRPC.Transport.HTTP2.FlowControlTest do
       # Receive 100MB of data
       data_size = 100 * 1024 * 1024
 
-      {new_window, increment} = FlowControl.compute_recv_window(initial_window, data_size)
+      {new_window, _increment} = FlowControl.compute_recv_window(initial_window, data_size)
 
       # Window should be decreased by data size, then potentially increased by increment
       # Just verify the window is reasonable (non-negative and less than max)
