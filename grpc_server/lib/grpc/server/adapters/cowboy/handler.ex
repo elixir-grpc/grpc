@@ -637,10 +637,24 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   defp send_error_trailers(req, status, trailers, state) do
-    req = check_sent_resp(req, status)
-    stream_grpcweb_trailers(req, trailers, state)
-    :cowboy_req.stream_trailers(trailers, req)
-    req
+    # stream grpcweb trailers (if required) before sending
+    # the normal HTTP2 trailers.
+    #
+    # sending those trailers may (or may not) change the
+    # sending state of the connection, so pattern match
+    # on the req after (maybe) streaming grpcweb trailers.
+    #
+    # when a resp has been already initiated, then just
+    # append the trailers by calling `stream_trailers`.
+    # otherwise, a full reply must be initiated.
+    case stream_grpcweb_trailers(req, trailers, state) do
+     %{has_sent_resp: _} = req ->
+      :cowboy_req.stream_trailers(trailers, req)
+      req
+
+     req ->
+      :cowboy_req.reply(status, trailers, req)
+    end
   end
 
   def exit_handler(pid, reason) do
@@ -783,7 +797,9 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         data
       end
 
+    req = check_sent_resp(req)
     :cowboy_req.stream_body(packed, :nofin, req)
+    req
   end
 
   defp stream_grpcweb_trailers(req, _trailers, _not_grpcweb), do: req
