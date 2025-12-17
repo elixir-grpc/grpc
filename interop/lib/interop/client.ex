@@ -326,7 +326,7 @@ defmodule Interop.Client do
       }
 
     stream = Grpc.Testing.TestService.Stub.full_duplex_call(ch, timeout: 1)
-    resp = stream |> GRPC.Stub.send_request(req) |> GRPC.Stub.recv()
+    resp = stream |> GRPC.Stub.send_request(req, end_stream: true) |> GRPC.Stub.recv()
 
     case resp do
       {:error, %GRPC.RPCError{status: 4}} ->

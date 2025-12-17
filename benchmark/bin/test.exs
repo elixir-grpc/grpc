@@ -3,10 +3,10 @@ server =
     async_server_threads: 1,
     port: 10000,
     channel_args: [
-      Grpc.Testing.ChannelArg.new(
+      %Grpc.Testing.ChannelArg{
         name: "grpc.optimization_target",
         value: {:str_value, "latency"}
-      )
+      }
     ]
   )
 

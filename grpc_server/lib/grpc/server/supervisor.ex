@@ -103,6 +103,8 @@ defmodule GRPC.Server.Supervisor do
           servers
       end
 
+    GRPC.Server.Cache.init()
+
     children =
       if opts[:start_server] do
         [child_spec(endpoint_or_servers, opts[:port], opts)]

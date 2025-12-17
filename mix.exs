@@ -20,6 +20,7 @@ defmodule GRPC.GRPCRoot do
  
   defp aliases do
     [
+      format: cmd("format"),
       setup: cmd("deps.get"),
       compile: cmd("compile"),
       test: cmd("test"),

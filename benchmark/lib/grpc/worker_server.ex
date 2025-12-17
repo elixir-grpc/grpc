@@ -21,11 +21,11 @@ defmodule Grpc.Testing.WorkerService.Server do
             {server, stats} = Benchmark.Server.get_stats(server)
 
             status =
-              Grpc.Testing.ServerStatus.new(
+              %Grpc.Testing.ServerStatus{
                 stats: stats,
                 port: server.port,
                 cores: server.cores
-              )
+              }
 
             {server, status}
 
@@ -33,7 +33,7 @@ defmodule Grpc.Testing.WorkerService.Server do
             {server, stats} = Benchmark.Server.get_stats(server, mark)
 
             status =
-              Grpc.Testing.ServerStatus.new(cores: server.cores, port: server.port, stats: stats)
+              %Grpc.Testing.ServerStatus{cores: server.cores, port: server.port, stats: stats}
 
             {server, status}
         end
@@ -53,11 +53,11 @@ defmodule Grpc.Testing.WorkerService.Server do
         case args.argtype do
           {:setup, client_config} ->
             manager = ClientManager.start_client(client_config)
-            {Grpc.Testing.ClientStatus.new(), manager}
+            {%Grpc.Testing.ClientStatus{}, manager}
 
           {:mark, mark} ->
             stats = ClientManager.get_stats(manager, mark.reset)
-            {Grpc.Testing.ClientStatus.new(stats: stats), manager}
+            {%Grpc.Testing.ClientStatus{stats: stats}, manager}
         end
 
       Logger.debug("Client send reply #{inspect(status)}")
@@ -70,6 +70,6 @@ defmodule Grpc.Testing.WorkerService.Server do
     Logger.debug("Received quit_work")
     Logger.debug(inspect(stream.local[:main_pid]))
     send(stream.local[:main_pid], {:quit, self()})
-    Grpc.Testing.Void.new()
+    %Grpc.Testing.Void{}
   end
 end

@@ -9,8 +9,10 @@ defmodule GRPC.Server.SupervisorTest do
 
   describe "init/1" do
     test "does not start children if opts sets false" do
-      assert {:ok, {%{strategy: :one_for_one}, []}} =
-               Supervisor.init(endpoint: MockEndpoint, port: 1234, start_server: false)
+      assert {
+               :ok,
+               {%{strategy: :one_for_one}, []}
+             } = Supervisor.init(endpoint: MockEndpoint, port: 1234, start_server: false)
     end
 
     test "fails if a tuple is passed" do

@@ -1,15 +1,15 @@
 defmodule Mix.Tasks.Benchmark.Worker do
   @moduledoc """
   Starts a gRPC worker server for benchmarking.
-  
+
   ## Usage
-  
+
       mix benchmark.worker --port=10000
-  
+
   ## Options
-  
+
     * `--port` - Port to listen on (required)
-  
+
   """
   use Mix.Task
 

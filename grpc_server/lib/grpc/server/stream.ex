@@ -98,10 +98,8 @@ defmodule GRPC.Server.Stream do
          data,
          opts
        ) do
-    opts =
-      opts
-      |> Keyword.put(:codec, codec)
-      |> Keyword.put(:http_transcode, access_mode == :http_transcoding)
+    # Optimize opts construction - avoid multiple Keyword operations
+    opts = [{:codec, codec}, {:http_transcode, access_mode == :http_transcoding} | opts]
 
     adapter.send_reply(stream.payload, data, opts)
 
