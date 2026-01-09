@@ -1,12 +1,5 @@
 # Changelog
 
-## v1.0.0-rc.2 (2026-01-09)
-
-### Bug fixes
-
-  * Fix Elixir 1.19 type system warnings for struct updates in protoc CLI and generator
-  * Fix unreachable clause warning in report_exception_test.exs
-
 ## v1.0.0-rc.1 (2025-12-02)
 
 ### Enhancements
@@ -15,6 +8,8 @@
 
 ### Bug fixes
 
+  * Fix Elixir 1.19 type system warnings for struct updates in protoc CLI and generator
+  * Fix unreachable clause warning in report_exception_test.exs
   * Fix Stream map_error send_response handling (#487)
 
 ## v0.11.5 (2025-11-14)
