@@ -1,7 +1,7 @@
 defmodule GRPC.GRPCRoot do
   use Mix.Project
 
-  @version "1.0.0-rc.1"
+  @version "1.0.0-rc.2"
 
   def project do
     [
@@ -14,10 +14,10 @@ defmodule GRPC.GRPCRoot do
 
   defp deps do
     [
-      {:grpc_server, path: "grpc_server"},
+      {:grpc_server, path: "grpc_server"}
     ]
   end
- 
+
   defp aliases do
     [
       setup: cmd("deps.get"),
@@ -42,5 +42,4 @@ defmodule GRPC.GRPCRoot do
       end
     end
   end
-
 end

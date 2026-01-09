@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.0.0-rc.2 (2026-01-09)
+
+### Bug fixes
+
+  * Fix Elixir 1.19 type system warnings for struct updates in Connection module
+  * Rename erlpack_notypes.ex to erlpack_notypes_test.exs to follow test naming convention
+
+## v1.0.0-rc.1 (2025-12-02)
+
+### Enhancements
+
+  * Major restructuring: separated into distinct grpc_core, grpc_server, and grpc_client packages
+  * Refactor GRPC client setup - start supervisor in application (#483)
+
+### Bug fixes
+
+  * Fix Connection state created by build_direct_state (#480)
+
 ## v0.11.5 (2025-11-14)
 
 ### Enhancements

@@ -373,7 +373,14 @@ defmodule GRPC.Client.Connection do
     |> Enum.uniq()
   end
 
-  defp build_balanced_state(base_state, addresses, config, lb_policy_opt, norm_opts, adapter) do
+  defp build_balanced_state(
+         %__MODULE__{} = base_state,
+         addresses,
+         config,
+         lb_policy_opt,
+         norm_opts,
+         adapter
+       ) do
     lb_policy =
       cond do
         is_map(config) and Map.has_key?(config, :load_balancing_policy) ->
@@ -415,7 +422,7 @@ defmodule GRPC.Client.Connection do
     end
   end
 
-  defp build_direct_state(base_state, norm_target, norm_opts, adapter) do
+  defp build_direct_state(%__MODULE__{} = base_state, norm_target, norm_opts, adapter) do
     {host, port} = split_host_port(norm_target)
     vc = base_state.virtual_channel
 
@@ -433,7 +440,7 @@ defmodule GRPC.Client.Connection do
     end
   end
 
-  defp build_real_channels(addresses, virtual_channel, norm_opts, adapter) do
+  defp build_real_channels(addresses, %Channel{} = virtual_channel, norm_opts, adapter) do
     Map.new(addresses, fn %{port: port, address: host} ->
       case connect_real_channel(
              %Channel{virtual_channel | host: host, port: port},
@@ -501,7 +508,7 @@ defmodule GRPC.Client.Connection do
     |> adapter.connect(opts[:adapter_opts])
   end
 
-  defp connect_real_channel(vc, host, port, opts, adapter) do
+  defp connect_real_channel(%Channel{} = vc, host, port, opts, adapter) do
     %Channel{vc | host: host, port: port}
     |> adapter.connect(opts[:adapter_opts])
   end

@@ -83,11 +83,11 @@ defmodule GRPC.Protoc.CLI do
     |> Enum.reduce(ctx, &parse_param/2)
   end
 
-  defp parse_param("plugins=" <> plugins, ctx) do
+  defp parse_param("plugins=" <> plugins, %Context{} = ctx) do
     %Context{ctx | plugins: String.split(plugins, "+")}
   end
 
-  defp parse_param("gen_descriptors=" <> value, ctx) do
+  defp parse_param("gen_descriptors=" <> value, %Context{} = ctx) do
     case value do
       "true" ->
         %Context{ctx | gen_descriptors?: true}
@@ -97,7 +97,7 @@ defmodule GRPC.Protoc.CLI do
     end
   end
 
-  defp parse_param("package_prefix=" <> package, ctx) do
+  defp parse_param("package_prefix=" <> package, %Context{} = ctx) do
     if package == "" do
       raise "package_prefix can't be empty"
     else
@@ -105,11 +105,11 @@ defmodule GRPC.Protoc.CLI do
     end
   end
 
-  defp parse_param("transform_module=" <> module, ctx) do
+  defp parse_param("transform_module=" <> module, %Context{} = ctx) do
     %Context{ctx | transform_module: Module.concat([module])}
   end
 
-  defp parse_param("one_file_per_module=" <> value, ctx) do
+  defp parse_param("one_file_per_module=" <> value, %Context{} = ctx) do
     case value do
       "true" ->
         %Context{ctx | one_file_per_module?: true}
@@ -129,7 +129,7 @@ defmodule GRPC.Protoc.CLI do
   #   end
   # end
 
-  defp parse_param(_unknown, ctx) do
+  defp parse_param(_unknown, %Context{} = ctx) do
     ctx
   end
 

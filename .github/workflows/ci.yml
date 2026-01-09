@@ -33,8 +33,17 @@ jobs:
     name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
     strategy:
       matrix:
-        otp: [24.x, 25.x, 26.1.x]
-        elixir: [1.15.x]
+        otp: [24.x, 25.x, 26.1.x, 28.x]
+        elixir: [1.15.x, 1.19.x]
+        exclude:
+          - otp: 24.x
+            elixir: 1.19.x
+          - otp: 25.x
+            elixir: 1.19.x
+          - otp: 26.1.x
+            elixir: 1.19.x
+          - otp: 28.x
+            elixir: 1.15.x
 
     needs: check_format
     steps:
@@ -84,8 +93,17 @@ jobs:
     if: ${{ github.ref == 'refs/heads/master' }}
     strategy:
       matrix:
-        otp: [24.x, 25.x, 26.1.x]
-        elixir: [1.15.x]
+        otp: [24.x, 25.x, 26.1.x, 28.x]
+        elixir: [1.15.x, 1.19.x]
+        exclude:
+          - otp: 24.x
+            elixir: 1.19.x
+          - otp: 25.x
+            elixir: 1.19.x
+          - otp: 26.1.x
+            elixir: 1.19.x
+          - otp: 28.x
+            elixir: 1.15.x
 
     steps:
       - uses: actions/checkout@v3

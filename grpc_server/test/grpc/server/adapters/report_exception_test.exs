@@ -14,9 +14,8 @@ defmodule ExceptionServer do
 
   @impl true
   def handle_cast(:case_boom, state) do
-    a = fn -> :ok end
-
-    case a.() do
+    # Use Function.identity/1 to make value opaque to type inference
+    case Function.identity(:ok) do
       :error -> :boom
     end
 
