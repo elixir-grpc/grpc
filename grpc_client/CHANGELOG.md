@@ -9,8 +9,6 @@
 
 ### Bug fixes
 
-  * Fix Elixir 1.19 type system warnings for struct updates in Connection module
-  * Rename erlpack_notypes.ex to erlpack_notypes_test.exs to follow test naming convention
   * Fix Connection state created by build_direct_state (#480)
 
 ## v0.11.5 (2025-11-14)

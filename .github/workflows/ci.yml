@@ -1,6 +1,7 @@
+---
 name: CI
 
-on:
+'on':
   pull_request:
     branches:
       - "**"
@@ -20,10 +21,12 @@ jobs:
           elixir-version: 1.15.x
       - name: Retrieve dependencies cache
         uses: actions/cache@v3
-        id: mix-cache # id to use in retrieve action
+        id: mix-cache  # id to use in retrieve action
         with:
           path: deps
-          key: v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
+          key: >-
+            v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{
+            hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
       - name: Install Dependencies
         run: mix deps.get 1>/dev/null
       - name: Check format
@@ -33,17 +36,11 @@ jobs:
     name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
     strategy:
       matrix:
-        otp: [24.x, 25.x, 26.1.x, 28.x]
-        elixir: [1.15.x, 1.19.x]
-        exclude:
-          - otp: 24.x
-            elixir: 1.19.x
-          - otp: 25.x
-            elixir: 1.19.x
-          - otp: 26.1.x
-            elixir: 1.19.x
+        otp: [24.x, 25.x, 26.1.x]
+        elixir: [1.15.x]
+        include:
           - otp: 28.x
-            elixir: 1.15.x
+            elixir: 1.19.x
 
     needs: check_format
     steps:
@@ -54,10 +51,12 @@ jobs:
           elixir-version: ${{matrix.elixir}}
       - name: Retrieve dependencies cache
         uses: actions/cache@v3
-        id: mix-cache # id to use in retrieve action
+        id: mix-cache  # id to use in retrieve action
         with:
           path: deps
-          key: v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
+          key: >-
+            v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{
+            hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
       - name: Install Dependencies
         run: mix setup 1>/dev/null
       - name: Run Tests
@@ -75,10 +74,12 @@ jobs:
           elixir-version: 1.15.x
       - name: Retrieve dependencies cache
         uses: actions/cache@v3
-        id: mix-cache # id to use in retrieve action
+        id: mix-cache  # id to use in retrieve action
         with:
           path: deps
-          key: v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
+          key: >-
+            v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{
+            hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
       - name: Install Dependencies
         run: mix deps.get 1>/dev/null
         working-directory: ./interop
@@ -93,17 +94,11 @@ jobs:
     if: ${{ github.ref == 'refs/heads/master' }}
     strategy:
       matrix:
-        otp: [24.x, 25.x, 26.1.x, 28.x]
-        elixir: [1.15.x, 1.19.x]
-        exclude:
-          - otp: 24.x
-            elixir: 1.19.x
-          - otp: 25.x
-            elixir: 1.19.x
-          - otp: 26.1.x
-            elixir: 1.19.x
+        otp: [24.x, 25.x, 26.1.x]
+        elixir: [1.15.x]
+        include:
           - otp: 28.x
-            elixir: 1.15.x
+            elixir: 1.19.x
 
     steps:
       - uses: actions/checkout@v3
@@ -113,10 +108,12 @@ jobs:
           elixir-version: ${{ matrix.elixir }}
       - name: Retrieve dependencies cache
         uses: actions/cache@v3
-        id: mix-cache # id to use in retrieve action
+        id: mix-cache  # id to use in retrieve action
         with:
           path: deps
-          key: v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
+          key: >-
+            v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{
+            hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
       - name: Install Dependencies
         run: mix deps.get 1>/dev/null
         working-directory: ./interop
