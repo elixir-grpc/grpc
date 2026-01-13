@@ -40,7 +40,10 @@ defmodule GRPC.Protoc.Generator do
     end
   end
 
-  defp generate_module_definitions(ctx, %Google.Protobuf.FileDescriptorProto{} = desc) do
+  defp generate_module_definitions(
+         %Context{} = ctx,
+         %Google.Protobuf.FileDescriptorProto{} = desc
+       ) do
     ctx =
       %Context{
         ctx
