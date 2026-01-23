@@ -153,9 +153,27 @@ defmodule GRPC.Client.Connection do
   """
   @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(target, opts \\ []) do
-    ref = make_ref()
+    supervisor_pid = Process.whereis(GRPC.Client.Supervisor)
 
-    case build_initial_state(target, Keyword.merge(opts, ref: ref)) do
+    if is_nil(supervisor_pid) or !Process.alive?(supervisor_pid) do
+      raise """
+      GRPC.Client.Supervisor is not running. Please ensure it is started as part of your
+      application's supervision tree:
+
+          children = [
+            {GRPC.Client.Supervisor, []}
+          ]
+
+          opts = [strategy: :one_for_one, name: MyApp.Supervisor]
+          Supervisor.start_link(children, opts)
+
+      You can also start it manually in scripts or test environments:
+
+          {:ok, _pid} = DynamicSupervisor.start_link(strategy: :one_for_one, name: GRPC.Client.Supervisor)
+      """
+    end
+
+    case build_initial_state(target, opts) do
       {:ok, initial_state} ->
         ch = initial_state.virtual_channel
 
@@ -321,7 +339,7 @@ defmodule GRPC.Client.Connection do
     opts =
       Keyword.validate!(opts,
         cred: nil,
-        ref: nil,
+        name: make_ref(),
         adapter: GRPC.Client.Adapters.Gun,
         adapter_opts: [],
         interceptors: [],
@@ -347,7 +365,7 @@ defmodule GRPC.Client.Connection do
     virtual_channel = %Channel{
       scheme: scheme,
       cred: cred,
-      ref: opts[:ref],
+      ref: opts[:name],
       adapter: adapter,
       interceptors: interceptors,
       codec: norm_opts[:codec],
