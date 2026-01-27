@@ -310,10 +310,10 @@ defmodule GRPC.Client.Connection do
   defp do_disconnect(adapter, channel) do
     adapter.disconnect(channel)
   rescue
-    _ -> 
+    _ ->
       :ok
   catch
-    _type, _value -> 
+    _type, _value ->
       :ok
   end
 
