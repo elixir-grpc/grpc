@@ -308,13 +308,13 @@ defmodule GRPC.Client.Connection do
   end
 
   defp do_disconnect(adapter, channel) do
-    try do
-      adapter.disconnect(channel)
-    rescue
-      _ -> :ok
-    catch
-      _type, _value -> :ok
-    end
+    adapter.disconnect(channel)
+  rescue
+    _ -> 
+      :ok
+  catch
+    _type, _value -> 
+      :ok
   end
 
   defp build_initial_state(target, opts) do
