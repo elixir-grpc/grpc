@@ -300,7 +300,7 @@ defmodule GRPC.Server do
       end
 
     case GRPC.Message.from_data(stream, body) do
-      {:ok, message} ->
+      {:ok, message, <<>>} ->
         request = codec.decode(message, req_mod)
 
         call_with_interceptors(res_stream, func_name, stream, request)

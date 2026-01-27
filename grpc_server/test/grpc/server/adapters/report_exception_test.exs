@@ -14,11 +14,7 @@ defmodule ExceptionServer do
 
   @impl true
   def handle_cast(:case_boom, state) do
-    a = fn -> :ok end
-
-    case a.() do
-      :error -> :boom
-    end
+    raise CaseClauseError, term: :ok
 
     {:noreply, state}
   end

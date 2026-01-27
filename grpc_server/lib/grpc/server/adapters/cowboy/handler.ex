@@ -12,6 +12,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
   @adapter GRPC.Server.Adapters.Cowboy
   @default_trailers HTTP2.server_trailers()
+  @trailers_flag 0b1000_0000
 
   @type init_state :: {
           endpoint :: atom(),
@@ -103,6 +104,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           handling_timer: timer_ref,
           pending_reader: nil,
           access_mode: access_mode,
+          codec: codec,
           exception_log_filter: exception_log_filter
         }
       }
@@ -110,7 +112,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       {:error, error} ->
         Logger.error(fn -> inspect(error) end)
         trailers = HTTP2.server_trailers(error.status, error.message)
-        req = send_error_trailers(req, 200, trailers)
+        req = send_error_trailers(req, 200, trailers, state)
         {:ok, req, state}
     end
   end
@@ -479,9 +481,17 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   def info({:stream_trailers, trailers}, req, state) do
-    metadata = Map.get(state, :resp_trailers, %{})
-    metadata = GRPC.Transport.HTTP2.encode_metadata(metadata)
-    send_stream_trailers(req, Map.merge(metadata, trailers))
+    metadata =
+      state
+      |> Map.get(:resp_trailers, %{})
+      |> GRPC.Transport.HTTP2.encode_metadata()
+
+    all_trailers = Map.merge(trailers, metadata)
+
+    req = check_sent_resp(req)
+    stream_grpcweb_trailers(req, all_trailers, state)
+    :cowboy_req.stream_trailers(all_trailers, req)
+
     {:ok, req, state}
   end
 
@@ -616,25 +626,35 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  defp send_stream_trailers(req, trailers) do
-    req = check_sent_resp(req)
-    :cowboy_req.stream_trailers(trailers, req)
-  end
+  defp check_sent_resp(req, status \\ 200)
 
-  defp check_sent_resp(%{has_sent_resp: _} = req) do
+  defp check_sent_resp(%{has_sent_resp: _} = req, status) do
     req
   end
 
-  defp check_sent_resp(req) do
-    :cowboy_req.stream_reply(200, req)
+  defp check_sent_resp(req, status) do
+    :cowboy_req.stream_reply(status, req)
   end
 
-  defp send_error_trailers(%{has_sent_resp: _} = req, _, trailers) do
-    :cowboy_req.stream_trailers(trailers, req)
-  end
+  defp send_error_trailers(req, status, trailers, state) do
+    # stream grpcweb trailers (if required) before sending
+    # the normal HTTP2 trailers.
+    #
+    # sending those trailers may (or may not) change the
+    # sending state of the connection, so pattern match
+    # on the req after (maybe) streaming grpcweb trailers.
+    #
+    # when a resp has been already initiated, then just
+    # append the trailers by calling `stream_trailers`.
+    # otherwise, a full reply must be initiated.
+    case stream_grpcweb_trailers(req, trailers, state) do
+      %{has_sent_resp: _} = req ->
+        :cowboy_req.stream_trailers(trailers, req)
+        req
 
-  defp send_error_trailers(req, status, trailers) do
-    :cowboy_req.reply(status, trailers, req)
+      req ->
+        :cowboy_req.reply(status, trailers, req)
+    end
   end
 
   def exit_handler(pid, reason) do
@@ -707,7 +727,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       exit_handler(pid, reason)
     end
 
-    send_error_trailers(req, status, trailers)
+    send_error_trailers(req, status, trailers, state)
   end
 
   # Similar with cowboy's read_body, but we need to receive the message
@@ -757,4 +777,30 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
     :ok
   end
+
+  defp stream_grpcweb_trailers(req, trailers, %{access_mode: :grpcweb} = state) do
+    # grpc_web requires trailers be sent as the last
+    # message block rather than in the HTTP trailers
+    # as javascript runtimes do not propagate trailers
+    #
+    # trailers are instead denoted with the "trailer flag"
+    # which has the MSB set to 1.
+    {:ok, data, _length} =
+      trailers
+      |> Enum.map_join("\r\n", fn {k, v} -> "#{k}: #{v}" end)
+      |> GRPC.Message.to_data(message_flag: @trailers_flag)
+
+    packed =
+      if function_exported?(state.codec, :pack_for_channel, 1) do
+        state.codec.pack_for_channel(data)
+      else
+        data
+      end
+
+    req = check_sent_resp(req)
+    :cowboy_req.stream_body(packed, :nofin, req)
+    req
+  end
+
+  defp stream_grpcweb_trailers(req, _trailers, _not_grpcweb), do: req
 end
