@@ -234,16 +234,13 @@ defmodule GRPC.Client.Connection do
     resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
 
     if Map.has_key?(state, :real_channels) do
-      Enum.map(
-        state.real_channels,
-        fn
-          {_key, {:ok, ch}} ->
-            do_disconnect(adapter, ch)
+      Enum.map(state.real_channels, fn
+        {_key, {:ok, ch}} ->
+          do_disconnect(adapter, ch)
 
-          _ ->
-            :ok
-        end
-      )
+        _ ->
+          :ok
+      end)
 
       keys_to_delete = [:real_channels, :virtual_channel]
       new_state = Map.drop(state, keys_to_delete)
