@@ -45,4 +45,19 @@ defmodule GRPC.Integration.ConnectionTest do
       :ok = GRPC.Server.stop(server)
     end
   end
+
+  test "disconnecting a channel works" do
+    server = FeatureServer
+    {:ok, _, port} = GRPC.Server.start(server, 0)
+    {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+
+    assert {:ok, _} =
+             Routeguide.RouteGuide.Stub.get_feature(channel, %Routeguide.Point{
+               latitude: 409_146_138,
+               longitude: -746_188_906
+             })
+
+    assert {:ok, _} = GRPC.Stub.disconnect(channel)
+    :ok = GRPC.Server.stop(server)
+  end
 end
