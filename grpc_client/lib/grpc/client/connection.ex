@@ -153,9 +153,7 @@ defmodule GRPC.Client.Connection do
   """
   @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(target, opts \\ []) do
-    ref = make_ref()
-
-    case build_initial_state(target, Keyword.merge(opts, ref: ref)) do
+    case build_initial_state(target, opts) do
       {:ok, initial_state} ->
         ch = initial_state.virtual_channel
 
@@ -234,8 +232,12 @@ defmodule GRPC.Client.Connection do
     resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
 
     if Map.has_key?(state, :real_channels) do
-      Enum.map(state.real_channels, fn {_key, {:ok, ch}} ->
-        adapter.disconnect(ch)
+      Enum.map(state.real_channels, fn
+        {_key, {:ok, ch}} ->
+          do_disconnect(adapter, ch)
+
+        _ ->
+          :ok
       end)
 
       keys_to_delete = [:real_channels, :virtual_channel]
@@ -303,11 +305,21 @@ defmodule GRPC.Client.Connection do
     {:global, {__MODULE__, ref}}
   end
 
+  defp do_disconnect(adapter, channel) do
+    adapter.disconnect(channel)
+  rescue
+    _ ->
+      :ok
+  catch
+    _type, _value ->
+      :ok
+  end
+
   defp build_initial_state(target, opts) do
     opts =
       Keyword.validate!(opts,
         cred: nil,
-        ref: nil,
+        name: make_ref(),
         adapter: GRPC.Client.Adapters.Gun,
         adapter_opts: [],
         interceptors: [],
@@ -333,7 +345,7 @@ defmodule GRPC.Client.Connection do
     virtual_channel = %Channel{
       scheme: scheme,
       cred: cred,
-      ref: opts[:ref],
+      ref: opts[:name],
       adapter: adapter,
       interceptors: interceptors,
       codec: norm_opts[:codec],

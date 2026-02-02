@@ -628,9 +628,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
   defp check_sent_resp(req, status \\ 200)
 
-  defp check_sent_resp(%{has_sent_resp: _} = req, status) do
-    req
-  end
+  defp check_sent_resp(%{has_sent_resp: _} = req, _status), do: req
 
   defp check_sent_resp(req, status) do
     :cowboy_req.stream_reply(status, req)

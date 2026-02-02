@@ -68,6 +68,21 @@ defmodule GRPC.Integration.StubTest do
     end)
   end
 
+  test "use a channel name to send a message" do
+    run_server(HelloServer, fn port ->
+      {:ok, _channel} =
+        GRPC.Client.Connection.connect("localhost:#{port}",
+          interceptors: [GRPC.Client.Interceptors.Logger],
+          name: :my_channel
+        )
+
+      name = "GRPC user!"
+      req = %Helloworld.HelloRequest{name: name}
+      {:ok, reply} = %GRPC.Channel{ref: :my_channel} |> Helloworld.Greeter.Stub.say_hello(req)
+      assert reply.message == "Hello, #{name}"
+    end)
+  end
+
   test "invalid channel function clause error" do
     req = %Helloworld.HelloRequest{name: "GRPC"}
 
