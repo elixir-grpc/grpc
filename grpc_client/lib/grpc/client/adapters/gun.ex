@@ -94,7 +94,7 @@ defmodule GRPC.Client.Adapters.Gun do
     do: :gun.open_unix(socket_path, open_opts)
 
   defp open(host, port, open_opts),
-    do: :gun.open(String.to_charlist(host), port, open_opts)
+    do: :gun.open(parse_address(host), port, open_opts)
 
   @impl true
   def send_request(stream, message, opts) do
@@ -493,6 +493,15 @@ defmodule GRPC.Client.Adapters.Gun do
         })
 
       {:error, rpc_error}
+    end
+  end
+
+  defp parse_address(host) do
+    host = String.to_charlist(host)
+
+    case :inet.parse_address(host) do
+      {:ok, address} -> address
+      {:error, _} -> host
     end
   end
 
