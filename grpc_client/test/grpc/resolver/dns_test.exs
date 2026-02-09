@@ -50,7 +50,7 @@ defmodule GRPC.Client.Resolver.DNSTest do
     assert {"baz", nil} in method_names
   end
 
-  test "resolves AAAA record and parses service config from TXT via GenServer" do
+  test "resolves AAAA record as fallback when A record returns empty list" do
     host = "my-service.local"
     config_name = "_grpc_config." <> host
 
