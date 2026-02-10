@@ -48,7 +48,7 @@ defmodule GRPC.Client.Resolver.DNS do
   defp lookup_addresses(host) do
     case lookup_addresses(host, :a) do
       {:ok, [_ | _] = addrs} -> {:ok, addrs}
-      {:ok, addrs} when is_list(addrs) and length(addrs) == 0 -> lookup_addresses(host, :aaaa)
+      {:ok, []} -> lookup_addresses(host, :aaaa)
       other -> other
     end
   end
