@@ -72,7 +72,7 @@ defmodule GRPC.Integration.EndpointTest do
                {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
                assert reply.message == "Hello, Elixir"
              end)
-           end) =~ "GRPC.Integration.EndpointTest.HelloServer.say_hello"
+           end) =~ "GRPC.Integration.EndpointTest.HelloServer.SayHello"
   end
 
   test "endpoint uses Logger interceptor for streaming server" do
@@ -86,7 +86,7 @@ defmodule GRPC.Integration.EndpointTest do
                loc = %Routeguide.Feature{location: point, name: "409146138,-746188906"}
                assert [{:ok, loc}, {:ok, loc}] == Enum.to_list(enum)
              end)
-           end) =~ "GRPC.Integration.EndpointTest.FeatureServer.list_features"
+           end) =~ "GRPC.Integration.EndpointTest.FeatureServer.ListFeatures"
   end
 
   test "endpoint uses Logger interceptor for streaming client" do
@@ -102,7 +102,7 @@ defmodule GRPC.Integration.EndpointTest do
                reply = GRPC.Stub.recv(stream)
                assert {:ok, %Routeguide.RouteSummary{point_count: 2}} == reply
              end)
-           end) =~ "GRPC.Integration.EndpointTest.FeatureServer.record_route"
+           end) =~ "GRPC.Integration.EndpointTest.FeatureServer.RecordRoute"
   end
 
   test "endpoint uses Logger and custom interceptor" do
@@ -120,6 +120,6 @@ defmodule GRPC.Integration.EndpointTest do
                {:ok, reply} = channel |> Helloworld.Greeter.Stub.say_hello(req)
                assert reply.message == "Hello by interceptor"
              end)
-           end) =~ "GRPC.Integration.EndpointTest.HelloServer.say_hello"
+           end) =~ "GRPC.Integration.EndpointTest.HelloServer.SayHello"
   end
 end
