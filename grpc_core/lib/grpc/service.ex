@@ -125,4 +125,31 @@ defmodule GRPC.Service do
 
   def rpc_options({_, _, _, options}), do: options
   def rpc_options({_, _, _, options}, type), do: Map.get(options, type)
+
+  @doc """
+  Format the function name for display/logging purposes.
+
+  If there's a name collision, returns "call(:Name, ...)" format to reflect actual usage.
+  Otherwise, returns the underscored name.
+
+  Handles both full 4-element RPC tuples and partial tuples (for testing).
+  """
+  def format_function_name(rpc) when is_tuple(rpc) do
+    name = elem(rpc, 0)
+
+    # Check if we have a full RPC tuple with options
+    has_collision? =
+      if tuple_size(rpc) >= 4 do
+        options = elem(rpc, 3)
+        Map.get(options, :__name_collision__, false)
+      else
+        false
+      end
+
+    if has_collision? do
+      "call(#{inspect(name)}, ...)"
+    else
+      name |> to_string() |> Macro.underscore()
+    end
+  end
 end
