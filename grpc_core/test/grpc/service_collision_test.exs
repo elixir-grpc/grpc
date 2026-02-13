@@ -12,7 +12,10 @@ defmodule GRPC.ServiceCollisionTest do
 
       # Both RPCs should be marked with collision flag
       assert length(annotated_calls) == 2
-      assert Enum.all?(annotated_calls, fn {_, _, _, opts} -> opts[:__name_collision__] == true end)
+
+      assert Enum.all?(annotated_calls, fn {_, _, _, opts} ->
+               opts[:__name_collision__] == true
+             end)
 
       # "process_data" should be in the collision map with both original names
       assert Map.has_key?(collision_map, "process_data")
@@ -32,7 +35,10 @@ defmodule GRPC.ServiceCollisionTest do
 
       # All four RPCs should be marked with collision flag
       assert length(annotated_calls) == 4
-      assert Enum.all?(annotated_calls, fn {_, _, _, opts} -> opts[:__name_collision__] == true end)
+
+      assert Enum.all?(annotated_calls, fn {_, _, _, opts} ->
+               opts[:__name_collision__] == true
+             end)
 
       # Both "get_foo" and "set_bar" should be in the collision map
       assert Map.has_key?(collision_map, "get_foo")

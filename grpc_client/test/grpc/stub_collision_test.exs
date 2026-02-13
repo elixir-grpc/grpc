@@ -33,16 +33,16 @@ defmodule GRPC.StubCollisionTest do
 
     # Non-colliding RPC should have convenience function
     assert :get_user in function_names,
-      "Expected get_user convenience function to be generated for non-colliding RPC :GetUser"
+           "Expected get_user convenience function to be generated for non-colliding RPC :GetUser"
 
     # Colliding RPCs should NOT have convenience functions
     refute :process_data in function_names,
-      "Expected NO process_data convenience function due to collision with :ProcessData"
+           "Expected NO process_data convenience function due to collision with :ProcessData"
 
     # All RPCs should be accessible via call/4 (they're all unary)
     # We can't easily check this without inspecting the function body,
     # but we can verify that call/4 clauses exist by checking the function is exported
     assert function_exported?(stub, :call, 4),
-      "Expected call/4 to be exported for unary RPC calls"
+           "Expected call/4 to be exported for unary RPC calls"
   end
 end

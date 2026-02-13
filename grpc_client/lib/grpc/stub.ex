@@ -92,7 +92,9 @@ defmodule GRPC.Stub do
       end
 
       # Define call/3 clauses for client streaming RPCs (no defaults to avoid conflicts)
-      streaming_rpcs = Enum.filter(service_mod.__rpc_calls__(), fn {_, {_, req_stream}, _, _} -> req_stream end)
+      streaming_rpcs =
+        Enum.filter(service_mod.__rpc_calls__(), fn {_, {_, req_stream}, _, _} -> req_stream end)
+
       Enum.each(streaming_rpcs, fn {name, {_, _req_stream}, {_, res_stream}, _options} = rpc ->
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
@@ -118,7 +120,9 @@ defmodule GRPC.Stub do
       end)
 
       # Define call/4 clauses for unary RPCs (no defaults to avoid conflicts)
-      unary_rpcs = Enum.filter(service_mod.__rpc_calls__(), fn {_, {_, req_stream}, _, _} -> !req_stream end)
+      unary_rpcs =
+        Enum.filter(service_mod.__rpc_calls__(), fn {_, {_, req_stream}, _, _} -> !req_stream end)
+
       Enum.each(unary_rpcs, fn {name, {_, _req_stream}, {_, res_stream}, _options} = rpc ->
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)

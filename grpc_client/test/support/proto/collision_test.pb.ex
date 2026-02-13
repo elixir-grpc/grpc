@@ -3,7 +3,7 @@ defmodule CollisionTest.Request do
 
   use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
-  field :data, 1, type: :string
+  field(:data, 1, type: :string)
 end
 
 defmodule CollisionTest.Response do
@@ -11,7 +11,7 @@ defmodule CollisionTest.Response do
 
   use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
 
-  field :result, 1, type: :string
+  field(:result, 1, type: :string)
 end
 
 defmodule CollisionTest.CollisionService.Service do
