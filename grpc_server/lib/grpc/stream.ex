@@ -67,6 +67,7 @@ defmodule GRPC.Stream do
 
   ## Options
 
+    - `:flow` — An optional pre-built `Flow` to use instead of building from input.
     - `:join_with` — An optional external `GenStage` producer to merge with the gRPC input.
     - `:dispatcher` — Specifies the `Flow` dispatcher (defaults to `GenStage.DemandDispatcher`).
     - `:propagate_context` - If `true`, the context from the `materializer` is propagated to the `Flow`.
@@ -87,6 +88,8 @@ defmodule GRPC.Stream do
   def from(input, opts \\ [])
 
   def from(%Elixir.Stream{} = input, opts), do: build_grpc_stream(input, opts)
+
+  def from(%Flow{} = flow, opts), do: build_grpc_stream(nil, Keyword.put(opts, :flow, flow))
 
   def from(input, opts) when is_list(input), do: build_grpc_stream(input, opts)
 
@@ -481,6 +484,8 @@ defmodule GRPC.Stream do
   end
 
   defp build_grpc_stream(input, opts) do
+    caller = self()
+
     metadata =
       if Keyword.has_key?(opts, :propagate_context) do
         %GRPC.Server.Stream{} = mat = Keyword.fetch!(opts, :materializer)
@@ -504,38 +509,64 @@ defmodule GRPC.Stream do
       end
     end
 
-    flow =
-      case Keyword.get(opts, :join_with) do
-        pid when is_pid(pid) ->
-          opts = Keyword.drop(opts, [:join_with, :default_dispatcher])
-
-          input_flow = Flow.from_enumerable(input, opts)
-          other_flow = Flow.from_stages([pid], opts)
-          Flow.merge([input_flow, other_flow], dispatcher, opts)
-
-        name when not is_nil(name) and is_atom(name) ->
-          pid = Process.whereis(name)
-
-          if not is_nil(pid) do
-            opts = Keyword.drop(opts, [:join_with, :default_dispatcher])
-
-            input_flow = Flow.from_enumerable(input, opts)
-            other_flow = Flow.from_stages([pid], opts)
-            Flow.merge([input_flow, other_flow], dispatcher, opts)
-          else
-            raise ArgumentError, "No process found for the given name: #{inspect(name)}"
-          end
-
-        # handle Elixir.Stream joining
-        other when is_list(other) or is_function(other) ->
-          Flow.from_enumerables([input, other], opts)
-
-        _ ->
-          opts = Keyword.drop(opts, [:join_with, :default_dispatcher])
-          Flow.from_enumerable(input, opts)
-      end
+    {flow, opts} = build_flow_from_input(input, opts, dispatcher)
+    flow = Flow.map(flow, &propagate_callers(caller, &1))
 
     %__MODULE__{flow: flow, options: opts}
+  end
+
+  defp build_flow_from_input(input, opts, dispatcher) do
+    case Keyword.get(opts, :flow) do
+      %Flow{} = custom_flow ->
+        opts = Keyword.drop(opts, [:flow])
+        {custom_flow, opts}
+
+      _ ->
+        build_flow_from_join_with(input, opts, dispatcher)
+    end
+  end
+
+  defp build_flow_from_join_with(input, opts, dispatcher) do
+    case Keyword.get(opts, :join_with) do
+      pid when is_pid(pid) ->
+        opts = Keyword.drop(opts, [:join_with, :default_dispatcher])
+        input_flow = Flow.from_enumerable(input, opts)
+        other_flow = Flow.from_stages([pid], opts)
+        {Flow.merge([input_flow, other_flow], dispatcher, opts), opts}
+
+      name when not is_nil(name) and is_atom(name) ->
+        pid = Process.whereis(name)
+
+        if not is_nil(pid) do
+          opts = Keyword.drop(opts, [:join_with, :default_dispatcher])
+          input_flow = Flow.from_enumerable(input, opts)
+          other_flow = Flow.from_stages([pid], opts)
+          {Flow.merge([input_flow, other_flow], dispatcher, opts), opts}
+        else
+          raise ArgumentError, "No process found for the given name: #{inspect(name)}"
+        end
+
+      # handle Elixir.Stream joining
+      other when is_list(other) or is_function(other) ->
+        {Flow.from_enumerables([input, other], opts), opts}
+
+      _ ->
+        opts = Keyword.drop(opts, [:join_with, :default_dispatcher])
+        {Flow.from_enumerable(input, opts), opts}
+    end
+  end
+
+  # Flow/GenStage workers are spawned processes that don't inherit the caller's
+  # process dictionary. Elixir's Task module sets :"$callers" automatically, but
+  # Flow does not. Libraries like opentelemetry_process_propagator walk the
+  # :"$callers" chain to find OTel context across process boundaries (this is the
+  # same mechanism opentelemetry_ecto uses for Ecto preloads in Task processes).
+  # By setting :"$callers" here, we restore that ancestry chain so any
+  # process-dictionary-based context propagation works transparently.
+  defp propagate_callers(caller, item) do
+    callers = Process.get(:"$callers") || []
+    Process.put(:"$callers", Enum.uniq([caller | callers]))
+    item
   end
 
   defp send_response(from, msg, opts) do
