@@ -79,6 +79,66 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
       assert new_state.buffer == extra_data
       assert :queue.to_list(new_state.responses) == [expected_response_message]
     end
+
+    test "decodes all complete messages when a single chunk contains two full messages", %{
+      state: state
+    } do
+      hello_luis = <<0, 0, 0, 0, 12, 10, 10, 72, 101, 108, 108, 111, 32, 76, 117, 105, 115>>
+      bye_luis = <<0, 0, 0, 0, 10, 10, 8, 66, 121, 101, 32, 76, 117, 105, 115>>
+      combined = hello_luis <> bye_luis
+
+      response =
+        StreamResponseProcess.handle_call({:consume_response, {:data, combined}}, self(), state)
+
+      assert {:reply, :ok, new_state, {:continue, :produce_response}} = response
+      assert new_state.buffer == <<>>
+
+      assert :queue.to_list(new_state.responses) == [
+               {:ok, build(:hello_reply_rpc)},
+               {:ok, build(:bye_reply_rpc)}
+             ]
+    end
+
+    test "decodes all complete messages and retains the incomplete tail in the buffer", %{
+      state: state
+    } do
+      hello_luis = <<0, 0, 0, 0, 12, 10, 10, 72, 101, 108, 108, 111, 32, 76, 117, 105, 115>>
+      bye_luis = <<0, 0, 0, 0, 10, 10, 8, 66, 121, 101, 32, 76, 117, 105, 115>>
+      # first 10 bytes of hello_luis — not enough to form a third full message
+      partial = <<0, 0, 0, 0, 12, 10, 10, 72, 101, 108>>
+      combined = hello_luis <> bye_luis <> partial
+
+      response =
+        StreamResponseProcess.handle_call({:consume_response, {:data, combined}}, self(), state)
+
+      assert {:reply, :ok, new_state, {:continue, :produce_response}} = response
+      assert new_state.buffer == partial
+
+      assert :queue.to_list(new_state.responses) == [
+               {:ok, build(:hello_reply_rpc)},
+               {:ok, build(:bye_reply_rpc)}
+             ]
+    end
+
+    test "decodes all complete messages when a single chunk contains three full messages", %{
+      state: state
+    } do
+      hello_luis = <<0, 0, 0, 0, 12, 10, 10, 72, 101, 108, 108, 111, 32, 76, 117, 105, 115>>
+      bye_luis = <<0, 0, 0, 0, 10, 10, 8, 66, 121, 101, 32, 76, 117, 105, 115>>
+      combined = hello_luis <> bye_luis <> hello_luis
+
+      response =
+        StreamResponseProcess.handle_call({:consume_response, {:data, combined}}, self(), state)
+
+      assert {:reply, :ok, new_state, {:continue, :produce_response}} = response
+      assert new_state.buffer == <<>>
+
+      assert :queue.to_list(new_state.responses) == [
+               {:ok, build(:hello_reply_rpc)},
+               {:ok, build(:bye_reply_rpc)},
+               {:ok, build(:hello_reply_rpc)}
+             ]
+    end
   end
 
   describe "handle_call/3 - headers/trailers" do
@@ -330,6 +390,25 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
         ]
 
       assert Enum.to_list(stream) == expected_elements
+    end
+
+    test "emits all messages when a single chunk contains multiple complete gRPC messages",
+         %{pid: pid} do
+      hello_luis = <<0, 0, 0, 0, 12, 10, 10, 72, 101, 108, 108, 111, 32, 76, 117, 105, 115>>
+      bye_luis = <<0, 0, 0, 0, 10, 10, 8, 66, 121, 101, 32, 76, 117, 105, 115>>
+      combined = hello_luis <> bye_luis
+
+      stream = StreamResponseProcess.build_stream(pid)
+
+      # A single consume call carrying both messages — previously only the
+      # first would have been decoded, causing the second to block.
+      StreamResponseProcess.consume(pid, :data, combined)
+      StreamResponseProcess.done(pid)
+
+      assert Enum.to_list(stream) == [
+               {:ok, build(:hello_reply_rpc)},
+               {:ok, build(:bye_reply_rpc)}
+             ]
     end
 
     test_with_params(
