@@ -2,7 +2,7 @@
 
 ### Summary
 
-This PR fixes two bugs caught by the Elixir compiler in the `grpc_client` package, and adds tests for the first fix.
+This PR fixes two bugs caught by the Elixir compiler in the `grpc_client` package. The first fix ships with new tests covering previously untested code paths. The second fix was already covered by pre-existing tests.
 
 ---
 
@@ -53,11 +53,11 @@ Pass `ch` (the virtual channel already built from `initial_state`) as the first 
 
 #### Tests
 
-This fix ships with a new test file **`test/grpc/client/connection_test.exs`** covering:
+This fix ships with a new test file **`test/grpc/client/connection_test.exs`** covering code paths that had no tests before:
 
 - `pick_channel/2` in isolation — both the `:no_connection` and the happy path.
-- The `already_started` branch of `connect/2` that was broken.
-- Disconnect behaviour and the intentional persistence of the `:persistent_term` entry after disconnect.
+- The `already_started` branch of `connect/2` that was broken — both the successful reuse and the missing `:persistent_term` entry edge case.
+- `disconnect/1` — verifies the GenServer process stops and documents the intentional behaviour that the `:persistent_term` entry is not erased on disconnect.
 
 ---
 
@@ -78,7 +78,7 @@ defp chunk_body(body, bytes_length) do
 end
 ```
 
-As of Elixir 1.17, the compiler requires variables that are defined **outside** a pattern match and referenced inside a `size(...)` specifier to be pinned with `^`. Without it, the compiler emits a warning today and will make it an error in a future release.
+As of Elixir 1.17, the compiler requires variables defined **outside** a pattern match and referenced inside a `size(...)` specifier to be pinned with `^`. Without it, the compiler emits a warning today and will make it an error in a future release.
 
 #### Fix
 
