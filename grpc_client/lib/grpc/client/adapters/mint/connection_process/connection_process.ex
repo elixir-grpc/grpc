@@ -343,7 +343,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
 
   defp chunk_body(body, bytes_length) do
     case body do
-      <<head::binary-size(bytes_length), tail::binary>> -> {head, tail}
+      <<head::binary-size(^bytes_length), tail::binary>> -> {head, tail}
       _other -> {body, <<>>}
     end
   end
