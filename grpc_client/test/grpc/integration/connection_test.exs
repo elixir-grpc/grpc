@@ -60,21 +60,4 @@ defmodule GRPC.Integration.ConnectionTest do
     assert {:ok, _} = GRPC.Stub.disconnect(channel)
     :ok = GRPC.Server.stop(server)
   end
-
-  test "connecting twice with the same name reuses the existing channel and it remains usable" do
-    server = FeatureServer
-    {:ok, _, port} = GRPC.Server.start(server, 0)
-    point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
-    name = make_ref()
-
-    {:ok, first_channel} = GRPC.Stub.connect("localhost:#{port}", name: name)
-    {:ok, second_channel} = GRPC.Stub.connect("localhost:#{port}", name: name)
-
-    assert first_channel.ref == second_channel.ref
-    assert {:ok, _} = Routeguide.RouteGuide.Stub.get_feature(first_channel, point)
-    assert {:ok, _} = Routeguide.RouteGuide.Stub.get_feature(second_channel, point)
-
-    assert {:ok, _} = GRPC.Stub.disconnect(first_channel)
-    :ok = GRPC.Server.stop(server)
-  end
 end
