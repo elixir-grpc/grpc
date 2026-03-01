@@ -162,7 +162,7 @@ defmodule GRPC.Client.Connection do
             {:ok, ch}
 
           {:error, {:already_started, _pid}} ->
-            case pick_channel(opts) do
+            case pick_channel(ch, opts) do
               {:ok, %Channel{} = channel} ->
                 {:ok, channel}
 
