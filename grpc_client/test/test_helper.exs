@@ -11,5 +11,4 @@ if !parsed[:warnings_as_errors] do
   Application.put_env(:grpc_client, :run_warning_tests, true)
 end
 
-
 ExUnit.start(capture_log: true)
