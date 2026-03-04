@@ -88,6 +88,8 @@ defmodule GRPC.Stub do
 
             YourStub.call(:OriginalRpcName, channel, request, opts)
             YourStub.call(:original_rpc_name, channel, request, opts)
+
+        See also: https://protobuf.dev/programming-guides/style/
         """)
       end
 
