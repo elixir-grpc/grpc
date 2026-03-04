@@ -506,9 +506,9 @@ end
 
 ## Benchmark
 
-1. [Simple benchmark](examples/helloworld/README.md#Benchmark) by using [ghz](https://ghz.sh/)
+1. [Simple benchmark](../benchmark) by using [ghz](https://ghz.sh/)
 
-2. [Benchmark](benchmark) followed by official spec
+2. [Benchmark](../benchmark) followed by official spec
 
 ## Contributing
 
