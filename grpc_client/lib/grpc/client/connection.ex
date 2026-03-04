@@ -162,7 +162,7 @@ defmodule GRPC.Client.Connection do
             {:ok, ch}
 
           {:error, {:already_started, _pid}} ->
-            case pick_channel(opts) do
+            case pick_channel(ch, opts) do
               {:ok, %Channel{} = channel} ->
                 {:ok, channel}
 
@@ -258,7 +258,7 @@ defmodule GRPC.Client.Connection do
       when not is_nil(lb_mod) do
     {:ok, {prefer_host, prefer_port}, new_lb_state} = lb_mod.pick(lb_state)
 
-    channel_key = "#{prefer_host}:#{prefer_port}"
+    channel_key = build_address_key(prefer_host, prefer_port)
 
     case Map.get(channels, channel_key) do
       nil ->
