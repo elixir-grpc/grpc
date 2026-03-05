@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package collision_test;
+
+message Request {
+  string data = 1;
+}
+
+message Response {
+  string result = 1;
+}
+
+service CollisionService {
+  rpc process_data (Request) returns (Response) {}
+  rpc ProcessData (Request) returns (Response) {}
+  rpc GetUser (Request) returns (Response) {}
+}

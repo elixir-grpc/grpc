@@ -34,7 +34,8 @@ defmodule GRPC.Server.Interceptors.Logger do
     if Logger.compare_levels(level, Logger.level()) != :lt do
       Logger.metadata(request_id: Logger.metadata()[:request_id] || stream.request_id)
 
-      Logger.log(level, "Handled by #{inspect(stream.server)}.#{elem(stream.rpc, 0)}")
+      function_name = GRPC.Service.format_function_name(stream.rpc)
+      Logger.log(level, "Handled by #{inspect(stream.server)}.#{function_name}")
 
       start = System.monotonic_time()
       result = next.(req, stream)

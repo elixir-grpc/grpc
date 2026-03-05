@@ -792,7 +792,7 @@ defmodule GRPC.Integration.ServerTest do
       assert %{
                stream: %GRPC.Client.Stream{
                  rpc:
-                   {"say_hello", {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false},
+                   {:SayHello, {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false},
                     %{}}
                }
              } = metadata
@@ -804,7 +804,7 @@ defmodule GRPC.Integration.ServerTest do
       assert %{
                stream: %GRPC.Client.Stream{
                  rpc:
-                   {"say_hello", {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false},
+                   {:SayHello, {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false},
                     %{}}
                }
              } = metadata
@@ -882,7 +882,7 @@ defmodule GRPC.Integration.ServerTest do
       assert %{
                stream: %GRPC.Client.Stream{
                  rpc:
-                   {"say_hello", {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false},
+                   {:SayHello, {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false},
                     %{}}
                }
              } = metadata
@@ -894,7 +894,7 @@ defmodule GRPC.Integration.ServerTest do
       assert %{
                stream: %GRPC.Client.Stream{
                  rpc:
-                   {"say_hello", {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false},
+                   {:SayHello, {Helloworld.HelloRequest, false}, {Helloworld.HelloReply, false},
                     %{}}
                }
              } = metadata
