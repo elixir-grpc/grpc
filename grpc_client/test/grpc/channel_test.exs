@@ -32,7 +32,7 @@ defmodule GRPC.ChannelTest do
 
         assert Keyword.has_key?(cred.ssl, :verify)
         assert Keyword.has_key?(cred.ssl, :depth)
-        assert Keyword.has_key?(cred.ssl, :cacert_file)
+        assert Keyword.has_key?(cred.ssl, :cacertfile)
 
         assert {:ok, _} = GRPC.Stub.disconnect(channel)
       end

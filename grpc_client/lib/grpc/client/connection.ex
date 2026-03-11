@@ -545,7 +545,7 @@ defmodule GRPC.Client.Connection do
         ssl: [
           verify: :verify_peer,
           depth: 99,
-          cacert_file: CAStore.file_path()
+          cacertfile: CAStore.file_path()
         ]
       }
     end
