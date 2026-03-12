@@ -61,6 +61,8 @@ jobs:
         run: mix setup 1>/dev/null
       - name: Run Tests
         run: mix test --warnings-as-errors
+      - name: Run Warning Tests
+        run: mix test --only warning_test
   interop-tests:
     runs-on: ubuntu-latest
     name: Interop tests

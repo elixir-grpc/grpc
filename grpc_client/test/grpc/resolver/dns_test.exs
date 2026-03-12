@@ -49,4 +49,23 @@ defmodule GRPC.Client.Resolver.DNSTest do
     assert {"foo", "bar"} in method_names
     assert {"baz", nil} in method_names
   end
+
+  test "resolves AAAA record as fallback when A record returns empty list" do
+    host = "my-service.local"
+    config_name = "_grpc_config." <> host
+
+    DNS.MockAdapter
+    |> expect(:lookup, fn ^host, :a ->
+      {:ok, []}
+    end)
+    |> expect(:lookup, fn ^host, :aaaa ->
+      {:ok, [{0, 0, 0, 0, 0, 0, 0, 1}]}
+    end)
+    |> expect(:lookup, fn ^config_name, :txt ->
+      {:ok, []}
+    end)
+
+    assert {:ok, %{addresses: addrs}} = DNS.resolve(host)
+    assert [%{address: "::1", port: 50051}] = addrs
+  end
 end

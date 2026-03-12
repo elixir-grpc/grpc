@@ -5,6 +5,13 @@ defmodule GRPC.Server.Adapters.ReportException do
 
   defexception [:kind, :reason, :stack, :adapter_extra]
 
+  @type t :: %__MODULE__{
+          kind: :error | :exit | :throw,
+          reason: GRPC.RPCError.t() | Exception.t() | term(),
+          stack: Exception.stacktrace(),
+          adapter_extra: term()
+        }
+
   def new(adapter_extra, exception, stack \\ [], kind \\ :error)
 
   def new(adapter_extra, %{__exception__: _} = exception, stack, kind) do

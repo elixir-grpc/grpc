@@ -4,7 +4,17 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   # incoming messages from a connection. For each request, there will be
   # a process responsible for consuming its messages. At the end of a stream
   # this process will automatically be killed.
-
+  #
+  # ## Buffer draining
+  #
+  # A single HTTP/2 data frame may carry more than one complete gRPC message.
+  # Whenever a `:data` chunk arrives, the process concatenates it with any
+  # previously buffered bytes and then calls `drain_buffer/5` to decode *all*
+  # complete messages in one pass before returning control. Only the incomplete
+  # tail (if any) is kept in the buffer for the next chunk. This prevents
+  # consumers from blocking on `:get_response` when the data is already
+  # available inside the process.
+  #
   # TODO: Refactor the GenServer.call/3 occurrences on this module to produce
   # telemetry events and log entries in case of failures
 
@@ -96,18 +106,17 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
       responses: responses
     } = state
 
-    case GRPC.Message.get_message(buffer <> data, state.compressor) do
-      {{_, message}, rest} ->
-        # TODO add code here to handle compressor headers
-        response = codec.decode(message, res_mod)
-        new_responses = :queue.in({:ok, response}, responses)
-        new_state = %{state | buffer: rest, responses: new_responses}
-        {:reply, :ok, new_state, {:continue, :produce_response}}
+    # Concatenate once and fully drain all complete gRPC messages from the
+    # combined buffer in a single pass, avoiding repeated allocation and
+    # preventing consumers from blocking when multiple messages arrive in
+    # the same HTTP/2 data frame.
+    combined = buffer <> data
 
-      _ ->
-        new_state = %{state | buffer: buffer <> data}
-        {:reply, :ok, new_state, {:continue, :produce_response}}
-    end
+    {new_buffer, new_responses} =
+      drain_buffer(combined, state.compressor, codec, res_mod, responses)
+
+    new_state = %{state | buffer: new_buffer, responses: new_responses}
+    {:reply, :ok, new_state, {:continue, :produce_response}}
   end
 
   def handle_call(
@@ -172,6 +181,30 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
         {{:value, response}, rest} = :queue.out(state.responses)
         GenServer.reply(state.from, response)
         {:noreply, %{state | responses: rest, from: nil}}
+    end
+  end
+
+  # Recursively decodes all complete gRPC messages from `buffer`, accumulating
+  # each decoded response into `responses_queue`. Recursion terminates when
+  # `GRPC.Message.get_message/2` can no longer extract a full message from the
+  # remaining bytes, at which point the leftover buffer and the populated queue
+  # are returned as `{remaining_buffer, updated_queue}`.
+  defp drain_buffer(buffer, compressor, codec, res_mod, responses_queue) do
+    case GRPC.Message.get_message(buffer, compressor) do
+      {{_, message}, rest} ->
+        # TODO: add code here to handle compressor headers
+        response = codec.decode(message, res_mod)
+
+        drain_buffer(
+          rest,
+          compressor,
+          codec,
+          res_mod,
+          :queue.in({:ok, response}, responses_queue)
+        )
+
+      _ ->
+        {buffer, responses_queue}
     end
   end
 

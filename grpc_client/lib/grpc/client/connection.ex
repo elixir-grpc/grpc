@@ -162,7 +162,7 @@ defmodule GRPC.Client.Connection do
             {:ok, ch}
 
           {:error, {:already_started, _pid}} ->
-            case pick_channel(opts) do
+            case pick_channel(ch, opts) do
               {:ok, %Channel{} = channel} ->
                 {:ok, channel}
 
@@ -230,6 +230,7 @@ defmodule GRPC.Client.Connection do
   @impl GenServer
   def handle_call({:disconnect, %Channel{adapter: adapter} = channel}, _from, state) do
     resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
+    :persistent_term.erase({__MODULE__, :lb_state, channel.ref})
 
     if Map.has_key?(state, :real_channels) do
       Enum.map(state.real_channels, fn
@@ -258,7 +259,7 @@ defmodule GRPC.Client.Connection do
       when not is_nil(lb_mod) do
     {:ok, {prefer_host, prefer_port}, new_lb_state} = lb_mod.pick(lb_state)
 
-    channel_key = "#{prefer_host}:#{prefer_port}"
+    channel_key = build_address_key(prefer_host, prefer_port)
 
     case Map.get(channels, channel_key) do
       nil ->
@@ -299,6 +300,12 @@ defmodule GRPC.Client.Connection do
   end
 
   @impl GenServer
+  def terminate(_reason, %{virtual_channel: %{ref: ref}}) do
+    :persistent_term.erase({__MODULE__, :lb_state, ref})
+  rescue
+    _ -> :ok
+  end
+
   def terminate(_reason, _state), do: :ok
 
   defp via(ref) do
@@ -545,7 +552,7 @@ defmodule GRPC.Client.Connection do
         ssl: [
           verify: :verify_peer,
           depth: 99,
-          cacert_file: CAStore.file_path()
+          cacertfile: CAStore.file_path()
         ]
       }
     end

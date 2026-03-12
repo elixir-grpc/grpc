@@ -61,7 +61,7 @@ defmodule GRPC.Client.Interceptors.Logger do
         "Call ",
         stream.service_name,
         ".",
-        to_string(elem(stream.rpc, 0)),
+        GRPC.Service.format_function_name(stream.rpc),
         " -> ",
         inspect(error),
         " (",
@@ -83,7 +83,7 @@ defmodule GRPC.Client.Interceptors.Logger do
             "Call ",
             stream.service_name,
             ".",
-            to_string(elem(stream.rpc, 0)),
+            GRPC.Service.format_function_name(stream.rpc),
             " -> ",
             inspect(status),
             " (",
@@ -94,7 +94,7 @@ defmodule GRPC.Client.Interceptors.Logger do
 
       _otherwise ->
         Logger.log(level, fn ->
-          ["Call ", to_string(elem(stream.rpc, 0)), " of ", stream.service_name]
+          ["Call ", GRPC.Service.format_function_name(stream.rpc), " of ", stream.service_name]
         end)
     end
   end

@@ -138,6 +138,24 @@ defmodule GRPC.Server do
       http_transcode = opts[:http_transcode]
 
       codecs = if http_transcode, do: [GRPC.Codec.JSON | codecs], else: codecs
+      collision_map = service_mod.__rpc_name_collisions__()
+
+      # Emit warnings for collisions
+      if map_size(collision_map) > 0 do
+        collision_summary =
+          collision_map
+          |> Enum.map(fn {underscored, originals} ->
+            names = Enum.map_join(originals, ", ", &":#{&1}")
+            "  - #{names} → #{underscored}/N"
+          end)
+          |> Enum.join("\n")
+
+        IO.warn("""
+        RPC name collision detected in service #{service_name}.
+        The following RPC names collide when converted to snake_case:
+        #{collision_summary}
+        """)
+      end
 
       routes =
         for {name, _, _, options} = rpc <- service_mod.__rpc_calls__(), reduce: [] do
@@ -157,7 +175,10 @@ defmodule GRPC.Server do
         end
 
       Enum.each(service_mod.__rpc_calls__(), fn {name, _, _, options} = rpc ->
+        # Use underscored name for function dispatch
+        # Note: Colliding RPCs will cause compilation errors, which is intentional
         func_name = name |> to_string |> Macro.underscore() |> String.to_atom()
+
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
 
@@ -171,7 +192,7 @@ defmodule GRPC.Server do
                 method_name: unquote(to_string(name)),
                 grpc_type: unquote(grpc_type)
             },
-            unquote(Macro.escape(put_elem(rpc, 0, func_name))),
+            unquote(Macro.escape(rpc)),
             unquote(func_name)
           )
         end
@@ -190,7 +211,7 @@ defmodule GRPC.Server do
                   grpc_type: unquote(grpc_type),
                   http_method: unquote(http_method)
               },
-              unquote(Macro.escape(put_elem(rpc, 0, func_name))),
+              unquote(Macro.escape(rpc)),
               unquote(func_name)
             )
           end

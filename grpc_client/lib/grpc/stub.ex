@@ -58,15 +58,46 @@ defmodule GRPC.Stub do
           | receive_data_return
 
   defmacro __using__(opts) do
-    opts = Keyword.validate!(opts, [:service])
+    opts = Keyword.validate!(opts, [:service, warn_on_collision: true])
 
     quote bind_quoted: [opts: opts] do
       service_mod = opts[:service]
       service_name = service_mod.__meta__(:name)
+      collision_map = service_mod.__rpc_name_collisions__()
+      warn_on_collision = Keyword.get(opts, :warn_on_collision, true)
 
-      Enum.each(service_mod.__rpc_calls__(), fn {name, {_, req_stream}, {_, res_stream}, _options} =
-                                                  rpc ->
-        func_name = name |> to_string |> Macro.underscore()
+      # Emit warnings for collisions (unless disabled)
+      if map_size(collision_map) > 0 and warn_on_collision do
+        collision_details =
+          collision_map
+          |> Enum.map(fn {underscored, originals} ->
+            names = Enum.map_join(originals, ", ", &":#{&1}")
+            "  - #{names} → #{underscored}/N"
+          end)
+          |> Enum.join("\n")
+
+        IO.warn("""
+        RPC name collision detected in service #{service_name}.
+        The following RPC names collide when converted to snake_case:
+        #{collision_details}
+
+        Conflicting RPC functions will not be generated. Instead, use the general
+        `call/3` or `call/4` function with the original RPC name as the first argument.
+
+        Example:
+
+            YourStub.call(:OriginalRpcName, channel, request, opts)
+            YourStub.call(:original_rpc_name, channel, request, opts)
+
+        See also: https://protobuf.dev/programming-guides/style/
+        """)
+      end
+
+      # Define call/3 clauses for client streaming RPCs (no defaults to avoid conflicts)
+      streaming_rpcs =
+        Enum.filter(service_mod.__rpc_calls__(), fn {_, {_, req_stream}, _, _} -> req_stream end)
+
+      Enum.each(streaming_rpcs, fn {name, {_, _req_stream}, {_, res_stream}, _options} = rpc ->
         path = "/#{service_name}/#{name}"
         grpc_type = GRPC.Service.grpc_type(rpc)
 
@@ -75,32 +106,77 @@ defmodule GRPC.Stub do
           method_name: to_string(name),
           grpc_type: grpc_type,
           path: path,
-          rpc: put_elem(rpc, 0, func_name),
+          rpc: rpc,
           server_stream: res_stream
         }
 
-        if req_stream do
-          def unquote(String.to_atom(func_name))(%GRPC.Channel{} = channel, opts \\ []) do
-            GRPC.Stub.call(
-              unquote(service_mod),
-              unquote(Macro.escape(rpc)),
-              %{unquote(Macro.escape(stream)) | channel: channel},
-              nil,
-              opts
-            )
-          end
-        else
-          def unquote(String.to_atom(func_name))(%GRPC.Channel{} = channel, request, opts \\ []) do
-            GRPC.Stub.call(
-              unquote(service_mod),
-              unquote(Macro.escape(rpc)),
-              %{unquote(Macro.escape(stream)) | channel: channel},
-              request,
-              opts
-            )
+        def call(unquote(name), %GRPC.Channel{} = channel, opts) when is_list(opts) do
+          GRPC.Stub.call(
+            unquote(service_mod),
+            unquote(Macro.escape(rpc)),
+            %{unquote(Macro.escape(stream)) | channel: channel},
+            nil,
+            opts
+          )
+        end
+      end)
+
+      # Define call/4 clauses for unary RPCs (no defaults to avoid conflicts)
+      unary_rpcs =
+        Enum.filter(service_mod.__rpc_calls__(), fn {_, {_, req_stream}, _, _} -> !req_stream end)
+
+      Enum.each(unary_rpcs, fn {name, {_, _req_stream}, {_, res_stream}, _options} = rpc ->
+        path = "/#{service_name}/#{name}"
+        grpc_type = GRPC.Service.grpc_type(rpc)
+
+        stream = %GRPC.Client.Stream{
+          service_name: service_name,
+          method_name: to_string(name),
+          grpc_type: grpc_type,
+          path: path,
+          rpc: rpc,
+          server_stream: res_stream
+        }
+
+        def call(unquote(name), %GRPC.Channel{} = channel, request, opts) when is_list(opts) do
+          GRPC.Stub.call(
+            unquote(service_mod),
+            unquote(Macro.escape(rpc)),
+            %{unquote(Macro.escape(stream)) | channel: channel},
+            request,
+            opts
+          )
+        end
+      end)
+
+      # Define convenience functions for non-colliding RPCs
+      Enum.each(service_mod.__rpc_calls__(), fn {name, {_, req_stream}, _, options} ->
+        has_collision = Map.get(options, :__name_collision__, false)
+
+        unless has_collision do
+          func_name = name |> to_string |> Macro.underscore() |> String.to_atom()
+
+          if req_stream do
+            def unquote(func_name)(%GRPC.Channel{} = channel, opts \\ []) do
+              call(unquote(name), channel, opts)
+            end
+          else
+            def unquote(func_name)(%GRPC.Channel{} = channel, request, opts \\ []) do
+              call(unquote(name), channel, request, opts)
+            end
           end
         end
       end)
+
+      # Catch-all for unknown RPC names
+      def call(rpc_name, %GRPC.Channel{} = _channel, _opts_or_request, _opts)
+          when is_atom(rpc_name) do
+        {:error,
+         GRPC.RPCError.exception(
+           GRPC.Status.unimplemented(),
+           "RPC #{rpc_name} not found in service #{unquote(service_name)}"
+         )}
+      end
     end
   end
 

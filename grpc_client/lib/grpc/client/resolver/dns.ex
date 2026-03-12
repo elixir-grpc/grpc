@@ -46,7 +46,15 @@ defmodule GRPC.Client.Resolver.DNS do
   end
 
   defp lookup_addresses(host) do
-    case adapter().lookup(host, :a) do
+    case lookup_addresses(host, :a) do
+      {:ok, [_ | _] = addrs} -> {:ok, addrs}
+      {:ok, []} -> lookup_addresses(host, :aaaa)
+      other -> other
+    end
+  end
+
+  defp lookup_addresses(host, type) do
+    case adapter().lookup(host, type) do
       {:ok, addrs} when is_list(addrs) -> {:ok, addrs}
       addrs when is_list(addrs) -> {:ok, addrs}
       other -> other

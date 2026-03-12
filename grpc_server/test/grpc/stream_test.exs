@@ -96,6 +96,90 @@ defmodule GRPC.StreamTest do
     end
   end
 
+  describe "from/2 with custom Flow" do
+    test "accepts a pre-built Flow" do
+      flow = Flow.from_enumerable([1, 2, 3])
+
+      result =
+        GRPC.Stream.from(flow)
+        |> GRPC.Stream.map(&(&1 * 2))
+        |> GRPC.Stream.to_flow()
+        |> Enum.to_list()
+
+      assert Enum.sort(result) == [2, 4, 6]
+    end
+
+    test "callers are appended to pre-existing $callers when passing a custom Flow" do
+      parent = self()
+      preexisting = spawn(fn -> Process.sleep(:infinity) end)
+
+      flow_with_preexisting_callers =
+        Flow.from_enumerable([1, 2, 3])
+        |> Flow.map(fn item ->
+          Process.put(:"$callers", [preexisting])
+          item
+        end)
+
+      result =
+        GRPC.Stream.from(flow_with_preexisting_callers)
+        |> GRPC.Stream.map(fn item ->
+          send(parent, {:callers, self(), Process.get(:"$callers"), item})
+          item
+        end)
+        |> GRPC.Stream.to_flow()
+        |> Enum.to_list()
+
+      assert Enum.sort(result) == [1, 2, 3]
+
+      for item <- [1, 2, 3] do
+        assert_receive {:callers, _worker_pid, [^parent, ^preexisting], ^item}
+      end
+
+      Process.exit(preexisting, :kill)
+    end
+  end
+
+  describe "process context propagation" do
+    test "Flow workers have $callers set to the originating process" do
+      parent = self()
+
+      result =
+        GRPC.Stream.from([1, 2, 3])
+        |> GRPC.Stream.map(fn item ->
+          send(parent, {:callers, self(), Process.get(:"$callers"), item})
+          item
+        end)
+        |> GRPC.Stream.to_flow()
+        |> Enum.to_list()
+
+      assert Enum.sort(result) == [1, 2, 3]
+
+      for item <- [1, 2, 3] do
+        assert_receive {:callers, _worker_pid, [^parent], ^item}
+      end
+    end
+
+    test "$callers is set for unary streams" do
+      parent = self()
+      input = %Routeguide.Point{latitude: 1, longitude: 2}
+
+      materializer = %GRPC.Server.Stream{
+        adapter: GRPC.StreamTest.FakeAdapter,
+        payload: %{test_pid: parent, ref: make_ref()},
+        grpc_type: :unary
+      }
+
+      GRPC.Stream.unary(input, materializer: materializer)
+      |> GRPC.Stream.map(fn item ->
+        send(parent, {:callers, self(), Process.get(:"$callers"), item})
+        item
+      end)
+      |> GRPC.Stream.run()
+
+      assert_receive {:callers, _worker_pid, [^parent], ^input}
+    end
+  end
+
   describe "ask/3 with pid" do
     test "calls a pid and returns the response" do
       pid =
