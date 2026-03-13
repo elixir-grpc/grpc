@@ -34,7 +34,7 @@ defmodule GRPC.Server.MixProject do
   defp deps do
     [
       #{:grpc_core, path: "../grpc_core"},
-      {:grpc_core, "~> 1.0"}, 
+      {:grpc_core, "~> 1.0.0-rc.1"}, 
       {:protobuf, "~> 0.14"},
       {:cowboy, "~> 2.14"},
       {:cowlib, "~> 2.14"},
@@ -63,6 +63,7 @@ defmodule GRPC.Server.MixProject do
       source_ref: "v#{@version}",
       source_url_pattern: "#{@source_url}/blob/v#{@version}/%{path}#L%{line}",
       extras: [
+        "README.md",
         "CHANGELOG.md",
         "guides/getting_started/quickstart.livemd",
         "guides/getting_started/stream.livemd",
