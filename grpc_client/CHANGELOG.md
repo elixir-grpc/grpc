@@ -4,31 +4,31 @@
 
 ### Enhancements
 
-  * Feat: separating client and server into two distinct packages (#477)
-  * Feat: add t() typespec to GRPC.Server.Adapters.ReportException (#506)
-  * Feat: Add IPv6 support for gRPC gun adapter (#495)
-  * Feat: Support naming a virtual channel (#491)
-  * Feat: Support grpcweb trailers encoded in the message (#481)
+  * The client and server implementations were separated into two distinct packages to improve modularity and maintainability.
+  * A t() typespec was added to GRPC.Server.Adapters.ReportException to improve type documentation and tooling support.
+  * IPv6 support was added to the gRPC gun adapter, enabling connections over IPv6 networks.
+  * Virtual channels can now be explicitly named, allowing clearer identification and management of channels.
+  * Support was added for grpc-web trailers encoded in the message body, improving compatibility with grpc-web clients.
 
-### Bug fixes
+### Bug Fixes
 
-  * Fix Stream map_error send_response handling (#487)
-  * Fix: erase persistent_term leak in GRPC.Client.Connection on disconnect (#509)
-  * Fix: cacertfile rename (#508)
-  * Fix: detect name collisions and provide fallback call function (#497)
-  * Fix: broken benchmark links (#505)
-  * Fix: two compiler warnings/errors in grpc_client (#504)
-  * Fix: propagate $callers in GRPC.Stream Flow workers (#502)
-  * Fix: use build_address_key/2 in handle_info(:refresh) to support Unix domain sockets (#501)
-  * Fix: fully drain buffer when an HTTP/2 frame carries multiple gRPC messages (#498)
-  * Fix: client disconnect (#493)
-  * Fix: Elixir 1.19 type system warnings (#490)
-  * Fix: Stream map error  (#487)
-  * Fix: Connection state created by build_direct_state (#480)
+  * Fixed an issue in stream map_error where send_response handling could behave incorrectly.
+  * Resolved a persistent_term memory leak in GRPC.Client.Connection that occurred when a connection was disconnected.
+  * Corrected the cacertfile option name.
+  * Added detection of name collisions and introduced a fallback mechanism for the call function.
+  * Fixed broken benchmark links in the project.
+  * Resolved two compiler warnings/errors in grpc_client.
+  * Ensured $callers are properly propagated in GRPC.Stream Flow workers.
+  * Fixed address key generation in handle_info(:refresh) to correctly support Unix domain sockets.
+  * Fixed an issue where buffers were not fully drained when a single HTTP/2 frame carried multiple gRPC messages.
+  * Resolved a client disconnection handling issue.
+  * Fixed type system warnings related to Elixir 1.19.
+  * Fixed an error handling issue in stream map_error.
+  * Corrected the connection state initialization created by build_direct_state.
 
-### Docs Fixes
+### Documentation Fixes
 
-  * Docs fixes: unary response correction, a note on adapter_opts.cred (#484)
+  * Corrected documentation related to unary responses and added clarification about the adapter_opts.cred option.
 
 ## v0.11.5 (2025-11-14)
 
