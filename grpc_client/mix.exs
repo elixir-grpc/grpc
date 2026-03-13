@@ -38,7 +38,8 @@ defmodule GrpcClient.MixProject do
       {:ex_doc, "~> 0.39", only: [:dev, :docs], runtime: false},
       {:ex_parameterized, "~> 1.3.7", only: :test},
       {:mox, "~> 1.2", only: :test},
-      {:grpc_server, path: "../grpc_server", only: :test}
+      #{:grpc_server, path: "../grpc_server", only: :test}
+      {:grpc_server, "~> 1.0.0-rc.1", only: :test}
     ]
   end
 
