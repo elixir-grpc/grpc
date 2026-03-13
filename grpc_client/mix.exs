@@ -29,8 +29,8 @@ defmodule GrpcClient.MixProject do
 
   defp deps do
     [
-      {:grpc_core, path: "../grpc_core"},
-      # {:grpc_core, "~> 1.0"}, # Uncomment for hex release
+      #{:grpc_core, path: "../grpc_core"},
+      {:grpc_core, "~> 1.0"}, # Uncomment for hex release
       {:gun, "~> 2.0"},
       {:mint, "~> 1.5"},
       {:castore, "~> 0.1 or ~> 1.0", optional: true},
