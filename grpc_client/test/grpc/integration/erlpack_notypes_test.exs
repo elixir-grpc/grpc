@@ -4,7 +4,7 @@ defmodule GRPC.Integration.ErplackNotypesTest do
   defmodule Helloworld.Notypes.Service do
     use GRPC.Service, name: "helloworld.Notypes"
 
-    rpc :ReplyHello, :ignore, :ignore
+    rpc(:ReplyHello, :ignore, :ignore)
   end
 
   defmodule HelloServer do
