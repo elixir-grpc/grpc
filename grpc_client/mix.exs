@@ -47,7 +47,7 @@ defmodule GrpcClient.MixProject do
       maintainers: ["Adriano Santos", "Dave Lucia", "Bing Han", "Paulo Valente"],
       licenses: ["Apache-2.0"],
       links: %{"GitHub" => @source_url},
-      files: ~w(mix.exs README.md lib src config LICENSE .formatter.exs)
+      files: ~w(mix.exs README.md lib config LICENSE .formatter.exs)
     }
   end
 
