@@ -29,15 +29,17 @@ defmodule GrpcClient.MixProject do
 
   defp deps do
     [
-      {:grpc_core, path: "../grpc_core"},
-      # {:grpc_core, "~> 1.0"}, # Uncomment for hex release
+      # {:grpc_core, path: "../grpc_core"},
+      # Uncomment for hex release
+      {:grpc_core, "~> 1.0.0-rc.1"},
       {:gun, "~> 2.0"},
       {:mint, "~> 1.5"},
       {:castore, "~> 0.1 or ~> 1.0", optional: true},
       {:ex_doc, "~> 0.39", only: [:dev, :docs], runtime: false},
       {:ex_parameterized, "~> 1.3.7", only: :test},
       {:mox, "~> 1.2", only: :test},
-      {:grpc_server, path: "../grpc_server", only: :test}
+      #{:grpc_server, path: "../grpc_server", only: :test}
+      {:grpc_server, "~> 1.0.0-rc.1", only: :test}
     ]
   end
 
@@ -46,7 +48,7 @@ defmodule GrpcClient.MixProject do
       maintainers: ["Adriano Santos", "Dave Lucia", "Bing Han", "Paulo Valente"],
       licenses: ["Apache-2.0"],
       links: %{"GitHub" => @source_url},
-      files: ~w(mix.exs README.md lib src config LICENSE .formatter.exs)
+      files: ~w(mix.exs README.md lib config LICENSE .formatter.exs)
     }
   end
 
@@ -56,6 +58,7 @@ defmodule GrpcClient.MixProject do
       source_ref: "v#{@version}",
       source_url: @source_url,
       extras: [
+        "README.md",
         "CHANGELOG.md",
         "guides/getting_started/client.md",
         "guides/advanced/custom_codecs.md",
