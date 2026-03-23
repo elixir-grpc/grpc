@@ -3,23 +3,23 @@ defmodule GRPC.Client.Adapters.GunTest do
 
   alias GRPC.Client.Adapters.Gun
 
+  setup do
+    server_credential = build(:credential)
+
+    {:ok, _, port} =
+      GRPC.Server.start(FeatureServer, 0, adapter_opts: [cred: server_credential])
+
+    on_exit(fn ->
+      :ok = GRPC.Server.stop(FeatureServer)
+    end)
+
+    %{
+      port: port,
+      credential: server_credential
+    }
+  end
+
   describe "connect/2" do
-    setup do
-      server_credential = build(:credential)
-
-      {:ok, _, port} =
-        GRPC.Server.start(FeatureServer, 0, adapter_opts: [cred: server_credential])
-
-      on_exit(fn ->
-        :ok = GRPC.Server.stop(FeatureServer)
-      end)
-
-      %{
-        port: port,
-        credential: server_credential
-      }
-    end
-
     test "connects insecurely (default options)", %{port: port, credential: credential} do
       channel = build(:channel, port: port, host: "localhost", cred: credential)
 
@@ -84,6 +84,36 @@ defmodule GRPC.Client.Adapters.GunTest do
                    ip: :loopback
                  ]
                )
+    end
+  end
+
+  describe "disconnect/1" do
+    test "keeps adapter_payload as a map with conn_pid set to nil", %{
+      port: port,
+      credential: credential
+    } do
+      channel = build(:channel, port: port, host: "localhost", cred: credential)
+
+      {:ok, connected} = Gun.connect(channel, [])
+      assert %{conn_pid: pid} = connected.adapter_payload
+      assert is_pid(pid)
+
+      {:ok, disconnected} = Gun.disconnect(connected)
+
+      assert %{conn_pid: nil} = disconnected.adapter_payload
+    end
+
+    test "disconnect is idempotent — calling it twice succeeds", %{
+      port: port,
+      credential: credential
+    } do
+      channel = build(:channel, port: port, host: "localhost", cred: credential)
+
+      {:ok, connected} = Gun.connect(channel, [])
+      {:ok, disconnected} = Gun.disconnect(connected)
+      {:ok, disconnected_again} = Gun.disconnect(disconnected)
+
+      assert %{conn_pid: nil} = disconnected_again.adapter_payload
     end
   end
 end
