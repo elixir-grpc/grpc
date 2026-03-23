@@ -85,16 +85,30 @@ defmodule GRPC.Client.ConnectionTest do
       assert_receive {:DOWN, ^ref_mon, :process, ^pid, _reason}, 500
     end
 
-    test "pick_channel still returns a stale channel after disconnect (persistent_term is not erased)",
+    test "pick_channel returns {:error, :no_connection} after disconnect (persistent_term is erased)",
          %{ref: ref, target: target, adapter: adapter} do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
       {:ok, _} = Connection.disconnect(channel)
 
-      # persistent_term is intentionally NOT erased on disconnect —
-      # the caller (GRPC.Stub.call) is responsible for detecting stale connections
-      # via Process.alive? on the adapter_payload conn_pid.
-      assert {:ok, _stale_channel} = Connection.pick_channel(channel)
+      assert {:error, :no_connection} = Connection.pick_channel(channel)
+    end
+  end
+
+  describe "terminate/2 - persistent_term cleanup on process kill" do
+    test "persistent_term is erased when process is killed without disconnect", %{
+      ref: ref,
+      target: target,
+      adapter: adapter
+    } do
+      {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
+
+      pid = :global.whereis_name({Connection, ref})
+      ref_mon = Process.monitor(pid)
+      GenServer.stop(pid, :shutdown)
+      assert_receive {:DOWN, ^ref_mon, :process, ^pid, :shutdown}, 500
+
+      assert {:error, :no_connection} = Connection.pick_channel(channel)
     end
   end
 end
