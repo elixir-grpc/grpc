@@ -58,15 +58,15 @@ defmodule GRPC.Client.Adapters.Mint do
   def disconnect(%{adapter_payload: %{conn_pid: pid}} = channel)
       when is_pid(pid) do
     :ok = ConnectionProcess.disconnect(pid)
-    {:ok, %{channel | adapter_payload: nil}}
+    {:ok, %{channel | adapter_payload: %{conn_pid: nil}}}
   end
 
-  def disconnect(%{adapter_payload: nil} = channel) do
+  def disconnect(%{adapter_payload: %{conn_pid: nil}} = channel) do
     {:ok, channel}
   end
 
   @impl true
-  def send_request(%{channel: %{adapter_payload: nil}}, _message, _opts),
+  def send_request(%{channel: %{adapter_payload: %{conn_pid: nil}}}, _message, _opts),
     do: raise(ArgumentError, "Can't perform a request without a connection process")
 
   def send_request(stream, message, opts) do
@@ -84,7 +84,7 @@ defmodule GRPC.Client.Adapters.Mint do
   end
 
   @impl true
-  def send_headers(%{channel: %{adapter_payload: nil}}, _opts),
+  def send_headers(%{channel: %{adapter_payload: %{conn_pid: nil}}}, _opts),
     do: raise("Can't start a client stream without a connection process")
 
   def send_headers(stream, opts) do
