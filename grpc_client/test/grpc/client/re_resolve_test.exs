@@ -37,8 +37,6 @@ defmodule GRPC.Client.ReResolveTest do
   # After a failure, backoff doubles the interval. Wait accordingly.
   @wait_after_backoff @resolve_interval * 2 + 150
 
-  setup :verify_on_exit!
-
   setup do
     Mox.set_mox_global()
     ref = make_ref()
@@ -51,6 +49,34 @@ defmodule GRPC.Client.ReResolveTest do
   end
 
   # -- helpers ---------------------------------------------------------------
+
+  defp disconnect_and_wait(channel) do
+    ref = channel.ref
+    pid = :global.whereis_name({Connection, ref})
+
+    if pid && Process.alive?(pid) do
+      mon = Process.monitor(pid)
+      Connection.disconnect(channel)
+
+      receive do
+        {:DOWN, ^mon, :process, ^pid, _} -> :ok
+      after
+        1_000 -> :ok
+      end
+    end
+
+    # Wait for any in-flight resolve tasks spawned by this connection
+    # to finish so Mox ownership doesn't leak into the next test.
+    for pid <- Task.Supervisor.children(GRPC.Client.ResolveSupervisor) do
+      ref = Process.monitor(pid)
+
+      receive do
+        {:DOWN, ^ref, :process, ^pid, _} -> :ok
+      after
+        1_000 -> :ok
+      end
+    end
+  end
 
   defp connect_with_resolver(ref, resolver, adapter, addresses, opts) do
     # Initial resolve call during connect/2
@@ -114,7 +140,7 @@ defmodule GRPC.Client.ReResolveTest do
       assert Map.has_key?(state.real_channels, "10.0.0.1:50051")
       assert Map.has_key?(state.real_channels, "10.0.0.2:50051")
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -147,7 +173,7 @@ defmodule GRPC.Client.ReResolveTest do
       assert Map.has_key?(state.real_channels, "10.0.0.1:50051")
       refute Map.has_key?(state.real_channels, "10.0.0.2:50051")
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -173,7 +199,7 @@ defmodule GRPC.Client.ReResolveTest do
       state_after = get_state(ctx.ref)
       assert state_before.real_channels == state_after.real_channels
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -211,7 +237,7 @@ defmodule GRPC.Client.ReResolveTest do
       assert Map.has_key?(state.real_channels, "10.0.0.3:50051")
       assert Map.has_key?(state.real_channels, "10.0.0.4:50051")
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -238,7 +264,7 @@ defmodule GRPC.Client.ReResolveTest do
       assert map_size(state.real_channels) == 1
       assert Map.has_key?(state.real_channels, "10.0.0.1:50051")
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -278,7 +304,7 @@ defmodule GRPC.Client.ReResolveTest do
       Process.sleep(@wait_after_backoff)
       assert map_size(get_state(ctx.ref).real_channels) == 2
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -307,7 +333,7 @@ defmodule GRPC.Client.ReResolveTest do
       state = get_state(ctx.ref)
       assert map_size(state.real_channels) == 2
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -351,7 +377,7 @@ defmodule GRPC.Client.ReResolveTest do
       assert map_size(state.real_channels) == 2
       assert Map.has_key?(state.real_channels, "10.0.0.3:50051")
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -387,7 +413,7 @@ defmodule GRPC.Client.ReResolveTest do
       assert picked.host in ["10.0.0.1", "10.0.0.2"]
       assert picked.port == 50051
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -415,7 +441,7 @@ defmodule GRPC.Client.ReResolveTest do
       assert {:ok, picked} = Connection.pick_channel(channel)
       assert picked.host == "10.0.0.99"
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -461,7 +487,7 @@ defmodule GRPC.Client.ReResolveTest do
       Process.sleep(@wait)
       assert map_size(get_state(ctx.ref).real_channels) == 3
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -482,7 +508,7 @@ defmodule GRPC.Client.ReResolveTest do
       # Should still be alive and working — no mock resolver crash
       assert {:ok, _} = Connection.pick_channel(channel)
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -550,7 +576,7 @@ defmodule GRPC.Client.ReResolveTest do
       assert map_size(state.real_channels) == 2
       assert {:ok, _} = Connection.pick_channel(channel)
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -589,7 +615,7 @@ defmodule GRPC.Client.ReResolveTest do
       refute Map.has_key?(state.real_channels, "10.0.0.1:50051")
       assert Map.has_key?(state.real_channels, "10.0.0.1:50052")
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -622,7 +648,7 @@ defmodule GRPC.Client.ReResolveTest do
       state = get_state(ctx.ref)
       assert state.resolve_interval == @resolve_interval * 4
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
 
     test "interval resets to base after successful resolution", ctx do
@@ -653,7 +679,7 @@ defmodule GRPC.Client.ReResolveTest do
       state = get_state(ctx.ref)
       assert state.resolve_interval == @resolve_interval
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
 
     test "interval caps at max_resolve_interval", ctx do
@@ -690,7 +716,7 @@ defmodule GRPC.Client.ReResolveTest do
       Process.sleep(max + 50)
       assert get_state(ctx.ref).resolve_interval == max
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -739,7 +765,7 @@ defmodule GRPC.Client.ReResolveTest do
       actual = :counters.get(call_count, 1)
       assert actual <= 2, "Expected at most 2 resolutions, got #{actual}"
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -796,7 +822,7 @@ defmodule GRPC.Client.ReResolveTest do
       assert metadata.target == "dns://my-service.local:50051"
       assert metadata.address_count == 2
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
 
     test "emits :error event on DNS failure", ctx do
@@ -821,7 +847,7 @@ defmodule GRPC.Client.ReResolveTest do
       assert metadata.reason == :timeout
       assert metadata.address_count == 0
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
 
     test "emits :error event on empty address list", ctx do
@@ -845,7 +871,7 @@ defmodule GRPC.Client.ReResolveTest do
       assert_received {:telemetry, [:grpc, :client, :resolve, :error], _measurements, metadata}
       assert metadata.reason == :empty_addresses
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -898,7 +924,7 @@ defmodule GRPC.Client.ReResolveTest do
       assert {:ok, picked} = Connection.pick_channel(channel)
       assert picked.host == "10.0.0.1"
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
 
     test "pick_channel returns error when all new channels fail", ctx do
@@ -1000,7 +1026,7 @@ defmodule GRPC.Client.ReResolveTest do
       assert match?({:ok, _}, Map.get(state.real_channels, "10.0.0.1:50051"))
       assert match?({:ok, _}, Map.get(state.real_channels, "10.0.0.2:50051"))
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -1047,7 +1073,7 @@ defmodule GRPC.Client.ReResolveTest do
       assert map_size(state.real_channels) == 1
       assert state.resolve_interval == @resolve_interval * 2
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 
@@ -1115,7 +1141,7 @@ defmodule GRPC.Client.ReResolveTest do
       assert {:ok, picked} = Connection.pick_channel(channel)
       assert picked.host == "10.0.0.1"
 
-      Connection.disconnect(channel)
+      disconnect_and_wait(channel)
     end
   end
 end

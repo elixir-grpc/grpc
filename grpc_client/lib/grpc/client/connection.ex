@@ -483,14 +483,24 @@ defmodule GRPC.Client.Connection do
         Map.delete(channels, key)
       end)
 
-    # Connect new channels and retry previously failed ones still in DNS
+    # Connect new channels, retry failed ones, and reconnect dead adapter PIDs
     real_channels =
       Enum.reduce(new_addresses, real_channels, fn %{address: host, port: port}, channels ->
         key = build_address_key(host, port)
         existing = Map.get(channels, key)
-        should_connect = MapSet.member?(added, key) or match?({:error, _}, existing)
+
+        should_connect =
+          MapSet.member?(added, key) or
+            match?({:error, _}, existing) or
+            not channel_alive?(existing)
 
         if should_connect do
+          # Disconnect the old channel if it exists but is dead
+          case existing do
+            {:ok, ch} -> do_disconnect(adapter, ch)
+            _ -> :ok
+          end
+
           case connect_real_channel(state.virtual_channel, host, port, opts, adapter) do
             {:ok, ch} -> Map.put(channels, key, {:ok, ch})
             {:error, reason} -> Map.put(channels, key, {:error, reason})
@@ -561,6 +571,13 @@ defmodule GRPC.Client.Connection do
     ref = Process.send_after(self(), :re_resolve, state.resolve_interval)
     %{state | resolve_timer_ref: ref}
   end
+
+  defp channel_alive?({:ok, %{adapter_payload: %{conn_pid: pid}}}) when is_pid(pid) do
+    Process.alive?(pid)
+  end
+
+  defp channel_alive?({:ok, _}), do: true
+  defp channel_alive?(_), do: false
 
   defp dns_target?(target) do
     URI.parse(target).scheme == "dns"
@@ -765,24 +782,21 @@ defmodule GRPC.Client.Connection do
     cond do
       uri.scheme == @secure_scheme and uri.host ->
         opts = Keyword.put_new_lazy(opts, :cred, &default_ssl_option/0)
-        {"dns://#{uri.host}:#{uri.port}", opts, @secure_scheme}
+        {"ipv4:#{uri.host}:#{uri.port}", opts, @secure_scheme}
 
       uri.scheme == @insecure_scheme and uri.host ->
         if opts[:cred],
           do: raise(ArgumentError, "invalid option for insecure (http) address: :cred")
 
-        {"dns://#{uri.host}:#{uri.port}", opts, @insecure_scheme}
+        {"ipv4:#{uri.host}:#{uri.port}", opts, @insecure_scheme}
 
-      # Compatibility mode: host:port or unix:path.
-      # Bare host:port defaults to dns:// scheme (matching the Resolver docs:
-      # "If no scheme is specified, dns is assumed"), so DNS-based targets
-      # get proper resolution and periodic re-resolution.
+      # Compatibility mode: host:port or unix:path
       uri.scheme in [nil, ""] ->
         scheme = if opts[:cred], do: @secure_scheme, else: @insecure_scheme
 
         case String.split(target, ":") do
           [host, port] ->
-            {"dns://#{host}:#{port}", opts, scheme}
+            {"ipv4:#{host}:#{port}", opts, scheme}
 
           [path] ->
             {"unix://#{path}", opts, "unix"}
