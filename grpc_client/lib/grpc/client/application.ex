@@ -4,7 +4,8 @@ defmodule GRPC.Client.Application do
 
   def start(_type, _args) do
     children = [
-      {DynamicSupervisor, [name: GRPC.Client.Supervisor]}
+      {DynamicSupervisor, [name: GRPC.Client.Supervisor]},
+      {Task.Supervisor, [name: GRPC.Client.ResolveSupervisor]}
     ]
 
     opts = [strategy: :one_for_one, name: GRPC.Supervisor]

@@ -1004,40 +1004,45 @@ defmodule GRPC.Client.ReResolveTest do
     end
   end
 
-  # -- 21. DNS resolution timeout doesn't hang the GenServer -----------------
+  # -- 21. Async resolve doesn't block GenServer ------------------------------
 
-  describe "DNS resolution timeout" do
-    test "resolver timeout triggers backoff, channels preserved", ctx do
-      expect(ctx.resolver, :resolve, fn _target ->
-        {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
-      end)
-
-      stub(ctx.resolver, :resolve, fn _target ->
-        {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
-      end)
-
+  describe "async DNS resolution" do
+    test "GenServer stays responsive during slow DNS resolution", ctx do
       {:ok, channel} =
-        Connection.connect(
-          "dns://my-service.local:50051",
-          adapter: ctx.adapter,
-          name: ctx.ref,
-          resolver: ctx.resolver,
-          resolve_interval: @resolve_interval,
-          min_resolve_interval: 0,
-          resolve_timeout: 200,
-          lb_policy: :round_robin
-        )
+        connect_with_resolver(ctx.ref, ctx.resolver, ctx.adapter, [
+          %{address: "10.0.0.1", port: 50051}
+        ], lb_policy: :round_robin)
 
-      # Simulate a resolver that hangs longer than the 200ms timeout
+      # Simulate a resolver that takes a long time
       stub(ctx.resolver, :resolve, fn _target ->
-        Process.sleep(5_000)
+        Process.sleep(2_000)
         {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
       end)
 
-      # Wait for the re-resolve to fire and timeout (200ms timeout + margin)
-      Process.sleep(@wait + 300)
+      # Wait for re-resolve to fire (spawns async task)
+      Process.sleep(@wait)
 
-      # GenServer should still be alive with existing channels, interval doubled
+      # GenServer should still be responsive — pick_channel should work immediately
+      assert {:ok, _} = Connection.pick_channel(channel)
+
+      # Disconnect should also work while resolve is in-flight
+      assert {:ok, _} = Connection.disconnect(channel)
+    end
+
+    test "resolver crash in task triggers backoff via :DOWN", ctx do
+      {:ok, channel} =
+        connect_with_resolver(ctx.ref, ctx.resolver, ctx.adapter, [
+          %{address: "10.0.0.1", port: 50051}
+        ], lb_policy: :round_robin)
+
+      # Simulate a resolver that crashes
+      stub(ctx.resolver, :resolve, fn _target ->
+        raise "DNS server exploded"
+      end)
+
+      Process.sleep(@wait + 50)
+
+      # GenServer should still be alive, with backoff applied
       state = get_state(ctx.ref)
       assert map_size(state.real_channels) == 1
       assert state.resolve_interval == @resolve_interval * 2

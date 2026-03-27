@@ -103,7 +103,8 @@ defmodule GRPC.Client.Connection do
           min_resolve_interval: non_neg_integer(),
           last_resolve_at: integer() | nil,
           resolve_timer_ref: reference() | nil,
-          resolve_timeout: non_neg_integer()
+          resolve_task: Task.t() | nil,
+          resolve_start_time: integer() | nil
         }
 
   defstruct virtual_channel: nil,
@@ -120,7 +121,8 @@ defmodule GRPC.Client.Connection do
             min_resolve_interval: 5_000,
             last_resolve_at: nil,
             resolve_timer_ref: nil,
-            resolve_timeout: 10_000
+            resolve_task: nil,
+            resolve_start_time: nil
 
   def child_spec(initial_state) do
     %{
@@ -332,23 +334,51 @@ defmodule GRPC.Client.Connection do
 
   def handle_info(
         :re_resolve,
-        %{resolver: resolver, target: target, adapter: adapter, connect_opts: opts} = state
+        %{resolver: resolver, target: target} = state
       )
       when not is_nil(resolver) and not is_nil(target) do
     now = System.monotonic_time(:millisecond)
 
+    # Don't start a new resolve if one is already in flight
     state =
-      if rate_limited?(state, now) do
-        Logger.debug("DNS re-resolution for #{target} rate-limited, skipping")
+      if state.resolve_task != nil do
         state
+      else if rate_limited?(state, now) do
+        Logger.debug("DNS re-resolution for #{target} rate-limited, skipping")
+        schedule_re_resolve(state)
       else
-        do_re_resolve(resolver, target, adapter, opts, %{state | last_resolve_at: now})
+        # Spawn async DNS resolution — GenServer stays responsive
+        task =
+          Task.Supervisor.async_nolink(GRPC.Client.ResolveSupervisor, fn ->
+            resolver.resolve(target)
+          end)
+
+        %{state | resolve_task: task, resolve_start_time: System.monotonic_time(), last_resolve_at: now}
+      end
       end
 
-    {:noreply, schedule_re_resolve(state)}
+    {:noreply, state}
   end
 
   def handle_info(:re_resolve, state), do: {:noreply, state}
+
+  # Async resolve completed successfully
+  def handle_info({ref, result}, %{resolve_task: %Task{ref: ref}} = state) do
+    # Flush the :DOWN message from the task
+    Process.demonitor(ref, [:flush])
+
+    state = handle_resolve_result(result, state)
+    {:noreply, schedule_re_resolve(%{state | resolve_task: nil, resolve_start_time: nil})}
+  end
+
+  # Async resolve task crashed or was killed
+  def handle_info(
+        {:DOWN, ref, :process, _pid, reason},
+        %{resolve_task: %Task{ref: ref}} = state
+      ) do
+    state = handle_resolve_result({:error, reason}, state)
+    {:noreply, schedule_re_resolve(%{state | resolve_task: nil, resolve_start_time: nil})}
+  end
 
   def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
     Logger.warning(
@@ -379,35 +409,14 @@ defmodule GRPC.Client.Connection do
 
   def terminate(_reason, _state), do: :ok
 
-  @default_resolve_timeout 10_000
-
-  defp do_re_resolve(resolver, target, adapter, opts, state) do
-    start_time = System.monotonic_time()
-
-    # Run DNS resolution with a timeout to prevent the GenServer from blocking
-    # indefinitely on a slow/hung DNS server.
-    caller = self()
-    ref = make_ref()
-
-    pid =
-      spawn(fn ->
-        result = resolver.resolve(target)
-        send(caller, {ref, result})
-      end)
-
-    result =
-      receive do
-        {^ref, result} -> result
-      after
-        Map.get(state, :resolve_timeout, @default_resolve_timeout) ->
-          Process.exit(pid, :kill)
-          {:error, :resolve_timeout}
-      end
+  defp handle_resolve_result(result, state) do
+    duration = System.monotonic_time() - (state.resolve_start_time || System.monotonic_time())
+    target = state.target
+    adapter = state.adapter
+    opts = state.connect_opts
 
     case result do
       {:ok, %{addresses: []}} ->
-        duration = System.monotonic_time() - start_time
-
         :telemetry.execute(@resolve_error_event, %{duration: duration}, %{
           target: target,
           reason: :empty_addresses,
@@ -421,8 +430,6 @@ defmodule GRPC.Client.Connection do
         backoff(state)
 
       {:ok, %{addresses: new_addresses}} ->
-        duration = System.monotonic_time() - start_time
-
         :telemetry.execute(@resolve_stop_event, %{duration: duration}, %{
           target: target,
           address_count: length(new_addresses)
@@ -432,8 +439,6 @@ defmodule GRPC.Client.Connection do
         reset_backoff(state)
 
       {:error, reason} ->
-        duration = System.monotonic_time() - start_time
-
         :telemetry.execute(@resolve_error_event, %{duration: duration}, %{
           target: target,
           reason: reason,
@@ -591,8 +596,7 @@ defmodule GRPC.Client.Connection do
         resolver: GRPC.Client.Resolver,
         resolve_interval: @default_resolve_interval,
         max_resolve_interval: @default_max_resolve_interval,
-        min_resolve_interval: @default_min_resolve_interval,
-        resolve_timeout: @default_resolve_timeout
+        min_resolve_interval: @default_min_resolve_interval
       )
 
     resolver = Keyword.get(opts, :resolver, GRPC.Client.Resolver)
@@ -601,7 +605,6 @@ defmodule GRPC.Client.Connection do
     resolve_interval = Keyword.get(opts, :resolve_interval, @default_resolve_interval)
     max_resolve_interval = Keyword.get(opts, :max_resolve_interval, @default_max_resolve_interval)
     min_resolve_interval = Keyword.get(opts, :min_resolve_interval, @default_min_resolve_interval)
-    resolve_timeout = Keyword.get(opts, :resolve_timeout, @default_resolve_timeout)
 
     {norm_target, norm_opts, scheme} = normalize_target_and_opts(target, opts)
     cred = resolve_credential(norm_opts[:cred], scheme)
@@ -633,8 +636,7 @@ defmodule GRPC.Client.Connection do
       resolve_interval: resolve_interval,
       base_resolve_interval: resolve_interval,
       max_resolve_interval: max_resolve_interval,
-      min_resolve_interval: min_resolve_interval,
-      resolve_timeout: resolve_timeout
+      min_resolve_interval: min_resolve_interval
     }
 
     case resolver.resolve(norm_target) do
