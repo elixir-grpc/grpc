@@ -1045,4 +1045,72 @@ defmodule GRPC.Client.ReResolveTest do
       Connection.disconnect(channel)
     end
   end
+
+  # -- 22. :refresh handler doesn't crash on {:error, _} channels -----------
+
+  describe "refresh handler with failed channels" do
+    setup ctx do
+      Application.put_env(:grpc_client, :grpc_test_failing_hosts, ["10.0.0.2"])
+      on_exit(fn -> Application.delete_env(:grpc_client, :grpc_test_failing_hosts) end)
+      Map.put(ctx, :failing_adapter, GRPC.Test.FailingClientAdapter)
+    end
+
+    test "GenServer survives when :refresh picks a failed channel", ctx do
+      # Connect with 2 backends — one healthy, one failing
+      expect(ctx.resolver, :resolve, fn _target ->
+        {:ok,
+         %{
+           addresses: [
+             %{address: "10.0.0.1", port: 50051},
+             %{address: "10.0.0.2", port: 50051}
+           ],
+           service_config: nil
+         }}
+      end)
+
+      stub(ctx.resolver, :resolve, fn _target ->
+        {:ok,
+         %{
+           addresses: [
+             %{address: "10.0.0.1", port: 50051},
+             %{address: "10.0.0.2", port: 50051}
+           ],
+           service_config: nil
+         }}
+      end)
+
+      {:ok, channel} =
+        Connection.connect(
+          "dns://my-service.local:50051",
+          adapter: ctx.failing_adapter,
+          name: ctx.ref,
+          resolver: ctx.resolver,
+          resolve_interval: 60_000,
+          min_resolve_interval: 0,
+          lb_policy: :round_robin
+        )
+
+      # 10.0.0.2 is {:error, _} in real_channels
+      state = get_state(ctx.ref)
+      assert match?({:error, _}, Map.get(state.real_channels, "10.0.0.2:50051"))
+
+      # Wait for several :refresh cycles (15s default, but we'll trigger manually).
+      # Round-robin will eventually pick 10.0.0.2. Without the fix, this crashes.
+      pid = :global.whereis_name({Connection, ctx.ref})
+
+      for _ <- 1..5 do
+        send(pid, :refresh)
+      end
+
+      # Small sleep for messages to process
+      Process.sleep(50)
+
+      # GenServer should still be alive
+      assert Process.alive?(pid)
+      assert {:ok, picked} = Connection.pick_channel(channel)
+      assert picked.host == "10.0.0.1"
+
+      Connection.disconnect(channel)
+    end
+  end
 end

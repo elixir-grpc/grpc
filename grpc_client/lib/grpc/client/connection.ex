@@ -311,18 +311,20 @@ defmodule GRPC.Client.Connection do
     channel_key = build_address_key(prefer_host, prefer_port)
 
     case Map.get(channels, channel_key) do
-      nil ->
-        Logger.warning("LB picked #{channel_key}, but no channel found in pool")
-
-        Process.send_after(self(), :refresh, @refresh_interval)
-        {:noreply, %{state | lb_state: new_lb_state}}
-
       {:ok, %Channel{} = picked_channel} ->
         :persistent_term.put({__MODULE__, :lb_state, vc.ref}, picked_channel)
 
         Process.send_after(self(), :refresh, @refresh_interval)
-
         {:noreply, %{state | lb_state: new_lb_state, virtual_channel: picked_channel}}
+
+      _nil_or_error ->
+        # LB picked a channel that is missing or in {:error, _} state.
+        # Don't update persistent_term — keep serving from the current
+        # virtual_channel until re-resolution provides healthy backends.
+        Logger.warning("LB picked #{channel_key}, but channel is unavailable")
+
+        Process.send_after(self(), :refresh, @refresh_interval)
+        {:noreply, %{state | lb_state: new_lb_state}}
     end
   end
 
