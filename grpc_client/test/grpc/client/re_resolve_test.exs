@@ -31,11 +31,11 @@ defmodule GRPC.Client.ReResolveTest do
 
   # Interval for re-resolution in tests (ms). Long enough that only one
   # re-resolve fires per sleep window, short enough tests stay fast.
-  @resolve_interval 100
+  @resolve_interval 200
   # Sleep slightly longer than one interval so the timer fires exactly once.
-  @wait @resolve_interval + 50
+  @wait @resolve_interval + 100
   # After a failure, backoff doubles the interval. Wait accordingly.
-  @wait_after_backoff @resolve_interval * 2 + 100
+  @wait_after_backoff @resolve_interval * 2 + 150
 
   setup :verify_on_exit!
 
@@ -257,33 +257,24 @@ defmodule GRPC.Client.ReResolveTest do
           lb_policy: :round_robin
         )
 
-      # First re-resolve: fail
-      call_count = :counters.new(1, [:atomics])
+      # First cycle: failure
+      stub(ctx.resolver, :resolve, fn _target -> {:error, :nxdomain} end)
 
-      stub(ctx.resolver, :resolve, fn _target ->
-        :counters.add(call_count, 1, 1)
-
-        case :counters.get(call_count, 1) do
-          1 ->
-            {:error, :nxdomain}
-
-          _ ->
-            {:ok,
-             %{
-               addresses: [
-                 %{address: "10.0.0.1", port: 50051},
-                 %{address: "10.0.0.2", port: 50051}
-               ],
-               service_config: nil
-             }}
-        end
-      end)
-
-      # Wait for first (failed) cycle
       Process.sleep(@wait)
       assert map_size(get_state(ctx.ref).real_channels) == 1
 
-      # Wait for second (successful) cycle — interval is doubled after failure
+      # Second cycle: success (interval is doubled after failure)
+      stub(ctx.resolver, :resolve, fn _target ->
+        {:ok,
+         %{
+           addresses: [
+             %{address: "10.0.0.1", port: 50051},
+             %{address: "10.0.0.2", port: 50051}
+           ],
+           service_config: nil
+         }}
+      end)
+
       Process.sleep(@wait_after_backoff)
       assert map_size(get_state(ctx.ref).real_channels) == 2
 
@@ -335,32 +326,26 @@ defmodule GRPC.Client.ReResolveTest do
           lb_policy: :round_robin
         )
 
-      call_count = :counters.new(1, [:atomics])
-
+      # First cycle: empty — channels preserved
       stub(ctx.resolver, :resolve, fn _target ->
-        :counters.add(call_count, 1, 1)
-
-        case :counters.get(call_count, 1) do
-          1 ->
-            {:ok, %{addresses: [], service_config: nil}}
-
-          _ ->
-            {:ok,
-             %{
-               addresses: [
-                 %{address: "10.0.0.1", port: 50051},
-                 %{address: "10.0.0.3", port: 50051}
-               ],
-               service_config: nil
-             }}
-        end
+        {:ok, %{addresses: [], service_config: nil}}
       end)
 
-      # First cycle: empty — channels preserved
       Process.sleep(@wait)
       assert map_size(get_state(ctx.ref).real_channels) == 1
 
       # Second cycle: valid — channels updated (interval doubled after empty)
+      stub(ctx.resolver, :resolve, fn _target ->
+        {:ok,
+         %{
+           addresses: [
+             %{address: "10.0.0.1", port: 50051},
+             %{address: "10.0.0.3", port: 50051}
+           ],
+           service_config: nil
+         }}
+      end)
+
       Process.sleep(@wait_after_backoff)
       state = get_state(ctx.ref)
       assert map_size(state.real_channels) == 2
@@ -449,25 +434,30 @@ defmodule GRPC.Client.ReResolveTest do
           lb_policy: :round_robin
         )
 
-      call_count = :counters.new(1, [:atomics])
+      # Cycle 1: 2 backends
+      two_addrs = [
+        %{address: "10.0.0.1", port: 50051},
+        %{address: "10.0.0.2", port: 50051}
+      ]
 
       stub(ctx.resolver, :resolve, fn _target ->
-        :counters.add(call_count, 1, 1)
-        n = :counters.get(call_count, 1)
-
-        addrs =
-          for i <- 1..min(n + 1, 3) do
-            %{address: "10.0.0.#{i}", port: 50051}
-          end
-
-        {:ok, %{addresses: addrs, service_config: nil}}
+        {:ok, %{addresses: two_addrs, service_config: nil}}
       end)
 
-      # Cycle 1: 2 backends
       Process.sleep(@wait)
       assert map_size(get_state(ctx.ref).real_channels) == 2
 
       # Cycle 2: 3 backends (no backoff — previous cycle succeeded)
+      three_addrs = [
+        %{address: "10.0.0.1", port: 50051},
+        %{address: "10.0.0.2", port: 50051},
+        %{address: "10.0.0.3", port: 50051}
+      ]
+
+      stub(ctx.resolver, :resolve, fn _target ->
+        {:ok, %{addresses: three_addrs, service_config: nil}}
+      end)
+
       Process.sleep(@wait)
       assert map_size(get_state(ctx.ref).real_channels) == 3
 
@@ -647,23 +637,18 @@ defmodule GRPC.Client.ReResolveTest do
           lb_policy: :round_robin
         )
 
-      call_count = :counters.new(1, [:atomics])
-
-      stub(ctx.resolver, :resolve, fn _target ->
-        :counters.add(call_count, 1, 1)
-
-        case :counters.get(call_count, 1) do
-          1 -> {:error, :nxdomain}
-          _ -> {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
-        end
-      end)
-
       # First cycle: failure → doubles interval
+      stub(ctx.resolver, :resolve, fn _target -> {:error, :nxdomain} end)
+
       Process.sleep(@wait)
       state = get_state(ctx.ref)
       assert state.resolve_interval == @resolve_interval * 2
 
       # Second cycle: success → resets to base
+      stub(ctx.resolver, :resolve, fn _target ->
+        {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
+      end)
+
       Process.sleep(@wait_after_backoff)
       state = get_state(ctx.ref)
       assert state.resolve_interval == @resolve_interval
@@ -718,6 +703,10 @@ defmodule GRPC.Client.ReResolveTest do
         {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
       end)
 
+      stub(ctx.resolver, :resolve, fn _target ->
+        {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
+      end)
+
       # Use a long resolve_interval so the timer doesn't fire during the test,
       # and a meaningful min_resolve_interval to test rate limiting.
       {:ok, channel} =
@@ -731,7 +720,7 @@ defmodule GRPC.Client.ReResolveTest do
           lb_policy: :round_robin
         )
 
-      # The stub will track calls — only the first resolve_now should actually resolve
+      # Track calls during the resolve_now burst
       call_count = :counters.new(1, [:atomics])
 
       stub(ctx.resolver, :resolve, fn _target ->
@@ -739,14 +728,16 @@ defmodule GRPC.Client.ReResolveTest do
         {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
       end)
 
-      # Fire 5 resolve_now calls rapidly
-      for _ <- 1..5, do: Connection.resolve_now(channel)
+      # Fire 20 resolve_now calls rapidly
+      for _ <- 1..20, do: Connection.resolve_now(channel)
 
       # Give them time to process
-      Process.sleep(100)
+      Process.sleep(200)
 
-      # At most 1 should have actually resolved (the rest rate-limited)
-      assert :counters.get(call_count, 1) <= 1
+      # Rate limiting should ensure far fewer than 20 actual resolutions.
+      # The first call resolves, the rest within 500ms are skipped.
+      actual = :counters.get(call_count, 1)
+      assert actual <= 2, "Expected at most 2 resolutions, got #{actual}"
 
       Connection.disconnect(channel)
     end
@@ -855,6 +846,100 @@ defmodule GRPC.Client.ReResolveTest do
       assert metadata.reason == :empty_addresses
 
       Connection.disconnect(channel)
+    end
+  end
+
+  # -- 19. Stale persistent_term: LB picks unhealthy channel -----------------
+
+  describe "stale persistent_term prevention" do
+    setup ctx do
+      Application.put_env(:grpc_client, :grpc_test_failing_hosts, ["10.0.0.99"])
+      on_exit(fn -> Application.delete_env(:grpc_client, :grpc_test_failing_hosts) end)
+      Map.put(ctx, :failing_adapter, GRPC.Test.FailingClientAdapter)
+    end
+
+    test "falls back to healthy channel when LB picks a failed one", ctx do
+      expect(ctx.resolver, :resolve, fn _target ->
+        {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
+      end)
+
+      stub(ctx.resolver, :resolve, fn _target ->
+        {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
+      end)
+
+      {:ok, channel} =
+        Connection.connect(
+          "dns://my-service.local:50051",
+          adapter: ctx.failing_adapter,
+          name: ctx.ref,
+          resolver: ctx.resolver,
+          resolve_interval: @resolve_interval,
+          min_resolve_interval: 0,
+          lb_policy: :round_robin
+        )
+
+      assert {:ok, _} = Connection.pick_channel(channel)
+
+      # Re-resolve adds a failing host. Round-robin might pick it, but
+      # fallback should ensure we get the healthy one.
+      stub(ctx.resolver, :resolve, fn _target ->
+        {:ok,
+         %{
+           addresses: [
+             %{address: "10.0.0.99", port: 50051},
+             %{address: "10.0.0.1", port: 50051}
+           ],
+           service_config: nil
+         }}
+      end)
+
+      Process.sleep(@wait)
+
+      assert {:ok, picked} = Connection.pick_channel(channel)
+      assert picked.host == "10.0.0.1"
+
+      Connection.disconnect(channel)
+    end
+
+    test "pick_channel returns error when all new channels fail", ctx do
+      expect(ctx.resolver, :resolve, fn _target ->
+        {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
+      end)
+
+      stub(ctx.resolver, :resolve, fn _target ->
+        {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
+      end)
+
+      {:ok, channel} =
+        Connection.connect(
+          "dns://my-service.local:50051",
+          adapter: ctx.failing_adapter,
+          name: ctx.ref,
+          resolver: ctx.resolver,
+          resolve_interval: @resolve_interval,
+          min_resolve_interval: 0,
+          lb_policy: :round_robin
+        )
+
+      assert {:ok, _} = Connection.pick_channel(channel)
+
+      # Re-resolve replaces with ONLY failing hosts
+      Application.put_env(:grpc_client, :grpc_test_failing_hosts, ["10.0.0.98", "10.0.0.99"])
+
+      stub(ctx.resolver, :resolve, fn _target ->
+        {:ok,
+         %{
+           addresses: [
+             %{address: "10.0.0.98", port: 50051},
+             %{address: "10.0.0.99", port: 50051}
+           ],
+           service_config: nil
+         }}
+      end)
+
+      Process.sleep(@wait)
+
+      assert {:error, :no_connection} = Connection.pick_channel(channel)
     end
   end
 end

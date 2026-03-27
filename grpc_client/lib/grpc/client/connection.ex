@@ -101,7 +101,8 @@ defmodule GRPC.Client.Connection do
           base_resolve_interval: non_neg_integer(),
           max_resolve_interval: non_neg_integer(),
           min_resolve_interval: non_neg_integer(),
-          last_resolve_at: integer() | nil
+          last_resolve_at: integer() | nil,
+          resolve_timer_ref: reference() | nil
         }
 
   defstruct virtual_channel: nil,
@@ -116,7 +117,8 @@ defmodule GRPC.Client.Connection do
             base_resolve_interval: 30_000,
             max_resolve_interval: 300_000,
             min_resolve_interval: 5_000,
-            last_resolve_at: nil
+            last_resolve_at: nil,
+            resolve_timer_ref: nil
 
   def child_spec(initial_state) do
     %{
@@ -145,9 +147,12 @@ defmodule GRPC.Client.Connection do
 
     # Only schedule periodic re-resolution for DNS targets — static targets
     # (ipv4:, ipv6:, unix:) always resolve to the same addresses.
-    if state.resolver && state.target && dns_target?(state.target) do
-      Process.send_after(self(), :re_resolve, state.resolve_interval)
-    end
+    state =
+      if state.resolver && state.target && dns_target?(state.target) do
+        schedule_re_resolve(state)
+      else
+        state
+      end
 
     {:ok, state}
   end
@@ -336,8 +341,7 @@ defmodule GRPC.Client.Connection do
         do_re_resolve(resolver, target, adapter, opts, %{state | last_resolve_at: now})
       end
 
-    Process.send_after(self(), :re_resolve, state.resolve_interval)
-    {:noreply, state}
+    {:noreply, schedule_re_resolve(state)}
   end
 
   def handle_info(:re_resolve, state), do: {:noreply, state}
@@ -485,20 +489,48 @@ defmodule GRPC.Client.Connection do
               }
 
             _ ->
-              %{state | real_channels: real_channels, lb_state: picked_lb_state}
+              # LB picked a channel that failed to connect. Fall back to any
+              # healthy channel so persistent_term doesn't hold a dead ref.
+              fallback_to_healthy_channel(state, real_channels, picked_lb_state)
           end
 
         {:error, _} ->
-          %{state | real_channels: real_channels}
+          fallback_to_healthy_channel(state, real_channels, state.lb_state)
       end
     else
-      %{state | real_channels: real_channels}
+      fallback_to_healthy_channel(state, real_channels, state.lb_state)
     end
   end
 
+  defp fallback_to_healthy_channel(state, real_channels, lb_state) do
+    ref = state.virtual_channel.ref
+
+    case Enum.find_value(real_channels, fn {_k, v} -> match?({:ok, _}, v) && v end) do
+      {:ok, healthy_channel} ->
+        :persistent_term.put({__MODULE__, :lb_state, ref}, healthy_channel)
+
+        %{
+          state
+          | real_channels: real_channels,
+            lb_state: lb_state,
+            virtual_channel: healthy_channel
+        }
+
+      nil ->
+        Logger.warning("No healthy channels available after re-resolution")
+        :persistent_term.erase({__MODULE__, :lb_state, ref})
+        %{state | real_channels: real_channels, lb_state: lb_state}
+    end
+  end
+
+  defp schedule_re_resolve(state) do
+    if state.resolve_timer_ref, do: Process.cancel_timer(state.resolve_timer_ref)
+    ref = Process.send_after(self(), :re_resolve, state.resolve_interval)
+    %{state | resolve_timer_ref: ref}
+  end
+
   defp dns_target?(target) do
-    uri = URI.parse(target)
-    uri.scheme == "dns" or is_nil(uri.scheme)
+    URI.parse(target).scheme == "dns"
   end
 
   defp via(ref) do
@@ -708,13 +740,16 @@ defmodule GRPC.Client.Connection do
 
         {"ipv4:#{uri.host}:#{uri.port}", opts, @insecure_scheme}
 
-      # Compatibility mode: host:port or unix:path
+      # Compatibility mode: host:port or unix:path.
+      # Bare host:port defaults to dns:// scheme (matching the Resolver docs:
+      # "If no scheme is specified, dns is assumed"), so DNS-based targets
+      # get proper resolution and periodic re-resolution.
       uri.scheme in [nil, ""] ->
         scheme = if opts[:cred], do: @secure_scheme, else: @insecure_scheme
 
         case String.split(target, ":") do
           [host, port] ->
-            {"ipv4:#{host}:#{port}", opts, scheme}
+            {"dns://#{host}:#{port}", opts, scheme}
 
           [path] ->
             {"unix://#{path}", opts, "unix"}
