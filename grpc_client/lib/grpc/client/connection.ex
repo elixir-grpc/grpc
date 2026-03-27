@@ -421,7 +421,15 @@ defmodule GRPC.Client.Connection do
         end
       end)
 
-    # Re-init load balancer with full updated address list
+    # Re-init load balancer with full updated address list.
+    #
+    # NOTE: We guard persistent_term writes to only happen when the picked
+    # channel actually changes. persistent_term updates trigger a global GC
+    # pass across all BEAM processes (see erlang.org/doc/apps/erts/persistent_term).
+    # With periodic re-resolution this function runs every 30s+ per connection,
+    # and on no-change cycles we must avoid redundant writes. A future
+    # improvement would be migrating to ETS with read_concurrency: true,
+    # which has no global GC cost on writes.
     if state.lb_mod do
       case state.lb_mod.init(addresses: new_addresses) do
         {:ok, new_lb_state} ->
@@ -430,10 +438,7 @@ defmodule GRPC.Client.Connection do
 
           case Map.get(real_channels, key) do
             {:ok, picked_channel} ->
-              :persistent_term.put(
-                {__MODULE__, :lb_state, state.virtual_channel.ref},
-                picked_channel
-              )
+              maybe_update_persistent_term(state.virtual_channel, picked_channel)
 
               %{
                 state
@@ -461,7 +466,7 @@ defmodule GRPC.Client.Connection do
 
     case Enum.find_value(real_channels, fn {_k, v} -> match?({:ok, _}, v) && v end) do
       {:ok, healthy_channel} ->
-        :persistent_term.put({__MODULE__, :lb_state, ref}, healthy_channel)
+        maybe_update_persistent_term(state.virtual_channel, healthy_channel)
 
         %{
           state
@@ -474,6 +479,18 @@ defmodule GRPC.Client.Connection do
         Logger.warning("No healthy channels available after re-resolution")
         :persistent_term.erase({__MODULE__, :lb_state, ref})
         %{state | real_channels: real_channels, lb_state: lb_state}
+    end
+  end
+
+  # Only write to persistent_term when the channel actually changed.
+  # persistent_term updates trigger a global GC pass, so we skip
+  # redundant writes on no-change re-resolution cycles.
+  defp maybe_update_persistent_term(current_channel, new_channel) do
+    if current_channel != new_channel do
+      :persistent_term.put(
+        {__MODULE__, :lb_state, new_channel.ref},
+        new_channel
+      )
     end
   end
 

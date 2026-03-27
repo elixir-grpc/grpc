@@ -55,6 +55,10 @@ defmodule GRPC.Client.ReResolveTest do
     pid = :global.whereis_name({Connection, ref})
 
     if pid && Process.alive?(pid) do
+      # Also monitor the DnsResolver so we wait for it to die
+      state = :sys.get_state(pid)
+      resolver_pid = state.dns_resolver
+
       mon = Process.monitor(pid)
       Connection.disconnect(channel)
 
@@ -62,6 +66,18 @@ defmodule GRPC.Client.ReResolveTest do
         {:DOWN, ^mon, :process, ^pid, _} -> :ok
       after
         1_000 -> :ok
+      end
+
+      # DnsResolver is linked to Connection, so it should die too.
+      # Wait briefly to ensure it's fully stopped.
+      if resolver_pid && Process.alive?(resolver_pid) do
+        resolver_mon = Process.monitor(resolver_pid)
+
+        receive do
+          {:DOWN, ^resolver_mon, :process, ^resolver_pid, _} -> :ok
+        after
+          1_000 -> :ok
+        end
       end
     end
   end
@@ -717,8 +733,8 @@ defmodule GRPC.Client.ReResolveTest do
         {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
       end)
 
-      # Use a long resolve_interval so the timer doesn't fire during the test,
-      # and a meaningful min_resolve_interval to test rate limiting.
+      # Use a long resolve_interval so the periodic timer doesn't fire,
+      # and a large min_resolve_interval to make rate limiting deterministic.
       {:ok, channel} =
         Connection.connect(
           "dns://my-service.local:50051",
@@ -726,11 +742,11 @@ defmodule GRPC.Client.ReResolveTest do
           name: ctx.ref,
           resolver: ctx.resolver,
           resolve_interval: 60_000,
-          min_resolve_interval: 500,
+          min_resolve_interval: 60_000,
           lb_policy: :round_robin
         )
 
-      # Track calls during the resolve_now burst
+      # Track resolve calls during the burst
       call_count = :counters.new(1, [:atomics])
 
       stub(ctx.resolver, :resolve, fn _target ->
@@ -738,16 +754,17 @@ defmodule GRPC.Client.ReResolveTest do
         {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
       end)
 
+      resolver_pid = get_state(ctx.ref).dns_resolver
+
       # Fire 20 resolve_now calls rapidly
-      for _ <- 1..20, do: Connection.resolve_now(channel)
+      for _ <- 1..20, do: send(resolver_pid, :resolve_now)
 
-      # Give them time to process
-      Process.sleep(200)
+      # Wait for the GenServer to drain its mailbox
+      _ = :sys.get_state(resolver_pid)
 
-      # Rate limiting should ensure far fewer than 20 actual resolutions.
-      # The first call resolves, the rest within 500ms are skipped.
+      # With 60s rate limit, only the first should resolve; rest are skipped
       actual = :counters.get(call_count, 1)
-      assert actual <= 3, "Expected at most 3 resolutions, got #{actual}"
+      assert actual == 1, "Expected exactly 1 resolution, got #{actual}"
 
       disconnect_and_wait(channel)
     end
