@@ -765,13 +765,13 @@ defmodule GRPC.Client.Connection do
     cond do
       uri.scheme == @secure_scheme and uri.host ->
         opts = Keyword.put_new_lazy(opts, :cred, &default_ssl_option/0)
-        {"ipv4:#{uri.host}:#{uri.port}", opts, @secure_scheme}
+        {"dns://#{uri.host}:#{uri.port}", opts, @secure_scheme}
 
       uri.scheme == @insecure_scheme and uri.host ->
         if opts[:cred],
           do: raise(ArgumentError, "invalid option for insecure (http) address: :cred")
 
-        {"ipv4:#{uri.host}:#{uri.port}", opts, @insecure_scheme}
+        {"dns://#{uri.host}:#{uri.port}", opts, @insecure_scheme}
 
       # Compatibility mode: host:port or unix:path.
       # Bare host:port defaults to dns:// scheme (matching the Resolver docs:
