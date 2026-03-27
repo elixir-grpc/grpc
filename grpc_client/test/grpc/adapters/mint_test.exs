@@ -116,4 +116,28 @@ defmodule GRPC.Client.Adapters.MintTest do
       end
     end
   end
+
+  describe "connect/2 with retry option" do
+    test "passes retry option to ConnectionProcess state", %{port: port} do
+      channel = build(:channel, adapter: Mint, port: port, host: "localhost")
+
+      {:ok, connected} = Mint.connect(channel, retry: 5)
+      state = :sys.get_state(connected.adapter_payload.conn_pid)
+
+      assert state.retry == 5
+      assert state.retry_attempt == 0
+      assert state.scheme == :http
+      assert state.host == "localhost"
+      assert state.port == port
+    end
+
+    test "defaults retry to 0 when not specified", %{port: port} do
+      channel = build(:channel, adapter: Mint, port: port, host: "localhost")
+
+      {:ok, connected} = Mint.connect(channel, [])
+      state = :sys.get_state(connected.adapter_payload.conn_pid)
+
+      assert state.retry == 0
+    end
+  end
 end

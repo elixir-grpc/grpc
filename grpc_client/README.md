@@ -193,6 +193,23 @@ config :grpc, GRPC.Client.Adapters.Mint,
 
 The accepted options are the same as [`Mint.HTTP.connect/4`](https://hexdocs.pm/mint/Mint.HTTP.html#connect/4-options).
 
+#### Automatic Reconnection
+
+The Mint adapter supports automatic reconnection when the underlying HTTP/2 connection drops (e.g. server restart, network interruption). To enable it, pass the `:retry` option via `adapter_opts`:
+
+```elixir
+iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051",
+...>   adapter: GRPC.Client.Adapters.Mint,
+...>   adapter_opts: [retry: 5]
+...> )
+```
+
+When the connection drops, the adapter will attempt to reconnect up to `retry` times using **exponential backoff with jitter**. The delay starts at ~1 second and grows up to a maximum of 120 seconds. If all attempts are exhausted, the parent process receives a `{:elixir_grpc, :connection_down, pid}` message.
+
+By default, `:retry` is `0` (no reconnection attempts).
+
+> **Note:** Any in-flight requests at the time of the drop will fail immediately. Reconnection only re-establishes the transport connection — it does not replay requests.
+
 ---
 
 ## Contributing
