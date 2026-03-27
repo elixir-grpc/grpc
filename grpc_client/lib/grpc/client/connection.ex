@@ -102,7 +102,8 @@ defmodule GRPC.Client.Connection do
           max_resolve_interval: non_neg_integer(),
           min_resolve_interval: non_neg_integer(),
           last_resolve_at: integer() | nil,
-          resolve_timer_ref: reference() | nil
+          resolve_timer_ref: reference() | nil,
+          resolve_timeout: non_neg_integer()
         }
 
   defstruct virtual_channel: nil,
@@ -118,7 +119,8 @@ defmodule GRPC.Client.Connection do
             max_resolve_interval: 300_000,
             min_resolve_interval: 5_000,
             last_resolve_at: nil,
-            resolve_timer_ref: nil
+            resolve_timer_ref: nil,
+            resolve_timeout: 10_000
 
   def child_spec(initial_state) do
     %{
@@ -375,10 +377,32 @@ defmodule GRPC.Client.Connection do
 
   def terminate(_reason, _state), do: :ok
 
+  @default_resolve_timeout 10_000
+
   defp do_re_resolve(resolver, target, adapter, opts, state) do
     start_time = System.monotonic_time()
 
-    case resolver.resolve(target) do
+    # Run DNS resolution with a timeout to prevent the GenServer from blocking
+    # indefinitely on a slow/hung DNS server.
+    caller = self()
+    ref = make_ref()
+
+    pid =
+      spawn(fn ->
+        result = resolver.resolve(target)
+        send(caller, {ref, result})
+      end)
+
+    result =
+      receive do
+        {^ref, result} -> result
+      after
+        Map.get(state, :resolve_timeout, @default_resolve_timeout) ->
+          Process.exit(pid, :kill)
+          {:error, :resolve_timeout}
+      end
+
+    case result do
       {:ok, %{addresses: []}} ->
         duration = System.monotonic_time() - start_time
 
@@ -452,12 +476,14 @@ defmodule GRPC.Client.Connection do
         Map.delete(channels, key)
       end)
 
-    # Connect new channels
+    # Connect new channels and retry previously failed ones still in DNS
     real_channels =
       Enum.reduce(new_addresses, real_channels, fn %{address: host, port: port}, channels ->
         key = build_address_key(host, port)
+        existing = Map.get(channels, key)
+        should_connect = MapSet.member?(added, key) or match?({:error, _}, existing)
 
-        if MapSet.member?(added, key) do
+        if should_connect do
           case connect_real_channel(state.virtual_channel, host, port, opts, adapter) do
             {:ok, ch} -> Map.put(channels, key, {:ok, ch})
             {:error, reason} -> Map.put(channels, key, {:error, reason})
@@ -563,7 +589,8 @@ defmodule GRPC.Client.Connection do
         resolver: GRPC.Client.Resolver,
         resolve_interval: @default_resolve_interval,
         max_resolve_interval: @default_max_resolve_interval,
-        min_resolve_interval: @default_min_resolve_interval
+        min_resolve_interval: @default_min_resolve_interval,
+        resolve_timeout: @default_resolve_timeout
       )
 
     resolver = Keyword.get(opts, :resolver, GRPC.Client.Resolver)
@@ -572,6 +599,7 @@ defmodule GRPC.Client.Connection do
     resolve_interval = Keyword.get(opts, :resolve_interval, @default_resolve_interval)
     max_resolve_interval = Keyword.get(opts, :max_resolve_interval, @default_max_resolve_interval)
     min_resolve_interval = Keyword.get(opts, :min_resolve_interval, @default_min_resolve_interval)
+    resolve_timeout = Keyword.get(opts, :resolve_timeout, @default_resolve_timeout)
 
     {norm_target, norm_opts, scheme} = normalize_target_and_opts(target, opts)
     cred = resolve_credential(norm_opts[:cred], scheme)
@@ -603,7 +631,8 @@ defmodule GRPC.Client.Connection do
       resolve_interval: resolve_interval,
       base_resolve_interval: resolve_interval,
       max_resolve_interval: max_resolve_interval,
-      min_resolve_interval: min_resolve_interval
+      min_resolve_interval: min_resolve_interval,
+      resolve_timeout: resolve_timeout
     }
 
     case resolver.resolve(norm_target) do

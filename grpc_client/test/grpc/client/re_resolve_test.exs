@@ -942,4 +942,107 @@ defmodule GRPC.Client.ReResolveTest do
       assert {:error, :no_connection} = Connection.pick_channel(channel)
     end
   end
+
+  # -- 20. Retry previously failed channels still in DNS ---------------------
+
+  describe "retry previously failed channels" do
+    setup ctx do
+      Application.put_env(:grpc_client, :grpc_test_failing_hosts, ["10.0.0.2"])
+      on_exit(fn -> Application.delete_env(:grpc_client, :grpc_test_failing_hosts) end)
+      Map.put(ctx, :failing_adapter, GRPC.Test.FailingClientAdapter)
+    end
+
+    test "reconnects a previously failed channel when it becomes reachable", ctx do
+      expect(ctx.resolver, :resolve, fn _target ->
+        {:ok,
+         %{
+           addresses: [
+             %{address: "10.0.0.1", port: 50051},
+             %{address: "10.0.0.2", port: 50051}
+           ],
+           service_config: nil
+         }}
+      end)
+
+      stub(ctx.resolver, :resolve, fn _target ->
+        {:ok,
+         %{
+           addresses: [
+             %{address: "10.0.0.1", port: 50051},
+             %{address: "10.0.0.2", port: 50051}
+           ],
+           service_config: nil
+         }}
+      end)
+
+      {:ok, channel} =
+        Connection.connect(
+          "dns://my-service.local:50051",
+          adapter: ctx.failing_adapter,
+          name: ctx.ref,
+          resolver: ctx.resolver,
+          resolve_interval: @resolve_interval,
+          min_resolve_interval: 0,
+          lb_policy: :round_robin
+        )
+
+      # 10.0.0.2 should be in error state
+      state = get_state(ctx.ref)
+      assert match?({:error, _}, Map.get(state.real_channels, "10.0.0.2:50051"))
+
+      # Now make 10.0.0.2 reachable
+      Application.put_env(:grpc_client, :grpc_test_failing_hosts, [])
+
+      Process.sleep(@wait)
+
+      # Both channels should now be healthy
+      state = get_state(ctx.ref)
+      assert match?({:ok, _}, Map.get(state.real_channels, "10.0.0.1:50051"))
+      assert match?({:ok, _}, Map.get(state.real_channels, "10.0.0.2:50051"))
+
+      Connection.disconnect(channel)
+    end
+  end
+
+  # -- 21. DNS resolution timeout doesn't hang the GenServer -----------------
+
+  describe "DNS resolution timeout" do
+    test "resolver timeout triggers backoff, channels preserved", ctx do
+      expect(ctx.resolver, :resolve, fn _target ->
+        {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
+      end)
+
+      stub(ctx.resolver, :resolve, fn _target ->
+        {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
+      end)
+
+      {:ok, channel} =
+        Connection.connect(
+          "dns://my-service.local:50051",
+          adapter: ctx.adapter,
+          name: ctx.ref,
+          resolver: ctx.resolver,
+          resolve_interval: @resolve_interval,
+          min_resolve_interval: 0,
+          resolve_timeout: 200,
+          lb_policy: :round_robin
+        )
+
+      # Simulate a resolver that hangs longer than the 200ms timeout
+      stub(ctx.resolver, :resolve, fn _target ->
+        Process.sleep(5_000)
+        {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
+      end)
+
+      # Wait for the re-resolve to fire and timeout (200ms timeout + margin)
+      Process.sleep(@wait + 300)
+
+      # GenServer should still be alive with existing channels, interval doubled
+      state = get_state(ctx.ref)
+      assert map_size(state.real_channels) == 1
+      assert state.resolve_interval == @resolve_interval * 2
+
+      Connection.disconnect(channel)
+    end
+  end
 end
