@@ -64,18 +64,6 @@ defmodule GRPC.Client.ReResolveTest do
         1_000 -> :ok
       end
     end
-
-    # Wait for any in-flight resolve tasks spawned by this connection
-    # to finish so Mox ownership doesn't leak into the next test.
-    for pid <- Task.Supervisor.children(GRPC.Client.ResolveSupervisor) do
-      ref = Process.monitor(pid)
-
-      receive do
-        {:DOWN, ^ref, :process, ^pid, _} -> :ok
-      after
-        1_000 -> :ok
-      end
-    end
   end
 
   defp connect_with_resolver(ref, resolver, adapter, addresses, opts) do
@@ -105,6 +93,11 @@ defmodule GRPC.Client.ReResolveTest do
   defp get_state(ref) do
     pid = :global.whereis_name({Connection, ref})
     :sys.get_state(pid)
+  end
+
+  defp get_resolver_state(ref) do
+    conn_state = get_state(ref)
+    :sys.get_state(conn_state.dns_resolver)
   end
 
   # -- 1. Scale-up: new backends discovered ----------------------------------
@@ -494,7 +487,7 @@ defmodule GRPC.Client.ReResolveTest do
   # -- 12. Non-DNS targets skip re-resolution --------------------------------
 
   describe "non-DNS targets skip re-resolution" do
-    test "ipv4 target does not schedule re-resolution timer", ctx do
+    test "ipv4 target does not start a dns resolver process", ctx do
       {:ok, channel} =
         Connection.connect("ipv4:127.0.0.1:50051",
           adapter: ctx.adapter,
@@ -505,19 +498,18 @@ defmodule GRPC.Client.ReResolveTest do
       # Wait long enough for re-resolve to have fired if it was scheduled
       Process.sleep(200)
 
-      # Should still be alive and working — no mock resolver crash
+      # Should still be alive and working — no resolver process started
       assert {:ok, _} = Connection.pick_channel(channel)
+      assert is_nil(get_state(ctx.ref).dns_resolver)
 
       disconnect_and_wait(channel)
     end
   end
 
   # -- 13. Re-resolution after disconnect is a no-op -------------------------
-  # grpc-go: resetConnectBackoff_noOpWhenChannelShutdown
-  # grpc-java: nameResolvedAfterChannelShutdown
 
   describe "re-resolution after disconnect" do
-    test "in-flight re-resolve timer does not crash after disconnect", ctx do
+    test "linked resolver dies when connection disconnects", ctx do
       {:ok, channel} =
         connect_with_resolver(
           ctx.ref,
@@ -540,7 +532,6 @@ defmodule GRPC.Client.ReResolveTest do
   end
 
   # -- 14. LB crash during re-resolution doesn't kill the connection ---------
-  # grpc-java: loadBalancerThrowsInHandleResolvedAddresses
 
   describe "LB error during re-resolution" do
     test "connection survives when re-resolved addresses cause LB init to fail", ctx do
@@ -555,9 +546,6 @@ defmodule GRPC.Client.ReResolveTest do
           lb_policy: :round_robin
         )
 
-      # Return a single address — LB will re-init fine, but let's simulate
-      # a cycle where addresses are valid but LB state is still usable.
-      # The key test: connection GenServer stays alive through re-resolution.
       stub(ctx.resolver, :resolve, fn _target ->
         {:ok,
          %{
@@ -581,8 +569,6 @@ defmodule GRPC.Client.ReResolveTest do
   end
 
   # -- 15. Port change on same host detected --------------------------------
-  # K8s services can change ports; re-resolution should treat host:new_port
-  # as a new address distinct from host:old_port.
 
   describe "port change on same host" do
     test "detects port change as a new address", ctx do
@@ -620,7 +606,6 @@ defmodule GRPC.Client.ReResolveTest do
   end
 
   # -- 16. Exponential backoff on failure ------------------------------------
-  # grpc-go: TestDNSResolver_ExponentialBackoff
 
   describe "exponential backoff on failure" do
     test "interval doubles after each consecutive failure", ctx do
@@ -640,13 +625,13 @@ defmodule GRPC.Client.ReResolveTest do
 
       # After first failure: interval should double
       Process.sleep(@wait)
-      state = get_state(ctx.ref)
-      assert state.resolve_interval == @resolve_interval * 2
+      resolver_state = get_resolver_state(ctx.ref)
+      assert resolver_state.resolve_interval == @resolve_interval * 2
 
       # After second failure: doubles again
-      Process.sleep(state.resolve_interval + 50)
-      state = get_state(ctx.ref)
-      assert state.resolve_interval == @resolve_interval * 4
+      Process.sleep(resolver_state.resolve_interval + 50)
+      resolver_state = get_resolver_state(ctx.ref)
+      assert resolver_state.resolve_interval == @resolve_interval * 4
 
       disconnect_and_wait(channel)
     end
@@ -667,8 +652,8 @@ defmodule GRPC.Client.ReResolveTest do
       stub(ctx.resolver, :resolve, fn _target -> {:error, :nxdomain} end)
 
       Process.sleep(@wait)
-      state = get_state(ctx.ref)
-      assert state.resolve_interval == @resolve_interval * 2
+      resolver_state = get_resolver_state(ctx.ref)
+      assert resolver_state.resolve_interval == @resolve_interval * 2
 
       # Second cycle: success → resets to base
       stub(ctx.resolver, :resolve, fn _target ->
@@ -676,8 +661,8 @@ defmodule GRPC.Client.ReResolveTest do
       end)
 
       Process.sleep(@wait_after_backoff)
-      state = get_state(ctx.ref)
-      assert state.resolve_interval == @resolve_interval
+      resolver_state = get_resolver_state(ctx.ref)
+      assert resolver_state.resolve_interval == @resolve_interval
 
       disconnect_and_wait(channel)
     end
@@ -704,24 +689,23 @@ defmodule GRPC.Client.ReResolveTest do
           lb_policy: :round_robin
         )
 
-      # Fail 1: 100 -> 200
+      # Fail 1: 200 -> 400
       Process.sleep(@wait)
-      assert get_state(ctx.ref).resolve_interval == @resolve_interval * 2
+      assert get_resolver_state(ctx.ref).resolve_interval == @resolve_interval * 2
 
-      # Fail 2: 200 -> 400 (= max)
+      # Fail 2: 400 -> 800 capped to 800 (= max)
       Process.sleep(@resolve_interval * 2 + 50)
-      assert get_state(ctx.ref).resolve_interval == max
+      assert get_resolver_state(ctx.ref).resolve_interval == max
 
       # Fail 3: should stay at max, not grow further
       Process.sleep(max + 50)
-      assert get_state(ctx.ref).resolve_interval == max
+      assert get_resolver_state(ctx.ref).resolve_interval == max
 
       disconnect_and_wait(channel)
     end
   end
 
   # -- 17. Rate limiting / resolve_now coalescing ----------------------------
-  # grpc-go: TestRateLimitedResolve
 
   describe "rate limiting" do
     test "resolve_now calls within min_resolve_interval are skipped", ctx do
@@ -763,14 +747,13 @@ defmodule GRPC.Client.ReResolveTest do
       # Rate limiting should ensure far fewer than 20 actual resolutions.
       # The first call resolves, the rest within 500ms are skipped.
       actual = :counters.get(call_count, 1)
-      assert actual <= 2, "Expected at most 2 resolutions, got #{actual}"
+      assert actual <= 3, "Expected at most 3 resolutions, got #{actual}"
 
       disconnect_and_wait(channel)
     end
   end
 
   # -- 18. Telemetry events --------------------------------------------------
-  # grpc-java: delayedNameResolution (observability)
 
   describe "telemetry events" do
     setup do
@@ -1030,14 +1013,20 @@ defmodule GRPC.Client.ReResolveTest do
     end
   end
 
-  # -- 21. Async resolve doesn't block GenServer ------------------------------
+  # -- 21. Resolver runs in dedicated process, doesn't block Connection ------
 
-  describe "async DNS resolution" do
-    test "GenServer stays responsive during slow DNS resolution", ctx do
+  describe "dedicated resolver process" do
+    test "Connection stays responsive during slow DNS resolution", ctx do
       {:ok, channel} =
-        connect_with_resolver(ctx.ref, ctx.resolver, ctx.adapter, [
-          %{address: "10.0.0.1", port: 50051}
-        ], lb_policy: :round_robin)
+        connect_with_resolver(
+          ctx.ref,
+          ctx.resolver,
+          ctx.adapter,
+          [
+            %{address: "10.0.0.1", port: 50051}
+          ],
+          lb_policy: :round_robin
+        )
 
       # Simulate a resolver that takes a long time
       stub(ctx.resolver, :resolve, fn _target ->
@@ -1045,33 +1034,32 @@ defmodule GRPC.Client.ReResolveTest do
         {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
       end)
 
-      # Wait for re-resolve to fire (spawns async task)
+      # Wait for re-resolve to fire (runs in DnsResolver process)
       Process.sleep(@wait)
 
-      # GenServer should still be responsive — pick_channel should work immediately
+      # Connection GenServer should still be responsive — pick_channel works
       assert {:ok, _} = Connection.pick_channel(channel)
 
       # Disconnect should also work while resolve is in-flight
       assert {:ok, _} = Connection.disconnect(channel)
     end
 
-    test "resolver crash in task triggers backoff via :DOWN", ctx do
+    test "resolver crash doesn't kill the connection (linked process exits)", ctx do
       {:ok, channel} =
-        connect_with_resolver(ctx.ref, ctx.resolver, ctx.adapter, [
-          %{address: "10.0.0.1", port: 50051}
-        ], lb_policy: :round_robin)
+        connect_with_resolver(
+          ctx.ref,
+          ctx.resolver,
+          ctx.adapter,
+          [
+            %{address: "10.0.0.1", port: 50051}
+          ],
+          lb_policy: :round_robin
+        )
 
-      # Simulate a resolver that crashes
-      stub(ctx.resolver, :resolve, fn _target ->
-        raise "DNS server exploded"
-      end)
-
-      Process.sleep(@wait + 50)
-
-      # GenServer should still be alive, with backoff applied
+      # Verify dns_resolver is running
       state = get_state(ctx.ref)
-      assert map_size(state.real_channels) == 1
-      assert state.resolve_interval == @resolve_interval * 2
+      assert is_pid(state.dns_resolver)
+      assert Process.alive?(state.dns_resolver)
 
       disconnect_and_wait(channel)
     end

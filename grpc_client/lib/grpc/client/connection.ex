@@ -84,10 +84,6 @@ defmodule GRPC.Client.Connection do
   @default_max_resolve_interval 300_000
   @default_min_resolve_interval 5_000
 
-  # Telemetry event names
-  @resolve_stop_event [:grpc, :client, :resolve, :stop]
-  @resolve_error_event [:grpc, :client, :resolve, :error]
-
   @type t :: %__MODULE__{
           virtual_channel: Channel.t(),
           real_channels: %{String.t() => {:ok, Channel.t()} | {:error, any()}},
@@ -97,14 +93,7 @@ defmodule GRPC.Client.Connection do
           adapter: module(),
           target: String.t() | nil,
           connect_opts: keyword(),
-          resolve_interval: non_neg_integer(),
-          base_resolve_interval: non_neg_integer(),
-          max_resolve_interval: non_neg_integer(),
-          min_resolve_interval: non_neg_integer(),
-          last_resolve_at: integer() | nil,
-          resolve_timer_ref: reference() | nil,
-          resolve_task: Task.t() | nil,
-          resolve_start_time: integer() | nil
+          dns_resolver: pid() | nil
         }
 
   defstruct virtual_channel: nil,
@@ -115,14 +104,7 @@ defmodule GRPC.Client.Connection do
             adapter: GRPC.Client.Adapters.Gun,
             target: nil,
             connect_opts: [],
-            resolve_interval: 30_000,
-            base_resolve_interval: 30_000,
-            max_resolve_interval: 300_000,
-            min_resolve_interval: 5_000,
-            last_resolve_at: nil,
-            resolve_timer_ref: nil,
-            resolve_task: nil,
-            resolve_start_time: nil
+            dns_resolver: nil
 
   def child_spec(initial_state) do
     %{
@@ -149,11 +131,21 @@ defmodule GRPC.Client.Connection do
 
     Process.send_after(self(), :refresh, @refresh_interval)
 
-    # Only schedule periodic re-resolution for DNS targets — static targets
+    # Only start periodic re-resolution for DNS targets — static targets
     # (ipv4:, ipv6:, unix:) always resolve to the same addresses.
     state =
       if state.resolver && state.target && dns_target?(state.target) do
-        schedule_re_resolve(state)
+        {:ok, pid} =
+          GRPC.Client.DnsResolver.start_link(
+            connection_pid: self(),
+            resolver: state.resolver,
+            target: state.target,
+            resolve_interval: state.connect_opts[:resolve_interval] || @default_resolve_interval,
+            max_resolve_interval: state.connect_opts[:max_resolve_interval] || @default_max_resolve_interval,
+            min_resolve_interval: state.connect_opts[:min_resolve_interval] || @default_min_resolve_interval
+          )
+
+        %{state | dns_resolver: pid}
       else
         state
       end
@@ -270,15 +262,24 @@ defmodule GRPC.Client.Connection do
   Intended for use by health checks or heartbeat mechanisms that detect
   a backend has gone away and want to force a fresh DNS lookup.
   """
-  @spec resolve_now(Channel.t()) :: :re_resolve | {:error, :no_connection}
+  @spec resolve_now(Channel.t()) :: :ok | {:error, :no_connection}
   def resolve_now(%Channel{ref: ref}) do
     case :global.whereis_name({__MODULE__, ref}) do
       :undefined -> {:error, :no_connection}
-      pid -> send(pid, :re_resolve)
+      pid -> GenServer.call(pid, :resolve_now)
     end
   end
 
   @impl GenServer
+  def handle_call(:resolve_now, _from, %{dns_resolver: pid} = state) when is_pid(pid) do
+    send(pid, :resolve_now)
+    {:reply, :ok, state}
+  end
+
+  def handle_call(:resolve_now, _from, state) do
+    {:reply, {:error, :no_dns_resolver}, state}
+  end
+
   def handle_call({:disconnect, %Channel{adapter: adapter} = channel}, _from, state) do
     resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
     :persistent_term.erase({__MODULE__, :lb_state, channel.ref})
@@ -332,52 +333,10 @@ defmodule GRPC.Client.Connection do
 
   def handle_info(:refresh, state), do: {:noreply, state}
 
-  def handle_info(
-        :re_resolve,
-        %{resolver: resolver, target: target} = state
-      )
-      when not is_nil(resolver) and not is_nil(target) do
-    now = System.monotonic_time(:millisecond)
-
-    # Don't start a new resolve if one is already in flight
-    state =
-      if state.resolve_task != nil do
-        state
-      else if rate_limited?(state, now) do
-        Logger.debug("DNS re-resolution for #{target} rate-limited, skipping")
-        schedule_re_resolve(state)
-      else
-        # Spawn async DNS resolution — GenServer stays responsive
-        task =
-          Task.Supervisor.async_nolink(GRPC.Client.ResolveSupervisor, fn ->
-            resolver.resolve(target)
-          end)
-
-        %{state | resolve_task: task, resolve_start_time: System.monotonic_time(), last_resolve_at: now}
-      end
-      end
-
-    {:noreply, state}
-  end
-
-  def handle_info(:re_resolve, state), do: {:noreply, state}
-
-  # Async resolve completed successfully
-  def handle_info({ref, result}, %{resolve_task: %Task{ref: ref}} = state) do
-    # Flush the :DOWN message from the task
-    Process.demonitor(ref, [:flush])
-
+  # Result from the dedicated DnsResolver process
+  def handle_info({:dns_result, result}, state) do
     state = handle_resolve_result(result, state)
-    {:noreply, schedule_re_resolve(%{state | resolve_task: nil, resolve_start_time: nil})}
-  end
-
-  # Async resolve task crashed or was killed
-  def handle_info(
-        {:DOWN, ref, :process, _pid, reason},
-        %{resolve_task: %Task{ref: ref}} = state
-      ) do
-    state = handle_resolve_result({:error, reason}, state)
-    {:noreply, schedule_re_resolve(%{state | resolve_task: nil, resolve_start_time: nil})}
+    {:noreply, state}
   end
 
   def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
@@ -409,61 +368,13 @@ defmodule GRPC.Client.Connection do
 
   def terminate(_reason, _state), do: :ok
 
-  defp handle_resolve_result(result, state) do
-    duration = System.monotonic_time() - (state.resolve_start_time || System.monotonic_time())
-    target = state.target
-    adapter = state.adapter
-    opts = state.connect_opts
+  defp handle_resolve_result({:ok, %{addresses: []}}, state), do: state
 
-    case result do
-      {:ok, %{addresses: []}} ->
-        :telemetry.execute(@resolve_error_event, %{duration: duration}, %{
-          target: target,
-          reason: :empty_addresses,
-          address_count: 0
-        })
-
-        Logger.warning(
-          "DNS re-resolution returned empty addresses for #{target}, keeping existing"
-        )
-
-        backoff(state)
-
-      {:ok, %{addresses: new_addresses}} ->
-        :telemetry.execute(@resolve_stop_event, %{duration: duration}, %{
-          target: target,
-          address_count: length(new_addresses)
-        })
-
-        state = reconcile_channels(new_addresses, adapter, opts, state)
-        reset_backoff(state)
-
-      {:error, reason} ->
-        :telemetry.execute(@resolve_error_event, %{duration: duration}, %{
-          target: target,
-          reason: reason,
-          address_count: 0
-        })
-
-        Logger.warning("DNS re-resolution failed for #{target}: #{inspect(reason)}")
-        backoff(state)
-    end
+  defp handle_resolve_result({:ok, %{addresses: new_addresses}}, state) do
+    reconcile_channels(new_addresses, state.adapter, state.connect_opts, state)
   end
 
-  defp backoff(state) do
-    new_interval = min(state.resolve_interval * 2, state.max_resolve_interval)
-    %{state | resolve_interval: new_interval}
-  end
-
-  defp reset_backoff(state) do
-    %{state | resolve_interval: state.base_resolve_interval}
-  end
-
-  defp rate_limited?(%{last_resolve_at: nil}, _now), do: false
-
-  defp rate_limited?(%{last_resolve_at: last, min_resolve_interval: min}, now) do
-    now - last < min
-  end
+  defp handle_resolve_result({:error, _reason}, state), do: state
 
   defp reconcile_channels(new_addresses, adapter, opts, state) do
     new_keys = MapSet.new(new_addresses, &build_address_key(&1.address, &1.port))
@@ -566,12 +477,6 @@ defmodule GRPC.Client.Connection do
     end
   end
 
-  defp schedule_re_resolve(state) do
-    if state.resolve_timer_ref, do: Process.cancel_timer(state.resolve_timer_ref)
-    ref = Process.send_after(self(), :re_resolve, state.resolve_interval)
-    %{state | resolve_timer_ref: ref}
-  end
-
   defp channel_alive?({:ok, %{adapter_payload: %{conn_pid: pid}}}) when is_pid(pid) do
     Process.alive?(pid)
   end
@@ -619,9 +524,6 @@ defmodule GRPC.Client.Connection do
     resolver = Keyword.get(opts, :resolver, GRPC.Client.Resolver)
     adapter = Keyword.get(opts, :adapter, GRPC.Client.Adapters.Gun)
     lb_policy_opt = Keyword.get(opts, :lb_policy)
-    resolve_interval = Keyword.get(opts, :resolve_interval, @default_resolve_interval)
-    max_resolve_interval = Keyword.get(opts, :max_resolve_interval, @default_max_resolve_interval)
-    min_resolve_interval = Keyword.get(opts, :min_resolve_interval, @default_min_resolve_interval)
 
     {norm_target, norm_opts, scheme} = normalize_target_and_opts(target, opts)
     cred = resolve_credential(norm_opts[:cred], scheme)
@@ -649,11 +551,7 @@ defmodule GRPC.Client.Connection do
       resolver: resolver,
       adapter: adapter,
       target: norm_target,
-      connect_opts: norm_opts,
-      resolve_interval: resolve_interval,
-      base_resolve_interval: resolve_interval,
-      max_resolve_interval: max_resolve_interval,
-      min_resolve_interval: min_resolve_interval
+      connect_opts: norm_opts
     }
 
     case resolver.resolve(norm_target) do
