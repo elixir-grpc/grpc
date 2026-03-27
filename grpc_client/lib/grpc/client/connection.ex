@@ -80,6 +80,13 @@ defmodule GRPC.Client.Connection do
   @insecure_scheme "http"
   @secure_scheme "https"
   @refresh_interval 15_000
+  @default_resolve_interval 30_000
+  @default_max_resolve_interval 300_000
+  @default_min_resolve_interval 5_000
+
+  # Telemetry event names
+  @resolve_stop_event [:grpc, :client, :resolve, :stop]
+  @resolve_error_event [:grpc, :client, :resolve, :error]
 
   @type t :: %__MODULE__{
           virtual_channel: Channel.t(),
@@ -87,7 +94,14 @@ defmodule GRPC.Client.Connection do
           lb_mod: module() | nil,
           lb_state: term() | nil,
           resolver: module() | nil,
-          adapter: module()
+          adapter: module(),
+          target: String.t() | nil,
+          connect_opts: keyword(),
+          resolve_interval: non_neg_integer(),
+          base_resolve_interval: non_neg_integer(),
+          max_resolve_interval: non_neg_integer(),
+          min_resolve_interval: non_neg_integer(),
+          last_resolve_at: integer() | nil
         }
 
   defstruct virtual_channel: nil,
@@ -95,7 +109,14 @@ defmodule GRPC.Client.Connection do
             lb_mod: nil,
             lb_state: nil,
             resolver: nil,
-            adapter: GRPC.Client.Adapters.Gun
+            adapter: GRPC.Client.Adapters.Gun,
+            target: nil,
+            connect_opts: [],
+            resolve_interval: 30_000,
+            base_resolve_interval: 30_000,
+            max_resolve_interval: 300_000,
+            min_resolve_interval: 5_000,
+            last_resolve_at: nil
 
   def child_spec(initial_state) do
     %{
@@ -121,6 +142,13 @@ defmodule GRPC.Client.Connection do
     )
 
     Process.send_after(self(), :refresh, @refresh_interval)
+
+    # Only schedule periodic re-resolution for DNS targets — static targets
+    # (ipv4:, ipv6:, unix:) always resolve to the same addresses.
+    if state.resolver && state.target && dns_target?(state.target) do
+      Process.send_after(self(), :re_resolve, state.resolve_interval)
+    end
+
     {:ok, state}
   end
 
@@ -227,6 +255,20 @@ defmodule GRPC.Client.Connection do
     end
   end
 
+  @doc """
+  Triggers an immediate DNS re-resolution, subject to rate limiting.
+
+  Intended for use by health checks or heartbeat mechanisms that detect
+  a backend has gone away and want to force a fresh DNS lookup.
+  """
+  @spec resolve_now(Channel.t()) :: :re_resolve | {:error, :no_connection}
+  def resolve_now(%Channel{ref: ref}) do
+    case :global.whereis_name({__MODULE__, ref}) do
+      :undefined -> {:error, :no_connection}
+      pid -> send(pid, :re_resolve)
+    end
+  end
+
   @impl GenServer
   def handle_call({:disconnect, %Channel{adapter: adapter} = channel}, _from, state) do
     resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
@@ -279,6 +321,27 @@ defmodule GRPC.Client.Connection do
 
   def handle_info(:refresh, state), do: {:noreply, state}
 
+  def handle_info(
+        :re_resolve,
+        %{resolver: resolver, target: target, adapter: adapter, connect_opts: opts} = state
+      )
+      when not is_nil(resolver) and not is_nil(target) do
+    now = System.monotonic_time(:millisecond)
+
+    state =
+      if rate_limited?(state, now) do
+        Logger.debug("DNS re-resolution for #{target} rate-limited, skipping")
+        state
+      else
+        do_re_resolve(resolver, target, adapter, opts, %{state | last_resolve_at: now})
+      end
+
+    Process.send_after(self(), :re_resolve, state.resolve_interval)
+    {:noreply, state}
+  end
+
+  def handle_info(:re_resolve, state), do: {:noreply, state}
+
   def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
     Logger.warning(
       "#{inspect(__MODULE__)} received :DOWN from #{inspect(pid)} with reason: #{inspect(reason)}"
@@ -308,6 +371,136 @@ defmodule GRPC.Client.Connection do
 
   def terminate(_reason, _state), do: :ok
 
+  defp do_re_resolve(resolver, target, adapter, opts, state) do
+    start_time = System.monotonic_time()
+
+    case resolver.resolve(target) do
+      {:ok, %{addresses: []}} ->
+        duration = System.monotonic_time() - start_time
+
+        :telemetry.execute(@resolve_error_event, %{duration: duration}, %{
+          target: target,
+          reason: :empty_addresses,
+          address_count: 0
+        })
+
+        Logger.warning(
+          "DNS re-resolution returned empty addresses for #{target}, keeping existing"
+        )
+
+        backoff(state)
+
+      {:ok, %{addresses: new_addresses}} ->
+        duration = System.monotonic_time() - start_time
+
+        :telemetry.execute(@resolve_stop_event, %{duration: duration}, %{
+          target: target,
+          address_count: length(new_addresses)
+        })
+
+        state = reconcile_channels(new_addresses, adapter, opts, state)
+        reset_backoff(state)
+
+      {:error, reason} ->
+        duration = System.monotonic_time() - start_time
+
+        :telemetry.execute(@resolve_error_event, %{duration: duration}, %{
+          target: target,
+          reason: reason,
+          address_count: 0
+        })
+
+        Logger.warning("DNS re-resolution failed for #{target}: #{inspect(reason)}")
+        backoff(state)
+    end
+  end
+
+  defp backoff(state) do
+    new_interval = min(state.resolve_interval * 2, state.max_resolve_interval)
+    %{state | resolve_interval: new_interval}
+  end
+
+  defp reset_backoff(state) do
+    %{state | resolve_interval: state.base_resolve_interval}
+  end
+
+  defp rate_limited?(%{last_resolve_at: nil}, _now), do: false
+
+  defp rate_limited?(%{last_resolve_at: last, min_resolve_interval: min}, now) do
+    now - last < min
+  end
+
+  defp reconcile_channels(new_addresses, adapter, opts, state) do
+    new_keys = MapSet.new(new_addresses, &build_address_key(&1.address, &1.port))
+    old_keys = MapSet.new(Map.keys(state.real_channels))
+
+    added = MapSet.difference(new_keys, old_keys)
+    removed = MapSet.difference(old_keys, new_keys)
+
+    # Disconnect removed channels
+    real_channels =
+      Enum.reduce(MapSet.to_list(removed), state.real_channels, fn key, channels ->
+        case Map.get(channels, key) do
+          {:ok, ch} -> do_disconnect(adapter, ch)
+          _ -> :ok
+        end
+
+        Map.delete(channels, key)
+      end)
+
+    # Connect new channels
+    real_channels =
+      Enum.reduce(new_addresses, real_channels, fn %{address: host, port: port}, channels ->
+        key = build_address_key(host, port)
+
+        if MapSet.member?(added, key) do
+          case connect_real_channel(state.virtual_channel, host, port, opts, adapter) do
+            {:ok, ch} -> Map.put(channels, key, {:ok, ch})
+            {:error, reason} -> Map.put(channels, key, {:error, reason})
+          end
+        else
+          channels
+        end
+      end)
+
+    # Re-init load balancer with full updated address list
+    if state.lb_mod do
+      case state.lb_mod.init(addresses: new_addresses) do
+        {:ok, new_lb_state} ->
+          {:ok, {host, port}, picked_lb_state} = state.lb_mod.pick(new_lb_state)
+          key = build_address_key(host, port)
+
+          case Map.get(real_channels, key) do
+            {:ok, picked_channel} ->
+              :persistent_term.put(
+                {__MODULE__, :lb_state, state.virtual_channel.ref},
+                picked_channel
+              )
+
+              %{
+                state
+                | real_channels: real_channels,
+                  lb_state: picked_lb_state,
+                  virtual_channel: picked_channel
+              }
+
+            _ ->
+              %{state | real_channels: real_channels, lb_state: picked_lb_state}
+          end
+
+        {:error, _} ->
+          %{state | real_channels: real_channels}
+      end
+    else
+      %{state | real_channels: real_channels}
+    end
+  end
+
+  defp dns_target?(target) do
+    uri = URI.parse(target)
+    uri.scheme == "dns" or is_nil(uri.scheme)
+  end
+
   defp via(ref) do
     {:global, {__MODULE__, ref}}
   end
@@ -333,12 +526,20 @@ defmodule GRPC.Client.Connection do
         codec: GRPC.Codec.Proto,
         compressor: nil,
         accepted_compressors: [],
-        headers: []
+        headers: [],
+        lb_policy: nil,
+        resolver: GRPC.Client.Resolver,
+        resolve_interval: @default_resolve_interval,
+        max_resolve_interval: @default_max_resolve_interval,
+        min_resolve_interval: @default_min_resolve_interval
       )
 
     resolver = Keyword.get(opts, :resolver, GRPC.Client.Resolver)
     adapter = Keyword.get(opts, :adapter, GRPC.Client.Adapters.Gun)
     lb_policy_opt = Keyword.get(opts, :lb_policy)
+    resolve_interval = Keyword.get(opts, :resolve_interval, @default_resolve_interval)
+    max_resolve_interval = Keyword.get(opts, :max_resolve_interval, @default_max_resolve_interval)
+    min_resolve_interval = Keyword.get(opts, :min_resolve_interval, @default_min_resolve_interval)
 
     {norm_target, norm_opts, scheme} = normalize_target_and_opts(target, opts)
     cred = resolve_credential(norm_opts[:cred], scheme)
@@ -364,7 +565,13 @@ defmodule GRPC.Client.Connection do
     base_state = %__MODULE__{
       virtual_channel: virtual_channel,
       resolver: resolver,
-      adapter: adapter
+      adapter: adapter,
+      target: norm_target,
+      connect_opts: norm_opts,
+      resolve_interval: resolve_interval,
+      base_resolve_interval: resolve_interval,
+      max_resolve_interval: max_resolve_interval,
+      min_resolve_interval: min_resolve_interval
     }
 
     case resolver.resolve(norm_target) do
