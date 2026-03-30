@@ -93,7 +93,7 @@ defmodule GRPC.Client.Connection do
           adapter: module(),
           target: String.t() | nil,
           connect_opts: keyword(),
-          dns_resolver: pid() | nil
+          dns_resolver_pid: pid() | nil
         }
 
   defstruct virtual_channel: nil,
@@ -104,7 +104,7 @@ defmodule GRPC.Client.Connection do
             adapter: GRPC.Client.Adapters.Gun,
             target: nil,
             connect_opts: [],
-            dns_resolver: nil
+            dns_resolver_pid: nil
 
   def child_spec(initial_state) do
     %{
@@ -140,12 +140,12 @@ defmodule GRPC.Client.Connection do
             connection_pid: self(),
             resolver: state.resolver,
             target: state.target,
-            resolve_interval: state.connect_opts[:resolve_interval] || @default_resolve_interval,
-            max_resolve_interval: state.connect_opts[:max_resolve_interval] || @default_max_resolve_interval,
-            min_resolve_interval: state.connect_opts[:min_resolve_interval] || @default_min_resolve_interval
+            resolve_interval: state.connect_opts[:resolve_interval],
+            max_resolve_interval: state.connect_opts[:max_resolve_interval],
+            min_resolve_interval: state.connect_opts[:min_resolve_interval]
           )
 
-        %{state | dns_resolver: pid}
+        %{state | dns_resolver_pid: pid}
       else
         state
       end
@@ -169,6 +169,9 @@ defmodule GRPC.Client.Connection do
     * `:codec` – request/response codec (default: `GRPC.Codec.Proto`)
     * `:compressor` / `:accepted_compressors` – message compression
     * `:headers` – default metadata headers
+    * `:resolve_interval` – DNS re-resolution interval in ms (default: 30000)
+    * `:max_resolve_interval` – backoff cap in ms (default: 300000)
+    * `:min_resolve_interval` – rate-limit floor in ms (default: 5000)
 
   Returns:
 
@@ -266,20 +269,19 @@ defmodule GRPC.Client.Connection do
   def resolve_now(%Channel{ref: ref}) do
     case :global.whereis_name({__MODULE__, ref}) do
       :undefined -> {:error, :no_connection}
-      pid -> GenServer.call(pid, :resolve_now)
+      pid -> GenServer.cast(pid, :resolve_now)
     end
   end
 
   @impl GenServer
-  def handle_call(:resolve_now, _from, %{dns_resolver: pid} = state) when is_pid(pid) do
+  def handle_cast(:resolve_now, %{dns_resolver_pid: pid} = state) when is_pid(pid) do
     send(pid, :resolve_now)
-    {:reply, :ok, state}
+    {:noreply, state}
   end
 
-  def handle_call(:resolve_now, _from, state) do
-    {:reply, {:error, :no_dns_resolver}, state}
-  end
+  def handle_cast(:resolve_now, state), do: {:noreply, state}
 
+  @impl GenServer
   def handle_call({:disconnect, %Channel{adapter: adapter} = channel}, _from, state) do
     resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
     :persistent_term.erase({__MODULE__, :lb_state, channel.ref})

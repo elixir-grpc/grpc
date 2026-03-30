@@ -7,7 +7,16 @@ defmodule GRPC.Client.DnsResolver do
   Connection process focused on channel management.
 
   Sends `{:dns_result, result}` to the Connection after each resolve,
-  where `result` matches the return type of `Resolver.resolve/1`.
+  where `result` matches the return type of `GRPC.Client.Resolver.resolve/1`.
+
+  ## Resolver contract
+
+  The `:resolver` option must be a module implementing the
+  `GRPC.Client.Resolver` behaviour — specifically the `c:GRPC.Client.Resolver.resolve/1`
+  callback, which returns:
+
+      {:ok, %{addresses: [%{address: String.t(), port: integer()}], service_config: term()}}
+      | {:error, term()}
   """
   use GenServer
   require Logger
@@ -17,7 +26,7 @@ defmodule GRPC.Client.DnsResolver do
 
   defstruct [
     :connection_pid,
-    :resolver,
+    :resolver_module,
     :target,
     :resolve_interval,
     :base_resolve_interval,
@@ -31,7 +40,8 @@ defmodule GRPC.Client.DnsResolver do
   Starts the resolver process, linked to the calling process.
 
   Options:
-    * `:resolver` — resolver module (e.g. `GRPC.Client.Resolver`)
+    * `:connection_pid` — pid of the owning Connection GenServer
+    * `:resolver` — module implementing `GRPC.Client.Resolver` behaviour
     * `:target` — the DNS target string
     * `:resolve_interval` — base interval between resolves (ms)
     * `:max_resolve_interval` — backoff cap (ms)
@@ -47,7 +57,7 @@ defmodule GRPC.Client.DnsResolver do
 
     state = %__MODULE__{
       connection_pid: Keyword.fetch!(opts, :connection_pid),
-      resolver: Keyword.fetch!(opts, :resolver),
+      resolver_module: Keyword.fetch!(opts, :resolver),
       target: Keyword.fetch!(opts, :target),
       resolve_interval: resolve_interval,
       base_resolve_interval: resolve_interval,
@@ -79,7 +89,7 @@ defmodule GRPC.Client.DnsResolver do
 
   defp do_resolve(state) do
     start_time = System.monotonic_time()
-    result = state.resolver.resolve(state.target)
+    result = state.resolver_module.resolve(state.target)
     duration = System.monotonic_time() - start_time
     now = System.monotonic_time(:millisecond)
 

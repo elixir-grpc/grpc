@@ -57,7 +57,7 @@ defmodule GRPC.Client.ReResolveTest do
     if pid && Process.alive?(pid) do
       # Also monitor the DnsResolver so we wait for it to die
       state = :sys.get_state(pid)
-      resolver_pid = state.dns_resolver
+      resolver_pid = state.dns_resolver_pid
 
       mon = Process.monitor(pid)
       Connection.disconnect(channel)
@@ -113,7 +113,7 @@ defmodule GRPC.Client.ReResolveTest do
 
   defp get_resolver_state(ref) do
     conn_state = get_state(ref)
-    :sys.get_state(conn_state.dns_resolver)
+    :sys.get_state(conn_state.dns_resolver_pid)
   end
 
   # -- 1. Scale-up: new backends discovered ----------------------------------
@@ -516,7 +516,7 @@ defmodule GRPC.Client.ReResolveTest do
 
       # Should still be alive and working — no resolver process started
       assert {:ok, _} = Connection.pick_channel(channel)
-      assert is_nil(get_state(ctx.ref).dns_resolver)
+      assert is_nil(get_state(ctx.ref).dns_resolver_pid)
 
       disconnect_and_wait(channel)
     end
@@ -754,7 +754,7 @@ defmodule GRPC.Client.ReResolveTest do
         {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
       end)
 
-      resolver_pid = get_state(ctx.ref).dns_resolver
+      resolver_pid = get_state(ctx.ref).dns_resolver_pid
 
       # Fire 20 resolve_now calls rapidly
       for _ <- 1..20, do: send(resolver_pid, :resolve_now)
@@ -1075,8 +1075,8 @@ defmodule GRPC.Client.ReResolveTest do
 
       # Verify dns_resolver is running
       state = get_state(ctx.ref)
-      assert is_pid(state.dns_resolver)
-      assert Process.alive?(state.dns_resolver)
+      assert is_pid(state.dns_resolver_pid)
+      assert Process.alive?(state.dns_resolver_pid)
 
       disconnect_and_wait(channel)
     end
