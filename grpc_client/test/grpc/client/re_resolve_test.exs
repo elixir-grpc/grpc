@@ -55,7 +55,7 @@ defmodule GRPC.Client.ReResolveTest do
     pid = :global.whereis_name({Connection, ref})
 
     if pid && Process.alive?(pid) do
-      # Also monitor the DnsResolver so we wait for it to die
+      # Also monitor the DNSResolver so we wait for it to die
       state = :sys.get_state(pid)
       resolver_pid = state.dns_resolver_pid
 
@@ -68,7 +68,7 @@ defmodule GRPC.Client.ReResolveTest do
         1_000 -> :ok
       end
 
-      # DnsResolver is linked to Connection, so it should die too.
+      # DNSResolver is linked to Connection, so it should die too.
       # Wait briefly to ensure it's fully stopped.
       if resolver_pid && Process.alive?(resolver_pid) do
         resolver_mon = Process.monitor(resolver_pid)
@@ -1014,7 +1014,7 @@ defmodule GRPC.Client.ReResolveTest do
 
       # 10.0.0.2 should be in error state
       state = get_state(ctx.ref)
-      assert match?({:error, _}, Map.get(state.real_channels, "10.0.0.2:50051"))
+      assert match?({:failed, _}, Map.get(state.real_channels, "10.0.0.2:50051"))
 
       # Now make 10.0.0.2 reachable
       Application.put_env(:grpc_client, :grpc_test_failing_hosts, [])
@@ -1023,8 +1023,8 @@ defmodule GRPC.Client.ReResolveTest do
 
       # Both channels should now be healthy
       state = get_state(ctx.ref)
-      assert match?({:ok, _}, Map.get(state.real_channels, "10.0.0.1:50051"))
-      assert match?({:ok, _}, Map.get(state.real_channels, "10.0.0.2:50051"))
+      assert match?({:connected, _}, Map.get(state.real_channels, "10.0.0.1:50051"))
+      assert match?({:connected, _}, Map.get(state.real_channels, "10.0.0.2:50051"))
 
       disconnect_and_wait(channel)
     end
@@ -1051,7 +1051,7 @@ defmodule GRPC.Client.ReResolveTest do
         {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
       end)
 
-      # Wait for re-resolve to fire (runs in DnsResolver process)
+      # Wait for re-resolve to fire (runs in DNSResolver process)
       Process.sleep(@wait)
 
       # Connection GenServer should still be responsive — pick_channel works
@@ -1126,9 +1126,9 @@ defmodule GRPC.Client.ReResolveTest do
           lb_policy: :round_robin
         )
 
-      # 10.0.0.2 is {:error, _} in real_channels
+      # 10.0.0.2 is {:failed, _} in real_channels
       state = get_state(ctx.ref)
-      assert match?({:error, _}, Map.get(state.real_channels, "10.0.0.2:50051"))
+      assert match?({:failed, _}, Map.get(state.real_channels, "10.0.0.2:50051"))
 
       # Wait for several :refresh cycles (15s default, but we'll trigger manually).
       # Round-robin will eventually pick 10.0.0.2. Without the fix, this crashes.

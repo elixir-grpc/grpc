@@ -1,4 +1,4 @@
-defmodule GRPC.Client.DnsResolver do
+defmodule GRPC.Client.DNSResolver do
   @moduledoc """
   Dedicated process for periodic DNS re-resolution.
 
