@@ -76,9 +76,20 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
 
   @impl true
   def init({scheme, host, port, opts}) do
+    {retry, opts} = Keyword.pop(opts, :retry, 0)
+
     case Mint.HTTP.connect(scheme, host, port, opts) do
       {:ok, conn} ->
-        {:ok, State.new(conn, opts[:parent])}
+        state_opts = [
+          parent: opts[:parent],
+          scheme: scheme,
+          host: host,
+          port: port,
+          connect_opts: opts,
+          retry: retry
+        ]
+
+        {:ok, State.new(conn, state_opts)}
 
       {:error, reason} ->
         Logger.error(
@@ -178,6 +189,10 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
   end
 
   @impl true
+  def handle_info(:reconnect, state) do
+    attempt_reconnect(state)
+  end
+
   def handle_info(message, state) do
     case Mint.HTTP.stream(state.conn, message) do
       :unknown ->
@@ -378,9 +393,6 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
         new_state
       end)
 
-    # Inform the parent that the connection is down
-    send(new_state.parent, {:elixir_grpc, :connection_down, self()})
-
     new_state.requests
     |> Enum.each(fn {ref, _} ->
       new_state
@@ -388,12 +400,67 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcess do
       |> send_connection_close_and_end_stream_response()
     end)
 
-    {:noreply, State.update_request_stream_queue(%{new_state | requests: %{}}, :queue.new())}
+    clean_state = State.update_request_stream_queue(%{new_state | requests: %{}}, :queue.new())
+
+    if clean_state.retry > 0 do
+      attempt_reconnect(clean_state)
+    else
+      send(clean_state.parent, {:elixir_grpc, :connection_down, self()})
+      {:noreply, clean_state}
+    end
   end
 
   defp send_connection_close_and_end_stream_response(pid) do
     :ok = StreamResponseProcess.consume(pid, :error, @connection_closed_error)
     :ok = StreamResponseProcess.done(pid)
+  end
+
+  defp attempt_reconnect(%{retry: max, retry_attempt: attempt} = state)
+       when attempt >= max do
+    Logger.warning(
+      "Connection retry exhausted (#{attempt}/#{max}) for #{state.scheme}://#{state.host}:#{state.port}"
+    )
+
+    send(state.parent, {:elixir_grpc, :connection_down, self()})
+    {:noreply, state}
+  end
+
+  defp attempt_reconnect(state) do
+    next_attempt = state.retry_attempt + 1
+
+    Logger.info(
+      "Attempting reconnection #{next_attempt}/#{state.retry} to #{state.scheme}://#{state.host}:#{state.port}"
+    )
+
+    case Mint.HTTP.connect(state.scheme, state.host, state.port, state.connect_opts) do
+      {:ok, conn} ->
+        Logger.info("Reconnected successfully to #{state.scheme}://#{state.host}:#{state.port}")
+
+        new_state = %{state | conn: conn, retry_attempt: 0}
+        {:noreply, new_state}
+
+      {:error, reason} ->
+        Logger.warning(
+          "Reconnection attempt #{next_attempt}/#{state.retry} failed: #{inspect(reason)}"
+        )
+
+        timeout = retry_timeout(next_attempt)
+        Process.send_after(self(), :reconnect, timeout)
+        {:noreply, %{state | retry_attempt: next_attempt}}
+    end
+  end
+
+  @doc false
+  def retry_timeout(attempt) do
+    timeout =
+      if attempt < 11 do
+        :math.pow(1.6, attempt - 1) * 1000
+      else
+        120_000
+      end
+
+    jitter = (:rand.uniform_real() - 0.5) / 2.5
+    round(timeout + jitter * timeout)
   end
 
   defp check_connection_status(state) do

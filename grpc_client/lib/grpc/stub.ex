@@ -272,19 +272,6 @@ defmodule GRPC.Stub do
     connect("#{ip_type}:#{host}:#{port}", opts)
   end
 
-  def retry_timeout(curr) when curr < 11 do
-    timeout =
-      if curr < 11 do
-        :math.pow(1.6, curr - 1) * 1000
-      else
-        120_000
-      end
-
-    jitter = (:rand.uniform_real() - 0.5) / 2.5
-
-    round(timeout + jitter * timeout)
-  end
-
   @doc """
   Disconnects the adapter and frees any resources the adapter is consuming
   """
