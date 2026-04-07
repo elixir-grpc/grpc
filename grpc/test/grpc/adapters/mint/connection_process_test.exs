@@ -363,6 +363,53 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert_receive {:elixir_grpc, :connection_down, pid}, 500
       assert pid == self()
     end
+
+    test "does not attempt reconnect when retry is 0", %{
+      state: state
+    } do
+      socket = state.conn.socket
+      tcp_message = {:tcp_closed, socket}
+
+      assert {:noreply, new_state} = ConnectionProcess.handle_info(tcp_message, state)
+      assert new_state.conn.state == :closed
+      assert new_state.retry == 0
+      assert_receive {:elixir_grpc, :connection_down, _pid}, 500
+    end
+  end
+
+  describe "handle_info - connection_closed - with retry" do
+    setup :valid_connection_with_retry
+
+    test "attempts reconnect when retry > 0 and connection drops", %{
+      state: state
+    } do
+      socket = state.conn.socket
+      tcp_message = {:tcp_closed, socket}
+
+      assert {:noreply, new_state} = ConnectionProcess.handle_info(tcp_message, state)
+      assert new_state.conn.state != :closed
+      assert new_state.retry_attempt == 0
+      refute_receive {:elixir_grpc, :connection_down, _pid}, 200
+    end
+
+    test "notifies parent when all retry attempts are exhausted", %{
+      state: state,
+      port: port
+    } do
+      :ok = GRPC.Server.stop(FeatureServer)
+
+      logs =
+        capture_log(fn ->
+          exhausted_state = %{state | retry: 1, retry_attempt: 1}
+          result = ConnectionProcess.handle_info(:reconnect, exhausted_state)
+          assert {:noreply, _} = result
+          assert_receive {:elixir_grpc, :connection_down, _pid}, 500
+        end)
+
+      assert logs =~ "Connection retry exhausted"
+
+      {:ok, _, _} = GRPC.Server.start(FeatureServer, port)
+    end
   end
 
   describe "handle_info - connection_closed - with request" do
@@ -417,8 +464,73 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     end
   end
 
-  defp valid_connection(%{port: port}) do
-    {:ok, pid} = ConnectionProcess.start_link(:http, "localhost", port, protocols: [:http2])
+  describe "retry_timeout/1" do
+    test "returns exponentially increasing timeouts" do
+      t1 = ConnectionProcess.retry_timeout(1)
+      t2 = ConnectionProcess.retry_timeout(2)
+      t5 = ConnectionProcess.retry_timeout(5)
+
+      assert t1 >= 800 and t1 <= 1200
+      assert t2 > t1
+      assert t5 > t2
+    end
+
+    test "caps at 120 seconds for attempt >= 11" do
+      t11 = ConnectionProcess.retry_timeout(11)
+      t15 = ConnectionProcess.retry_timeout(15)
+
+      assert t11 >= 96_000 and t11 <= 144_000
+      assert t15 >= 96_000 and t15 <= 144_000
+    end
+  end
+
+  describe "handle_info :reconnect" do
+    setup :valid_connection_with_retry
+
+    test "successfully reconnects when server is available", %{
+      state: state
+    } do
+      failed_state = %{state | retry_attempt: 1}
+
+      logs =
+        capture_log(fn ->
+          assert {:noreply, new_state} = ConnectionProcess.handle_info(:reconnect, failed_state)
+          assert Mint.HTTP.open?(new_state.conn)
+          assert new_state.retry_attempt == 0
+        end)
+
+      assert logs =~ "Reconnected successfully"
+    end
+
+    test "schedules another reconnect when server is unavailable", %{
+      state: state,
+      port: port
+    } do
+      :ok = GRPC.Server.stop(FeatureServer)
+
+      logs =
+        capture_log(fn ->
+          failed_state = %{state | retry_attempt: 0}
+          assert {:noreply, new_state} = ConnectionProcess.handle_info(:reconnect, failed_state)
+          assert new_state.retry_attempt == 1
+          assert_receive :reconnect, 5_000
+        end)
+
+      assert logs =~ "Reconnection attempt 1/"
+
+      {:ok, _, _} = GRPC.Server.start(FeatureServer, port)
+    end
+  end
+
+  defp valid_connection(%{port: port}, opts \\ []) do
+    {:ok, pid} =
+      ConnectionProcess.start_link(
+        :http,
+        "localhost",
+        port,
+        Keyword.merge([protocols: [:http2]], opts)
+      )
+
     state = :sys.get_state(pid)
     version = Application.spec(:grpc_client) |> Keyword.get(:vsn)
 
@@ -431,6 +543,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     %{
       process_pid: pid,
       state: state,
+      port: port,
       request: {"POST", "/routeguide.RouteGuide/RecordRoute", headers}
     }
   end
@@ -455,4 +568,6 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
     %{state | requests: %{request_ref => %{request_ref_state | stream_response_pid: test_pid}}}
   end
+
+  defp valid_connection_with_retry(ctx), do: valid_connection(ctx, retry: 3)
 end

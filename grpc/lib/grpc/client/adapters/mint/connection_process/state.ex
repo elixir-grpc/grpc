@@ -1,16 +1,42 @@
 defmodule GRPC.Client.Adapters.Mint.ConnectionProcess.State do
   @moduledoc false
 
-  defstruct [:conn, :parent, requests: %{}, request_stream_queue: :queue.new()]
+  defstruct [
+    :conn,
+    :parent,
+    :scheme,
+    :host,
+    :port,
+    :connect_opts,
+    requests: %{},
+    request_stream_queue: :queue.new(),
+    retry: 0,
+    retry_attempt: 0
+  ]
 
   @type t :: %__MODULE__{
           conn: Mint.HTTP.t(),
           requests: map(),
-          parent: pid()
+          parent: pid(),
+          scheme: Mint.Types.scheme() | nil,
+          host: Mint.Types.address() | nil,
+          port: :inet.port_number() | nil,
+          connect_opts: keyword(),
+          retry: non_neg_integer(),
+          retry_attempt: non_neg_integer()
         }
 
-  def new(conn, parent) do
-    %__MODULE__{conn: conn, request_stream_queue: :queue.new(), parent: parent}
+  def new(conn, opts) do
+    %__MODULE__{
+      conn: conn,
+      request_stream_queue: :queue.new(),
+      parent: opts[:parent],
+      scheme: opts[:scheme],
+      host: opts[:host],
+      port: opts[:port],
+      connect_opts: opts[:connect_opts] || [],
+      retry: opts[:retry] || 0
+    }
   end
 
   def update_conn(state, conn) do

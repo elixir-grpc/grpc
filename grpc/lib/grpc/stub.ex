@@ -272,19 +272,6 @@ defmodule GRPC.Stub do
     connect("#{ip_type}:#{host}:#{port}", opts)
   end
 
-  def retry_timeout(curr) when curr < 11 do
-    timeout =
-      if curr < 11 do
-        :math.pow(1.6, curr - 1) * 1000
-      else
-        120_000
-      end
-
-    jitter = (:rand.uniform_real() - 0.5) / 2.5
-
-    round(timeout + jitter * timeout)
-  end
-
   @doc """
   Disconnects the adapter and frees any resources the adapter is consuming
   """
@@ -316,12 +303,14 @@ defmodule GRPC.Stub do
 
     ch =
       case Connection.pick_channel(channel, opts) do
-        {:ok, ch} ->
-          if Process.alive?(ch.adapter_payload.conn_pid) do
+        {:ok, %Channel{adapter_payload: adapter_payload} = ch} when is_map(adapter_payload) ->
+          conn_pid = Map.get(adapter_payload, :conn_pid)
+
+          if is_pid(conn_pid) and Process.alive?(conn_pid) do
             ch
           else
             Logger.warning(
-              "The connection process #{inspect(ch.adapter_payload.conn_pid)} is not alive, " <>
+              "The connection process #{inspect(conn_pid)} is not alive, " <>
                 "please create a new channel via GRPC.Stub.connect/2"
             )
 

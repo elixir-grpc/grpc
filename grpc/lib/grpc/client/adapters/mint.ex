@@ -28,14 +28,20 @@ defmodule GRPC.Client.Adapters.Mint do
       window size ensures that the number of packages exchanges is smaller, thus speeding up the requests by reducing the
       amount of networks round trip, with the cost of having larger packages reaching the server per connection.
       Check [Mint.HTTP2.setting() type](https://hexdocs.pm/mint/Mint.HTTP2.html#t:setting/0) for additional configs.
+    * `:retry`: Number of reconnection attempts when the connection drops. Defaults to `0` (no retries).
+      Uses exponential backoff with jitter between attempts.
   """
   @impl true
   def connect(%{host: host, port: port} = channel, opts \\ []) do
-    # Added :config_options to facilitate testing.
     {config_opts, opts} = Keyword.pop(opts, :config_options, [])
+    {retry, opts} = Keyword.pop(opts, :retry, 0)
     module_opts = Application.get_env(:grpc, __MODULE__, config_opts)
 
-    opts = connect_opts(channel, opts) |> merge_opts(module_opts)
+    opts =
+      channel
+      |> connect_opts(opts)
+      |> merge_opts(module_opts)
+      |> Keyword.put(:retry, retry)
 
     Process.flag(:trap_exit, true)
 
@@ -58,15 +64,15 @@ defmodule GRPC.Client.Adapters.Mint do
   def disconnect(%{adapter_payload: %{conn_pid: pid}} = channel)
       when is_pid(pid) do
     :ok = ConnectionProcess.disconnect(pid)
-    {:ok, %{channel | adapter_payload: nil}}
+    {:ok, %{channel | adapter_payload: %{conn_pid: nil}}}
   end
 
-  def disconnect(%{adapter_payload: nil} = channel) do
+  def disconnect(%{adapter_payload: %{conn_pid: nil}} = channel) do
     {:ok, channel}
   end
 
   @impl true
-  def send_request(%{channel: %{adapter_payload: nil}}, _message, _opts),
+  def send_request(%{channel: %{adapter_payload: %{conn_pid: nil}}}, _message, _opts),
     do: raise(ArgumentError, "Can't perform a request without a connection process")
 
   def send_request(stream, message, opts) do
@@ -84,7 +90,7 @@ defmodule GRPC.Client.Adapters.Mint do
   end
 
   @impl true
-  def send_headers(%{channel: %{adapter_payload: nil}}, _opts),
+  def send_headers(%{channel: %{adapter_payload: %{conn_pid: nil}}}, _opts),
     do: raise("Can't start a client stream without a connection process")
 
   def send_headers(stream, opts) do
