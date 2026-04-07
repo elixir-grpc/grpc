@@ -1,12 +1,12 @@
-defmodule GrpcClient.MixProject do
+defmodule GRPC.MixProject do
   use Mix.Project
 
-  @source_url "https://github.com/elixir-grpc/grpc_client"
+  @source_url "https://github.com/elixir-grpc/grpc/tree/master/grpc"
   @version "1.0.0-rc.1"
 
   def project do
     [
-      app: :grpc_client,
+      app: :grpc,
       version: @version,
       elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
