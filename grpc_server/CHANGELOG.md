@@ -17,7 +17,7 @@
   * Corrected the cacertfile option name.
   * Added detection of name collisions and introduced a fallback mechanism for the call function.
   * Fixed broken benchmark links in the project.
-  * Resolved two compiler warnings/errors in grpc_client.
+  * Resolved two compiler warnings/errors in grpc.
   * Ensured $callers are properly propagated in GRPC.Stream Flow workers.
   * Fixed address key generation in handle_info(:refresh) to correctly support Unix domain sockets.
   * Fixed an issue where buffers were not fully drained when a single HTTP/2 frame carried multiple gRPC messages.

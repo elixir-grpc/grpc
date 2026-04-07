@@ -32,7 +32,7 @@ The package can be installed as:
 ```elixir
 def deps do
   [
-    {:grpc_client, "~> 0.11"},
+    {:grpc, "~> 0.11"},
     {:protobuf, "~> 0.14"}, # optional for import wellknown google types
   ]
 end
@@ -125,7 +125,7 @@ iex> {:ok, reply} = channel |> Helloworld.GreetingServer.Stub.say_unary_hello(re
 
 ## Target Schemes and Resolvers
 
-The `connect/2` function supports URI-like targets that are resolved via the internal **gRPC** [Resolver](grpc_client/lib/grpc/client/resolver.ex).
+The `connect/2` function supports URI-like targets that are resolved via the internal **gRPC** [Resolver](grpc/lib/grpc/client/resolver.ex).
 You can connect using `DNS`, `Unix Domain sockets`, `IPv4/IPv6`, or even `xDS-based endpoints`.
 
 ### Supported formats:

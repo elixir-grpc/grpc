@@ -2,7 +2,7 @@
 
 Core gRPC types, codecs, and utilities for Elixir.
 
-This package provides the foundational components used by both `grpc_server` and `grpc_client`:
+This package provides the foundational components used by both `grpc_server` and `grpc`:
 
 - **Codecs**: Protocol Buffers, JSON, WebText, Erlpack
 - **Compressors**: Gzip compression support
@@ -26,7 +26,7 @@ end
 
 Most users shouldn't depend on `grpc_core` directly. Instead, use:
 
-- `{:grpc_client, "~> 0.12"}` for client-only applications
+- `{:grpc, "~> 0.12"}` for client-only applications
 - `{:grpc_server, "~> 0.12"}` for server-only applications  
 
 ## Documentation
