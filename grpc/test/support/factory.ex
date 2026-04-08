@@ -36,9 +36,9 @@ defmodule GRPC.Factory do
   end
 
   def credential_factory do
-    cert_path = Path.expand("./tls/server1.pem", :code.priv_dir(:grpc_client))
-    key_path = Path.expand("./tls/server1.key", :code.priv_dir(:grpc_client))
-    ca_path = Path.expand("./tls/ca.pem", :code.priv_dir(:grpc_client))
+    cert_path = Path.expand("./tls/server1.pem", :code.priv_dir(:grpc))
+    key_path = Path.expand("./tls/server1.key", :code.priv_dir(:grpc))
+    ca_path = Path.expand("./tls/ca.pem", :code.priv_dir(:grpc))
 
     %Credential{
       ssl: [

@@ -84,6 +84,6 @@ defmodule GRPC.Client.Resolver.DNS do
   end
 
   defp adapter() do
-    Application.get_env(:grpc_client, :dns_adapter, GRPC.Client.Resolver.DNS.Adapter)
+    Application.get_env(:grpc, :dns_adapter, GRPC.Client.Resolver.DNS.Adapter)
   end
 end

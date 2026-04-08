@@ -1,4 +1,4 @@
-if Application.get_env(:grpc_client, :run_warning_tests) do
+if Application.get_env(:grpc, :run_warning_tests) do
   defmodule GRPC.Integration.CollisionLoggingTest do
     use GRPC.Integration.TestCase
     import ExUnit.CaptureLog

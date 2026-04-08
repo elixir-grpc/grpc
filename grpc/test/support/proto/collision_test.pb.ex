@@ -19,11 +19,11 @@ defmodule CollisionTest.CollisionService.Service do
 
   use GRPC.Service, name: "collision_test.CollisionService", protoc_gen_elixir_version: "0.14.1"
 
-  rpc :process_data, CollisionTest.Request, CollisionTest.Response
+  rpc(:process_data, CollisionTest.Request, CollisionTest.Response)
 
-  rpc :ProcessData, CollisionTest.Request, CollisionTest.Response
+  rpc(:ProcessData, CollisionTest.Request, CollisionTest.Response)
 
-  rpc :GetUser, CollisionTest.Request, CollisionTest.Response
+  rpc(:GetUser, CollisionTest.Request, CollisionTest.Response)
 end
 
 defmodule CollisionTest.CollisionService.Stub do

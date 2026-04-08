@@ -1,1 +1,1 @@
-[subdirectories: ["grpc_core", "grpc_server", "grpc_client"]]
+[subdirectories: ["grpc_core", "grpc_server", "grpc"]]
