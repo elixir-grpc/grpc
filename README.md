@@ -46,11 +46,14 @@ The package can be installed as:
 def deps do
   [
     {:grpc, "~> 0.11"},
+    {:grpc_server, "~> 0.11"},
     {:protobuf, "~> 0.14"}, # optional for import wellknown google types
     {:grpc_reflection, "~> 0.2"} # optional enable grpc reflection
   ]
 end
 ```
+
+>**_Note (since v1.0.0-rc.1)_**: To use the server, you must add the :grpc_server dependency to your mix.exs instead of the older :grpc package.
 
 ## Protobuf Code Generation
 
@@ -91,7 +94,7 @@ protoc --elixir_out=plugins=grpc:./lib -I./priv/protos helloworld.proto
 
 All RPC calls must be implemented using the stream-based API, even for unary requests.
 
->__NOTE__: The old API was deprecated based on `GRPC.Server.send_reply/2` and direct `struct` returns was deprecated as of version `0.10.x`.
+>**_Note_**: The old API was deprecated based on `GRPC.Server.send_reply/2` and direct `struct` returns was deprecated as of version `0.10.x`.
 
 ### Unary RPC using Stream API
 
@@ -282,6 +285,8 @@ end
 # Client Usage
 
 This section demonstrates how to establish client connections and perform RPC calls using the Elixir gRPC client.
+
+>**_Note (since v1.0.0-rc.1)_**: To use the client, you must explicitly add the :grpc dependency to your mix.exs.
 
 ---
 
