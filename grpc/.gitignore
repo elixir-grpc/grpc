@@ -17,7 +17,7 @@ erl_crash.dump
 *.ez
 
 # Ignore package tarball (built via "mix hex.build").
-grpc_client-*.tar
+grpc-*.tar
 
 .elixir_ls
 

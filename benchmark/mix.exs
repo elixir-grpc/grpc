@@ -21,7 +21,7 @@ defmodule Benchmark.MixProject do
   defp deps do
     [
       {:grpc_server, path: "../grpc_server"},
-      {:grpc_client, path: "../grpc_client"},
+      {:grpc, path: "../grpc"},
       {:protobuf, "~> 0.14"}
     ]
   end

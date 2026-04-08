@@ -236,7 +236,7 @@ defmodule MetricsSupervisor do
 
       # Client Metrics
       counter(
-        "grpc_client_started_total",
+        "grpc_started_total",
         event_name: "grpc.client.rpc.start",
         measurement: :count,
         tags: @tags,
@@ -244,7 +244,7 @@ defmodule MetricsSupervisor do
         description: "Total number of RPCs started on the client"
       ),
       counter(
-        "grpc_client_msg_received_total",
+        "grpc_msg_received_total",
         event_name: "custom_grpc.client_rpc.message_received",
         measurement: :count,
         tags: @tags,
@@ -252,14 +252,14 @@ defmodule MetricsSupervisor do
         description: "Total number of RPC stream messages received on the client"
       ),
       counter(
-        "grpc_client_msg_sent_total",
+        "grpc_msg_sent_total",
         event_name: "custom_grpc.client_rpc.sent",
         measurement: :duration,
         tags: @tags,
         description: "Total number of gRPC stream messages sent by the client."
       ),
       counter(
-        "grpc_client_handled_total",
+        "grpc_handled_total",
         event_name: "custom_grpc.client_rpc.handled",
         measurement: :duration,
         tags: @tags_with_code,
@@ -267,7 +267,7 @@ defmodule MetricsSupervisor do
           "Total number of RPCs completed on the client, regardless of success or failure."
       ),
       distribution(
-        "grpc_client_handled_latency_seconds",
+        "grpc_handled_latency_seconds",
         event_name: "custom_grpc.client_rpc.handled",
         description: "Histogram of response latency of rpcs handled by the client, in seconds.",
         measurement: :duration,

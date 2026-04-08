@@ -32,7 +32,7 @@ defmodule GRPC.GRPCRoot do
     ansi = IO.ANSI.enabled?()
     base = ["--erl", "-elixir ansi_enabled #{ansi}", "-S", "mix", command]
 
-    for app <- ~w(grpc_core grpc_server grpc_client) do
+    for app <- ~w(grpc_core grpc_server grpc) do
       fn args ->
         {_, res} = System.cmd("elixir", base ++ args, into: IO.binstream(:stdio, :line), cd: app)
 

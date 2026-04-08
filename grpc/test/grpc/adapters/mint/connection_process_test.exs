@@ -532,7 +532,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       )
 
     state = :sys.get_state(pid)
-    version = Application.spec(:grpc_client) |> Keyword.get(:vsn)
+    version = Application.spec(:grpc) |> Keyword.get(:vsn)
 
     headers = [
       {"content-type", "application/grpc"},
