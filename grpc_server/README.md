@@ -42,6 +42,8 @@ def deps do
 end
 ```
 
+>**_Note (since v1.0.0-rc.1)_**: To use the server, you must add the :grpc_server dependency to your mix.exs instead of the older :grpc package.
+
 ## Protobuf Code Generation
 
 Use `protoc` with [protobuf elixir plugin](https://github.com/elixir-protobuf/protobuf) or using [protobuf_generate](https://hexdocs.pm/protobuf_generate/readme.html) hex package to generate the necessary files.
@@ -81,7 +83,7 @@ protoc --elixir_out=plugins=grpc:./lib -I./priv/protos helloworld.proto
 
 All RPC calls must be implemented using the stream-based API, even for unary requests.
 
->__NOTE__: The old API was deprecated based on `GRPC.Server.send_reply/2` and direct `struct` returns was deprecated as of version `0.10.x`.
+>**_Note_**: The old API was deprecated based on `GRPC.Server.send_reply/2` and direct `struct` returns was deprecated as of version `0.10.x`.
 
 ### Unary RPC using Stream API
 
@@ -236,7 +238,7 @@ By normalizing all possible outcomes, `GRPC.Stream` ensures fault-tolerant, exce
 
 This unified model allows developers to build composable and reliable streaming pipelines that gracefully recover from both domain and runtime errors.
 
->_NOTE_: In the example above, we could use `map_error/2` instead of `map/2` to handle error cases explicitly. However, since the function also performs a transformation on successful values, `map/2` remains appropriate and useful in this context.
+>**_Note_**: In the example above, we could use `map_error/2` instead of `map/2` to handle error cases explicitly. However, since the function also performs a transformation on successful values, `map/2` remains appropriate and useful in this context.
 
 ---
 
@@ -287,6 +289,7 @@ A TLS configuration can be defined by assigning a `%GRPC.Credential{}` struct, t
 
 This section demonstrates how to establish client connections and perform RPC calls using the Elixir gRPC client.
 
+>**_Note (since v1.0.0-rc.1)_**: To use the client, you must explicitly add the :grpc dependency to your mix.exs.
 ---
 
 ## Basic Connection and RPC
@@ -362,7 +365,7 @@ iex> {:ok, reply} = channel |> Orders.OrderService.Stub.get_order(request)
 iex> {:ok, channel} = GRPC.Stub.connect("unix:/tmp/my.sock")
 ```
 
->__NOTE__: When using `DNS` or `xDS` targets, the connection layer periodically refreshes endpoints.
+>**_Note_**: When using `DNS` or `xDS` targets, the connection layer periodically refreshes endpoints.
 ---
 
 ## Compression and Metadata
