@@ -83,6 +83,48 @@ defmodule GRPC.Client.Resolver.DNS do
     end)
   end
 
+  @impl GRPC.Client.Resolver
+  def init(target, opts) do
+    if dns_target?(target) do
+      connect_opts = Keyword.get(opts, :connect_opts, [])
+
+      {:ok, pid} =
+        GRPC.Client.DNSResolver.start_link(
+          connection_pid: Keyword.fetch!(opts, :connection_pid),
+          resolver: __MODULE__,
+          target: target,
+          resolve_interval: Keyword.get(connect_opts, :resolve_interval, 30_000),
+          max_resolve_interval: Keyword.get(connect_opts, :max_resolve_interval, 300_000),
+          min_resolve_interval: Keyword.get(connect_opts, :min_resolve_interval, 5_000)
+        )
+
+      {:ok, %{worker_pid: pid}}
+    else
+      {:ok, nil}
+    end
+  end
+
+  defp dns_target?(target) do
+    URI.parse(target).scheme == "dns"
+  end
+
+  @impl GRPC.Client.Resolver
+  def update(%{worker_pid: pid}, :resolve_now) do
+    send(pid, :resolve_now)
+    {:ok, %{worker_pid: pid}}
+  end
+
+  @impl GRPC.Client.Resolver
+  def update(state, _event), do: {:ok, state}
+
+  @impl GRPC.Client.Resolver
+  def shutdown(%{worker_pid: _pid}) do
+    # Worker is linked to Connection, dies automatically
+    :ok
+  end
+
+  def shutdown(nil), do: :ok
+
   defp adapter() do
     Application.get_env(:grpc_client, :dns_adapter, GRPC.Client.Resolver.DNS.Adapter)
   end

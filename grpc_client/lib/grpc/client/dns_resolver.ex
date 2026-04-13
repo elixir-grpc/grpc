@@ -6,7 +6,7 @@ defmodule GRPC.Client.DNSResolver do
   resolve loop, backoff, rate limiting, and telemetry — keeping the
   Connection process focused on channel management.
 
-  Sends `{:dns_result, result}` to the Connection after each resolve,
+  Sends `{:resolver_update, result}` to the Connection after each resolve,
   where `result` matches the return type of `GRPC.Client.Resolver.resolve/1`.
 
   ## Resolver contract
@@ -103,18 +103,18 @@ defmodule GRPC.Client.DNSResolver do
           "DNS re-resolution returned empty addresses for #{state.target}, keeping existing"
         )
 
-        send(state.connection_pid, {:dns_result, result})
+        send(state.connection_pid, {:resolver_update, result})
         backoff(state)
 
       {:ok, %{addresses: addresses}} ->
         emit_success(duration, state.target, length(addresses))
-        send(state.connection_pid, {:dns_result, result})
+        send(state.connection_pid, {:resolver_update, result})
         reset_backoff(state)
 
       {:error, reason} ->
         emit_error(duration, state.target, reason)
         Logger.warning("DNS re-resolution failed for #{state.target}: #{inspect(reason)}")
-        send(state.connection_pid, {:dns_result, result})
+        send(state.connection_pid, {:resolver_update, result})
         backoff(state)
     end
   end

@@ -93,7 +93,7 @@ defmodule GRPC.Client.Connection do
           adapter: module(),
           resolver_target: String.t() | nil,
           connect_opts: keyword(),
-          dns_resolver_pid: pid() | nil
+          resolver_state: term() | nil
         }
 
   defstruct virtual_channel: nil,
@@ -104,7 +104,7 @@ defmodule GRPC.Client.Connection do
             adapter: GRPC.Client.Adapters.Gun,
             resolver_target: nil,
             connect_opts: [],
-            dns_resolver_pid: nil
+            resolver_state: nil
 
   def child_spec(initial_state) do
     %{
@@ -131,21 +131,15 @@ defmodule GRPC.Client.Connection do
 
     Process.send_after(self(), :refresh, @refresh_interval)
 
-    # Only start periodic re-resolution for DNS targets — static targets
-    # (ipv4:, ipv6:, unix:) always resolve to the same addresses.
     state =
-      if state.resolver && state.resolver_target && dns_target?(state.resolver_target) do
-        {:ok, pid} =
-          GRPC.Client.DNSResolver.start_link(
+      if function_exported?(state.resolver, :init, 2) do
+        {:ok, resolver_state} =
+          state.resolver.init(state.resolver_target, [
             connection_pid: self(),
-            resolver: state.resolver,
-            target: state.resolver_target,
-            resolve_interval: state.connect_opts[:resolve_interval],
-            max_resolve_interval: state.connect_opts[:max_resolve_interval],
-            min_resolve_interval: state.connect_opts[:min_resolve_interval]
-          )
+            connect_opts: state.connect_opts
+          ])
 
-        %{state | dns_resolver_pid: pid}
+        %{state | resolver_state: resolver_state}
       else
         state
       end
@@ -271,15 +265,20 @@ defmodule GRPC.Client.Connection do
   end
 
   @impl GenServer
-  def handle_cast(:resolve_now, %{dns_resolver_pid: pid} = state) when is_pid(pid) do
-    send(pid, :resolve_now)
-    {:noreply, state}
+  def handle_cast(:resolve_now, %{resolver: resolver, resolver_state: rs} = state)
+      when not is_nil(rs) do
+    {:ok, new_rs} = resolver.update(rs, :resolve_now)
+    {:noreply, %{state | resolver_state: new_rs}}
   end
 
   def handle_cast(:resolve_now, state), do: {:noreply, state}
 
   @impl GenServer
   def handle_call({:disconnect, %Channel{adapter: adapter} = channel}, _from, state) do
+    if state.resolver_state && function_exported?(state.resolver, :shutdown, 1) do
+      state.resolver.shutdown(state.resolver_state)
+    end
+
     resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
     :persistent_term.erase({__MODULE__, :lb_state, channel.ref})
 
@@ -332,9 +331,30 @@ defmodule GRPC.Client.Connection do
 
   def handle_info(:refresh, state), do: {:noreply, state}
 
-  # Result from the dedicated DNSResolver process
-  def handle_info({:dns_result, result}, state) do
+  # Result from the resolver worker process
+  def handle_info({:resolver_update, result}, state) do
     state = handle_resolve_result(result, state)
+    {:noreply, state}
+  end
+
+  # Resolver worker crashed — re-initialize it
+  def handle_info({:EXIT, _pid, reason}, %{resolver: resolver, resolver_state: rs} = state)
+      when not is_nil(rs) and reason != :normal do
+    Logger.warning("Resolver worker exited: #{inspect(reason)}, re-initializing")
+
+    state =
+      if function_exported?(resolver, :init, 2) do
+        case resolver.init(state.resolver_target, [
+               connection_pid: self(),
+               connect_opts: state.connect_opts
+             ]) do
+          {:ok, new_rs} -> %{state | resolver_state: new_rs}
+          {:error, _} -> %{state | resolver_state: nil}
+        end
+      else
+        %{state | resolver_state: nil}
+      end
+
     {:noreply, state}
   end
 
@@ -502,10 +522,6 @@ defmodule GRPC.Client.Connection do
 
   defp channel_alive?({:connected, _}), do: true
   defp channel_alive?(_), do: false
-
-  defp dns_target?(target) do
-    URI.parse(target).scheme == "dns"
-  end
 
   defp via(ref) do
     {:global, {__MODULE__, ref}}

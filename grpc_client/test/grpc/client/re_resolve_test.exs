@@ -40,11 +40,34 @@ defmodule GRPC.Client.ReResolveTest do
   setup do
     Mox.set_mox_global()
     ref = make_ref()
+    resolver = GRPC.Client.MockResolver
+
+    # Default stubs for the new lifecycle callbacks. Tests using
+    # connect_with_resolver override init with their own stub; tests
+    # calling Connection.connect directly pick these up automatically.
+    stub(resolver, :init, fn _target, init_opts ->
+      connect_opts = Keyword.get(init_opts, :connect_opts, [])
+
+      {:ok, pid} =
+        GRPC.Client.DNSResolver.start_link(
+          connection_pid: Keyword.fetch!(init_opts, :connection_pid),
+          resolver: resolver,
+          target: "dns://my-service.local:50051",
+          resolve_interval: Keyword.get(connect_opts, :resolve_interval, 200),
+          max_resolve_interval: Keyword.get(connect_opts, :max_resolve_interval, 300_000),
+          min_resolve_interval: Keyword.get(connect_opts, :min_resolve_interval, 0)
+        )
+
+      {:ok, %{worker_pid: pid}}
+    end)
+
+    stub(resolver, :update, fn state, _event -> {:ok, state} end)
+    stub(resolver, :shutdown, fn _state -> :ok end)
 
     %{
       ref: ref,
       adapter: GRPC.Test.ClientAdapter,
-      resolver: GRPC.Client.MockResolver
+      resolver: resolver
     }
   end
 
@@ -57,7 +80,7 @@ defmodule GRPC.Client.ReResolveTest do
     if pid && Process.alive?(pid) do
       # Also monitor the DNSResolver so we wait for it to die
       state = :sys.get_state(pid)
-      resolver_pid = state.dns_resolver_pid
+      resolver_pid = state.resolver_state && state.resolver_state[:worker_pid]
 
       mon = Process.monitor(pid)
       Connection.disconnect(channel)
@@ -94,6 +117,26 @@ defmodule GRPC.Client.ReResolveTest do
       {:ok, %{addresses: addresses, service_config: nil}}
     end)
 
+    # Stub the new lifecycle callbacks so Connection can delegate to them.
+    stub(resolver, :init, fn _target, init_opts ->
+      connect_opts = Keyword.get(init_opts, :connect_opts, [])
+
+      {:ok, pid} =
+        GRPC.Client.DNSResolver.start_link(
+          connection_pid: Keyword.fetch!(init_opts, :connection_pid),
+          resolver: resolver,
+          target: "dns://my-service.local:50051",
+          resolve_interval: Keyword.get(connect_opts, :resolve_interval, 200),
+          max_resolve_interval: Keyword.get(connect_opts, :max_resolve_interval, 300_000),
+          min_resolve_interval: Keyword.get(connect_opts, :min_resolve_interval, 0)
+        )
+
+      {:ok, %{worker_pid: pid}}
+    end)
+
+    stub(resolver, :update, fn state, _event -> {:ok, state} end)
+    stub(resolver, :shutdown, fn _state -> :ok end)
+
     Connection.connect(
       "dns://my-service.local:50051",
       [
@@ -113,7 +156,8 @@ defmodule GRPC.Client.ReResolveTest do
 
   defp get_resolver_state(ref) do
     conn_state = get_state(ref)
-    :sys.get_state(conn_state.dns_resolver_pid)
+    worker_pid = conn_state.resolver_state.worker_pid
+    :sys.get_state(worker_pid)
   end
 
   # -- 1. Scale-up: new backends discovered ----------------------------------
@@ -516,7 +560,7 @@ defmodule GRPC.Client.ReResolveTest do
 
       # Should still be alive and working — no resolver process started
       assert {:ok, _} = Connection.pick_channel(channel)
-      assert is_nil(get_state(ctx.ref).dns_resolver_pid)
+      assert is_nil(get_state(ctx.ref).resolver_state)
 
       disconnect_and_wait(channel)
     end
@@ -754,7 +798,7 @@ defmodule GRPC.Client.ReResolveTest do
         {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
       end)
 
-      resolver_pid = get_state(ctx.ref).dns_resolver_pid
+      resolver_pid = get_state(ctx.ref).resolver_state.worker_pid
 
       # Fire 20 resolve_now calls rapidly
       for _ <- 1..20, do: send(resolver_pid, :resolve_now)
@@ -1075,8 +1119,9 @@ defmodule GRPC.Client.ReResolveTest do
 
       # Verify dns_resolver is running
       state = get_state(ctx.ref)
-      assert is_pid(state.dns_resolver_pid)
-      assert Process.alive?(state.dns_resolver_pid)
+      assert is_map(state.resolver_state)
+      assert is_pid(state.resolver_state.worker_pid)
+      assert Process.alive?(state.resolver_state.worker_pid)
 
       disconnect_and_wait(channel)
     end
@@ -1145,6 +1190,87 @@ defmodule GRPC.Client.ReResolveTest do
       assert Process.alive?(pid)
       assert {:ok, picked} = Connection.pick_channel(channel)
       assert picked.host == "10.0.0.1"
+
+      disconnect_and_wait(channel)
+    end
+  end
+
+  # -- 23. DNS.init returns nil for non-DNS targets ----------------------------
+
+  describe "resolver init with non-DNS target" do
+    test "DNS resolver returns {:ok, nil} for ipv4 target, Connection handles it", ctx do
+      # Simulate DNS resolver being configured but target is ipv4
+      # DNS.init should return {:ok, nil} and Connection should store nil resolver_state
+      expect(ctx.resolver, :resolve, fn _target ->
+        {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
+      end)
+
+      stub(ctx.resolver, :resolve, fn _target ->
+        {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
+      end)
+
+      # Mock init to return nil (simulating DNS resolver with non-DNS target)
+      stub(ctx.resolver, :init, fn _target, _opts -> {:ok, nil} end)
+
+      {:ok, channel} =
+        Connection.connect(
+          "dns://my-service.local:50051",
+          adapter: ctx.adapter,
+          name: ctx.ref,
+          resolver: ctx.resolver,
+          resolve_interval: @resolve_interval,
+          min_resolve_interval: 0,
+          lb_policy: :round_robin
+        )
+
+      # resolver_state should be nil
+      state = get_state(ctx.ref)
+      assert is_nil(state.resolver_state)
+
+      # resolve_now should be a no-op (cast, so returns :ok)
+      Connection.resolve_now(channel)
+      Process.sleep(50)
+
+      # Connection should still work fine
+      assert {:ok, _} = Connection.pick_channel(channel)
+
+      disconnect_and_wait(channel)
+    end
+  end
+
+  # -- 24. Resolver worker crash recovery --------------------------------------
+
+  describe "resolver worker crash recovery" do
+    test "Connection re-initializes resolver when worker crashes", ctx do
+      {:ok, channel} =
+        connect_with_resolver(
+          ctx.ref,
+          ctx.resolver,
+          ctx.adapter,
+          [%{address: "10.0.0.1", port: 50051}],
+          lb_policy: :round_robin
+        )
+
+      state = get_state(ctx.ref)
+      original_pid = state.resolver_state.worker_pid
+      assert Process.alive?(original_pid)
+
+      # Kill the worker — Connection traps exits and should re-init
+      Process.exit(original_pid, :kill)
+      Process.sleep(100)
+
+      # Connection should still be alive
+      conn_pid = :global.whereis_name({Connection, ctx.ref})
+      assert Process.alive?(conn_pid)
+
+      # resolver_state should have a NEW worker pid
+      state = get_state(ctx.ref)
+      assert state.resolver_state != nil
+      assert state.resolver_state.worker_pid != original_pid
+      assert Process.alive?(state.resolver_state.worker_pid)
+
+      # Channel should still be pickable
+      assert {:ok, _} = Connection.pick_channel(channel)
 
       disconnect_and_wait(channel)
     end
