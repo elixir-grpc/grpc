@@ -74,10 +74,10 @@ defmodule GRPC.Client.Connection do
   """
   use GenServer
   alias GRPC.Channel
+  alias GRPC.Client.Connection.Target
 
   require Logger
 
-  @insecure_scheme "http"
   @secure_scheme "https"
   @refresh_interval 15_000
   @default_resolve_interval 30_000
@@ -549,12 +549,12 @@ defmodule GRPC.Client.Connection do
     adapter = Keyword.get(opts, :adapter, GRPC.Client.Adapters.Gun)
     lb_policy_opt = Keyword.get(opts, :lb_policy)
 
-    {norm_target, norm_opts, scheme} = normalize_target_and_opts(target, opts)
-    cred = resolve_credential(norm_opts[:cred], scheme)
-    interceptors = init_interceptors(norm_opts[:interceptors])
+    {norm_target, scheme, cred} = Target.normalize(target, opts[:cred])
+    cred = resolve_credential(cred, scheme)
+    interceptors = init_interceptors(opts[:interceptors])
 
     accepted_compressors =
-      build_compressor_list(norm_opts[:compressor], norm_opts[:accepted_compressors])
+      build_compressor_list(opts[:compressor], opts[:accepted_compressors])
 
     validate_adapter_opts!(opts[:adapter_opts])
 
@@ -564,10 +564,10 @@ defmodule GRPC.Client.Connection do
       ref: opts[:name],
       adapter: adapter,
       interceptors: interceptors,
-      codec: norm_opts[:codec],
-      compressor: norm_opts[:compressor],
+      codec: opts[:codec],
+      compressor: opts[:compressor],
       accepted_compressors: accepted_compressors,
-      headers: norm_opts[:headers]
+      headers: opts[:headers]
     }
 
     base_state = %__MODULE__{
@@ -580,10 +580,10 @@ defmodule GRPC.Client.Connection do
 
     case resolver.resolve(norm_target) do
       {:ok, %{addresses: addresses, service_config: config}} ->
-        build_balanced_state(base_state, addresses, config, lb_policy_opt, norm_opts, adapter)
+        build_balanced_state(base_state, addresses, config, lb_policy_opt, opts, adapter)
 
       {:error, _reason} ->
-        build_direct_state(base_state, norm_target, norm_opts, adapter)
+        build_direct_state(base_state, norm_target, opts, adapter)
     end
   end
 
@@ -608,7 +608,7 @@ defmodule GRPC.Client.Connection do
          addresses,
          config,
          lb_policy_opt,
-         norm_opts,
+         opts,
          adapter
        ) do
     lb_policy =
@@ -630,7 +630,7 @@ defmodule GRPC.Client.Connection do
         {:ok, {prefer_host, prefer_port}, new_lb_state} = lb_mod.pick(lb_state)
 
         real_channels =
-          build_real_channels(addresses, base_state.virtual_channel, norm_opts, adapter)
+          build_real_channels(addresses, base_state.virtual_channel, opts, adapter)
 
         key = build_address_key(prefer_host, prefer_port)
 
@@ -652,11 +652,11 @@ defmodule GRPC.Client.Connection do
     end
   end
 
-  defp build_direct_state(%__MODULE__{} = base_state, norm_target, norm_opts, adapter) do
-    {host, port} = split_host_port(norm_target)
+  defp build_direct_state(%__MODULE__{} = base_state, norm_target, opts, adapter) do
+    {host, port} = Target.split_host_port(norm_target)
     vc = base_state.virtual_channel
 
-    case connect_real_channel(vc, host, port, norm_opts, adapter) do
+    case connect_real_channel(vc, host, port, opts, adapter) do
       {:ok, ch} ->
         {:ok,
          %__MODULE__{
@@ -670,13 +670,13 @@ defmodule GRPC.Client.Connection do
     end
   end
 
-  defp build_real_channels(addresses, %Channel{} = virtual_channel, norm_opts, adapter) do
+  defp build_real_channels(addresses, %Channel{} = virtual_channel, opts, adapter) do
     Map.new(addresses, fn %{port: port, address: host} ->
       case connect_real_channel(
              %Channel{virtual_channel | host: host, port: port},
              host,
              port,
-             norm_opts,
+             opts,
              adapter
            ) do
         {:ok, ch} ->
@@ -698,38 +698,6 @@ defmodule GRPC.Client.Connection do
     end
   end
 
-  defp normalize_target_and_opts(target, opts) do
-    uri = URI.parse(target)
-
-    cond do
-      uri.scheme == @secure_scheme and uri.host ->
-        opts = Keyword.put_new_lazy(opts, :cred, &default_ssl_option/0)
-        {"ipv4:#{uri.host}:#{uri.port}", opts, @secure_scheme}
-
-      uri.scheme == @insecure_scheme and uri.host ->
-        if opts[:cred],
-          do: raise(ArgumentError, "invalid option for insecure (http) address: :cred")
-
-        {"ipv4:#{uri.host}:#{uri.port}", opts, @insecure_scheme}
-
-      # Compatibility mode: host:port or unix:path
-      uri.scheme in [nil, ""] ->
-        scheme = if opts[:cred], do: @secure_scheme, else: @insecure_scheme
-
-        case String.split(target, ":") do
-          [host, port] ->
-            {"ipv4:#{host}:#{port}", opts, scheme}
-
-          [path] ->
-            {"unix://#{path}", opts, "unix"}
-        end
-
-      # Anything else (dns://, unix://, etc.) handled by resolver
-      true ->
-        {target, opts, if(opts[:cred], do: @secure_scheme, else: @insecure_scheme)}
-    end
-  end
-
   defp choose_lb(:round_robin), do: GRPC.Client.LoadBalancing.RoundRobin
   defp choose_lb(_), do: GRPC.Client.LoadBalancing.PickFirst
 
@@ -741,13 +709,6 @@ defmodule GRPC.Client.Connection do
   defp connect_real_channel(%Channel{} = vc, host, port, opts, adapter) do
     %Channel{vc | host: host, port: port}
     |> adapter.connect(opts[:adapter_opts])
-  end
-
-  defp split_host_port(target) do
-    case String.split(target, ":", trim: true) do
-      [h, p] -> {h, String.to_integer(p)}
-      [h] -> {h, default_port()}
-    end
   end
 
   defp init_interceptors(interceptors) do
@@ -777,6 +738,4 @@ defmodule GRPC.Client.Connection do
       """
     end
   end
-
-  defp default_port, do: 50051
 end
