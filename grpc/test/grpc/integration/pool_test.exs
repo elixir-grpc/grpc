@@ -190,7 +190,9 @@ defmodule GRPC.Integration.PoolTest do
   test "nil max_overflow allows unbounded overflow connections" do
     run_server(SlowServer, fn port ->
       {:ok, channel} =
-        GRPC.Stub.connect("localhost:#{port}", pool: %{size: 1, max_overflow: nil, max_streams: 1})
+        GRPC.Stub.connect("localhost:#{port}",
+          pool: %{size: 1, max_overflow: nil, max_streams: 1}
+        )
 
       pool_ref = channel.pool
 
@@ -281,7 +283,9 @@ defmodule GRPC.Integration.PoolTest do
       assert_receive :holding
 
       assert {:error, %GRPC.RPCError{status: status}} =
-               Helloworld.Greeter.Stub.say_hello(channel, %Helloworld.HelloRequest{name: "blocked"})
+               Helloworld.Greeter.Stub.say_hello(channel, %Helloworld.HelloRequest{
+                 name: "blocked"
+               })
 
       assert status == GRPC.Status.resource_exhausted()
 
@@ -319,7 +323,9 @@ defmodule GRPC.Integration.PoolTest do
       assert_receive :holding_2
 
       assert {:error, %GRPC.RPCError{status: status}} =
-               Helloworld.Greeter.Stub.say_hello(channel, %Helloworld.HelloRequest{name: "blocked"})
+               Helloworld.Greeter.Stub.say_hello(channel, %Helloworld.HelloRequest{
+                 name: "blocked"
+               })
 
       assert status == GRPC.Status.resource_exhausted()
 
