@@ -62,7 +62,8 @@ defmodule GRPC.MixProject do
         "CHANGELOG.md",
         "guides/getting_started/client.md",
         "guides/advanced/custom_codecs.md",
-        "guides/advanced/load_balancing.md"
+        "guides/advanced/load_balancing.md",
+        "guides/advanced/connection_pool.md"
       ],
       groups_for_modules: [
         "Client Core": [

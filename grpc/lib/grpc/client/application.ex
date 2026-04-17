@@ -4,6 +4,7 @@ defmodule GRPC.Client.Application do
 
   def start(_type, _args) do
     children = [
+      {Registry, [keys: :unique, name: GRPC.Client.Pool.Registry]},
       {DynamicSupervisor, [name: GRPC.Client.Supervisor]}
     ]
 

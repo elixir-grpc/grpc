@@ -17,35 +17,13 @@ defmodule GRPC.Integration.StubTest do
     end
   end
 
-  def port_for(pid) do
-    Port.list()
-    |> Enum.find(fn port ->
-      case Port.info(port, :links) do
-        {:links, links} ->
-          pid in links
-
-        _ ->
-          false
-      end
-    end)
-  end
-
   test "you can disconnect stubs" do
     run_server(HelloServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-      Process.sleep(100)
+      assert is_reference(channel.pool)
 
-      %{adapter_payload: %{conn_pid: gun_conn_pid}} = channel
-
-      gun_port = port_for(gun_conn_pid)
-      # Using :erlang.monitor to be compatible with <= 1.5
-      ref = :erlang.monitor(:port, gun_port)
-
-      {:ok, channel} = GRPC.Stub.disconnect(channel)
-
-      assert %{adapter_payload: %{conn_pid: nil}} = channel
-      assert_receive {:DOWN, ^ref, :port, ^gun_port, _}
-      assert port_for(gun_conn_pid) == nil
+      {:ok, disconnected_channel} = GRPC.Stub.disconnect(channel)
+      assert %{pool: nil} = disconnected_channel
     end)
   end
 
@@ -70,15 +48,15 @@ defmodule GRPC.Integration.StubTest do
 
   test "use a channel name to send a message" do
     run_server(HelloServer, fn port ->
-      {:ok, _channel} =
-        GRPC.Client.Connection.connect("localhost:#{port}",
-          interceptors: [GRPC.Client.Interceptors.Logger],
-          name: :my_channel
-        )
+      assert {:ok, %GRPC.Channel{ref: :my_channel} = channel} =
+               GRPC.Client.Connection.connect("localhost:#{port}",
+                 interceptors: [GRPC.Client.Interceptors.Logger],
+                 name: :my_channel
+               )
 
       name = "GRPC user!"
       req = %Helloworld.HelloRequest{name: name}
-      {:ok, reply} = %GRPC.Channel{ref: :my_channel} |> Helloworld.Greeter.Stub.say_hello(req)
+      {:ok, reply} = Helloworld.Greeter.Stub.say_hello(channel, req)
       assert reply.message == "Hello, #{name}"
     end)
   end
