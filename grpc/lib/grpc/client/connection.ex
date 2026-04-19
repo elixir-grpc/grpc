@@ -140,6 +140,14 @@ defmodule GRPC.Client.Connection do
     * `:codec` – request/response codec (default: `GRPC.Codec.Proto`)
     * `:compressor` / `:accepted_compressors` – message compression
     * `:headers` – default metadata headers
+    * `:pool` – connection pool options (map):
+      * `:size` – number of persistent connections (default: `1`)
+      * `:max_overflow` – max extra connections when pool is saturated; `nil` for no limit (default: `0`)
+      * `:max_streams` – max concurrent streams per connection; `nil` for no client-side limit (default: `nil`)
+      * `:health_check_enabled` – send periodic gRPC health-check pings (default: `false`)
+
+  The pool can be disabled entirely by setting `config :grpc, pool_enabled: false` in your
+  application config, which restores the pre-pool behaviour (single direct connection per `connect/2` call).
 
   Returns:
 
@@ -228,26 +236,15 @@ defmodule GRPC.Client.Connection do
   end
 
   @impl GenServer
-  def handle_call({:disconnect, %Channel{adapter: adapter} = channel}, _from, state) do
+  def handle_call({:disconnect, %Channel{adapter: adapter, pool: nil} = channel}, _from, state) do
     resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
-    :persistent_term.erase({__MODULE__, :lb_state, channel.ref})
+    do_handle_disconnect(adapter, channel, resp, state)
+  end
 
-    if Map.has_key?(state, :real_channels) do
-      Enum.map(state.real_channels, fn
-        {_key, {:ok, ch}} ->
-          do_disconnect(adapter, ch)
-
-        _ ->
-          :ok
-      end)
-
-      keys_to_delete = [:real_channels, :virtual_channel]
-      new_state = Map.drop(state, keys_to_delete)
-
-      {:reply, resp, new_state, {:continue, :stop}}
-    else
-      {:reply, resp, state, {:continue, :stop}}
-    end
+  @impl GenServer
+  def handle_call({:disconnect, %Channel{adapter: adapter} = channel}, _from, state) do
+    resp = {:ok, %Channel{channel | pool: nil}}
+    do_handle_disconnect(adapter, channel, resp, state)
   end
 
   @impl GenServer
@@ -312,15 +309,27 @@ defmodule GRPC.Client.Connection do
     {:global, {__MODULE__, ref}}
   end
 
-  defp do_disconnect(adapter, channel) do
-    adapter.disconnect(channel)
-  rescue
-    _ ->
-      :ok
-  catch
-    _type, _value ->
-      :ok
+  defp do_handle_disconnect(adapter, channel, resp, state) do
+    :persistent_term.erase({__MODULE__, :lb_state, channel.ref})
+
+    if Map.has_key?(state, :real_channels) do
+      Enum.map(state.real_channels, fn
+        {_key, {:ok, ch}} -> do_disconnect(adapter, ch)
+        _ -> :ok
+      end)
+
+      {:reply, resp, Map.drop(state, [:real_channels, :virtual_channel]), {:continue, :stop}}
+    else
+      {:reply, resp, state, {:continue, :stop}}
+    end
   end
+
+  defp pool_enabled?, do: Application.get_env(:grpc, :pool_enabled, false)
+
+  defp do_disconnect(adapter, %Channel{pool: nil} = ch), do: adapter.disconnect(ch)
+
+  defp do_disconnect(_adapter, %Channel{pool: pool_ref}),
+    do: GRPC.Client.Pool.stop_for_address(pool_ref)
 
   defp build_initial_state(target, opts) do
     opts =
@@ -333,7 +342,8 @@ defmodule GRPC.Client.Connection do
         codec: GRPC.Codec.Proto,
         compressor: nil,
         accepted_compressors: [],
-        headers: []
+        headers: [],
+        pool: %{size: 1, max_overflow: 0, max_streams: nil, health_check_enabled: false}
       )
 
     resolver = Keyword.get(opts, :resolver, GRPC.Client.Resolver)
@@ -369,10 +379,10 @@ defmodule GRPC.Client.Connection do
 
     case resolver.resolve(norm_target) do
       {:ok, %{addresses: addresses, service_config: config}} ->
-        build_balanced_state(base_state, addresses, config, lb_policy_opt, norm_opts, adapter)
+        build_balanced_state(base_state, addresses, config, lb_policy_opt, norm_opts)
 
       {:error, _reason} ->
-        build_direct_state(base_state, norm_target, norm_opts, adapter)
+        build_direct_state(base_state, norm_target, norm_opts)
     end
   end
 
@@ -397,8 +407,7 @@ defmodule GRPC.Client.Connection do
          addresses,
          config,
          lb_policy_opt,
-         norm_opts,
-         adapter
+         norm_opts
        ) do
     lb_policy =
       cond do
@@ -419,7 +428,7 @@ defmodule GRPC.Client.Connection do
         {:ok, {prefer_host, prefer_port}, new_lb_state} = lb_mod.pick(lb_state)
 
         real_channels =
-          build_real_channels(addresses, base_state.virtual_channel, norm_opts, adapter)
+          build_real_channels(addresses, base_state.virtual_channel, norm_opts)
 
         key = build_address_key(prefer_host, prefer_port)
 
@@ -441,38 +450,55 @@ defmodule GRPC.Client.Connection do
     end
   end
 
-  defp build_direct_state(%__MODULE__{} = base_state, norm_target, norm_opts, adapter) do
+  defp build_direct_state(%__MODULE__{} = base_state, norm_target, norm_opts) do
     {host, port} = split_host_port(norm_target)
     vc = base_state.virtual_channel
 
-    case connect_real_channel(vc, host, port, norm_opts, adapter) do
-      {:ok, ch} ->
-        {:ok,
-         %__MODULE__{
-           base_state
-           | virtual_channel: ch,
-             real_channels: %{"#{host}:#{port}" => {:ok, ch}}
-         }}
+    if pool_enabled?() do
+      case GRPC.Client.Pool.start_for_address(vc, host, port, norm_opts) do
+        {:ok, ch} ->
+          {:ok,
+           %__MODULE__{
+             base_state
+             | virtual_channel: ch,
+               real_channels: %{"#{host}:#{port}" => {:ok, ch}}
+           }}
 
-      {:error, reason} ->
-        {:error, reason}
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      channel = %Channel{vc | host: host, port: port}
+
+      case base_state.adapter.connect(channel, norm_opts[:adapter_opts] || []) do
+        {:ok, ch} ->
+          {:ok,
+           %__MODULE__{
+             base_state
+             | virtual_channel: ch,
+               real_channels: %{"#{host}:#{port}" => {:ok, ch}}
+           }}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
   end
 
-  defp build_real_channels(addresses, %Channel{} = virtual_channel, norm_opts, adapter) do
+  defp build_real_channels(addresses, %Channel{} = virtual_channel, norm_opts) do
     Map.new(addresses, fn %{port: port, address: host} ->
-      case connect_real_channel(
-             %Channel{virtual_channel | host: host, port: port},
-             host,
-             port,
-             norm_opts,
-             adapter
-           ) do
-        {:ok, ch} ->
-          {build_address_key(host, port), {:ok, ch}}
+      if pool_enabled?() do
+        case GRPC.Client.Pool.start_for_address(virtual_channel, host, port, norm_opts) do
+          {:ok, ch} -> {build_address_key(host, port), {:ok, ch}}
+          {:error, reason} -> {build_address_key(host, port), {:error, reason}}
+        end
+      else
+        channel = %Channel{virtual_channel | host: host, port: port}
 
-        {:error, reason} ->
-          {build_address_key(host, port), {:error, reason}}
+        case virtual_channel.adapter.connect(channel, norm_opts[:adapter_opts] || []) do
+          {:ok, ch} -> {build_address_key(host, port), {:ok, ch}}
+          {:error, reason} -> {build_address_key(host, port), {:error, reason}}
+        end
       end
     end)
   end
@@ -521,16 +547,6 @@ defmodule GRPC.Client.Connection do
 
   defp choose_lb(:round_robin), do: GRPC.Client.LoadBalancing.RoundRobin
   defp choose_lb(_), do: GRPC.Client.LoadBalancing.PickFirst
-
-  defp connect_real_channel(%Channel{scheme: "unix"} = vc, path, port, opts, adapter) do
-    %Channel{vc | host: path, port: port}
-    |> adapter.connect(opts[:adapter_opts])
-  end
-
-  defp connect_real_channel(%Channel{} = vc, host, port, opts, adapter) do
-    %Channel{vc | host: host, port: port}
-    |> adapter.connect(opts[:adapter_opts])
-  end
 
   defp split_host_port(target) do
     case String.split(target, ":", trim: true) do
