@@ -324,7 +324,7 @@ defmodule GRPC.Client.Connection do
     end
   end
 
-  defp pool_enabled?, do: Application.get_env(:grpc, :pool_enabled, true)
+  defp pool_enabled?, do: Application.get_env(:grpc, :pool_enabled, false)
 
   defp do_disconnect(adapter, %Channel{pool: nil} = ch), do: adapter.disconnect(ch)
 
