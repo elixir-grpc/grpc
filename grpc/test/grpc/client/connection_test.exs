@@ -111,4 +111,46 @@ defmodule GRPC.Client.ConnectionTest do
       assert {:error, :no_connection} = Connection.pick_channel(channel)
     end
   end
+
+  describe "LB ETS table lifecycle" do
+    test "disconnect/1 calls lb_mod.shutdown so the ETS table is freed", %{
+      ref: ref,
+      target: target,
+      adapter: adapter
+    } do
+      {:ok, channel} =
+        Connection.connect(target, adapter: adapter, name: ref, lb_policy: :round_robin)
+
+      tid = lb_tid(ref)
+      assert :ets.info(tid) != :undefined
+
+      {:ok, _} = Connection.disconnect(channel)
+
+      assert :ets.info(tid) == :undefined
+    end
+
+    test "terminate/2 frees the ETS table when the process is killed", %{
+      ref: ref,
+      target: target,
+      adapter: adapter
+    } do
+      {:ok, _channel} =
+        Connection.connect(target, adapter: adapter, name: ref, lb_policy: :round_robin)
+
+      tid = lb_tid(ref)
+      pid = :global.whereis_name({Connection, ref})
+      ref_mon = Process.monitor(pid)
+
+      GenServer.stop(pid, :shutdown)
+      assert_receive {:DOWN, ^ref_mon, :process, ^pid, :shutdown}, 500
+
+      assert :ets.info(tid) == :undefined
+    end
+  end
+
+  defp lb_tid(ref) do
+    pid = :global.whereis_name({Connection, ref})
+    %{lb_state: %{tid: tid}} = :sys.get_state(pid)
+    tid
+  end
 end
