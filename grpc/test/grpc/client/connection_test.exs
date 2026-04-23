@@ -57,14 +57,14 @@ defmodule GRPC.Client.ConnectionTest do
     } do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
-      # Remove the persistent_term entry to simulate a missing LB state
+      # Capture the real entry so we can restore its shape for disconnect.
+      entry = :persistent_term.get({Connection, :lb_state, ref})
       :persistent_term.erase({Connection, :lb_state, ref})
 
       # Calling connect again will hit already_started → pick_channel → :no_connection
       assert {:error, :no_connection} = Connection.connect(target, adapter: adapter, name: ref)
 
-      # Restore entry so disconnect works cleanly
-      :persistent_term.put({Connection, :lb_state, ref}, channel)
+      :persistent_term.put({Connection, :lb_state, ref}, entry)
       Connection.disconnect(channel)
     end
   end
