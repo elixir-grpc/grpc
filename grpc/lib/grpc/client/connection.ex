@@ -6,8 +6,8 @@ defmodule GRPC.Client.Connection do
   A `Conn` process manages one or more underlying gRPC connections
   (`GRPC.Channel` structs) and exposes a virtual channel to be used by
   client stubs. The orchestration process runs as a `GenServer` registered
-  globally (via `:global`), so only one orchestrator exists per connection
-  in a BEAM node.
+  in a node-local `Registry`, so named channels are scoped to the current
+  BEAM node rather than shared across connected nodes.
 
   ## Overview
 
@@ -309,7 +309,7 @@ defmodule GRPC.Client.Connection do
   def terminate(_reason, _state), do: :ok
 
   defp via(ref) do
-    {:global, {__MODULE__, ref}}
+    {:via, Registry, {GRPC.Client.Registry, {__MODULE__, ref}}}
   end
 
   defp do_disconnect(adapter, channel) do
