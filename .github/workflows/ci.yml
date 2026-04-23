@@ -85,8 +85,11 @@ jobs:
       - name: Install Dependencies
         run: mix deps.get 1>/dev/null
         working-directory: ./interop
-      - name: Run interop tests
-        run: mix run script/run.exs
+      - name: Run Gun interop tests
+        run: mix run script/run.exs --adapter gun
+        working-directory: ./interop
+      - name: Run Mint interop tests
+        run: mix run script/run.exs --adapter mint
         working-directory: ./interop
 
   interop-tests-all:
