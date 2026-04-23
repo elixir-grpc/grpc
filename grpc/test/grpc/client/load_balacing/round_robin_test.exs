@@ -97,6 +97,15 @@ defmodule GRPC.Client.LoadBalancing.RoundRobinTest do
     end
   end
 
+  describe "pick/1 race with shutdown" do
+    test "returns :no_channels instead of raising when the table was deleted" do
+      {:ok, state} = RoundRobin.init(channels: channels([{"a", 1}]))
+      :ok = RoundRobin.shutdown(state)
+
+      assert {:error, :no_channels} = RoundRobin.pick(state)
+    end
+  end
+
   describe "shutdown/1" do
     test "deletes the ETS table" do
       {:ok, state} = RoundRobin.init(channels: channels([{"a", 1}]))
