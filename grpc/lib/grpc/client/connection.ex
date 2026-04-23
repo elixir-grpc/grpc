@@ -20,7 +20,8 @@ defmodule GRPC.Client.Connection do
   * The target string is resolved using a [Resolver](GRPC.Client.Resolver).
   * Depending on the target and service config, a load-balancing module is chosen
     (e.g. `PickFirst`, `RoundRobin`).
-  * The orchestrator periodically refreshes the LB decision to adapt to changes.
+  * Each call to `pick/2` dispatches to the LB module, which selects a channel
+    per request. DNS re-resolution reconciles the LB's channel list in place.
 
   ## Target syntax
 
@@ -68,9 +69,6 @@ defmodule GRPC.Client.Connection do
       iex> GRPC.Client.Connection.disconnect(ch)
       {:ok, %GRPC.Channel{...}}
 
-  ## Notes
-
-    * The orchestrator refreshes the LB pick every 15 seconds.
   """
   use GenServer
   alias GRPC.Channel
