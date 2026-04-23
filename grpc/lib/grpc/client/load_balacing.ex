@@ -11,13 +11,13 @@ defmodule GRPC.Client.LoadBalancing do
 
     * `init/1` — build initial state from `[channels: [Channel.t()]]`.
     * `pick/1` — choose a `Channel` for the next request.
-
-  Optional callbacks (used by strategies that maintain live state, e.g. ETS):
-
     * `update/2` — reconcile the state with a new channel list in place,
       without tearing it down. Called by `Connection` on DNS re-resolution.
+
+  Optional callbacks:
+
     * `shutdown/1` — release any resources held by the strategy. Called on
-      disconnect.
+      disconnect. Strategies that hold no external resources can omit it.
   """
   alias GRPC.Channel
 
@@ -31,5 +31,5 @@ defmodule GRPC.Client.LoadBalancing do
 
   @callback shutdown(state :: any()) :: :ok
 
-  @optional_callbacks update: 2, shutdown: 1
+  @optional_callbacks shutdown: 1
 end

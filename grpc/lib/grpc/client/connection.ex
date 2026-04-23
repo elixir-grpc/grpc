@@ -444,11 +444,7 @@ defmodule GRPC.Client.Connection do
   end
 
   defp reconcile_lb(lb_mod, lb_state, new_channels) do
-    if lb_state != nil and function_exported?(lb_mod, :update, 2) do
-      lb_mod.update(lb_state, new_channels)
-    else
-      lb_mod.init(channels: new_channels)
-    end
+    lb_mod.update(lb_state, new_channels)
   end
 
   defp connected_channels(real_channels) do
