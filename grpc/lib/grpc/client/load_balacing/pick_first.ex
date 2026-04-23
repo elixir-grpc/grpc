@@ -4,7 +4,7 @@ defmodule GRPC.Client.LoadBalancing.PickFirst do
 
   Stores the current pick in an ETS table so `update/2` can swap it without
   returning a new state — callers that captured `lb_state` (the Connection
-  GenServer, the shared persistent_term entry) keep seeing the right channel.
+  GenServer, the LB registry) keep seeing the right channel.
   """
   @behaviour GRPC.Client.LoadBalancing
 

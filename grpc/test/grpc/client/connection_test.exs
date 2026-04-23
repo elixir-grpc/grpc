@@ -3,6 +3,7 @@ defmodule GRPC.Client.ConnectionTest do
 
   alias GRPC.Channel
   alias GRPC.Client.Connection
+  alias GRPC.Client.LoadBalancing.Registry
 
   setup do
     %{
@@ -14,13 +15,13 @@ defmodule GRPC.Client.ConnectionTest do
   end
 
   describe "pick_channel/2" do
-    test "returns {:error, :no_connection} when no persistent_term entry exists", %{ref: ref} do
+    test "returns {:error, :no_connection} when the ref is not registered", %{ref: ref} do
       channel = %Channel{ref: ref}
 
       assert {:error, :no_connection} = Connection.pick_channel(channel)
     end
 
-    test "returns {:ok, channel} when a channel is stored in persistent_term", %{
+    test "returns {:ok, channel} once a connection has registered its LB state", %{
       ref: ref,
       target: target,
       adapter: adapter
@@ -50,21 +51,17 @@ defmodule GRPC.Client.ConnectionTest do
       Connection.disconnect(first_channel)
     end
 
-    test "returns {:error, :no_connection} when already_started but no persistent_term entry", %{
-      ref: ref,
-      target: target,
-      adapter: adapter
-    } do
+    test "returns {:error, :no_connection} when already_started but the registry entry is missing",
+         %{ref: ref, target: target, adapter: adapter} do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
-      # Capture the real entry so we can restore its shape for disconnect.
-      entry = :persistent_term.get({Connection, :lb_state, ref})
-      :persistent_term.erase({Connection, :lb_state, ref})
+      {:ok, entry} = Registry.lookup(ref)
+      Registry.delete(ref)
 
       # Calling connect again will hit already_started → pick_channel → :no_connection
       assert {:error, :no_connection} = Connection.connect(target, adapter: adapter, name: ref)
 
-      :persistent_term.put({Connection, :lb_state, ref}, entry)
+      Registry.put(ref, entry)
       Connection.disconnect(channel)
     end
   end
@@ -85,7 +82,7 @@ defmodule GRPC.Client.ConnectionTest do
       assert_receive {:DOWN, ^ref_mon, :process, ^pid, _reason}, 500
     end
 
-    test "pick_channel returns {:error, :no_connection} after disconnect (persistent_term is erased)",
+    test "pick_channel returns {:error, :no_connection} after disconnect (registry entry is deleted)",
          %{ref: ref, target: target, adapter: adapter} do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
@@ -95,8 +92,8 @@ defmodule GRPC.Client.ConnectionTest do
     end
   end
 
-  describe "terminate/2 - persistent_term cleanup on process kill" do
-    test "persistent_term is erased when process is killed without disconnect", %{
+  describe "terminate/2 - registry cleanup on process kill" do
+    test "registry entry is deleted when process is killed without disconnect", %{
       ref: ref,
       target: target,
       adapter: adapter

@@ -72,6 +72,7 @@ defmodule GRPC.Client.Connection do
   """
   use GenServer
   alias GRPC.Channel
+  alias GRPC.Client.LoadBalancing.Registry
 
   require Logger
 
@@ -119,10 +120,7 @@ defmodule GRPC.Client.Connection do
   def init(%__MODULE__{} = state) do
     Process.flag(:trap_exit, true)
 
-    :persistent_term.put(
-      {__MODULE__, :lb_state, state.virtual_channel.ref},
-      {state.lb_mod, state.lb_state}
-    )
+    Registry.put(state.virtual_channel.ref, {state.lb_mod, state.lb_state})
 
     state =
       if function_exported?(state.resolver, :init, 2) do
@@ -237,8 +235,8 @@ defmodule GRPC.Client.Connection do
   """
   @spec pick_channel(Channel.t(), keyword()) :: {:ok, Channel.t()} | {:error, term()}
   def pick_channel(%Channel{ref: ref} = _channel, _opts \\ []) do
-    case :persistent_term.get({__MODULE__, :lb_state, ref}, nil) do
-      {lb_mod, lb_state} when not is_nil(lb_mod) ->
+    case Registry.lookup(ref) do
+      {:ok, {lb_mod, lb_state}} when not is_nil(lb_mod) ->
         case lb_mod.pick(lb_state) do
           {:ok, %Channel{} = channel, _new_state} -> {:ok, channel}
           {:error, _} -> {:error, :no_connection}
@@ -278,7 +276,7 @@ defmodule GRPC.Client.Connection do
     shutdown_lb(state.lb_mod, state.lb_state)
 
     resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
-    :persistent_term.erase({__MODULE__, :lb_state, channel.ref})
+    Registry.delete(channel.ref)
 
     if Map.has_key?(state, :real_channels) do
       Enum.map(state.real_channels, fn
@@ -347,7 +345,7 @@ defmodule GRPC.Client.Connection do
   @impl GenServer
   def terminate(_reason, %{virtual_channel: %{ref: ref}} = state) do
     shutdown_lb(Map.get(state, :lb_mod), Map.get(state, :lb_state))
-    :persistent_term.erase({__MODULE__, :lb_state, ref})
+    Registry.delete(ref)
   rescue
     _ -> :ok
   end
