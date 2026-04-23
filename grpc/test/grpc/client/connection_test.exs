@@ -145,6 +145,55 @@ defmodule GRPC.Client.ConnectionTest do
     end
   end
 
+  describe "pick_channel/2 races with disconnect/1" do
+    # Concurrent RPCs must never crash when a disconnect is tearing down the
+    # LB state. This exercises both the Registry.lookup ArgumentError rescue
+    # (table gone) and the per-LB pick rescue (per-connection table gone).
+    test "many concurrent picks complete without crashing while disconnect runs", %{
+      ref: ref,
+      target: target,
+      adapter: adapter
+    } do
+      {:ok, channel} =
+        Connection.connect(target, adapter: adapter, name: ref, lb_policy: :round_robin)
+
+      parent = self()
+      picker_count = 50
+      picks_per_proc = 100
+
+      pickers =
+        for i <- 1..picker_count do
+          spawn_link(fn ->
+            results =
+              for _ <- 1..picks_per_proc do
+                Connection.pick_channel(channel)
+              end
+
+            send(parent, {:done, i, results})
+          end)
+        end
+
+      # Give pickers a head start so some land before, during, and after.
+      Process.sleep(2)
+      {:ok, _} = Connection.disconnect(channel)
+
+      for _ <- 1..picker_count do
+        assert_receive {:done, _, results}, 2_000
+
+        # Every result must be well-shaped — either a valid channel or the
+        # documented error. Anything else means we crashed a caller.
+        for r <- results do
+          assert match?({:ok, %Channel{}}, r) or r == {:error, :no_connection}
+        end
+      end
+
+      # And confirm the pickers actually ran to completion.
+      for pid <- pickers do
+        refute Process.alive?(pid)
+      end
+    end
+  end
+
   defp lb_tid(ref) do
     pid = :global.whereis_name({Connection, ref})
     %{lb_state: %{tid: tid}} = :sys.get_state(pid)
