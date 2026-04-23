@@ -7,7 +7,7 @@ defmodule GRPC.Client.Connection do
   (`GRPC.Channel` structs) and exposes a virtual channel to be used by
   client stubs. The orchestration process runs as a `GenServer` registered
   in a node-local `Registry`, so named channels are scoped to the current
-  BEAM node rather than shared across connected nodes.
+  BEAM node.
 
   ## Overview
 
