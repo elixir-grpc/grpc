@@ -10,15 +10,14 @@ port = Keyword.get(options, :port) || 0
 level = Keyword.get(options, :level) || "warning"
 level = String.to_existing_atom(level)
 
-alias GRPC.Client.Adapters.Gun
-alias GRPC.Client.Adapters.Mint
-
 require Logger
 
 Logger.configure(level: level)
 
 Logger.info("Rounds: #{rounds}; concurrency: #{concurrency}; port: #{port}")
 
+alias GRPC.Client.Adapters.Gun
+alias GRPC.Client.Adapters.Mint
 alias Interop.Client
 
 {:ok, _pid, port} = GRPC.Server.start_endpoint(Interop.Endpoint, port)
