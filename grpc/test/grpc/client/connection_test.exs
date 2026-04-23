@@ -194,6 +194,35 @@ defmodule GRPC.Client.ConnectionTest do
     end
   end
 
+  describe "resource leaks over repeated connect/disconnect" do
+    # Mirrors the regression style used in #509 for the persistent_term leak:
+    # cycle connect/disconnect many times and assert zero growth in the
+    # long-lived tables we own (the registry + the count of ETS tables).
+    test "500 cycles leave the registry empty and no per-LB tables leak", %{
+      target: target,
+      adapter: adapter
+    } do
+      before_table_count = length(:ets.all())
+      before_registry_size = :ets.info(:grpc_client_lb_registry, :size)
+
+      for _ <- 1..500 do
+        ref = make_ref()
+        {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
+        {:ok, _} = Connection.disconnect(channel)
+      end
+
+      after_registry_size = :ets.info(:grpc_client_lb_registry, :size)
+      after_table_count = length(:ets.all())
+
+      assert after_registry_size == before_registry_size,
+             "registry leaked: before=#{before_registry_size} after=#{after_registry_size}"
+
+      # Allow small slop for tables the VM may have created incidentally.
+      assert after_table_count - before_table_count <= 5,
+             "ETS tables leaked: before=#{before_table_count} after=#{after_table_count}"
+    end
+  end
+
   defp lb_tid(ref) do
     pid = :global.whereis_name({Connection, ref})
     %{lb_state: %{tid: tid}} = :sys.get_state(pid)
