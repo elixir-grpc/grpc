@@ -4,6 +4,8 @@ defmodule GRPC.Client.ConnectionTest do
   alias GRPC.Channel
   alias GRPC.Client.Connection
 
+  @peer if Code.ensure_loaded?(:peer), do: :peer, else: GRPC.Test.PeerShim
+
   setup do
     %{
       ref: make_ref(),
@@ -128,40 +130,40 @@ defmodule GRPC.Client.ConnectionTest do
         stop_peer(peer2)
       end)
 
-      assert :pong == :peer.call(peer1, :net_adm, :ping, [node2])
-      assert :pong == :peer.call(peer2, :net_adm, :ping, [node1])
-      assert :ok == :peer.call(peer1, :global, :sync, [])
-      assert :ok == :peer.call(peer2, :global, :sync, [])
+      assert :pong == @peer.call(peer1, :net_adm, :ping, [node2])
+      assert :pong == @peer.call(peer2, :net_adm, :ping, [node1])
+      assert :ok == @peer.call(peer1, :global, :sync, [])
+      assert :ok == @peer.call(peer2, :global, :sync, [])
 
       target = "ipv4:127.0.0.1:#{port}"
       ref = :shared_channel
 
       assert {:ok, %Channel{ref: ^ref}} =
-               :peer.call(peer1, Connection, :connect, [target, [name: ref]])
+               @peer.call(peer1, Connection, :connect, [target, [name: ref]])
 
       assert {:ok, %Channel{ref: ^ref}} =
-               :peer.call(peer2, Connection, :connect, [target, [name: ref]])
+               @peer.call(peer2, Connection, :connect, [target, [name: ref]])
     end
   end
 
   defp start_peer do
     {:ok, peer, node} =
-      :peer.start_link(%{
-        name: :peer.random_name(~c"grpcpeer"),
+      @peer.start_link(%{
+        name: @peer.random_name(~c"grpcpeer"),
         longnames: true,
         host: ~c"127.0.0.1",
         connection: :standard_io,
         args: [~c"-setcookie", ~c"grpcpeer"]
       })
 
-    :ok = :peer.call(peer, :code, :add_paths, [:code.get_path()])
-    {:ok, _apps} = :peer.call(peer, Application, :ensure_all_started, [:grpc])
+    :ok = @peer.call(peer, :code, :add_paths, [:code.get_path()])
+    {:ok, _apps} = @peer.call(peer, Application, :ensure_all_started, [:grpc])
 
     {peer, node}
   end
 
   defp stop_peer(peer) do
-    :peer.stop(peer)
+    @peer.stop(peer)
   catch
     :exit, _reason ->
       :ok
