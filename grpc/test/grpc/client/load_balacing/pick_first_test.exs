@@ -8,9 +8,18 @@ defmodule GRPC.Client.LoadBalancing.PickFirstTest do
     do: Enum.map(pairs, fn {h, p} -> %Channel{host: h, port: p, ref: {h, p}} end)
 
   describe "init/1" do
-    test "returns the first channel as current" do
+    test "creates an ETS table and returns the tid in state" do
       {:ok, state} = PickFirst.init(channels: channels([{"a", 1}, {"b", 2}]))
-      assert state == %{current: %Channel{host: "a", port: 1, ref: {"a", 1}}}
+      assert %{tid: tid} = state
+      assert is_reference(tid)
+      assert :ets.info(tid) != :undefined
+      PickFirst.shutdown(state)
+    end
+
+    test "seeds the table with the first channel" do
+      {:ok, state} = PickFirst.init(channels: channels([{"a", 1}, {"b", 2}]))
+      assert {:ok, %Channel{host: "a", port: 1}, ^state} = PickFirst.pick(state)
+      PickFirst.shutdown(state)
     end
 
     test "rejects empty channel lists" do
@@ -29,30 +38,57 @@ defmodule GRPC.Client.LoadBalancing.PickFirstTest do
       for _ <- 1..3 do
         assert {:ok, %Channel{host: "a", port: 1}, ^state} = PickFirst.pick(state)
       end
+
+      PickFirst.shutdown(state)
     end
 
     test "returns :no_channels when current is nil" do
-      assert {:error, :no_channels} = PickFirst.pick(%{current: nil})
+      {:ok, state} = PickFirst.init(channels: channels([{"a", 1}]))
+      {:ok, _} = PickFirst.update(state, [])
+      assert {:error, :no_channels} = PickFirst.pick(state)
+      PickFirst.shutdown(state)
+    end
+
+    test "returns :no_channels instead of raising when the table was deleted" do
+      {:ok, state} = PickFirst.init(channels: channels([{"a", 1}]))
+      :ok = PickFirst.shutdown(state)
+      assert {:error, :no_channels} = PickFirst.pick(state)
     end
   end
 
   describe "update/2" do
-    test "swaps current to the first of the new channels" do
+    test "swaps current in place without changing the tid" do
       {:ok, state} = PickFirst.init(channels: channels([{"a", 1}]))
+      original_tid = state.tid
+
       {:ok, new_state} = PickFirst.update(state, channels([{"x", 9}, {"y", 8}]))
+      assert new_state.tid == original_tid
 
       assert {:ok, %Channel{host: "x", port: 9}, _} = PickFirst.pick(new_state)
+      PickFirst.shutdown(new_state)
     end
 
-    test "sets current to nil on empty list" do
+    test "clears current to nil on empty list" do
       {:ok, state} = PickFirst.init(channels: channels([{"a", 1}]))
-      assert {:ok, %{current: nil}} = PickFirst.update(state, [])
+      {:ok, state} = PickFirst.update(state, [])
+      assert {:error, :no_channels} = PickFirst.pick(state)
+      PickFirst.shutdown(state)
     end
   end
 
   describe "shutdown/1" do
-    test "returns :ok (no-op, no external resources)" do
+    test "deletes the ETS table" do
       {:ok, state} = PickFirst.init(channels: channels([{"a", 1}]))
+      tid = state.tid
+      assert :ets.info(tid) != :undefined
+
+      :ok = PickFirst.shutdown(state)
+      assert :ets.info(tid) == :undefined
+    end
+
+    test "is idempotent on already-deleted tables" do
+      {:ok, state} = PickFirst.init(channels: channels([{"a", 1}]))
+      :ok = PickFirst.shutdown(state)
       assert :ok = PickFirst.shutdown(state)
     end
   end

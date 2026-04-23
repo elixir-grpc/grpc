@@ -431,6 +431,33 @@ defmodule GRPC.Client.ReResolveTest do
     end
   end
 
+  describe "pick_first reconciliation" do
+    test "pick_channel returns the new backend after DNS replaces it", ctx do
+      {:ok, channel} =
+        connect_with_resolver(
+          ctx.ref,
+          ctx.resolver,
+          ctx.adapter,
+          [%{address: "10.0.0.1", port: 50051}],
+          []
+        )
+
+      {:ok, before} = Connection.pick_channel(channel)
+      assert before.host == "10.0.0.1"
+
+      stub(ctx.resolver, :resolve, fn _target ->
+        {:ok, %{addresses: [%{address: "10.0.0.9", port: 50051}], service_config: nil}}
+      end)
+
+      Process.sleep(@wait)
+
+      {:ok, picked} = Connection.pick_channel(channel)
+      assert picked.host == "10.0.0.9"
+
+      disconnect_and_wait(channel)
+    end
+  end
+
   describe "pick_channel per-request rotation" do
     test "round-robin rotates across all backends on successive picks", ctx do
       {:ok, channel} =
