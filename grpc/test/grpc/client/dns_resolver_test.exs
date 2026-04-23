@@ -27,6 +27,7 @@ defmodule GRPC.Client.ReResolveTest do
   use GRPC.Client.DataCase, async: false
   import Mox
 
+  alias GRPC.Channel
   alias GRPC.Client.Connection
 
   @resolve_interval 200
@@ -453,6 +454,75 @@ defmodule GRPC.Client.ReResolveTest do
 
       {:ok, picked} = Connection.pick_channel(channel)
       assert picked.host == "10.0.0.9"
+
+      disconnect_and_wait(channel)
+    end
+  end
+
+  describe "pick_channel during shrinking reconcile" do
+    test "concurrent picks stay correct while backends are removed", ctx do
+      large =
+        for i <- 1..8, do: %{address: "10.0.0.#{i}", port: 50051}
+
+      {:ok, channel} =
+        connect_with_resolver(
+          ctx.ref,
+          ctx.resolver,
+          ctx.adapter,
+          large,
+          lb_policy: :round_robin
+        )
+
+      small = [
+        %{address: "10.0.0.1", port: 50051},
+        %{address: "10.0.0.2", port: 50051}
+      ]
+
+      parent = self()
+      picker_count = 30
+      picks_per_proc = 200
+
+      pickers =
+        for i <- 1..picker_count do
+          spawn_link(fn ->
+            results =
+              for _ <- 1..picks_per_proc do
+                Connection.pick_channel(channel)
+              end
+
+            send(parent, {:done, i, results})
+          end)
+        end
+
+      stub(ctx.resolver, :resolve, fn _target ->
+        {:ok, %{addresses: small, service_config: nil}}
+      end)
+
+      Process.sleep(@wait)
+
+      for _ <- 1..picker_count do
+        assert_receive {:done, _, results}, 2_000
+
+        for r <- results do
+          assert match?({:ok, %Channel{}}, r),
+                 "pick returned #{inspect(r)} — expected {:ok, %Channel{}}"
+        end
+      end
+
+      Process.sleep(@wait)
+
+      hosts =
+        for _ <- 1..20 do
+          {:ok, picked} = Connection.pick_channel(channel)
+          picked.host
+        end
+
+      assert Enum.all?(hosts, &(&1 in ["10.0.0.1", "10.0.0.2"])),
+             "picked from an already-removed backend: #{inspect(hosts)}"
+
+      for pid <- pickers do
+        refute Process.alive?(pid)
+      end
 
       disconnect_and_wait(channel)
     end
