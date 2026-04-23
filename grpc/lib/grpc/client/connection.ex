@@ -120,22 +120,32 @@ defmodule GRPC.Client.Connection do
   def init(%__MODULE__{} = state) do
     Process.flag(:trap_exit, true)
 
-    Registry.put(state.virtual_channel.ref, {state.lb_mod, state.lb_state})
+    connected = connected_channels(state.real_channels)
 
-    state =
-      if function_exported?(state.resolver, :init, 2) do
-        {:ok, resolver_state} =
-          state.resolver.init(state.resolver_target,
-            connection_pid: self(),
-            connect_opts: state.connect_opts
-          )
+    case state.lb_mod.init(channels: connected) do
+      {:ok, lb_state} ->
+        state = %{state | lb_state: lb_state}
+        Registry.put(state.virtual_channel.ref, {state.lb_mod, lb_state})
 
-        %{state | resolver_state: resolver_state}
-      else
-        state
-      end
+        state =
+          if function_exported?(state.resolver, :init, 2) do
+            {:ok, resolver_state} =
+              state.resolver.init(state.resolver_target,
+                connection_pid: self(),
+                connect_opts: state.connect_opts
+              )
 
-    {:ok, state}
+            %{state | resolver_state: resolver_state}
+          else
+            state
+          end
+
+        {:ok, state}
+
+      {:error, reason} ->
+        disconnect_real_channels(state.real_channels, state.adapter)
+        {:stop, reason}
+    end
   end
 
   @doc """
@@ -176,16 +186,10 @@ defmodule GRPC.Client.Connection do
 
         case DynamicSupervisor.start_child(GRPC.Client.Supervisor, child_spec(initial_state)) do
           {:ok, _pid} ->
-            {:ok, ch}
+            finalize_connection(ch, opts)
 
           {:error, {:already_started, _pid}} ->
-            case pick_channel(ch, opts) do
-              {:ok, %Channel{} = channel} ->
-                {:ok, channel}
-
-              _ ->
-                {:error, :no_connection}
-            end
+            finalize_connection(ch, opts)
 
           {:error, reason} ->
             {:error, reason}
@@ -273,8 +277,6 @@ defmodule GRPC.Client.Connection do
       state.resolver.shutdown(state.resolver_state)
     end
 
-    shutdown_lb(state.lb_mod, state.lb_state)
-
     resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
     Registry.delete(channel.ref)
 
@@ -302,22 +304,18 @@ defmodule GRPC.Client.Connection do
     {:noreply, state}
   end
 
-  def handle_info({:EXIT, _pid, reason}, %{resolver: resolver, resolver_state: rs} = state)
-      when not is_nil(rs) and reason != :normal do
-    Logger.warning("Resolver worker exited: #{inspect(reason)}, re-initializing")
+  def handle_info({:EXIT, pid, reason}, %{resolver_state: %{worker_pid: pid}} = state)
+      when reason != :normal do
+    Logger.warning("Resolver worker exited: #{inspect(reason)}, stopping Connection")
+    {:stop, {:resolver_exited, reason}, state}
+  end
 
-    state =
-      if function_exported?(resolver, :init, 2) do
-        case resolver.init(state.resolver_target,
-               connection_pid: self(),
-               connect_opts: state.connect_opts
-             ) do
-          {:ok, new_rs} -> %{state | resolver_state: new_rs}
-          {:error, _} -> %{state | resolver_state: nil}
-        end
-      else
-        %{state | resolver_state: nil}
-      end
+  def handle_info({:EXIT, _pid, :normal}, state), do: {:noreply, state}
+
+  def handle_info({:EXIT, pid, reason}, state) do
+    Logger.warning(
+      "#{inspect(__MODULE__)} received :EXIT from #{inspect(pid)} reason: #{inspect(reason)}"
+    )
 
     {:noreply, state}
   end
@@ -343,8 +341,7 @@ defmodule GRPC.Client.Connection do
   end
 
   @impl GenServer
-  def terminate(_reason, %{virtual_channel: %{ref: ref}} = state) do
-    shutdown_lb(Map.get(state, :lb_mod), Map.get(state, :lb_state))
+  def terminate(_reason, %{virtual_channel: %{ref: ref}}) do
     Registry.delete(ref)
   rescue
     _ -> :ok
@@ -352,16 +349,21 @@ defmodule GRPC.Client.Connection do
 
   def terminate(_reason, _state), do: :ok
 
-  defp shutdown_lb(lb_mod, lb_state)
-       when not is_nil(lb_mod) and not is_nil(lb_state) do
-    if function_exported?(lb_mod, :shutdown, 1) do
-      lb_mod.shutdown(lb_state)
+  defp finalize_connection(%Channel{} = ch, opts) do
+    case pick_channel(ch, opts) do
+      {:ok, %Channel{} = channel} -> {:ok, channel}
+      _ -> {:error, :no_connection}
     end
-  rescue
-    _ -> :ok
   end
 
-  defp shutdown_lb(_lb_mod, _lb_state), do: :ok
+  defp disconnect_real_channels(real_channels, adapter) when is_map(real_channels) do
+    Enum.each(real_channels, fn
+      {_key, {:connected, ch}} -> do_disconnect(adapter, ch)
+      _ -> :ok
+    end)
+  end
+
+  defp disconnect_real_channels(_real_channels, _adapter), do: :ok
 
   defp handle_resolve_result({:ok, %{addresses: []}}, state), do: state
 
@@ -574,23 +576,18 @@ defmodule GRPC.Client.Connection do
     real_channels =
       build_real_channels(addresses, base_state.virtual_channel, norm_opts, adapter)
 
-    connected = connected_channels(real_channels)
+    case connected_channels(real_channels) do
+      [] ->
+        disconnect_real_channels(real_channels, adapter)
+        {:error, :no_channels}
 
-    case lb_mod.init(channels: connected) do
-      {:ok, lb_state} ->
-        {:ok, %Channel{} = picked, _} = lb_mod.pick(lb_state)
-
+      _connected ->
         {:ok,
          %__MODULE__{
            base_state
            | lb_mod: lb_mod,
-             lb_state: lb_state,
-             virtual_channel: picked,
              real_channels: real_channels
          }}
-
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 
@@ -599,16 +596,17 @@ defmodule GRPC.Client.Connection do
     vc = base_state.virtual_channel
     lb_mod = GRPC.Client.LoadBalancing.PickFirst
 
-    with {:ok, ch} <- connect_real_channel(vc, host, port, norm_opts, adapter),
-         {:ok, lb_state} <- lb_mod.init(channels: [ch]) do
-      {:ok,
-       %__MODULE__{
-         base_state
-         | virtual_channel: ch,
-           real_channels: %{build_address_key(host, port) => {:connected, ch}},
-           lb_mod: lb_mod,
-           lb_state: lb_state
-       }}
+    case connect_real_channel(vc, host, port, norm_opts, adapter) do
+      {:ok, ch} ->
+        {:ok,
+         %__MODULE__{
+           base_state
+           | real_channels: %{build_address_key(host, port) => {:connected, ch}},
+             lb_mod: lb_mod
+         }}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

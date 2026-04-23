@@ -1267,9 +1267,9 @@ defmodule GRPC.Client.ReResolveTest do
     end
   end
 
-  describe "resolver worker crash recovery" do
-    test "Connection re-initializes resolver when worker crashes", ctx do
-      {:ok, channel} =
+  describe "resolver worker crash" do
+    test "Connection stops when the resolver worker dies", ctx do
+      {:ok, _channel} =
         connect_with_resolver(
           ctx.ref,
           ctx.resolver,
@@ -1279,22 +1279,33 @@ defmodule GRPC.Client.ReResolveTest do
         )
 
       state = get_state(ctx.ref)
-      original_pid = state.resolver_state.worker_pid
-      assert Process.alive?(original_pid)
-
-      # Kill the worker — Connection traps exits and should re-init
-      Process.exit(original_pid, :kill)
-      Process.sleep(100)
+      worker_pid = state.resolver_state.worker_pid
+      assert Process.alive?(worker_pid)
 
       conn_pid = :global.whereis_name({Connection, ctx.ref})
+      mon = Process.monitor(conn_pid)
+
+      Process.exit(worker_pid, :kill)
+
+      assert_receive {:DOWN, ^mon, :process, ^conn_pid, {:resolver_exited, :killed}}, 500
+    end
+
+    test "unrelated :EXIT signals don't stop the Connection", ctx do
+      {:ok, channel} =
+        connect_with_resolver(
+          ctx.ref,
+          ctx.resolver,
+          ctx.adapter,
+          [%{address: "10.0.0.1", port: 50051}],
+          lb_policy: :round_robin
+        )
+
+      conn_pid = :global.whereis_name({Connection, ctx.ref})
+      stray_pid = spawn(fn -> :ok end)
+      send(conn_pid, {:EXIT, stray_pid, :boom})
+
+      Process.sleep(50)
       assert Process.alive?(conn_pid)
-
-      # resolver_state should have a NEW worker pid
-      state = get_state(ctx.ref)
-      assert state.resolver_state != nil
-      assert state.resolver_state.worker_pid != original_pid
-      assert Process.alive?(state.resolver_state.worker_pid)
-
       assert {:ok, _} = Connection.pick_channel(channel)
 
       disconnect_and_wait(channel)

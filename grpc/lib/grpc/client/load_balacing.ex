@@ -7,17 +7,16 @@ defmodule GRPC.Client.LoadBalancing do
   it by `GRPC.Client.Connection` — it is not responsible for establishing or
   tearing down transport.
 
-  Required callbacks:
+  Callbacks:
 
     * `init/1` — build initial state from `[channels: [Channel.t()]]`.
     * `pick/1` — choose a `Channel` for the next request.
-    * `update/2` — reconcile the state with a new channel list in place,
-      without tearing it down. Called by `Connection` on DNS re-resolution.
+    * `update/2` — swap in a new channel list when DNS re-resolution
+      discovers new or removed backends.
 
-  Optional callbacks:
-
-    * `shutdown/1` — release any resources held by the strategy. Called on
-      disconnect. Strategies that hold no external resources can omit it.
+  `init/1` runs inside the `GRPC.Client.Connection` GenServer. Any ETS
+  tables or other process-owned resources the strategy creates are owned
+  by that GenServer and are released automatically when it exits.
   """
   alias GRPC.Channel
 
@@ -28,8 +27,4 @@ defmodule GRPC.Client.LoadBalancing do
 
   @callback update(state :: any(), new_channels :: [Channel.t()]) ::
               {:ok, new_state :: any()} | {:error, reason :: any()}
-
-  @callback shutdown(state :: any()) :: :ok
-
-  @optional_callbacks shutdown: 1
 end

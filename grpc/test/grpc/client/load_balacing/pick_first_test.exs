@@ -13,13 +13,11 @@ defmodule GRPC.Client.LoadBalancing.PickFirstTest do
       assert %{tid: tid} = state
       assert is_reference(tid)
       assert :ets.info(tid) != :undefined
-      PickFirst.shutdown(state)
     end
 
     test "seeds the table with the first channel" do
       {:ok, state} = PickFirst.init(channels: channels([{"a", 1}, {"b", 2}]))
       assert {:ok, %Channel{host: "a", port: 1}, ^state} = PickFirst.pick(state)
-      PickFirst.shutdown(state)
     end
 
     test "rejects empty channel lists" do
@@ -38,20 +36,20 @@ defmodule GRPC.Client.LoadBalancing.PickFirstTest do
       for _ <- 1..3 do
         assert {:ok, %Channel{host: "a", port: 1}, ^state} = PickFirst.pick(state)
       end
-
-      PickFirst.shutdown(state)
     end
 
     test "returns :no_channels when current is nil" do
       {:ok, state} = PickFirst.init(channels: channels([{"a", 1}]))
       {:ok, _} = PickFirst.update(state, [])
       assert {:error, :no_channels} = PickFirst.pick(state)
-      PickFirst.shutdown(state)
     end
 
+    # Guards the race where the owning Connection GenServer dies (and BEAM
+    # reclaims the ETS table) between a caller's registry lookup and this
+    # pick — the rescue should turn the BIF crash into a tagged error.
     test "returns :no_channels instead of raising when the table was deleted" do
       {:ok, state} = PickFirst.init(channels: channels([{"a", 1}]))
-      :ok = PickFirst.shutdown(state)
+      :ets.delete(state.tid)
       assert {:error, :no_channels} = PickFirst.pick(state)
     end
   end
@@ -65,31 +63,12 @@ defmodule GRPC.Client.LoadBalancing.PickFirstTest do
       assert new_state.tid == original_tid
 
       assert {:ok, %Channel{host: "x", port: 9}, _} = PickFirst.pick(new_state)
-      PickFirst.shutdown(new_state)
     end
 
     test "clears current to nil on empty list" do
       {:ok, state} = PickFirst.init(channels: channels([{"a", 1}]))
       {:ok, state} = PickFirst.update(state, [])
       assert {:error, :no_channels} = PickFirst.pick(state)
-      PickFirst.shutdown(state)
-    end
-  end
-
-  describe "shutdown/1" do
-    test "deletes the ETS table" do
-      {:ok, state} = PickFirst.init(channels: channels([{"a", 1}]))
-      tid = state.tid
-      assert :ets.info(tid) != :undefined
-
-      :ok = PickFirst.shutdown(state)
-      assert :ets.info(tid) == :undefined
-    end
-
-    test "is idempotent on already-deleted tables" do
-      {:ok, state} = PickFirst.init(channels: channels([{"a", 1}]))
-      :ok = PickFirst.shutdown(state)
-      assert :ok = PickFirst.shutdown(state)
     end
   end
 end

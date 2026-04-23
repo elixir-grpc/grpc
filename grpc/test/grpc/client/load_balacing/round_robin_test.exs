@@ -8,11 +8,10 @@ defmodule GRPC.Client.LoadBalancing.RoundRobinTest do
     3. pick/1 rotates through channels in order
     4. pick/1 wraps around after the last channel
     5. update/2 replaces channels in place without creating a new table
-    6. update/2 rejects empty channel lists
+    6. update/2 accepts empty channel lists
     7. update/2 resets the cursor so the first pick is the first channel
-    8. shutdown/1 deletes the ETS table
-    9. shutdown/1 is idempotent (safe on already-deleted tables)
-   10. pick/1 is safe under concurrent access (many processes, one table)
+    8. pick/1 is safe under concurrent access (many processes, one table)
+    9. pick/1 returns :no_channels (not a crash) when the table is gone
   """
   use ExUnit.Case, async: true
 
@@ -28,7 +27,6 @@ defmodule GRPC.Client.LoadBalancing.RoundRobinTest do
       assert %{tid: tid} = state
       assert is_reference(tid)
       assert :ets.info(tid) != :undefined
-      RoundRobin.shutdown(state)
     end
 
     test "rejects empty channel lists" do
@@ -48,8 +46,6 @@ defmodule GRPC.Client.LoadBalancing.RoundRobinTest do
       assert {:ok, %Channel{host: "b", port: 2}, _} = RoundRobin.pick(state)
       assert {:ok, %Channel{host: "c", port: 3}, _} = RoundRobin.pick(state)
       assert {:ok, %Channel{host: "a", port: 1}, _} = RoundRobin.pick(state)
-
-      RoundRobin.shutdown(state)
     end
 
     test "wraps around with a single channel" do
@@ -58,8 +54,6 @@ defmodule GRPC.Client.LoadBalancing.RoundRobinTest do
       for _ <- 1..5 do
         assert {:ok, %Channel{host: "only"}, _} = RoundRobin.pick(state)
       end
-
-      RoundRobin.shutdown(state)
     end
   end
 
@@ -74,15 +68,12 @@ defmodule GRPC.Client.LoadBalancing.RoundRobinTest do
       assert {:ok, %Channel{host: "x", port: 9}, _} = RoundRobin.pick(new_state)
       assert {:ok, %Channel{host: "y", port: 8}, _} = RoundRobin.pick(new_state)
       assert {:ok, %Channel{host: "z", port: 7}, _} = RoundRobin.pick(new_state)
-
-      RoundRobin.shutdown(new_state)
     end
 
     test "accepts empty channel lists; pick then returns :no_channels" do
       {:ok, state} = RoundRobin.init(channels: channels([{"a", 1}]))
       assert {:ok, ^state} = RoundRobin.update(state, [])
       assert {:error, :no_channels} = RoundRobin.pick(state)
-      RoundRobin.shutdown(state)
     end
 
     test "resets cursor so the first pick after update starts at the first channel" do
@@ -92,34 +83,18 @@ defmodule GRPC.Client.LoadBalancing.RoundRobinTest do
 
       {:ok, state} = RoundRobin.update(state, channels([{"new-first", 1}, {"new-second", 2}]))
       assert {:ok, %Channel{host: "new-first"}, _} = RoundRobin.pick(state)
-
-      RoundRobin.shutdown(state)
     end
   end
 
-  describe "pick/1 race with shutdown" do
+  # Guards the race where the owning Connection GenServer dies (and BEAM
+  # reclaims the ETS table) between a caller's registry lookup and this
+  # pick — the rescue should turn the BIF crash into a tagged error.
+  describe "pick/1 race with table deletion" do
     test "returns :no_channels instead of raising when the table was deleted" do
       {:ok, state} = RoundRobin.init(channels: channels([{"a", 1}]))
-      :ok = RoundRobin.shutdown(state)
+      :ets.delete(state.tid)
 
       assert {:error, :no_channels} = RoundRobin.pick(state)
-    end
-  end
-
-  describe "shutdown/1" do
-    test "deletes the ETS table" do
-      {:ok, state} = RoundRobin.init(channels: channels([{"a", 1}]))
-      tid = state.tid
-      assert :ets.info(tid) != :undefined
-
-      :ok = RoundRobin.shutdown(state)
-      assert :ets.info(tid) == :undefined
-    end
-
-    test "is idempotent on already-deleted tables" do
-      {:ok, state} = RoundRobin.init(channels: channels([{"a", 1}]))
-      :ok = RoundRobin.shutdown(state)
-      assert :ok = RoundRobin.shutdown(state)
     end
   end
 
@@ -161,8 +136,6 @@ defmodule GRPC.Client.LoadBalancing.RoundRobinTest do
         assert abs(c - avg) <= 1,
                "uneven pick distribution: #{inspect(counts)}"
       end
-
-      RoundRobin.shutdown(state)
     end
   end
 end

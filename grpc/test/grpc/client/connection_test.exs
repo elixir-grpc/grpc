@@ -110,7 +110,10 @@ defmodule GRPC.Client.ConnectionTest do
   end
 
   describe "LB ETS table lifecycle" do
-    test "disconnect/1 calls lb_mod.shutdown so the ETS table is freed", %{
+    # The Connection GenServer owns the LB's ETS table (lb_mod.init runs in
+    # the GenServer), so BEAM reclaims the table automatically when the
+    # process exits — no explicit shutdown callback needed.
+    test "disconnect/1 exits the GenServer and the ETS table is freed", %{
       ref: ref,
       target: target,
       adapter: adapter
@@ -121,7 +124,15 @@ defmodule GRPC.Client.ConnectionTest do
       tid = lb_tid(ref)
       assert :ets.info(tid) != :undefined
 
+      pid = :global.whereis_name({Connection, ref})
+      ref_mon = Process.monitor(pid)
+
       {:ok, _} = Connection.disconnect(channel)
+
+      # disconnect replies before the GenServer terminates (via {:continue, :stop}),
+      # so wait for the process to actually exit before asserting BEAM has reclaimed
+      # the table.
+      assert_receive {:DOWN, ^ref_mon, :process, ^pid, _reason}, 500
 
       assert :ets.info(tid) == :undefined
     end

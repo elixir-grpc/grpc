@@ -8,9 +8,8 @@ defmodule GRPC.Client.LoadBalancing.RoundRobin do
   plus a lookup.
 
   The ETS table is owned by whichever process calls `init/1` (normally the
-  `GRPC.Client.Connection` GenServer), so when that process dies the table is
-  reclaimed automatically — no separate supervision needed. `shutdown/1` is
-  provided for graceful disconnects.
+  `GRPC.Client.Connection` GenServer), so when that process dies the table
+  is reclaimed automatically.
   """
   @behaviour GRPC.Client.LoadBalancing
 
@@ -56,13 +55,5 @@ defmodule GRPC.Client.LoadBalancing.RoundRobin do
     :ets.insert(tid, {@channels_key, List.to_tuple(new_channels)})
     :ets.insert(tid, {@index_key, -1})
     {:ok, state}
-  end
-
-  @impl true
-  def shutdown(%{tid: tid}) do
-    :ets.delete(tid)
-    :ok
-  rescue
-    ArgumentError -> :ok
   end
 end
