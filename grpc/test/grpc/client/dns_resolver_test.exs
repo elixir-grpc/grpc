@@ -431,6 +431,38 @@ defmodule GRPC.Client.ReResolveTest do
     end
   end
 
+  describe "pick_channel per-request rotation" do
+    test "round-robin rotates across all backends on successive picks", ctx do
+      {:ok, channel} =
+        connect_with_resolver(
+          ctx.ref,
+          ctx.resolver,
+          ctx.adapter,
+          [
+            %{address: "10.0.0.1", port: 50051},
+            %{address: "10.0.0.2", port: 50051},
+            %{address: "10.0.0.3", port: 50051}
+          ],
+          lb_policy: :round_robin
+        )
+
+      hosts =
+        for _ <- 1..9 do
+          {:ok, picked} = Connection.pick_channel(channel)
+          picked.host
+        end
+
+      assert Enum.sort(Enum.uniq(hosts)) == ["10.0.0.1", "10.0.0.2", "10.0.0.3"]
+
+      counts = Enum.frequencies(hosts)
+      assert counts["10.0.0.1"] == 3
+      assert counts["10.0.0.2"] == 3
+      assert counts["10.0.0.3"] == 3
+
+      disconnect_and_wait(channel)
+    end
+  end
+
   describe "pick_channel after full backend replacement" do
     test "picks a channel from the new backend set", ctx do
       {:ok, channel} =
