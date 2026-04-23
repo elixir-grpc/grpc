@@ -3,7 +3,13 @@ if Code.ensure_loaded?(Mint.HTTP) do
     @moduledoc """
     A client adapter using Mint.
 
-    Remember to add `{:mint, "~> 1.5"}` to dependencies.
+    This adapter requires a compatible version of `:mint` to use. Add `:mint` to
+    your project's dependencies, then recompile `:grpc`:
+
+    ```shell
+    mix deps.clean grpc
+    mix deps.compile grpc
+    ```
     """
 
     alias GRPC.Channel

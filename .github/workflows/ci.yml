@@ -63,6 +63,12 @@ jobs:
         run: mix test --warnings-as-errors
       - name: Run Warning Tests
         run: mix test --only warning_test
+      - name: Run :mint optional dependency test
+        run: elixir script/adapter_test.exs mint
+        working-directory: ./grpc
+      - name: Run :gun optional dependency test
+        run: elixir script/adapter_test.exs gun
+        working-directory: ./grpc
   interop-tests:
     runs-on: ubuntu-latest
     name: Interop tests
@@ -85,11 +91,8 @@ jobs:
       - name: Install Dependencies
         run: mix deps.get 1>/dev/null
         working-directory: ./interop
-      - name: Run Gun interop tests
-        run: mix run script/run.exs --adapter gun
-        working-directory: ./interop
-      - name: Run Mint interop tests
-        run: mix run script/run.exs --adapter mint
+      - name: Run interop tests
+        run: mix run script/run.exs
         working-directory: ./interop
 
   interop-tests-all:

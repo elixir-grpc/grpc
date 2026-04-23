@@ -1,6 +1,6 @@
 {options, _, _} =
   OptionParser.parse(System.argv(),
-    strict: [rounds: :integer, concurrency: :integer, port: :integer, level: :string, adapter: :string]
+    strict: [rounds: :integer, concurrency: :integer, port: :integer, level: :string]
   )
 
 rounds = Keyword.get(options, :rounds) || 20
@@ -10,22 +10,14 @@ port = Keyword.get(options, :port) || 0
 level = Keyword.get(options, :level) || "warning"
 level = String.to_existing_atom(level)
 
-alias GRPC.Client.Adapters.{Gun, Mint}
-
-{adapter, missing_adapters} = case Keyword.get(options, :adapter, "gun") do
-  "gun" ->
-    Mix.install([:gun])
-    {Gun, [Mint]}
-  "mint" ->
-    Mix.install([:mint])
-    {Mint, [Gun]}
-end
+alias GRPC.Client.Adapters.Gun
+alias GRPC.Client.Adapters.Mint
 
 require Logger
 
 Logger.configure(level: level)
 
-Logger.info("Rounds: #{rounds}; concurrency: #{concurrency}; port: #{port}; adapter: #{adapter}")
+Logger.info("Rounds: #{rounds}; concurrency: #{concurrency}; port: #{port}")
 
 alias Interop.Client
 
@@ -74,25 +66,14 @@ res = DynamicSupervisor.start_link(strategy: :one_for_one, name: GRPC.Client.Sup
       {:ok, pid}
   end
 
-Logger.info("Starting run for adapter: #{adapter}")
-args = [adapter, port, rounds]
-stream_opts = [max_concurrency: concurrency, ordered: false, timeout: :infinity]
+for adapter <- [Gun, Mint] do
+  Logger.info("Starting run for adapter: #{adapter}")
+  args = [adapter, port, rounds]
+  stream_opts = [max_concurrency: concurrency, ordered: false, timeout: :infinity]
 
-1..concurrency
-|> Task.async_stream(InteropTestRunner, :run, args, stream_opts)
-|> Enum.to_list()
-
-for missing <- missing_adapters do
-  Logger.info("Checking to make sure #{missing} cannot be used...")
-  try do
-    InteropTestRunner.run(missing, port, rounds)
-    raise "#{missing} should not be present"
-  catch
-    UndefinedFunctionError -> :ok
-    e ->
-      :ok = GRPC.Server.stop_endpoint(Interop.Endpoint)
-      raise e
-  end
+  1..concurrency
+  |> Task.async_stream(InteropTestRunner, :run, args, stream_opts)
+  |> Enum.to_list()
 end
 
 Logger.info("Succeed!")

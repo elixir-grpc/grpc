@@ -5,7 +5,13 @@ if Code.ensure_loaded?(:gun) do
 
     `conn_pid` and `stream_ref` are stored in `GRPC.Server.Stream`.
 
-    Remember to add `{:gun, "~> 2.0"}` to dependencies.
+    This adapter requires a compatible version of `:gun` to use. Add `:gun` to
+    your project's dependencies, then recompile `:grpc`:
+
+    ```shell
+    mix deps.clean grpc
+    mix deps.compile grpc
+    ```
     """
 
     @behaviour GRPC.Client.Adapter
