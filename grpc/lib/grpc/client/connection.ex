@@ -125,7 +125,6 @@ defmodule GRPC.Client.Connection do
     case state.lb_mod.init(channels: connected) do
       {:ok, lb_state} ->
         state = %{state | lb_state: lb_state}
-        Registry.put(state.virtual_channel.ref, {state.lb_mod, lb_state})
 
         state =
           if function_exported?(state.resolver, :init, 2) do
@@ -139,6 +138,11 @@ defmodule GRPC.Client.Connection do
           else
             state
           end
+
+        # Publish to the Registry last. init/1 crashes don't run terminate/2,
+        # so anything registered before this point would leak if a later step
+        # raised.
+        Registry.put(state.virtual_channel.ref, {state.lb_mod, lb_state})
 
         {:ok, state}
 
@@ -277,25 +281,13 @@ defmodule GRPC.Client.Connection do
       state.resolver.shutdown(state.resolver_state)
     end
 
-    resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
+    # Delete the Registry entry before closing transports so in-flight picks
+    # fail fast with :no_connection instead of racing against a dying adapter.
     Registry.delete(channel.ref)
+    disconnect_real_channels(state.real_channels, adapter)
 
-    if Map.has_key?(state, :real_channels) do
-      Enum.map(state.real_channels, fn
-        {_key, {:connected, ch}} ->
-          do_disconnect(adapter, ch)
-
-        _ ->
-          :ok
-      end)
-
-      keys_to_delete = [:real_channels, :virtual_channel]
-      new_state = Map.drop(state, keys_to_delete)
-
-      {:reply, resp, new_state, {:continue, :stop}}
-    else
-      {:reply, resp, state, {:continue, :stop}}
-    end
+    resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
+    {:reply, resp, state, {:continue, :stop}}
   end
 
   @impl GenServer
@@ -437,6 +429,13 @@ defmodule GRPC.Client.Connection do
       else
         state.lb_state
       end
+
+    # pick_channel/2 reads {lb_mod, lb_state} from the Registry on every RPC,
+    # so the Registry is the source of truth for picks. Keep it in sync with
+    # whatever update/2 returned.
+    if state.lb_mod do
+      Registry.put(state.virtual_channel.ref, {state.lb_mod, new_lb_state})
+    end
 
     if connected == [] do
       Logger.warning("No healthy channels available after re-resolution")
