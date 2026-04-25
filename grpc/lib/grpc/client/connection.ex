@@ -331,13 +331,11 @@ defmodule GRPC.Client.Connection do
 
   def handle_info(:refresh, state), do: {:noreply, state}
 
-  # Result from the resolver worker process
   def handle_info({:resolver_update, result}, state) do
     state = handle_resolve_result(result, state)
     {:noreply, state}
   end
 
-  # Resolver worker crashed — re-initialize it
   def handle_info({:EXIT, _pid, reason}, %{resolver: resolver, resolver_state: rs} = state)
       when not is_nil(rs) and reason != :normal do
     Logger.warning("Resolver worker exited: #{inspect(reason)}, re-initializing")
@@ -447,15 +445,6 @@ defmodule GRPC.Client.Connection do
     end)
   end
 
-  # Re-init load balancer with full updated address list.
-  #
-  # NOTE: We guard persistent_term writes to only happen when the picked
-  # channel actually changes. persistent_term updates trigger a global GC
-  # pass across all BEAM processes (see erlang.org/doc/apps/erts/persistent_term).
-  # With periodic re-resolution this function runs every 30s+ per connection,
-  # and on no-change cycles we must avoid redundant writes. A future
-  # improvement would be migrating to ETS with read_concurrency: true,
-  # which has no global GC cost on writes.
   defp rebalance_after_reconcile(new_addresses, real_channels, state) do
     if state.lb_mod do
       case state.lb_mod.init(addresses: new_addresses) do
@@ -507,9 +496,6 @@ defmodule GRPC.Client.Connection do
     end
   end
 
-  # Only write to persistent_term when the channel actually changed.
-  # persistent_term updates trigger a global GC pass, so we skip
-  # redundant writes on no-change re-resolution cycles.
   defp maybe_update_persistent_term(current_channel, new_channel) do
     if current_channel != new_channel do
       :persistent_term.put(
