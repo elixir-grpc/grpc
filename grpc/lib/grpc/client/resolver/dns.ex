@@ -118,12 +118,7 @@ defmodule GRPC.Client.Resolver.DNS do
   def update(state, _event), do: {:ok, state}
 
   @impl GRPC.Client.Resolver
-  def shutdown(%{worker_pid: _pid}) do
-    # Worker is linked to Connection, dies automatically
-    :ok
-  end
-
-  def shutdown(nil), do: :ok
+  def shutdown(_state), do: :ok
 
   defp adapter() do
     Application.get_env(:grpc, :dns_adapter, GRPC.Client.Resolver.DNS.Adapter)
