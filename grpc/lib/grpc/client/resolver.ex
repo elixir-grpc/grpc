@@ -72,6 +72,16 @@ defmodule GRPC.Client.Resolver do
               {:ok, %{addresses: list(map()), service_config: service_config()}}
               | {:error, term()}
 
+  @callback init(target :: String.t(), opts :: keyword()) ::
+              {:ok, state :: term()} | {:error, term()}
+
+  @callback update(state :: term(), event :: term()) ::
+              {:ok, state :: term()}
+
+  @callback shutdown(state :: term()) :: :ok
+
+  @optional_callbacks [init: 2, update: 2, shutdown: 1]
+
   @doc """
   Resolves a gRPC target string into a list of connection endpoints and an optional ServiceConfig.
 

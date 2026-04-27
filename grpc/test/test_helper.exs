@@ -5,6 +5,10 @@ Mox.defmock(GRPC.Client.Resolver.DNS.MockAdapter,
   for: GRPC.Client.Resolver.DNS.Adapter
 )
 
+Mox.defmock(GRPC.Client.MockResolver,
+  for: GRPC.Client.Resolver
+)
+
 {parsed, _, _} = OptionParser.parse(System.argv(), switches: [warnings_as_errors: :boolean])
 
 if !parsed[:warnings_as_errors] do

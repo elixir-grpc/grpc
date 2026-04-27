@@ -9,6 +9,30 @@ defmodule GRPC.Integration.TestCase do
     end
   end
 
+  setup :setup_mox_global
+
+  def setup_mox_global(_context) do
+    Mox.set_mox_global()
+
+    Mox.stub(GRPC.Client.MockResolver, :resolve, fn _target ->
+      {:ok, %{addresses: [], service_config: nil}}
+    end)
+
+    Mox.stub(GRPC.Client.MockResolver, :init, fn _target, _opts ->
+      {:ok, nil}
+    end)
+
+    Mox.stub(GRPC.Client.MockResolver, :update, fn state, _event ->
+      {:ok, state}
+    end)
+
+    Mox.stub(GRPC.Client.MockResolver, :shutdown, fn _state ->
+      :ok
+    end)
+
+    :ok
+  end
+
   def run_server(servers, func, port \\ 0, opts \\ []) do
     {:ok, _pid, port} =
       start_supervised(%{
