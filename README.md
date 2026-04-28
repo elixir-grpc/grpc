@@ -385,6 +385,19 @@ iex> {:ok, channel} =
 By default, `GRPC.Stub.connect/2` uses the **Gun** adapter.
 You can switch to **Mint** (pure Elixir HTTP/2) or other adapters as needed.
 
+Since both of these are optional dependencies, you must add one to your dependencies list:
+
+```elixir
+def deps do
+  [
+    # Gun
+    {:gun, "~> 2.0"},
+    # Mint
+    {:mint, "~> 1.5"}
+  ]
+end
+```
+
 ### Using Mint Adapter
 
 ```elixir

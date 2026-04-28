@@ -11,6 +11,32 @@ defmodule GRPC.Test.ClientAdapter do
   def cancel(stream), do: stream
 end
 
+defmodule GRPC.Test.FailingClientAdapter do
+  @moduledoc """
+  A test adapter that fails to connect for hosts listed in the
+  :grpc_test_failing_hosts application env key. All other hosts succeed.
+  """
+  @behaviour GRPC.Client.Adapter
+
+  def connect(%{host: host} = channel, _opts) do
+    failing = Application.get_env(:grpc, :grpc_test_failing_hosts, [])
+
+    if host in failing do
+      {:error, :connection_refused}
+    else
+      {:ok, channel}
+    end
+  end
+
+  def disconnect(channel), do: {:ok, channel}
+  def send_request(stream, _message, _opts), do: stream
+  def receive_data(_stream, _opts), do: {:ok, nil}
+  def send_data(stream, _message, _opts), do: stream
+  def send_headers(stream, _opts), do: stream
+  def end_stream(stream), do: stream
+  def cancel(stream), do: stream
+end
+
 defmodule GRPC.Test.ServerAdapter do
   @behaviour GRPC.Server.Adapter
 

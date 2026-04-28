@@ -35,7 +35,7 @@ defmodule GRPC.Server.Router.Query do
     current =
       case :binary.split(binary, "=") do
         [key, value] ->
-          {decode_www_form(key), decode_www_form(value)}
+          {decode_www_form(key), coerce_query_value(decode_www_form(value))}
 
         [key] ->
           {decode_www_form(key), ""}
@@ -47,4 +47,11 @@ defmodule GRPC.Server.Router.Query do
   defp decode_www_form(value) do
     URI.decode_www_form(value)
   end
+
+  # Query params are always strings, but proto bool fields require actual Elixir booleans.
+  # `Protobuf.JSON.from_decoded` throws {:bad_bool, field, value} when given a string,
+  # causing the request to fail silently with a 204 No Content response.
+  defp coerce_query_value("true"), do: true
+  defp coerce_query_value("false"), do: false
+  defp coerce_query_value(value), do: value
 end
