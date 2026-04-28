@@ -191,7 +191,11 @@ defmodule GRPC.Client.Connection.EndpointResolver do
   end
 
   defp resolver_prefix(host) when is_binary(host) do
-    if String.contains?(host, ":"), do: "ipv6", else: "ipv4"
+    case :inet.parse_address(String.to_charlist(host)) do
+      {:ok, {_, _, _, _}} -> "ipv4"
+      {:ok, {_, _, _, _, _, _, _, _}} -> "ipv6"
+      {:error, _} -> "ipv4"
+    end
   end
 
   defp strip_scheme(target) do
