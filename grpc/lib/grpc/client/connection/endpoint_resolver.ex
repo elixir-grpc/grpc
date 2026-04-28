@@ -8,11 +8,11 @@ defmodule GRPC.Client.Connection.EndpointResolver do
   #
   #   * `"https://host:port"` – TLS, implicit :cred injection
   #   * `"http://host:port"`  – plain-text, rejects :cred
-  #   * `"host:port"`         – compatibility shorthand → ipv4
+  #   * `"host:port"`         – compatibility shorthand → ipv4/ipv6
   #   * `"path"`              – bare path → unix socket
   #   * `"dns://…"`, `"ipv4:…"`, `"ipv6:…"`, `"unix:…"`, etc. – passed through
-  #   * `"[::1]:port"`        – bracketed IPv6 with port → ipv4 normalised
-  #   * `"::1:port"`          – bare IPv6 with port → ipv4 normalised
+  #   * `"[::1]:port"`        – bracketed IPv6 with port → ipv6 normalised
+  #   * `"::1:port"`          – bare IPv6 with port → ipv6 normalised
 
   @insecure_scheme "http"
   @secure_scheme "https"
@@ -21,7 +21,7 @@ defmodule GRPC.Client.Connection.EndpointResolver do
   @doc """
   Normalises `target` and `cred`, returning `{norm_target, scheme, cred}`.
 
-  - `norm_target` – canonical target string for the resolver (e.g. `"ipv4:1.2.3.4:50051"`)
+  - `norm_target` – canonical target string for the resolver (e.g. `"ipv4:1.2.3.4:50051"`, `"ipv6:::1:50051"`)
   - `scheme`      – `"http"`, `"https"`, or `"unix"`
   - `cred`        – resolved `%GRPC.Credential{}`, or `nil` for plain-text targets
 
@@ -38,7 +38,7 @@ defmodule GRPC.Client.Connection.EndpointResolver do
       {"ipv4:localhost:50051", "http", nil}
 
       iex> GRPC.Client.Connection.EndpointResolver.normalize("[::1]:50051", nil)
-      {"ipv4:::1:50051", "http", nil}
+      {"ipv6:::1:50051", "http", nil}
 
   """
   @spec normalize(String.t(), GRPC.Credential.t() | nil) ::
@@ -50,13 +50,15 @@ defmodule GRPC.Client.Connection.EndpointResolver do
     cond do
       uri.scheme == @secure_scheme and uri.host ->
         resolved_cred = cred || default_ssl_option()
-        {"ipv4:#{uri.host}:#{uri.port}", @secure_scheme, resolved_cred}
+        prefix = resolver_prefix(uri.host)
+        {"#{prefix}:#{uri.host}:#{uri.port}", @secure_scheme, resolved_cred}
 
       uri.scheme == @insecure_scheme and uri.host ->
         if cred,
           do: raise(ArgumentError, "invalid option for insecure (http) address: :cred")
 
-        {"ipv4:#{uri.host}:#{uri.port}", @insecure_scheme, nil}
+        prefix = resolver_prefix(uri.host)
+        {"#{prefix}:#{uri.host}:#{uri.port}", @insecure_scheme, nil}
 
       # Compatibility mode: "host:port", bare path, or raw IPv6
       uri.scheme in [nil, ""] ->
@@ -155,10 +157,11 @@ defmodule GRPC.Client.Connection.EndpointResolver do
       String.starts_with?(target, "[") ->
         case Regex.run(~r/^\[([^\]]+)\]:(\d+)$/, target) do
           [_, addr, port] ->
-            {"ipv4:#{addr}:#{port}", scheme, cred}
+            {"ipv6:#{addr}:#{port}", scheme, cred}
 
           _ ->
-            {"ipv4:#{String.trim_leading(target, "[") |> String.replace("]", "")}", scheme, cred}
+            addr = target |> String.trim_leading("[") |> String.replace("]", "")
+            {"ipv6:#{addr}", scheme, cred}
         end
 
       String.contains?(target, ":") ->
@@ -169,19 +172,26 @@ defmodule GRPC.Client.Connection.EndpointResolver do
             case Integer.parse(port_str) do
               {_port, ""} ->
                 addr = parts |> Enum.drop(-1) |> Enum.join(":")
-                {"ipv4:#{addr}:#{port_str}", scheme, cred}
+                prefix = resolver_prefix(addr)
+                {"#{prefix}:#{addr}:#{port_str}", scheme, cred}
 
               _ ->
-                {"ipv4:#{target}", scheme, cred}
+                prefix = resolver_prefix(target)
+                {"#{prefix}:#{target}", scheme, cred}
             end
 
           _ ->
-            {"ipv4:#{target}", scheme, cred}
+            prefix = resolver_prefix(target)
+            {"#{prefix}:#{target}", scheme, cred}
         end
 
       true ->
         {"unix://#{target}", "unix", nil}
     end
+  end
+
+  defp resolver_prefix(host) when is_binary(host) do
+    if String.contains?(host, ":"), do: "ipv6", else: "ipv4"
   end
 
   defp strip_scheme(target) do

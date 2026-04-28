@@ -101,33 +101,33 @@ defmodule GRPC.Client.Connection.EndpointResolverTest do
     test "bracketed IPv6 loopback [::1]:50051" do
       {norm_target, scheme, _cred} = EndpointResolver.normalize("[::1]:50051", nil)
 
-      assert norm_target == "ipv4:::1:50051"
+      assert norm_target == "ipv6:::1:50051"
       assert scheme == "http"
     end
 
     test "bracketed full address [2001:db8::1]:8080" do
       {norm_target, _scheme, _cred} = EndpointResolver.normalize("[2001:db8::1]:8080", nil)
 
-      assert norm_target == "ipv4:2001:db8::1:8080"
+      assert norm_target == "ipv6:2001:db8::1:8080"
     end
 
     test "bracketed IPv6 without port — strips brackets, uses default port" do
       {norm_target, _scheme, _cred} = EndpointResolver.normalize("[::1]", nil)
 
-      assert norm_target == "ipv4:::1"
+      assert norm_target == "ipv6:::1"
     end
 
     test "bare IPv6 loopback ::1:50051 (last segment is port)" do
       {norm_target, scheme, _cred} = EndpointResolver.normalize("::1:50051", nil)
 
-      assert norm_target == "ipv4:::1:50051"
+      assert norm_target == "ipv6:::1:50051"
       assert scheme == "http"
     end
 
     test "bare full address 2001:db8::1:8080" do
       {norm_target, _scheme, _cred} = EndpointResolver.normalize("2001:db8::1:8080", nil)
 
-      assert norm_target == "ipv4:2001:db8::1:8080"
+      assert norm_target == "ipv6:2001:db8::1:8080"
     end
 
     test "supplying cred flips scheme to https for bracketed IPv6" do
