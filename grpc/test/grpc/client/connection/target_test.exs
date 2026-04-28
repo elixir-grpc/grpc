@@ -5,15 +5,7 @@ defmodule GRPC.Client.Connection.TargetTest do
 
   doctest GRPC.Client.Connection.Target
 
-  # ---------------------------------------------------------------------------
-  # Helpers
-  # ---------------------------------------------------------------------------
-
   defp cred(opts \\ [verify: :verify_none]), do: %GRPC.Credential{ssl: opts}
-
-  # ---------------------------------------------------------------------------
-  # normalize/2 — https:// scheme
-  # ---------------------------------------------------------------------------
 
   describe "normalize/2 — https://" do
     test "normalises host and port to ipv4 prefix" do
@@ -49,10 +41,6 @@ defmodule GRPC.Client.Connection.TargetTest do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # normalize/2 — http:// scheme
-  # ---------------------------------------------------------------------------
-
   describe "normalize/2 — http://" do
     test "normalises host and port to ipv4 prefix with http scheme" do
       {norm_target, scheme, cred} = Target.normalize("http://example.com:50051", nil)
@@ -74,10 +62,6 @@ defmodule GRPC.Client.Connection.TargetTest do
       end
     end
   end
-
-  # ---------------------------------------------------------------------------
-  # normalize/2 — schemeless shorthand
-  # ---------------------------------------------------------------------------
 
   describe "normalize/2 — schemeless host:port shorthand" do
     test "IPv4 address:port becomes ipv4 prefix with http scheme" do
@@ -110,10 +94,6 @@ defmodule GRPC.Client.Connection.TargetTest do
       assert cred == nil
     end
   end
-
-  # ---------------------------------------------------------------------------
-  # normalize/2 — schemeless IPv6
-  # ---------------------------------------------------------------------------
 
   describe "normalize/2 — schemeless IPv6" do
     test "bracketed IPv6 loopback [::1]:50051" do
@@ -154,10 +134,6 @@ defmodule GRPC.Client.Connection.TargetTest do
       assert scheme == "https"
     end
   end
-
-  # ---------------------------------------------------------------------------
-  # normalize/2 — passthrough resolver schemes
-  # ---------------------------------------------------------------------------
 
   describe "normalize/2 — passthrough resolver schemes" do
     test "dns:// target is passed through unchanged" do
@@ -210,10 +186,6 @@ defmodule GRPC.Client.Connection.TargetTest do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # split_host_port/1 — standard host:port
-  # ---------------------------------------------------------------------------
-
   describe "split_host_port/1 — standard host:port" do
     test "IPv4 address:port" do
       assert Target.split_host_port("127.0.0.1:50051") == {"127.0.0.1", 50051}
@@ -228,10 +200,6 @@ defmodule GRPC.Client.Connection.TargetTest do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # split_host_port/1 — scheme-prefixed targets
-  # ---------------------------------------------------------------------------
-
   describe "split_host_port/1 — scheme-prefixed targets" do
     test "ipv4:host:port strips the scheme prefix" do
       assert Target.split_host_port("ipv4:10.0.0.1:50051") == {"10.0.0.1", 50051}
@@ -241,10 +209,6 @@ defmodule GRPC.Client.Connection.TargetTest do
       assert Target.split_host_port("ipv4:10.0.0.1") == {"10.0.0.1", 50051}
     end
   end
-
-  # ---------------------------------------------------------------------------
-  # split_host_port/1 — bracketed IPv6
-  # ---------------------------------------------------------------------------
 
   describe "split_host_port/1 — bracketed IPv6" do
     test "[::1]:50051" do
@@ -263,10 +227,6 @@ defmodule GRPC.Client.Connection.TargetTest do
       assert Target.split_host_port("[::1]") == {"::1", 50051}
     end
   end
-
-  # ---------------------------------------------------------------------------
-  # split_host_port/1 — bare IPv6 (last segment is port)
-  # ---------------------------------------------------------------------------
 
   describe "split_host_port/1 — bare IPv6" do
     test "::1:50051 — loopback with port" do

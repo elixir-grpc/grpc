@@ -108,7 +108,6 @@ defmodule GRPC.Client.Connection.Target do
   @spec split_host_port(String.t()) :: {String.t(), pos_integer()}
   def split_host_port(target) when is_binary(target) do
     cond do
-      # Bracketed IPv6: [::1]:50051 or scheme:[::1]:50051
       String.contains?(target, "[") ->
         case Regex.run(~r/\[([^\]]+)\]:(\d+)$/, target) do
           [_, addr, port] ->
@@ -121,53 +120,40 @@ defmodule GRPC.Client.Connection.Target do
             end
         end
 
-      # More than one colon → could be scheme:host:port or bare IPv6 with port
       target |> String.split(":") |> length() > 2 ->
-        # Do NOT use trim: true — empty segments are significant in IPv6 ("::")
         parts = String.split(target, ":")
 
         case {parts, Integer.parse(List.last(parts))} do
           {[_scheme, host, port_str], {_port, ""}} ->
-            # scheme:host:port — exactly 3 segments, last is an integer
             {host, String.to_integer(port_str)}
 
           {_, {_port, ""}} ->
-            # Last segment is an integer → treat as port, rest joins as IPv6 address
             port_str = List.last(parts)
             addr = parts |> Enum.drop(-1) |> Enum.join(":")
             {addr, String.to_integer(port_str)}
 
           {[_scheme, host], _} ->
-            # scheme:host — 2 segments, last is not an integer → no port
             {host, @default_port}
 
           _ ->
             {strip_scheme(target), @default_port}
         end
 
-      # Exactly one colon → could be host:port or scheme:host (no port)
       String.contains?(target, ":") ->
         [h, p] = String.split(target, ":", parts: 2)
 
         case Integer.parse(p) do
           {port, ""} -> {h, port}
-          # Second segment is not an integer → treat as scheme:host, no port
           _ -> {p, @default_port}
         end
 
-      # No colon → bare host, use default port
       true ->
         {target, @default_port}
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # Private
-  # ---------------------------------------------------------------------------
-
   defp normalize_schemeless(target, scheme, cred) do
     cond do
-      # Bracketed IPv6 — [::1]:50051
       String.starts_with?(target, "[") ->
         case Regex.run(~r/^\[([^\]]+)\]:(\d+)$/, target) do
           [_, addr, port] ->
@@ -177,8 +163,6 @@ defmodule GRPC.Client.Connection.Target do
             {"ipv4:#{String.trim_leading(target, "[") |> String.replace("]", "")}", scheme, cred}
         end
 
-      # Bare IPv6 or host:port — any colon present
-      # Heuristic: last colon-separated segment is all digits → it is the port
       String.contains?(target, ":") ->
         parts = String.split(target, ":")
 
@@ -186,12 +170,10 @@ defmodule GRPC.Client.Connection.Target do
           port_str when byte_size(port_str) > 0 ->
             case Integer.parse(port_str) do
               {_port, ""} ->
-                # Last segment is a number → treat as port, rest is the address
                 addr = parts |> Enum.drop(-1) |> Enum.join(":")
                 {"ipv4:#{addr}:#{port_str}", scheme, cred}
 
               _ ->
-                # Last segment is not a number → no recognisable port, pass as-is
                 {"ipv4:#{target}", scheme, cred}
             end
 
@@ -199,7 +181,6 @@ defmodule GRPC.Client.Connection.Target do
             {"ipv4:#{target}", scheme, cred}
         end
 
-      # No colon → bare path (unix socket) or bare hostname
       true ->
         {"unix://#{target}", "unix", nil}
     end
