@@ -293,10 +293,24 @@ defmodule GRPC.Client.Connection do
     {:noreply, state}
   end
 
-  def handle_info({:EXIT, pid, reason}, %{resolver_state: %{worker_pid: pid}} = state)
-      when reason != :normal do
-    Logger.warning("Resolver worker exited: #{inspect(reason)}, stopping Connection")
-    {:stop, {:resolver_exited, reason}, state}
+  def handle_info({:EXIT, _pid, reason}, %{resolver: resolver, resolver_state: rs} = state)
+      when not is_nil(rs) and reason != :normal do
+    Logger.warning("Resolver worker exited: #{inspect(reason)}, re-initializing")
+
+    state =
+      if function_exported?(resolver, :init, 2) do
+        case resolver.init(state.resolver_target,
+               connection_pid: self(),
+               connect_opts: state.connect_opts
+             ) do
+          {:ok, new_rs} -> %{state | resolver_state: new_rs}
+          {:error, _} -> %{state | resolver_state: nil}
+        end
+      else
+        %{state | resolver_state: nil}
+      end
+
+    {:noreply, state}
   end
 
   def handle_info({:EXIT, _pid, :normal}, state), do: {:noreply, state}
