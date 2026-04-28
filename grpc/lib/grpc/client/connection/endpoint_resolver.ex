@@ -1,4 +1,4 @@
-defmodule GRPC.Client.Connection.Target do
+defmodule GRPC.Client.Connection.EndpointResolver do
   @moduledoc false
 
   # Parses and normalises a raw target string into the canonical
@@ -27,17 +27,17 @@ defmodule GRPC.Client.Connection.Target do
 
   ## Examples
 
-      iex> GRPC.Client.Connection.Target.normalize("http://example.com:50051", nil)
+      iex> GRPC.Client.Connection.EndpointResolver.normalize("http://example.com:50051", nil)
       {"ipv4:example.com:50051", "http", nil}
 
       iex> cred = %GRPC.Credential{ssl: [verify: :verify_none]}
-      iex> GRPC.Client.Connection.Target.normalize("https://example.com:50051", cred)
+      iex> GRPC.Client.Connection.EndpointResolver.normalize("https://example.com:50051", cred)
       {"ipv4:example.com:50051", "https", %GRPC.Credential{ssl: [verify: :verify_none]}}
 
-      iex> GRPC.Client.Connection.Target.normalize("localhost:50051", nil)
+      iex> GRPC.Client.Connection.EndpointResolver.normalize("localhost:50051", nil)
       {"ipv4:localhost:50051", "http", nil}
 
-      iex> GRPC.Client.Connection.Target.normalize("[::1]:50051", nil)
+      iex> GRPC.Client.Connection.EndpointResolver.normalize("[::1]:50051", nil)
       {"ipv4:::1:50051", "http", nil}
 
   """
@@ -71,8 +71,6 @@ defmodule GRPC.Client.Connection.Target do
         scheme = if cred, do: @secure_scheme, else: @insecure_scheme
         normalize_schemeless(target, scheme, cred)
 
-      # Anything else (dns://host, ipv4:host:port, ipv6:…, unix:…, xds:…)
-      # passed through to the resolver
       true ->
         scheme = if cred, do: @secure_scheme, else: @insecure_scheme
         {target, scheme, cred}
@@ -92,16 +90,16 @@ defmodule GRPC.Client.Connection.Target do
 
   ## Examples
 
-      iex> GRPC.Client.Connection.Target.split_host_port("ipv4:127.0.0.1:50051")
+      iex> GRPC.Client.Connection.EndpointResolver.split_host_port("ipv4:127.0.0.1:50051")
       {"127.0.0.1", 50051}
 
-      iex> GRPC.Client.Connection.Target.split_host_port("localhost:8080")
+      iex> GRPC.Client.Connection.EndpointResolver.split_host_port("localhost:8080")
       {"localhost", 8080}
 
-      iex> GRPC.Client.Connection.Target.split_host_port("[::1]:50051")
+      iex> GRPC.Client.Connection.EndpointResolver.split_host_port("[::1]:50051")
       {"::1", 50051}
 
-      iex> GRPC.Client.Connection.Target.split_host_port("myhost")
+      iex> GRPC.Client.Connection.EndpointResolver.split_host_port("myhost")
       {"myhost", 50051}
 
   """

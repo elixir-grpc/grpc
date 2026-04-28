@@ -74,7 +74,7 @@ defmodule GRPC.Client.Connection do
   """
   use GenServer
   alias GRPC.Channel
-  alias GRPC.Client.Connection.Target
+  alias GRPC.Client.Connection.EndpointResolver
 
   require Logger
 
@@ -549,7 +549,7 @@ defmodule GRPC.Client.Connection do
     adapter = Keyword.get(opts, :adapter, GRPC.Client.Adapters.Gun)
     lb_policy_opt = Keyword.get(opts, :lb_policy)
 
-    {norm_target, scheme, cred} = Target.normalize(target, opts[:cred])
+    {norm_target, scheme, cred} = EndpointResolver.normalize(target, opts[:cred])
     cred = resolve_credential(cred, scheme)
     interceptors = init_interceptors(opts[:interceptors])
 
@@ -653,7 +653,7 @@ defmodule GRPC.Client.Connection do
   end
 
   defp build_direct_state(%__MODULE__{} = base_state, norm_target, opts, adapter) do
-    {host, port} = Target.split_host_port(norm_target)
+    {host, port} = EndpointResolver.split_host_port(norm_target)
     vc = base_state.virtual_channel
 
     case connect_real_channel(vc, host, port, opts, adapter) do
