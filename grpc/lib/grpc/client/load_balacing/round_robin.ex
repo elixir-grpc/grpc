@@ -33,9 +33,7 @@ defmodule GRPC.Client.LoadBalancing.RoundRobin do
   end
 
   @impl true
-  # A concurrent `disconnect/1` can delete the ETS table between a caller's
-  # registry lookup and this pick, turning the ETS BIFs into ArgumentError.
-  # Callers expect a tagged error, not a crashed RPC.
+  # `disconnect/1` may delete the table between a caller's registry lookup and pick.
   def pick(%{tid: tid} = state) do
     case :ets.lookup(tid, @channels_key) do
       [{@channels_key, channels}] when tuple_size(channels) > 0 ->

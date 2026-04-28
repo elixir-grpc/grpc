@@ -139,9 +139,7 @@ defmodule GRPC.Client.Connection do
             state
           end
 
-        # Publish to the Registry last. init/1 crashes don't run terminate/2,
-        # so anything registered before this point would leak if a later step
-        # raised.
+        # init/1 crashes skip terminate/2, so register only after fallible steps.
         Registry.put(state.virtual_channel.ref, {state.lb_mod, lb_state})
 
         {:ok, state}
@@ -281,8 +279,7 @@ defmodule GRPC.Client.Connection do
       state.resolver.shutdown(state.resolver_state)
     end
 
-    # Delete the Registry entry before closing transports so in-flight picks
-    # fail fast with :no_connection instead of racing against a dying adapter.
+    # Delete first so in-flight picks fail fast instead of racing a dying adapter.
     Registry.delete(channel.ref)
     disconnect_real_channels(state.real_channels, adapter)
 
@@ -430,9 +427,6 @@ defmodule GRPC.Client.Connection do
         state.lb_state
       end
 
-    # pick_channel/2 reads {lb_mod, lb_state} from the Registry on every RPC,
-    # so the Registry is the source of truth for picks. Keep it in sync with
-    # whatever update/2 returned.
     if state.lb_mod do
       Registry.put(state.virtual_channel.ref, {state.lb_mod, new_lb_state})
     end
