@@ -575,7 +575,7 @@ defmodule GRPC.Client.Connection do
       resolver: resolver,
       adapter: adapter,
       resolver_target: norm_target,
-      connect_opts: norm_opts
+      connect_opts: opts
     }
 
     case resolver.resolve(norm_target) do
