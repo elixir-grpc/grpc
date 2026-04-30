@@ -3,7 +3,6 @@ defmodule GRPC.Client.ConnectionTest do
 
   alias GRPC.Channel
   alias GRPC.Client.Connection
-  alias GRPC.Client.LoadBalancing.Registry
 
   setup do
     %{
@@ -21,7 +20,7 @@ defmodule GRPC.Client.ConnectionTest do
       assert {:error, :no_connection} = Connection.pick_channel(channel)
     end
 
-    test "returns {:ok, channel} once a connection has registered its LB state", %{
+    test "returns {:ok, channel} once a connection has published its LB state", %{
       ref: ref,
       target: target,
       adapter: adapter
@@ -51,17 +50,18 @@ defmodule GRPC.Client.ConnectionTest do
       Connection.disconnect(first_channel)
     end
 
-    test "returns {:error, :no_connection} when already_started but the registry entry is missing",
+    test "returns {:error, :no_connection} when already_started but the persistent_term entry is missing",
          %{ref: ref, target: target, adapter: adapter} do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
-      {:ok, entry} = Registry.lookup(ref)
-      Registry.delete(ref)
+      key = {Connection, ref}
+      entry = :persistent_term.get(key)
+      :persistent_term.erase(key)
 
       # Calling connect again will hit already_started → pick_channel → :no_connection
       assert {:error, :no_connection} = Connection.connect(target, adapter: adapter, name: ref)
 
-      Registry.put(ref, entry)
+      :persistent_term.put(key, entry)
       Connection.disconnect(channel)
     end
   end
@@ -82,7 +82,7 @@ defmodule GRPC.Client.ConnectionTest do
       assert_receive {:DOWN, ^ref_mon, :process, ^pid, _reason}, 500
     end
 
-    test "pick_channel returns {:error, :no_connection} after disconnect (registry entry is deleted)",
+    test "pick_channel returns {:error, :no_connection} after disconnect (persistent_term entry is erased)",
          %{ref: ref, target: target, adapter: adapter} do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
@@ -92,8 +92,8 @@ defmodule GRPC.Client.ConnectionTest do
     end
   end
 
-  describe "terminate/2 - registry cleanup on process kill" do
-    test "registry entry is deleted when process is killed without disconnect", %{
+  describe "terminate/2 - persistent_term cleanup on process kill" do
+    test "persistent_term entry is erased when process is killed without disconnect", %{
       ref: ref,
       target: target,
       adapter: adapter
@@ -158,8 +158,9 @@ defmodule GRPC.Client.ConnectionTest do
 
   describe "pick_channel/2 races with disconnect/1" do
     # Concurrent RPCs must never crash when a disconnect is tearing down the
-    # LB state. This exercises both the Registry.lookup ArgumentError rescue
-    # (table gone) and the per-LB pick rescue (per-connection table gone).
+    # LB state. The pick path's :persistent_term.get falls back to nil when
+    # the entry is gone, and the per-LB pick rescues ArgumentError if the
+    # ETS table is reclaimed mid-pick.
     test "many concurrent picks complete without crashing while disconnect runs", %{
       ref: ref,
       target: target,
@@ -208,13 +209,14 @@ defmodule GRPC.Client.ConnectionTest do
   describe "resource leaks over repeated connect/disconnect" do
     # Mirrors the regression style used in #509 for the persistent_term leak:
     # cycle connect/disconnect many times and assert zero growth in the
-    # long-lived tables we own (the registry + the count of ETS tables).
-    test "500 cycles leave the registry empty and no per-LB tables leak", %{
+    # long-lived stores we own (Connection-keyed persistent_term entries +
+    # the count of ETS tables).
+    test "500 cycles leave persistent_term clean and no per-LB tables leak", %{
       target: target,
       adapter: adapter
     } do
       before_table_count = length(:ets.all())
-      before_registry_size = :ets.info(:grpc_client_lb_registry, :size)
+      before_pt_count = connection_pt_count()
 
       for _ <- 1..500 do
         ref = make_ref()
@@ -222,16 +224,20 @@ defmodule GRPC.Client.ConnectionTest do
         {:ok, _} = Connection.disconnect(channel)
       end
 
-      after_registry_size = :ets.info(:grpc_client_lb_registry, :size)
+      after_pt_count = connection_pt_count()
       after_table_count = length(:ets.all())
 
-      assert after_registry_size == before_registry_size,
-             "registry leaked: before=#{before_registry_size} after=#{after_registry_size}"
+      assert after_pt_count == before_pt_count,
+             "persistent_term leaked: before=#{before_pt_count} after=#{after_pt_count}"
 
       # Allow small slop for tables the VM may have created incidentally.
       assert after_table_count - before_table_count <= 5,
              "ETS tables leaked: before=#{before_table_count} after=#{after_table_count}"
     end
+  end
+
+  defp connection_pt_count do
+    Enum.count(:persistent_term.get(), &match?({{Connection, _}, _}, &1))
   end
 
   defp lb_tid(ref) do

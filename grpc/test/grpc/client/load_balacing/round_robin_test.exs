@@ -1,13 +1,14 @@
 defmodule GRPC.Client.LoadBalancing.RoundRobinTest do
   @moduledoc """
-  Tests for the ETS-backed round-robin load balancer.
+  Tests for the round-robin load balancer (ETS for the channel tuple,
+  `:atomics` for the cursor).
 
   Covers:
-    1. init/1 creates an ETS table and returns it in state
+    1. init/1 creates an ETS table + atomics ref and returns them in state
     2. init/1 rejects empty channel lists
     3. pick/1 rotates through channels in order
     4. pick/1 wraps around after the last channel
-    5. update/2 replaces channels in place without creating a new table
+    5. update/2 replaces channels in place without creating a new table or atomics ref
     6. update/2 accepts empty channel lists
     7. update/2 resets the cursor so the first pick is the first channel
     8. pick/1 is safe under concurrent access (many processes, one table)
@@ -22,11 +23,13 @@ defmodule GRPC.Client.LoadBalancing.RoundRobinTest do
     do: Enum.map(pairs, fn {h, p} -> %Channel{host: h, port: p, ref: {h, p}} end)
 
   describe "init/1" do
-    test "creates an ETS table and returns the tid in state" do
+    test "creates an ETS table + atomics ref and returns both in state" do
       {:ok, state} = RoundRobin.init(channels: channels([{"a", 1}]))
-      assert %{tid: tid} = state
+      assert %{tid: tid, atomics: aref} = state
       assert is_reference(tid)
+      assert is_reference(aref)
       assert :ets.info(tid) != :undefined
+      assert :atomics.get(aref, 1) == 0
     end
 
     test "rejects empty channel lists" do
@@ -58,12 +61,14 @@ defmodule GRPC.Client.LoadBalancing.RoundRobinTest do
   end
 
   describe "update/2" do
-    test "replaces channels in place without changing the tid" do
+    test "replaces channels in place without changing the tid or atomics ref" do
       {:ok, state} = RoundRobin.init(channels: channels([{"a", 1}, {"b", 2}]))
       original_tid = state.tid
+      original_aref = state.atomics
 
       {:ok, new_state} = RoundRobin.update(state, channels([{"x", 9}, {"y", 8}, {"z", 7}]))
       assert new_state.tid == original_tid
+      assert new_state.atomics == original_aref
 
       assert {:ok, %Channel{host: "x", port: 9}, _} = RoundRobin.pick(new_state)
       assert {:ok, %Channel{host: "y", port: 8}, _} = RoundRobin.pick(new_state)

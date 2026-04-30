@@ -4,7 +4,6 @@ defmodule GRPC.Client.Application do
 
   def start(_type, _args) do
     children = [
-      GRPC.Client.LoadBalancing.Registry,
       {DynamicSupervisor, [name: GRPC.Client.Supervisor]}
     ]
 

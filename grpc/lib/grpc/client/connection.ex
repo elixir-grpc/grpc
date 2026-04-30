@@ -72,7 +72,6 @@ defmodule GRPC.Client.Connection do
   """
   use GenServer
   alias GRPC.Channel
-  alias GRPC.Client.LoadBalancing.Registry
 
   require Logger
 
@@ -139,8 +138,12 @@ defmodule GRPC.Client.Connection do
             state
           end
 
-        # init/1 crashes skip terminate/2, so register only after fallible steps.
-        Registry.put(state.virtual_channel.ref, {state.lb_mod, lb_state})
+        # init/1 crashes skip terminate/2, so publish only after fallible steps.
+        # lb_state (tid + atomics ref) is stable for the life of the connection;
+        # reconcile mutates ETS/atomics in place rather than republishing, so
+        # persistent_term.put fires once per connect — not every 30s — keeping
+        # the global GC pass off the steady-state path.
+        :persistent_term.put({__MODULE__, state.virtual_channel.ref}, {state.lb_mod, lb_state})
 
         {:ok, state}
 
@@ -241,8 +244,8 @@ defmodule GRPC.Client.Connection do
   """
   @spec pick_channel(Channel.t(), keyword()) :: {:ok, Channel.t()} | {:error, term()}
   def pick_channel(%Channel{ref: ref} = _channel, _opts \\ []) do
-    case Registry.lookup(ref) do
-      {:ok, {lb_mod, lb_state}} when not is_nil(lb_mod) ->
+    case :persistent_term.get({__MODULE__, ref}, nil) do
+      {lb_mod, lb_state} when not is_nil(lb_mod) ->
         case lb_mod.pick(lb_state) do
           {:ok, %Channel{} = channel, _new_state} -> {:ok, channel}
           {:error, _} -> {:error, :no_connection}
@@ -279,8 +282,8 @@ defmodule GRPC.Client.Connection do
       state.resolver.shutdown(state.resolver_state)
     end
 
-    # Delete first so in-flight picks fail fast instead of racing a dying adapter.
-    Registry.delete(channel.ref)
+    # Erase first so in-flight picks fail fast instead of racing a dying adapter.
+    :persistent_term.erase({__MODULE__, channel.ref})
     disconnect_real_channels(state.real_channels, adapter)
 
     resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
@@ -345,7 +348,8 @@ defmodule GRPC.Client.Connection do
 
   @impl GenServer
   def terminate(_reason, %{virtual_channel: %{ref: ref}}) do
-    Registry.delete(ref)
+    :persistent_term.erase({__MODULE__, ref})
+    :ok
   rescue
     _ -> :ok
   end
@@ -431,6 +435,9 @@ defmodule GRPC.Client.Connection do
   defp rebalance_after_reconcile(_new_addresses, real_channels, state) do
     connected = connected_channels(real_channels)
 
+    # update/2 mutates ETS/atomics in place; the persistent_term entry stays
+    # valid because lb_state's tid + atomics ref don't change. No republish,
+    # no global GC, every 30s reconcile.
     new_lb_state =
       if state.lb_mod do
         case reconcile_lb(state.lb_mod, state.lb_state, connected) do
@@ -440,10 +447,6 @@ defmodule GRPC.Client.Connection do
       else
         state.lb_state
       end
-
-    if state.lb_mod do
-      Registry.put(state.virtual_channel.ref, {state.lb_mod, new_lb_state})
-    end
 
     if connected == [] do
       Logger.warning("No healthy channels available after re-resolution")
