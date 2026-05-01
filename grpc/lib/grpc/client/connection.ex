@@ -138,11 +138,6 @@ defmodule GRPC.Client.Connection do
             state
           end
 
-        # init/1 crashes skip terminate/2, so publish only after fallible steps.
-        # lb_state (tid + atomics ref) is stable for the life of the connection;
-        # reconcile mutates ETS/atomics in place rather than republishing, so
-        # persistent_term.put fires once per connect — not every 30s — keeping
-        # the global GC pass off the steady-state path.
         :persistent_term.put({__MODULE__, state.virtual_channel.ref}, {state.lb_mod, lb_state})
 
         {:ok, state}
@@ -282,7 +277,6 @@ defmodule GRPC.Client.Connection do
       state.resolver.shutdown(state.resolver_state)
     end
 
-    # Erase first so in-flight picks fail fast instead of racing a dying adapter.
     :persistent_term.erase({__MODULE__, channel.ref})
     disconnect_real_channels(state.real_channels, adapter)
 
@@ -435,9 +429,6 @@ defmodule GRPC.Client.Connection do
   defp rebalance_after_reconcile(_new_addresses, real_channels, state) do
     connected = connected_channels(real_channels)
 
-    # update/2 mutates ETS/atomics in place; the persistent_term entry stays
-    # valid because lb_state's tid + atomics ref don't change. No republish,
-    # no global GC, every 30s reconcile.
     new_lb_state =
       if state.lb_mod do
         case reconcile_lb(state.lb_mod, state.lb_state, connected) do

@@ -1,21 +1,6 @@
 defmodule GRPC.Client.LoadBalancing.RoundRobin do
-  @moduledoc """
-  Round-robin load balancer.
+  @moduledoc "Round-robin load balancer (ETS for the channel tuple, `:atomics` for the cursor)."
 
-  The pick path is fully lock-free:
-
-    * `:atomics.add_get/3` advances the cursor with a hardware CAS — no
-      table-level or key-level lock, unlike `:ets.update_counter/3` which
-      serialises writers on a single key's hash bucket.
-    * The channel tuple lives in a `read_concurrency: true` ETS table and
-      is replaced wholesale on reconcile, so concurrent picks never see a
-      torn list.
-
-  The ETS table is owned by whichever process calls `init/1` (normally the
-  `GRPC.Client.Connection` GenServer), so when that process dies the table
-  is reclaimed automatically. The atomics ref has no owner — it is reclaimed
-  by the GC when the last reference is dropped.
-  """
   @behaviour GRPC.Client.LoadBalancing
 
   @channels_key :channels
@@ -37,8 +22,6 @@ defmodule GRPC.Client.LoadBalancing.RoundRobin do
   end
 
   @impl true
-  # `disconnect/1` may delete the table between a caller's persistent_term
-  # lookup and pick — the rescue turns the BIF crash into a tagged error.
   def pick(%{tid: tid, atomics: aref} = state) do
     case :ets.lookup(tid, @channels_key) do
       [{@channels_key, channels}] when tuple_size(channels) > 0 ->

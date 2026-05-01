@@ -44,9 +44,6 @@ defmodule GRPC.Client.LoadBalancing.PickFirstTest do
       assert {:error, :no_channels} = PickFirst.pick(state)
     end
 
-    # Guards the race where the owning Connection GenServer dies (and BEAM
-    # reclaims the ETS table) between a caller's registry lookup and this
-    # pick — the rescue should turn the BIF crash into a tagged error.
     test "returns :no_channels instead of raising when the table was deleted" do
       {:ok, state} = PickFirst.init(channels: channels([{"a", 1}]))
       :ets.delete(state.tid)

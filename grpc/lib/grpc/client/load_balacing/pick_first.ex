@@ -1,12 +1,6 @@
 defmodule GRPC.Client.LoadBalancing.PickFirst do
-  @moduledoc """
-  Pick-first load balancer: always returns the first channel in the list.
+  @moduledoc "Pick-first load balancer: always returns the first channel in the list."
 
-  Stores the current pick in an ETS table so `update/2` can swap it in
-  place without allocating a new state. The `tid` is stable for the life
-  of the strategy, which lets callers cache `lb_state` across DNS
-  re-resolutions that swap the backend list.
-  """
   @behaviour GRPC.Client.LoadBalancing
 
   @current_key :current

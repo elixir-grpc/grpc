@@ -39,8 +39,6 @@ defmodule GRPC.Client.ConnectionTest do
       adapter: adapter
     } do
       {:ok, first_channel} = Connection.connect(target, adapter: adapter, name: ref)
-
-      # Connecting again with the same ref triggers the :already_started path
       {:ok, second_channel} = Connection.connect(target, adapter: adapter, name: ref)
 
       assert first_channel.ref == second_channel.ref
@@ -58,7 +56,6 @@ defmodule GRPC.Client.ConnectionTest do
       entry = :persistent_term.get(key)
       :persistent_term.erase(key)
 
-      # Calling connect again will hit already_started → pick_channel → :no_connection
       assert {:error, :no_connection} = Connection.connect(target, adapter: adapter, name: ref)
 
       :persistent_term.put(key, entry)
@@ -110,9 +107,6 @@ defmodule GRPC.Client.ConnectionTest do
   end
 
   describe "LB ETS table lifecycle" do
-    # The Connection GenServer owns the LB's ETS table (lb_mod.init runs in
-    # the GenServer), so BEAM reclaims the table automatically when the
-    # process exits — no explicit shutdown callback needed.
     test "disconnect/1 exits the GenServer and the ETS table is freed", %{
       ref: ref,
       target: target,
@@ -129,9 +123,6 @@ defmodule GRPC.Client.ConnectionTest do
 
       {:ok, _} = Connection.disconnect(channel)
 
-      # disconnect replies before the GenServer terminates (via {:continue, :stop}),
-      # so wait for the process to actually exit before asserting BEAM has reclaimed
-      # the table.
       assert_receive {:DOWN, ^ref_mon, :process, ^pid, _reason}, 500
 
       assert :ets.info(tid) == :undefined
@@ -157,10 +148,6 @@ defmodule GRPC.Client.ConnectionTest do
   end
 
   describe "pick_channel/2 races with disconnect/1" do
-    # Concurrent RPCs must never crash when a disconnect is tearing down the
-    # LB state. The pick path's :persistent_term.get falls back to nil when
-    # the entry is gone, and the per-LB pick rescues ArgumentError if the
-    # ETS table is reclaimed mid-pick.
     test "many concurrent picks complete without crashing while disconnect runs", %{
       ref: ref,
       target: target,
@@ -185,21 +172,17 @@ defmodule GRPC.Client.ConnectionTest do
           end)
         end
 
-      # Give pickers a head start so some land before, during, and after.
       Process.sleep(2)
       {:ok, _} = Connection.disconnect(channel)
 
       for _ <- 1..picker_count do
         assert_receive {:done, _, results}, 2_000
 
-        # Every result must be well-shaped — either a valid channel or the
-        # documented error. Anything else means we crashed a caller.
         for r <- results do
           assert match?({:ok, %Channel{}}, r) or r == {:error, :no_connection}
         end
       end
 
-      # And confirm the pickers actually ran to completion.
       for pid <- pickers do
         refute Process.alive?(pid)
       end
@@ -207,10 +190,6 @@ defmodule GRPC.Client.ConnectionTest do
   end
 
   describe "resource leaks over repeated connect/disconnect" do
-    # Mirrors the regression style used in #509 for the persistent_term leak:
-    # cycle connect/disconnect many times and assert zero growth in the
-    # long-lived stores we own (Connection-keyed persistent_term entries +
-    # the count of ETS tables).
     test "500 cycles leave persistent_term clean and no per-LB tables leak", %{
       target: target,
       adapter: adapter
@@ -230,7 +209,6 @@ defmodule GRPC.Client.ConnectionTest do
       assert after_pt_count == before_pt_count,
              "persistent_term leaked: before=#{before_pt_count} after=#{after_pt_count}"
 
-      # Allow small slop for tables the VM may have created incidentally.
       assert after_table_count - before_table_count <= 5,
              "ETS tables leaked: before=#{before_table_count} after=#{after_table_count}"
     end
