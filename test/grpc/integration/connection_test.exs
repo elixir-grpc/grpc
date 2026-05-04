@@ -46,23 +46,15 @@ defmodule GRPC.Integration.ConnectionTest do
     end
   end
 
-  test "disconnect does not crash when real_channels contains failed connections" do
+  test "disconnect does not crash when some channels failed to connect" do
     server = FeatureServer
     {:ok, _, port} = GRPC.Server.start(server, 0)
-    {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
-    # Inject a failed channel entry into the Connection GenServer state
-    conn_pid = :global.whereis_name({GRPC.Client.Connection, channel.ref})
-
-    :sys.replace_state(conn_pid, fn state ->
-      failed_channels =
-        Map.merge(
-          Map.get(state, :real_channels, %{}),
-          %{"unreachable-host:50051" => {:error, :timeout}}
-        )
-
-      Map.put(state, :real_channels, failed_channels)
-    end)
+    # Connect with multiple addresses where one is unreachable.
+    # This produces {:error, _} entries in real_channels via build_real_channels.
+    # retry: 0 prevents Gun from retrying the unreachable address (~5s → <1ms).
+    {:ok, channel} =
+      GRPC.Stub.connect("ipv4:127.0.0.1:#{port},127.0.0.1:1", adapter_opts: [retry: 0])
 
     assert {:ok, _} = GRPC.Stub.disconnect(channel)
     :ok = GRPC.Server.stop(server)
