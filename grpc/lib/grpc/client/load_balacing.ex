@@ -1,12 +1,13 @@
 defmodule GRPC.Client.LoadBalancing do
-  @moduledoc """
-  Load balancing behaviour for gRPC clients.
+  @moduledoc "Load balancing behaviour for gRPC clients."
 
-  This module defines the behaviour that load balancing strategies must implement.
-  """
+  alias GRPC.Channel
+
   @callback init(opts :: keyword()) :: {:ok, state :: any()} | {:error, reason :: any()}
 
   @callback pick(state :: any()) ::
-              {:ok, {host :: String.t(), port :: non_neg_integer()}, new_state :: any()}
-              | {:error, reason :: any()}
+              {:ok, Channel.t(), new_state :: any()} | {:error, reason :: any()}
+
+  @callback update(state :: any(), new_channels :: [Channel.t()]) ::
+              {:ok, new_state :: any()} | {:error, reason :: any()}
 end

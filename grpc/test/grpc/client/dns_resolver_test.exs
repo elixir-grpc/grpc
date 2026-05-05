@@ -27,6 +27,7 @@ defmodule GRPC.Client.ReResolveTest do
   use GRPC.Client.DataCase, async: false
   import Mox
 
+  alias GRPC.Channel
   alias GRPC.Client.Connection
 
   @resolve_interval 200
@@ -426,6 +427,134 @@ defmodule GRPC.Client.ReResolveTest do
       assert {:ok, picked} = Connection.pick_channel(channel)
       assert picked.host in ["10.0.0.1", "10.0.0.2"]
       assert picked.port == 50051
+
+      disconnect_and_wait(channel)
+    end
+  end
+
+  describe "pick_first reconciliation" do
+    test "pick_channel returns the new backend after DNS replaces it", ctx do
+      {:ok, channel} =
+        connect_with_resolver(
+          ctx.ref,
+          ctx.resolver,
+          ctx.adapter,
+          [%{address: "10.0.0.1", port: 50051}],
+          []
+        )
+
+      {:ok, before} = Connection.pick_channel(channel)
+      assert before.host == "10.0.0.1"
+
+      stub(ctx.resolver, :resolve, fn _target ->
+        {:ok, %{addresses: [%{address: "10.0.0.9", port: 50051}], service_config: nil}}
+      end)
+
+      Process.sleep(@wait)
+
+      {:ok, picked} = Connection.pick_channel(channel)
+      assert picked.host == "10.0.0.9"
+
+      disconnect_and_wait(channel)
+    end
+  end
+
+  describe "pick_channel during shrinking reconcile" do
+    test "concurrent picks stay correct while backends are removed", ctx do
+      large =
+        for i <- 1..8, do: %{address: "10.0.0.#{i}", port: 50051}
+
+      {:ok, channel} =
+        connect_with_resolver(
+          ctx.ref,
+          ctx.resolver,
+          ctx.adapter,
+          large,
+          lb_policy: :round_robin
+        )
+
+      small = [
+        %{address: "10.0.0.1", port: 50051},
+        %{address: "10.0.0.2", port: 50051}
+      ]
+
+      parent = self()
+      picker_count = 30
+      picks_per_proc = 200
+
+      pickers =
+        for i <- 1..picker_count do
+          spawn_link(fn ->
+            results =
+              for _ <- 1..picks_per_proc do
+                Connection.pick_channel(channel)
+              end
+
+            send(parent, {:done, i, results})
+          end)
+        end
+
+      stub(ctx.resolver, :resolve, fn _target ->
+        {:ok, %{addresses: small, service_config: nil}}
+      end)
+
+      Process.sleep(@wait)
+
+      for _ <- 1..picker_count do
+        assert_receive {:done, _, results}, 2_000
+
+        for r <- results do
+          assert match?({:ok, %Channel{}}, r),
+                 "pick returned #{inspect(r)} — expected {:ok, %Channel{}}"
+        end
+      end
+
+      Process.sleep(@wait)
+
+      hosts =
+        for _ <- 1..20 do
+          {:ok, picked} = Connection.pick_channel(channel)
+          picked.host
+        end
+
+      assert Enum.all?(hosts, &(&1 in ["10.0.0.1", "10.0.0.2"])),
+             "picked from an already-removed backend: #{inspect(hosts)}"
+
+      for pid <- pickers do
+        refute Process.alive?(pid)
+      end
+
+      disconnect_and_wait(channel)
+    end
+  end
+
+  describe "pick_channel per-request rotation" do
+    test "round-robin rotates across all backends on successive picks", ctx do
+      {:ok, channel} =
+        connect_with_resolver(
+          ctx.ref,
+          ctx.resolver,
+          ctx.adapter,
+          [
+            %{address: "10.0.0.1", port: 50051},
+            %{address: "10.0.0.2", port: 50051},
+            %{address: "10.0.0.3", port: 50051}
+          ],
+          lb_policy: :round_robin
+        )
+
+      hosts =
+        for _ <- 1..9 do
+          {:ok, picked} = Connection.pick_channel(channel)
+          picked.host
+        end
+
+      assert Enum.sort(Enum.uniq(hosts)) == ["10.0.0.1", "10.0.0.2", "10.0.0.3"]
+
+      counts = Enum.frequencies(hosts)
+      assert counts["10.0.0.1"] == 3
+      assert counts["10.0.0.2"] == 3
+      assert counts["10.0.0.3"] == 3
 
       disconnect_and_wait(channel)
     end
@@ -839,7 +968,7 @@ defmodule GRPC.Client.ReResolveTest do
     end
   end
 
-  describe "stale persistent_term prevention" do
+  describe "unhealthy-pick fallback" do
     setup ctx do
       Application.put_env(:grpc, :grpc_test_failing_hosts, ["10.0.0.99"])
       on_exit(fn -> Application.delete_env(:grpc, :grpc_test_failing_hosts) end)
@@ -1153,19 +1282,38 @@ defmodule GRPC.Client.ReResolveTest do
       original_pid = state.resolver_state.worker_pid
       assert Process.alive?(original_pid)
 
-      # Kill the worker — Connection traps exits and should re-init
       Process.exit(original_pid, :kill)
       Process.sleep(100)
 
       conn_pid = :global.whereis_name({Connection, ctx.ref})
       assert Process.alive?(conn_pid)
 
-      # resolver_state should have a NEW worker pid
       state = get_state(ctx.ref)
       assert state.resolver_state != nil
       assert state.resolver_state.worker_pid != original_pid
       assert Process.alive?(state.resolver_state.worker_pid)
 
+      assert {:ok, _} = Connection.pick_channel(channel)
+
+      disconnect_and_wait(channel)
+    end
+
+    test "unrelated :EXIT signals don't stop the Connection", ctx do
+      {:ok, channel} =
+        connect_with_resolver(
+          ctx.ref,
+          ctx.resolver,
+          ctx.adapter,
+          [%{address: "10.0.0.1", port: 50051}],
+          lb_policy: :round_robin
+        )
+
+      conn_pid = :global.whereis_name({Connection, ctx.ref})
+      stray_pid = spawn(fn -> :ok end)
+      send(conn_pid, {:EXIT, stray_pid, :boom})
+
+      Process.sleep(50)
+      assert Process.alive?(conn_pid)
       assert {:ok, _} = Connection.pick_channel(channel)
 
       disconnect_and_wait(channel)
