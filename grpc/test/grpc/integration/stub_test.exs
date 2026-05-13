@@ -30,6 +30,13 @@ defmodule GRPC.Integration.StubTest do
     end)
   end
 
+  defp whereis_name(ref) do
+    case Registry.lookup(GRPC.Client.Registry, {GRPC.Client.Connection, ref}) do
+      [{pid, _value}] -> pid
+      [] -> nil
+    end
+  end
+
   test "you can disconnect stubs" do
     run_server(HelloServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
@@ -101,7 +108,7 @@ defmodule GRPC.Integration.StubTest do
       assert_receive {:DOWN, ^caller_ref, :process, ^caller_pid, :normal}
 
       named_channel = %GRPC.Channel{ref: channel_name}
-      manager_pid = :global.whereis_name({GRPC.Client.Connection, channel_name})
+      manager_pid = whereis_name(channel_name)
 
       assert is_pid(manager_pid)
       assert Process.alive?(manager_pid)
