@@ -65,9 +65,16 @@ defmodule GRPC.Client.ReResolveTest do
     }
   end
 
+  defp whereis_name(ref) do
+    case Registry.lookup(GRPC.Client.Registry, {Connection, ref}) do
+      [{pid, _value}] -> pid
+      [] -> nil
+    end
+  end
+
   defp disconnect_and_wait(channel) do
     ref = channel.ref
-    pid = :global.whereis_name({Connection, ref})
+    pid = whereis_name(ref)
 
     if pid && Process.alive?(pid) do
       state = :sys.get_state(pid)
@@ -135,7 +142,7 @@ defmodule GRPC.Client.ReResolveTest do
   end
 
   defp get_state(ref) do
-    pid = :global.whereis_name({Connection, ref})
+    pid = whereis_name(ref)
     :sys.get_state(pid)
   end
 
@@ -1212,7 +1219,7 @@ defmodule GRPC.Client.ReResolveTest do
 
       # Wait for several :refresh cycles (15s default, but we'll trigger manually).
       # Round-robin will eventually pick 10.0.0.2. Without the fix, this crashes.
-      pid = :global.whereis_name({Connection, ctx.ref})
+      pid = whereis_name(ctx.ref)
 
       for _ <- 1..5 do
         send(pid, :refresh)
@@ -1285,7 +1292,7 @@ defmodule GRPC.Client.ReResolveTest do
       Process.exit(original_pid, :kill)
       Process.sleep(100)
 
-      conn_pid = :global.whereis_name({Connection, ctx.ref})
+      conn_pid = whereis_name(ctx.ref)
       assert Process.alive?(conn_pid)
 
       state = get_state(ctx.ref)
@@ -1308,7 +1315,7 @@ defmodule GRPC.Client.ReResolveTest do
           lb_policy: :round_robin
         )
 
-      conn_pid = :global.whereis_name({Connection, ctx.ref})
+      conn_pid = whereis_name(ctx.ref)
       stray_pid = spawn(fn -> :ok end)
       send(conn_pid, {:EXIT, stray_pid, :boom})
 
