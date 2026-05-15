@@ -24,8 +24,9 @@ defmodule GRPC.Client.Adapters.GunTest do
       channel = build(:channel, port: port, host: "localhost", cred: credential)
 
       assert {:ok, result} = Gun.connect(channel, [])
-
-      assert %{channel | adapter_payload: %{conn_pid: result.adapter_payload.conn_pid}} == result
+      assert %{conn_pid: conn_pid} = result.adapter_payload
+      assert is_pid(conn_pid)
+      assert %{channel | adapter_payload: %{conn_pid: conn_pid}} == result
     end
 
     test "connects insecurely (custom options)", %{port: port, credential: credential} do
@@ -33,7 +34,9 @@ defmodule GRPC.Client.Adapters.GunTest do
 
       # Ensure that it works
       assert {:ok, result} = Gun.connect(channel, transport_opts: [ip: :loopback])
-      assert %{channel | adapter_payload: %{conn_pid: result.adapter_payload.conn_pid}} == result
+      assert %{conn_pid: conn_pid} = result.adapter_payload
+      assert is_pid(conn_pid)
+      assert %{channel | adapter_payload: %{conn_pid: conn_pid}} == result
 
       # Ensure that changing one of the options breaks things
       assert {:error, {:down, :badarg}} ==
@@ -50,8 +53,9 @@ defmodule GRPC.Client.Adapters.GunTest do
         )
 
       assert {:ok, result} = Gun.connect(channel, tls_opts: channel.cred.ssl)
-
-      assert %{channel | adapter_payload: %{conn_pid: result.adapter_payload.conn_pid}} == result
+      assert %{conn_pid: conn_pid} = result.adapter_payload
+      assert is_pid(conn_pid)
+      assert %{channel | adapter_payload: %{conn_pid: conn_pid}} == result
     end
 
     test "connects securely (custom options)", %{port: port, credential: credential} do
@@ -73,7 +77,9 @@ defmodule GRPC.Client.Adapters.GunTest do
                  ]
                )
 
-      assert %{channel | adapter_payload: %{conn_pid: result.adapter_payload.conn_pid}} == result
+      assert %{conn_pid: conn_pid} = result.adapter_payload
+      assert is_pid(conn_pid)
+      assert %{channel | adapter_payload: %{conn_pid: conn_pid}} == result
 
       # Ensure that changing one of the options breaks things
       assert {:error, :timeout} ==
@@ -95,8 +101,8 @@ defmodule GRPC.Client.Adapters.GunTest do
       channel = build(:channel, port: port, host: "localhost", cred: credential)
 
       {:ok, connected} = Gun.connect(channel, [])
-      assert %{conn_pid: pid} = connected.adapter_payload
-      assert is_pid(pid)
+      assert %{conn_pid: conn_pid} = connected.adapter_payload
+      assert is_pid(conn_pid)
 
       {:ok, disconnected} = Gun.disconnect(connected)
 

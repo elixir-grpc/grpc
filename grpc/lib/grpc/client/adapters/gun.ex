@@ -1,9 +1,10 @@
 if Code.ensure_loaded?(:gun) do
   defmodule GRPC.Client.Adapters.Gun do
     @moduledoc """
-    A client adapter using Gun
+    A client adapter using Gun.
 
-    `conn_pid` and `stream_ref` are stored in `GRPC.Server.Stream`.
+    `conn_pid` stores the adapter-managed connection process pid and per-request
+    `stream_ref` values are stored in `GRPC.Client.Stream`.
 
     This adapter requires a compatible version of `:gun` to use. Add `:gun` to
     your project's dependencies, then recompile `:grpc`:
@@ -15,6 +16,8 @@ if Code.ensure_loaded?(:gun) do
     """
 
     @behaviour GRPC.Client.Adapter
+
+    alias GRPC.Client.Adapters.Gun.ConnectionProcess
 
     @default_tcp_opts [nodelay: true]
     @max_retries 100
@@ -69,29 +72,22 @@ if Code.ensure_loaded?(:gun) do
       do_connect(channel, open_opts)
     end
 
-    defp do_connect(%{host: host, port: port} = channel, open_opts) do
+    defp do_connect(channel, open_opts) do
       open_opts = Map.merge(%{retry: @max_retries, retry_fun: &__MODULE__.retry_fun/2}, open_opts)
 
-      {:ok, conn_pid} = open(host, port, open_opts)
-
-      case :gun.await_up(conn_pid) do
-        {:ok, :http2} ->
-          {:ok, Map.put(channel, :adapter_payload, %{conn_pid: conn_pid})}
-
-        {:ok, proto} ->
-          :gun.shutdown(conn_pid)
-          {:error, "Error when opening connection: protocol #{proto} is not http2"}
+      case ConnectionProcess.connect(channel, open_opts) do
+        {:ok, adapter_payload} ->
+          {:ok, Map.put(channel, :adapter_payload, adapter_payload)}
 
         {:error, reason} ->
-          :gun.shutdown(conn_pid)
           {:error, reason}
       end
     end
 
     @impl true
-    def disconnect(%{adapter_payload: %{conn_pid: gun_pid}} = channel)
-        when is_pid(gun_pid) do
-      :ok = :gun.shutdown(gun_pid)
+    def disconnect(%{adapter_payload: %{conn_pid: conn_pid}} = channel)
+        when is_pid(conn_pid) do
+      :ok = ConnectionProcess.disconnect(conn_pid)
       {:ok, %{channel | adapter_payload: %{conn_pid: nil}}}
     end
 
@@ -99,16 +95,13 @@ if Code.ensure_loaded?(:gun) do
       {:ok, channel}
     end
 
-    defp open({:local, socket_path}, _port, open_opts),
-      do: :gun.open_unix(socket_path, open_opts)
-
-    defp open(host, port, open_opts),
-      do: :gun.open(parse_address(host), port, open_opts)
-
     @impl true
     def send_request(stream, message, opts) do
-      stream_ref = do_send_request(stream, message, opts)
-      GRPC.Client.Stream.put_payload(stream, :stream_ref, stream_ref)
+      {stream_ref, response_pid} = do_send_request(stream, message, opts)
+
+      stream
+      |> GRPC.Client.Stream.put_payload(:stream_ref, stream_ref)
+      |> GRPC.Client.Stream.put_payload(:response_pid, response_pid)
     end
 
     defp do_send_request(
@@ -118,7 +111,11 @@ if Code.ensure_loaded?(:gun) do
          ) do
       headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
       {:ok, data, _} = GRPC.Message.to_data(message, opts)
-      :gun.post(conn_pid, path, headers, data)
+
+      {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} =
+        ConnectionProcess.request(conn_pid, path, headers, data)
+
+      {stream_ref, response_pid}
     end
 
     @impl true
@@ -127,8 +124,13 @@ if Code.ensure_loaded?(:gun) do
           opts
         ) do
       headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
-      stream_ref = :gun.post(conn_pid, path, headers)
-      GRPC.Client.Stream.put_payload(stream, :stream_ref, stream_ref)
+
+      {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} =
+        ConnectionProcess.open_stream(conn_pid, path, headers)
+
+      stream
+      |> GRPC.Client.Stream.put_payload(:stream_ref, stream_ref)
+      |> GRPC.Client.Stream.put_payload(:response_pid, response_pid)
     end
 
     @impl true
@@ -136,14 +138,14 @@ if Code.ensure_loaded?(:gun) do
       conn_pid = channel.adapter_payload[:conn_pid]
       fin = if opts[:send_end_stream], do: :fin, else: :nofin
       {:ok, data, _} = GRPC.Message.to_data(message, opts)
-      :gun.data(conn_pid, stream_ref, fin, data)
+      :ok = ConnectionProcess.send_data(conn_pid, stream_ref, fin, data)
       stream
     end
 
     @impl true
     def end_stream(%{channel: channel, payload: %{stream_ref: stream_ref}} = stream) do
       conn_pid = channel.adapter_payload[:conn_pid]
-      :gun.data(conn_pid, stream_ref, :fin, "")
+      :ok = ConnectionProcess.send_data(conn_pid, stream_ref, :fin, "")
       stream
     end
 
@@ -154,7 +156,7 @@ if Code.ensure_loaded?(:gun) do
         payload: %{stream_ref: stream_ref}
       } = stream
 
-      :gun.cancel(conn_pid, stream_ref)
+      ConnectionProcess.cancel(conn_pid, stream_ref)
     end
 
     @impl true
@@ -162,9 +164,9 @@ if Code.ensure_loaded?(:gun) do
           %{server_stream: true} = stream,
           opts
         ) do
-      %{channel: %{adapter_payload: adapter_payload}, payload: payload} = stream
+      %{payload: payload} = stream
 
-      case recv_headers(adapter_payload, payload, opts) do
+      case recv_headers(payload, opts) do
         {:ok, headers, :fin} ->
           handle_fin_response(headers, opts)
 
@@ -177,14 +179,14 @@ if Code.ensure_loaded?(:gun) do
     end
 
     def receive_data(stream, opts) do
-      %{payload: payload, channel: %{adapter_payload: adapter_payload}} = stream
+      %{payload: payload} = stream
 
-      case recv_headers(adapter_payload, payload, opts) do
+      case recv_headers(payload, opts) do
         {:ok, headers, :fin} ->
           handle_fin_response(headers, opts)
 
         {:ok, headers, :nofin} ->
-          handle_nofin_response(adapter_payload, payload, stream, headers, opts)
+          handle_nofin_response(payload, stream, headers, opts)
 
         {:error, _} = error ->
           error
@@ -212,9 +214,9 @@ if Code.ensure_loaded?(:gun) do
       end
     end
 
-    defp handle_nofin_response(adapter_payload, payload, stream, headers, opts) do
+    defp handle_nofin_response(payload, stream, headers, opts) do
       # Regular response: fetch body and trailers
-      with {:ok, body, trailers} <- recv_body(adapter_payload, payload, opts),
+      with {:ok, body, trailers} <- recv_body(payload, opts),
            {:ok, response, embedded_trailers} <- parse_response(stream, headers, body, trailers) do
         if opts[:return_headers] do
           all_trailers = Map.merge(trailers, embedded_trailers)
@@ -230,8 +232,8 @@ if Code.ensure_loaded?(:gun) do
       end
     end
 
-    defp recv_headers(%{conn_pid: conn_pid}, %{stream_ref: stream_ref}, opts) do
-      case await(conn_pid, stream_ref, opts[:timeout]) do
+    defp recv_headers(%{response_pid: response_pid}, opts) do
+      case await(response_pid, opts[:timeout]) do
         {:response, headers, fin} ->
           {:ok, headers, fin}
 
@@ -247,8 +249,8 @@ if Code.ensure_loaded?(:gun) do
       end
     end
 
-    defp recv_data_or_trailers(%{conn_pid: conn_pid}, %{stream_ref: stream_ref}, opts) do
-      case await(conn_pid, stream_ref, opts[:timeout]) do
+    defp recv_data_or_trailers(%{response_pid: response_pid}, opts) do
+      case await(response_pid, opts[:timeout]) do
         data = {:data, _} ->
           data
 
@@ -267,7 +269,7 @@ if Code.ensure_loaded?(:gun) do
       end
     end
 
-    defp await(conn_pid, stream_ref, timeout) do
+    defp await(response_pid, timeout) do
       # We should use server timeout for most time
       timeout =
         if is_integer(timeout) do
@@ -276,7 +278,7 @@ if Code.ensure_loaded?(:gun) do
           timeout
         end
 
-      case :gun.await(conn_pid, stream_ref, timeout) do
+      case GRPC.Client.Adapters.Gun.StreamResponseProcess.await(response_pid, timeout) do
         {:response, :fin, status, headers} ->
           if status == 200 do
             headers = GRPC.Transport.HTTP2.decode_headers(headers)
@@ -355,14 +357,14 @@ if Code.ensure_loaded?(:gun) do
       %{retries: retries - 1, timeout: timeout}
     end
 
-    defp recv_body(conn_payload, stream_payload, opts) do
-      recv_body(conn_payload, stream_payload, "", opts)
+    defp recv_body(stream_payload, opts) do
+      recv_body(stream_payload, "", opts)
     end
 
-    defp recv_body(conn_payload, stream_payload, acc, opts) do
-      case recv_data_or_trailers(conn_payload, stream_payload, opts) do
+    defp recv_body(stream_payload, acc, opts) do
+      case recv_data_or_trailers(stream_payload, opts) do
         {:data, data} ->
-          recv_body(conn_payload, stream_payload, <<acc::binary, data::binary>>, opts)
+          recv_body(stream_payload, <<acc::binary, data::binary>>, opts)
 
         {:trailers, trailers} ->
           {:ok, acc, GRPC.Transport.HTTP2.decode_headers(trailers)}
@@ -375,7 +377,6 @@ if Code.ensure_loaded?(:gun) do
     defp response_stream(
            :nofin,
            %{
-             channel: %{adapter_payload: ap},
              response_mod: res_mod,
              codec: codec,
              payload: payload
@@ -383,7 +384,6 @@ if Code.ensure_loaded?(:gun) do
            opts
          ) do
       state = %{
-        adapter_payload: ap,
         payload: payload,
         buffer: <<>>,
         fin: false,
@@ -403,14 +403,13 @@ if Code.ensure_loaded?(:gun) do
 
     defp read_stream(
            %{
-             adapter_payload: ap,
              payload: payload,
              buffer: buffer,
              need_more: true,
              opts: opts
            } = stream
          ) do
-      case recv_data_or_trailers(ap, payload, opts) do
+      case recv_data_or_trailers(payload, opts) do
         {:data, data} ->
           stream
           |> Map.put(:need_more, false)
@@ -502,15 +501,6 @@ if Code.ensure_loaded?(:gun) do
           })
 
         {:error, rpc_error}
-      end
-    end
-
-    defp parse_address(host) do
-      host = String.to_charlist(host)
-
-      case :inet.parse_address(host) do
-        {:ok, address} -> address
-        {:error, _} -> host
       end
     end
 
