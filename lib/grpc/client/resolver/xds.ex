@@ -1,4 +1,5 @@
 defmodule GRPC.Client.Resolver.XDS do
+  @moduledoc false
   @behaviour GRPC.Client.Resolver
 
   @impl GRPC.Client.Resolver

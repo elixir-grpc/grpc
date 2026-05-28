@@ -4,8 +4,12 @@ defmodule GRPC.Integration.ServerTest do
   defmodule FeatureServer do
     use GRPC.Server, service: Routeguide.RouteGuide.Service
 
-    def get_feature(point, _stream) do
-      %Routeguide.Feature{location: point, name: "#{point.latitude},#{point.longitude}"}
+    def get_feature(point, materializer) do
+      GRPC.Stream.unary(point, materializer: materializer)
+      |> GRPC.Stream.map(fn point ->
+        %Routeguide.Feature{location: point, name: "#{point.latitude},#{point.longitude}"}
+      end)
+      |> GRPC.Stream.run()
     end
 
     def route_chat(_ex_stream, stream) do
@@ -32,19 +36,25 @@ defmodule GRPC.Integration.ServerTest do
       service: Transcode.Messaging.Service,
       http_transcode: true
 
-    def get_message(msg_request, _stream) do
-      %Transcode.Message{name: msg_request.name, text: "get_message"}
+    def get_message(msg_request, stream) do
+      GRPC.Stream.unary(msg_request, materializer: stream)
+      |> GRPC.Stream.map(fn req ->
+        %Transcode.Message{name: req.name, text: "get_message"}
+      end)
+      |> GRPC.Stream.run()
     end
 
-    def stream_messages(msg_request, stream) do
-      Enum.each(1..5, fn i ->
-        msg = %Transcode.Message{
+    def stream_messages(msg_request, materializer) do
+      1..5
+      |> Stream.take(5)
+      |> GRPC.Stream.from()
+      |> GRPC.Stream.map(fn i ->
+        %Transcode.Message{
           name: msg_request.name,
           text: "#{i}"
         }
-
-        GRPC.Server.send_reply(stream, msg)
       end)
+      |> GRPC.Stream.run_with(materializer)
     end
 
     def create_message(msg, _stream) do
@@ -62,24 +72,33 @@ defmodule GRPC.Integration.ServerTest do
       msg_request.message
     end
 
-    def get_message_with_response_body(msg_request, _) do
-      %Transcode.MessageOut{
-        response: %Transcode.Message{
-          name: msg_request.name,
-          text: "get_message_with_response_body"
+    def get_message_with_response_body(msg_request, materializer) do
+      GRPC.Stream.unary(msg_request, materializer: materializer)
+      |> GRPC.Stream.map(fn req ->
+        %Transcode.MessageOut{
+          response: %Transcode.Message{
+            name: req.name,
+            text: "get_message_with_response_body"
+          }
         }
-      }
+      end)
+      |> GRPC.Stream.run()
     end
 
-    def get_message_with_query(msg_request, _stream) do
-      %Transcode.Message{name: msg_request.name, text: "get_message_with_query"}
+    def get_message_with_query(msg_request, materializer) do
+      GRPC.Stream.unary(msg_request, materializer: materializer)
+      |> GRPC.Stream.map(fn req ->
+        %Transcode.Message{name: req.name, text: "get_message_with_query"}
+      end)
+      |> GRPC.Stream.run()
     end
 
-    def get_message_with_subpath_query(msg_request, _stream) do
-      %Transcode.Message{
-        name: msg_request.message.name,
-        text: "get_message_with_subpath_query"
-      }
+    def get_message_with_subpath_query(msg_request, materializer) do
+      GRPC.Stream.unary(msg_request, materializer: materializer)
+      |> GRPC.Stream.map(fn req ->
+        %Transcode.Message{name: req.message.name, text: "get_message_with_subpath_query"}
+      end)
+      |> GRPC.Stream.run()
     end
   end
 
@@ -168,13 +187,14 @@ defmodule GRPC.Integration.ServerTest do
   defmodule SlowServer do
     use GRPC.Server, service: Routeguide.RouteGuide.Service
 
-    def list_features(rectangle, stream) do
+    def list_features(rectangle, materializer) do
       Process.sleep(400)
+      server_stream = Stream.each([rectangle.lo, rectangle.hi], fn point -> point end)
 
-      Enum.each([rectangle.lo, rectangle.hi], fn point ->
-        feature = simple_feature(point)
-        GRPC.Server.send_reply(stream, feature)
-      end)
+      server_stream
+      |> GRPC.Stream.from()
+      |> GRPC.Stream.map(&simple_feature/1)
+      |> GRPC.Stream.run_with(materializer)
     end
 
     defp simple_feature(point) do
@@ -185,6 +205,16 @@ defmodule GRPC.Integration.ServerTest do
   defmodule HTTP1Server do
     def init(req, state) do
       {:ok, :cowboy_req.reply(200, %{}, "OK", req), state}
+    end
+  end
+
+  defmodule ExceptionLogFilter do
+    def always_allow(_exception) do
+      true
+    end
+
+    def never_allow(_exception) do
+      false
     end
   end
 
@@ -255,6 +285,110 @@ defmodule GRPC.Integration.ServerTest do
       end)
 
     assert logs =~ "Exception raised while handling /helloworld.Greeter/SayHello"
+  end
+
+  test "logs error if exception_log_filter returns true" do
+    logs =
+      ExUnit.CaptureLog.capture_log(fn ->
+        run_server(
+          [HelloErrorServer],
+          fn port ->
+            {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+            req = %Helloworld.HelloRequest{name: "unknown error"}
+            Helloworld.Greeter.Stub.say_hello(channel, req)
+          end,
+          0,
+          exception_log_filter: {ExceptionLogFilter, :always_allow}
+        )
+      end)
+
+    assert logs =~ "Exception raised while handling /helloworld.Greeter/SayHello"
+  end
+
+  test "does not log error if exception_log_filter returns false" do
+    logs =
+      ExUnit.CaptureLog.capture_log(fn ->
+        run_server(
+          [HelloErrorServer],
+          fn port ->
+            {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+            req = %Helloworld.HelloRequest{name: "unknown error"}
+            Helloworld.Greeter.Stub.say_hello(channel, req)
+          end,
+          0,
+          exception_log_filter: {TestFalseFilter, :never_allow}
+        )
+      end)
+
+    refute logs =~ "Exception raised while handling /helloworld.Greeter/SayHello"
+  end
+
+  defmodule ExceptionFilterMustBeRPCError do
+    def filter(exception) do
+      data = exception.adapter_extra[:req][:headers]["test-data"]
+
+      {pid, ref} = :erlang.binary_to_term(data)
+      send(pid, {:exception_log_filter, ref, exception})
+
+      true
+    end
+  end
+
+  test "passes RPCErrors to `exception_log_filter" do
+    test_pid = self()
+    ref = make_ref()
+
+    run_server(
+      [HelloErrorServer],
+      fn port ->
+        {:ok, channel} =
+          GRPC.Stub.connect("localhost:#{port}",
+            headers: [{"test-data", :erlang.term_to_binary({test_pid, ref})}]
+          )
+
+        req = %Helloworld.HelloRequest{name: "world"}
+        Helloworld.Greeter.Stub.say_hello(channel, req)
+      end,
+      0,
+      exception_log_filter: {ExceptionFilterMustBeRPCError, :filter}
+    )
+
+    assert_receive {:exception_log_filter, ^ref,
+                    %GRPC.Server.Adapters.ReportException{reason: %GRPC.RPCError{}}}
+  end
+
+  defmodule ExceptionFilterMustBeRaisedError do
+    def filter(exception) do
+      data = exception.adapter_extra[:req][:headers]["test-data"]
+
+      {pid, ref} = :erlang.binary_to_term(data)
+      send(pid, {:exception_log_filter, ref, exception})
+
+      true
+    end
+  end
+
+  test "passes thrown exceptions to `exception_log_filter" do
+    test_pid = self()
+    ref = make_ref()
+
+    run_server(
+      [HelloErrorServer],
+      fn port ->
+        {:ok, channel} =
+          GRPC.Stub.connect("localhost:#{port}",
+            headers: [{"test-data", :erlang.term_to_binary({test_pid, ref})}]
+          )
+
+        req = %Helloworld.HelloRequest{name: "unknown error", duration: 0}
+        Helloworld.Greeter.Stub.say_hello(channel, req)
+      end,
+      0,
+      exception_log_filter: {ExceptionFilterMustBeRaisedError, :filter}
+    )
+
+    assert_receive {:exception_log_filter, ^ref,
+                    %GRPC.Server.Adapters.ReportException{reason: %RuntimeError{}}}
   end
 
   test "returns appropriate error for stream requests" do

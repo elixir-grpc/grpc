@@ -10,7 +10,14 @@ defmodule GRPC.Integration.TestCase do
   end
 
   def run_server(servers, func, port \\ 0, opts \\ []) do
-    {:ok, _pid, port} = GRPC.Server.start(servers, port, opts)
+    {:ok, _pid, port} =
+      start_supervised(%{
+        id: {GRPC.Server, System.unique_integer([:positive])},
+        start: {GRPC.Server, :start, [servers, port, opts]},
+        type: :worker,
+        restart: :permanent,
+        shutdown: 500
+      })
 
     try do
       func.(port)
@@ -20,7 +27,14 @@ defmodule GRPC.Integration.TestCase do
   end
 
   def run_endpoint(endpoint, func, port \\ 0) do
-    {:ok, _pid, port} = GRPC.Server.start_endpoint(endpoint, port)
+    {:ok, _pid, port} =
+      start_supervised(%{
+        id: {GRPC.Server, System.unique_integer([:positive])},
+        start: {GRPC.Server, :start_endpoint, [endpoint, port]},
+        type: :worker,
+        restart: :permanent,
+        shutdown: 500
+      })
 
     try do
       func.(port)

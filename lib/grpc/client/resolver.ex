@@ -2,8 +2,8 @@ defmodule GRPC.Client.Resolver do
   @moduledoc """
   Behaviour for gRPC client resolvers.
 
-  A gRPC resolver is responsible for translating a **target string** into
-  a list of connection endpoints (addresses) and an optional `ServiceConfig`.
+  A gRPC resolver is responsible for translating a target string into
+  a list of connection endpoints (addresses) and an optional `GRPC.Client.ServiceConfig`.
 
   gRPC supports multiple naming schemes, allowing clients to connect
   to servers via DNS, fixed IPs, Unix domain sockets, or through

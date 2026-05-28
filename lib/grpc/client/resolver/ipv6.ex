@@ -9,7 +9,7 @@ defmodule GRPC.Client.Resolver.IPv6 do
 
       ipv6:[addr][:port][,[addr][:port],...]
 
-  - IPv6 addresses **must** be enclosed in square brackets (`[...]`).
+  - IPv6 addresses must be enclosed in square brackets (`[...]`).
   - The port is optional; if not provided, the default port is `443`.
   - Multiple addresses can be comma-separated.
   - `service_config` is always `nil` as IPv6 literals do not support DNS TXT or xDS.

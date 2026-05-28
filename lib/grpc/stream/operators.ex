@@ -9,9 +9,9 @@ defmodule GRPC.Stream.Operators do
   @type reason :: any()
 
   @spec ask(GRPCStream.t(), pid | atom, non_neg_integer) ::
-          GRPCStream.t() | {:error, any(), :timeout | :not_alive}
+          GRPCStream.t() | {:error, :timeout | :process_not_alive}
   def ask(%GRPCStream{flow: flow} = stream, target, timeout \\ 5000) do
-    mapper = fn item -> do_ask(item, target, timeout, raise_on_error: false) end
+    mapper = fn item -> safe_invoke(&do_ask(&1, target, timeout, raise_on_error: false), item) end
     %GRPCStream{stream | flow: Flow.map(flow, mapper)}
   end
 
@@ -33,7 +33,7 @@ defmodule GRPC.Stream.Operators do
         raise "Target #{inspect(target)} is not alive. Cannot send request to it."
 
       is_nil(resolved_target) ->
-        {:error, item, :not_alive}
+        {:error, :process_not_alive}
 
       true ->
         send(resolved_target, {:request, item, self()})
@@ -45,25 +45,45 @@ defmodule GRPC.Stream.Operators do
             if raise? do
               raise "Timeout waiting for response from #{inspect(target)}"
             else
-              {:error, item, :timeout}
+              {:error, :timeout}
             end
         end
     end
   end
 
+  @spec effect(GRPCStream.t(), (term -> term())) :: GRPCStream.t()
+  def effect(%GRPCStream{flow: flow} = stream, effect_fun) when is_function(effect_fun, 1) do
+    flow =
+      Flow.map(flow, fn flow_item ->
+        tap(flow_item, fn item -> safe_invoke(effect_fun, item) end)
+      end)
+
+    %GRPCStream{stream | flow: flow}
+  end
+
   @spec filter(GRPCStream.t(), (term -> term)) :: GRPCStream.t()
   def filter(%GRPCStream{flow: flow} = stream, filter) do
-    %GRPCStream{stream | flow: Flow.filter(flow, filter)}
+    flow_wrapper = Flow.filter(flow, fn item -> safe_invoke(filter, item) end)
+    %GRPCStream{stream | flow: flow_wrapper}
   end
 
   @spec flat_map(GRPCStream.t(), (term -> Enumerable.GRPCStream.t())) :: GRPCStream.t()
   def flat_map(%GRPCStream{flow: flow} = stream, flat_mapper) do
-    %GRPCStream{stream | flow: Flow.flat_map(flow, flat_mapper)}
+    flow_wrapper =
+      Flow.flat_map(flow, fn item ->
+        case safe_invoke(flat_mapper, item) do
+          {:error, reason} -> [{:error, reason}]
+          res -> res
+        end
+      end)
+
+    %GRPCStream{stream | flow: flow_wrapper}
   end
 
   @spec map(GRPCStream.t(), (term -> term)) :: GRPCStream.t()
   def map(%GRPCStream{flow: flow} = stream, mapper) do
-    %GRPCStream{stream | flow: Flow.map(flow, mapper)}
+    flow_wrapper = Flow.map(flow, fn item -> safe_invoke(mapper, item) end)
+    %GRPCStream{stream | flow: flow_wrapper}
   end
 
   @spec map_with_context(GRPCStream.t(), (map(), term -> term)) :: GRPCStream.t()
@@ -73,7 +93,37 @@ defmodule GRPC.Stream.Operators do
       mapper.(meta, item)
     end
 
-    %GRPCStream{stream | flow: Flow.map(flow, wrapper)}
+    flow_wrapper = Flow.map(flow, fn item -> safe_invoke(wrapper, item) end)
+
+    %GRPCStream{stream | flow: flow_wrapper}
+  end
+
+  @spec map_error(GRPCStream.t(), (reason -> term)) :: GRPCStream.t()
+  def map_error(%GRPCStream{flow: flow} = stream, func) when is_function(func, 1) do
+    mapper =
+      Flow.map(flow, fn
+        {:error, reason} -> handle_error(func, reason)
+        {:ok, value} -> value
+        other -> other
+      end)
+
+    %GRPCStream{stream | flow: mapper}
+  end
+
+  defp handle_error(func, reason) do
+    case safe_invoke(func, {:error, reason}) do
+      {:error, %GRPC.RPCError{} = rpc_error} ->
+        {:error, rpc_error}
+
+      {:error, other_reason} ->
+        {:error, GRPC.RPCError.exception(message: inspect(other_reason))}
+
+      {:ok, value} ->
+        value
+
+      other ->
+        other
+    end
   end
 
   @spec partition(GRPCStream.t(), keyword()) :: GRPCStream.t()
@@ -88,7 +138,8 @@ defmodule GRPC.Stream.Operators do
 
   @spec reject(GRPCStream.t(), (term -> term)) :: GRPCStream.t()
   def reject(%GRPCStream{flow: flow} = stream, filter) do
-    %GRPCStream{stream | flow: Flow.reject(flow, filter)}
+    flow_wrapper = Flow.reject(flow, fn item -> safe_invoke(filter, item) end)
+    %GRPCStream{stream | flow: flow_wrapper}
   end
 
   @spec uniq(GRPCStream.t()) :: GRPCStream.t()
@@ -99,5 +150,27 @@ defmodule GRPC.Stream.Operators do
   @spec uniq_by(GRPCStream.t(), (term -> term)) :: GRPCStream.t()
   def uniq_by(%GRPCStream{flow: flow} = stream, fun) do
     %GRPCStream{stream | flow: Flow.uniq_by(flow, fun)}
+  end
+
+  # Normalizes and catches exceptions/throws.
+  # Returns:
+  #   value -> successful value
+  #   {:error, reason} -> failure
+  #   {:error, {:exception, exception}} -> failure due to exception
+  #   {:error, {kind, reason}} -> failure due to throw or exit
+  defp safe_invoke(fun, arg) do
+    res = fun.(arg)
+
+    case res do
+      {:ok, v} -> v
+      {:error, reason} -> {:error, reason}
+      other -> other
+    end
+  rescue
+    e ->
+      {:error, {:exception, e}}
+  catch
+    kind, reason ->
+      {:error, {kind, reason}}
   end
 end
