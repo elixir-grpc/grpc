@@ -18,11 +18,11 @@ defmodule GRPC.Client.LoadBalancing.RoundRobinTest do
     end
 
     test "rejects empty channel lists" do
-      assert {:error, :no_channels} = RoundRobin.init(channels: [])
+      assert {:error, :no_addresses} = RoundRobin.init(channels: [])
     end
 
     test "rejects missing :channels option" do
-      assert {:error, :no_channels} = RoundRobin.init([])
+      assert {:error, :no_addresses} = RoundRobin.init([])
     end
   end
 
@@ -60,10 +60,10 @@ defmodule GRPC.Client.LoadBalancing.RoundRobinTest do
       assert {:ok, %Channel{host: "z", port: 7}, _} = RoundRobin.pick(new_state)
     end
 
-    test "accepts empty channel lists; pick then returns :no_channels" do
+    test "accepts empty channel lists; pick then returns :no_addresses" do
       {:ok, state} = RoundRobin.init(channels: channels([{"a", 1}]))
       assert {:ok, ^state} = RoundRobin.update(state, [])
-      assert {:error, :no_channels} = RoundRobin.pick(state)
+      assert {:error, :no_addresses} = RoundRobin.pick(state)
     end
 
     test "resets cursor so the first pick after update starts at the first channel" do
@@ -77,11 +77,11 @@ defmodule GRPC.Client.LoadBalancing.RoundRobinTest do
   end
 
   describe "pick/1 race with table deletion" do
-    test "returns :no_channels instead of raising when the table was deleted" do
+    test "returns :no_addresses instead of raising when the table was deleted" do
       {:ok, state} = RoundRobin.init(channels: channels([{"a", 1}]))
       :ets.delete(state.tid)
 
-      assert {:error, :no_channels} = RoundRobin.pick(state)
+      assert {:error, :no_addresses} = RoundRobin.pick(state)
     end
   end
 

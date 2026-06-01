@@ -21,11 +21,11 @@ defmodule GRPC.Client.LoadBalancing.PickFirstTest do
     end
 
     test "rejects empty channel lists" do
-      assert {:error, :no_channels} = PickFirst.init(channels: [])
+      assert {:error, :no_addresses} = PickFirst.init(channels: [])
     end
 
     test "rejects missing :channels option" do
-      assert {:error, :no_channels} = PickFirst.init([])
+      assert {:error, :no_addresses} = PickFirst.init([])
     end
   end
 
@@ -38,16 +38,16 @@ defmodule GRPC.Client.LoadBalancing.PickFirstTest do
       end
     end
 
-    test "returns :no_channels when current is nil" do
+    test "returns :no_addresses when current is nil" do
       {:ok, state} = PickFirst.init(channels: channels([{"a", 1}]))
       {:ok, _} = PickFirst.update(state, [])
-      assert {:error, :no_channels} = PickFirst.pick(state)
+      assert {:error, :no_addresses} = PickFirst.pick(state)
     end
 
-    test "returns :no_channels instead of raising when the table was deleted" do
+    test "returns :no_addresses instead of raising when the table was deleted" do
       {:ok, state} = PickFirst.init(channels: channels([{"a", 1}]))
       :ets.delete(state.tid)
-      assert {:error, :no_channels} = PickFirst.pick(state)
+      assert {:error, :no_addresses} = PickFirst.pick(state)
     end
   end
 
@@ -65,7 +65,7 @@ defmodule GRPC.Client.LoadBalancing.PickFirstTest do
     test "clears current to nil on empty list" do
       {:ok, state} = PickFirst.init(channels: channels([{"a", 1}]))
       {:ok, state} = PickFirst.update(state, [])
-      assert {:error, :no_channels} = PickFirst.pick(state)
+      assert {:error, :no_addresses} = PickFirst.pick(state)
     end
   end
 end

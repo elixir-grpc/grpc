@@ -1,5 +1,5 @@
 defmodule GRPC.Client.LoadBalancing.RoundRobin do
-  @moduledoc "Round-robin load balancer (ETS for the channel tuple, `:atomics` for the cursor)."
+  @moduledoc "Round-robin load balancer: cycles through the channels, one per pick."
 
   @behaviour GRPC.Client.LoadBalancing
 
@@ -9,7 +9,7 @@ defmodule GRPC.Client.LoadBalancing.RoundRobin do
   def init(opts) do
     case Keyword.get(opts, :channels, []) do
       [] ->
-        {:error, :no_channels}
+        {:error, :no_addresses}
 
       channels ->
         tid = :ets.new(:grpc_lb_round_robin, [:set, :public, read_concurrency: true])
@@ -30,10 +30,10 @@ defmodule GRPC.Client.LoadBalancing.RoundRobin do
         {:ok, channel, state}
 
       _ ->
-        {:error, :no_channels}
+        {:error, :no_addresses}
     end
   rescue
-    ArgumentError -> {:error, :no_channels}
+    ArgumentError -> {:error, :no_addresses}
   end
 
   @impl true

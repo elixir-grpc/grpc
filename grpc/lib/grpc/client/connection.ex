@@ -72,6 +72,7 @@ defmodule GRPC.Client.Connection do
   """
   use GenServer
   alias GRPC.Channel
+  alias GRPC.Client.Connection.EndpointResolver
 
   require Logger
 
@@ -580,7 +581,7 @@ defmodule GRPC.Client.Connection do
     case connected_channels(real_channels) do
       [] ->
         disconnect_real_channels(real_channels, adapter)
-        {:error, :no_channels}
+        {:error, :no_addresses}
 
       _connected ->
         {:ok,
@@ -593,8 +594,11 @@ defmodule GRPC.Client.Connection do
   end
 
   defp build_direct_state(%__MODULE__{} = base_state, norm_target, norm_opts, adapter) do
-    {host, port} = split_host_port(norm_target)
+    {host, port} = EndpointResolver.split_host_port(norm_target)
     vc = base_state.virtual_channel
+
+    # A direct target resolves to a single endpoint, so any LB policy would only
+    # ever have one channel to choose from. PickFirst is the only meaningful choice.
     lb_mod = GRPC.Client.LoadBalancing.PickFirst
 
     case connect_real_channel(vc, host, port, norm_opts, adapter) do
@@ -684,13 +688,6 @@ defmodule GRPC.Client.Connection do
     |> adapter.connect(opts[:adapter_opts])
   end
 
-  defp split_host_port(target) do
-    case String.split(target, ":", trim: true) do
-      [h, p] -> {h, String.to_integer(p)}
-      [h] -> {h, default_port()}
-    end
-  end
-
   defp init_interceptors(interceptors) do
     Enum.map(interceptors, fn
       {interceptor, opts} -> {interceptor, interceptor.init(opts)}
@@ -718,6 +715,4 @@ defmodule GRPC.Client.Connection do
       """
     end
   end
-
-  defp default_port, do: 50051
 end
