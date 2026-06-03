@@ -65,6 +65,16 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       http_transcode = access_mode == :http_transcoding
       request_headers = :cowboy_req.headers(req)
 
+      # Decode the inbound deadline ONCE, before building the stream, so it can be
+      # surfaced to interceptors/handlers and reused for the cancellation timer.
+      timeout_ms =
+        case Map.get(request_headers, "grpc-timeout") do
+          t when is_binary(t) -> GRPC.Transport.Utils.decode_timeout(t)
+          _ -> nil
+        end
+
+      deadline = timeout_ms && System.monotonic_time(:millisecond) + timeout_ms
+
       stream = %GRPC.Server.Stream{
         server: server,
         endpoint: endpoint,
@@ -77,7 +87,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         http_transcode: http_transcode,
         compressor: compressor,
         is_preflight?: preflight?(req),
-        access_mode: access_mode
+        access_mode: access_mode,
+        deadline: deadline
       }
 
       server_rpc_pid = :proc_lib.spawn_link(__MODULE__, :call_rpc, [server, route, stream])
@@ -85,15 +96,9 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
       req = :cowboy_req.set_resp_headers(HTTP2.server_headers(stream), req)
 
-      timeout = Map.get(request_headers, "grpc-timeout")
-
       timer_ref =
-        if is_binary(timeout) do
-          Process.send_after(
-            self(),
-            {:handling_timeout, self()},
-            GRPC.Transport.Utils.decode_timeout(timeout)
-          )
+        if timeout_ms do
+          Process.send_after(self(), {:handling_timeout, self()}, timeout_ms)
         end
 
       {

@@ -15,6 +15,8 @@ defmodule GRPC.Server.Stream do
     * `:codec`             - the codec
     * `:payload`           - the payload needed by the adapter
     * `:local`             - local data initialized by user
+    * `:deadline`          - absolute monotonic-time (ms) by which the inbound request
+      must complete, or `nil` when the caller set no deadline
   """
   @type access_mode :: :grpc | :grpcweb | :http_transcoding
 
@@ -33,6 +35,9 @@ defmodule GRPC.Server.Stream do
           adapter: atom(),
           local: any(),
           access_mode: access_mode,
+          # Absolute monotonic-time (ms) by which the inbound request must complete,
+          # derived from the inbound `grpc-timeout` header. `nil` when the caller set no deadline.
+          deadline: integer() | nil,
           # compressor mainly is used in client decompressing, responses compressing should be set by
           # `GRPC.Server.set_compressor`
           compressor: module() | nil,
@@ -59,6 +64,7 @@ defmodule GRPC.Server.Stream do
             adapter: nil,
             local: nil,
             access_mode: :grpc,
+            deadline: nil,
             compressor: nil,
             is_preflight?: false,
             http_method: :post,
@@ -107,4 +113,14 @@ defmodule GRPC.Server.Stream do
 
     stream
   end
+
+  @doc """
+  Milliseconds left before the inbound deadline, or `:infinity` if the caller set none.
+  Clamped at 0 so an already-expired deadline never returns a negative value.
+  """
+  @spec remaining_ms(t()) :: non_neg_integer() | :infinity
+  def remaining_ms(%__MODULE__{deadline: nil}), do: :infinity
+
+  def remaining_ms(%__MODULE__{deadline: deadline}),
+    do: max(deadline - System.monotonic_time(:millisecond), 0)
 end
