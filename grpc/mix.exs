@@ -30,16 +30,13 @@ defmodule GRPC.MixProject do
   defp deps do
     [
       {:grpc_core, path: "../grpc_core"},
-      # Uncomment for hex release
-      # {:grpc_core, "~> 1.0.0-rc.1"},
-      {:gun, "~> 2.0", optional: true},
-      {:mint, "~> 1.5", optional: true},
-      {:castore, "~> 0.1 or ~> 1.0", optional: true},
-      {:ex_doc, "~> 0.39", only: [:dev, :docs], runtime: false},
+      {:gun, "~> 2.2.0", optional: true},
+      {:mint, "~> 1.9", optional: true},
+      {:castore, "~> 1.0", optional: true},
+      {:ex_doc, "~> 0.40", only: [:dev, :docs], runtime: false},
       {:ex_parameterized, "~> 1.3.7", only: :test},
       {:mox, "~> 1.2", only: :test},
       {:grpc_server, path: "../grpc_server", only: :test}
-      # {:grpc_server, "~> 1.0.0-rc.1", only: :test}
     ]
   end
 
