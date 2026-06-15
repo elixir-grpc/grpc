@@ -139,9 +139,6 @@ defmodule GRPC.Client.Resolver do
       "localhost" ->
         IPv4.resolve("ipv4:#{target}")
 
-      nil ->
-        IPv4.resolve("ipv4:#{target}")
-
       _ ->
         {:error, {:unknown_scheme, scheme}}
     end

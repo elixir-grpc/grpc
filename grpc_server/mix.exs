@@ -19,7 +19,7 @@ defmodule GRPC.Server.MixProject do
       aliases: aliases(),
       name: "gRPC Server",
       source_url: @source_url,
-      xref: [exclude: [IEx]]
+      elixirc_options: [no_warn_undefined: [IEx]]
     ]
   end
 
@@ -43,7 +43,7 @@ defmodule GRPC.Server.MixProject do
       {:ex_parameterized, "~> 1.3.7", only: :test},
       {:gun, "~> 2.0", only: :test},
       {:mox, "~> 1.2", only: :test},
-      {:ex_doc, "~> 0.39", only: [:dev, :docs], runtime: false},
+      {:ex_doc, "~> 0.40", only: [:dev, :docs], runtime: false},
       {:makeup, "~> 1.2.1", only: [:dev, :docs], runtime: false},
       {:makeup_syntect, "~> 0.1", only: [:dev, :docs], runtime: false}
     ]

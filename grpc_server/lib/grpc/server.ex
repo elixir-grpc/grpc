@@ -111,8 +111,6 @@ defmodule GRPC.Server do
   For more comprehensive documentation on annotation usage in `.proto` files [see](https://cloud.google.com/endpoints/docs/grpc/transcoding)
   """
 
-  require Logger
-
   alias GRPC.RPCError
   alias GRPC.Server.Router
   alias GRPC.Server.Transcode
