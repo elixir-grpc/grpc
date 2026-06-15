@@ -134,8 +134,7 @@ defmodule GRPC.Server.Adapters.Cowboy.RouterTest do
       dispatch = make_dispatch("/v1/{a=users/*}/messages/{message_id}/{c=books/*}")
 
       assert {:ok, Handler, [], %{a: "users/foobar", message_id: "1", c: "books/barbaz"},
-              :undefined,
-              :undefined} ==
+              :undefined, :undefined} ==
                Router.match(dispatch, "localhost", "/v1/users/foobar/messages/1/books/barbaz")
 
       assert {:error, :notfound, :path} ==
@@ -146,8 +145,7 @@ defmodule GRPC.Server.Adapters.Cowboy.RouterTest do
       dispatch = make_dispatch("/v1/{a=users/*}/{b=messages}/{c=books/*}")
 
       assert {:ok, Handler, [], %{a: "users/foobar", b: "messages", c: "books/barbaz"},
-              :undefined,
-              :undefined} ==
+              :undefined, :undefined} ==
                Router.match(dispatch, "localhost", "/v1/users/foobar/messages/books/barbaz")
 
       assert {:error, :notfound, :path} ==
