@@ -36,7 +36,7 @@ defmodule GRPC.MixProject do
       {:castore, "~> 1.0", optional: true},
       {:ex_doc, "~> 0.40", only: [:dev, :docs], runtime: false},
       {:ex_parameterized, "~> 1.3.7", only: :test},
-      {:mox, "~> 1.2", only: :test},
+      {:mox, "~> 1.2", only: :test}
       # {:grpc_server, path: "../grpc_server", only: :test}
     ]
   end
