@@ -117,4 +117,33 @@ defmodule GRPC.Codec.ErlpackTest do
       assert decoded == term
     end
   end
+
+  describe "safe decoding (CVE-2026-48853)" do
+    test "refuses to create new atoms from untrusted payloads" do
+      # Craft the external term format for an atom by hand so the atom is never
+      # created on this node. `:safe` must reject it instead of populating the
+      # global atom table. Format: <<131, SMALL_ATOM_UTF8_EXT, len, name>>.
+      name = "erlpack_unknown_atom_payload"
+      binary = <<131, 119, byte_size(name)::8, name::binary>>
+
+      assert_raise ArgumentError, fn ->
+        Erlpack.decode(binary, AnyModule)
+      end
+    end
+
+    test "refuses to materialize fun terms from untrusted payloads" do
+      binary = :erlang.term_to_binary(fn -> :exploited end)
+
+      assert_raise ArgumentError, fn ->
+        Erlpack.decode(binary, AnyModule)
+      end
+    end
+
+    test "still decodes payloads referencing existing atoms" do
+      term = {:ok, :existing_atom, "payload"}
+      binary = :erlang.term_to_binary(term)
+
+      assert Erlpack.decode(binary, AnyModule) == term
+    end
+  end
 end
