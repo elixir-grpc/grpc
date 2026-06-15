@@ -85,9 +85,7 @@ defmodule GRPC.Server.Adapters.Cowboy.HandlerTest do
           large_name = String.duplicate("x", 200)
 
           body =
-            grpc_frame(
-              Protobuf.encode(%Helloworld.HelloRequest{name: large_name})
-            )
+            grpc_frame(Protobuf.encode(%Helloworld.HelloRequest{name: large_name}))
 
           assert byte_size(body) > 64,
                  "test body (#{byte_size(body)} bytes) must exceed max_body_size: 64"
