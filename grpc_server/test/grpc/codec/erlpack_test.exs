@@ -131,7 +131,7 @@ defmodule GRPC.Codec.ErlpackTest do
       end
     end
 
-    test "refuses to materialize fun terms from untrusted payloads" do
+    test "refuses to decode local fun terms (RCE vector)" do
       binary = :erlang.term_to_binary(fn -> :exploited end)
 
       assert_raise ArgumentError, fn ->
@@ -139,8 +139,48 @@ defmodule GRPC.Codec.ErlpackTest do
       end
     end
 
+    test "refuses to decode external fun terms (RCE vector)" do
+      binary = :erlang.term_to_binary(&:erlang.system_time/0)
+
+      assert_raise ArgumentError, fn ->
+        Erlpack.decode(binary, AnyModule)
+      end
+    end
+
+    test "refuses funs nested inside collections" do
+      for term <- [
+            {:ok, fn -> :x end},
+            [1, 2, fn -> :x end],
+            %{callback: fn -> :x end},
+            %{nested: %{deep: [fn -> :x end]}}
+          ] do
+        binary = :erlang.term_to_binary(term)
+
+        assert_raise ArgumentError, fn ->
+          Erlpack.decode(binary, AnyModule)
+        end
+      end
+    end
+
+    test "refuses pids and references" do
+      for term <- [self(), make_ref(), {:wrapped, self()}] do
+        binary = :erlang.term_to_binary(term)
+
+        assert_raise ArgumentError, fn ->
+          Erlpack.decode(binary, AnyModule)
+        end
+      end
+    end
+
     test "still decodes payloads referencing existing atoms" do
       term = {:ok, :existing_atom, "payload"}
+      binary = :erlang.term_to_binary(term)
+
+      assert Erlpack.decode(binary, AnyModule) == term
+    end
+
+    test "still decodes nested data structures without unsafe terms" do
+      term = %{list: [1, 2, 3], tuple: {:a, "b"}, nested: %{k: [:ok, "v"]}}
       binary = :erlang.term_to_binary(term)
 
       assert Erlpack.decode(binary, AnyModule) == term
