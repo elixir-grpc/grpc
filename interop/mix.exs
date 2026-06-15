@@ -24,7 +24,7 @@ defmodule Interop.MixProject do
     [
       {:grpc_server, path: "../grpc_server", override: true},
       {:grpc, path: "../grpc", override: true},
-      {:protobuf, "~> 0.14"},
+      {:protobuf, "~> 0.17"},
       {:gun, "~> 2.0"},
       {:mint, "~> 1.5"},
       {:grpc_statsd, "~> 0.1.0"},
