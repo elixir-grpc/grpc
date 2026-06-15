@@ -2,7 +2,7 @@ defmodule GRPC.Server.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/elixir-grpc/grpc_server"
-  @version "1.0.0-rc.1"
+  @version "1.0.0"
 
   def project do
     [
@@ -33,8 +33,8 @@ defmodule GRPC.Server.MixProject do
 
   defp deps do
     [
-      {:grpc_core, path: "../grpc_core"},
-      # {:grpc_core, "~> 1.0.0-rc.1"},
+      # {:grpc_core, path: "../grpc_core"},
+      {:grpc_core, "~> 1.0.0"},
       {:protobuf, "~> 0.17"},
       {:cowboy, "~> 2.14"},
       {:cowlib, "~> 2.14"},
@@ -71,7 +71,6 @@ defmodule GRPC.Server.MixProject do
         "guides/getting_started/error_handling.md",
         "guides/getting_started/codegen.md",
         "guides/cheatsheets/streams.cheatmd",
-        "guides/advanced/custom_codecs.md",
         "guides/advanced/transcoding.livemd",
         "guides/advanced/cors.md",
         "guides/advanced/telemetry.livemd",
