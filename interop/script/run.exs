@@ -20,7 +20,8 @@ alias GRPC.Client.Adapters.Gun
 alias GRPC.Client.Adapters.Mint
 alias Interop.Client
 
-{:ok, _pid, port} = GRPC.Server.start_endpoint(Interop.Endpoint, port)
+# large_unary2! sends an 8 MB payload; allow up to 32 MB to keep headroom.
+{:ok, _pid, port} = GRPC.Server.start_endpoint(Interop.Endpoint, port, max_body_size: 32 * 1024 * 1024)
 
 defmodule InteropTestRunner do
   def run(_cli, adapter, port, rounds) do

@@ -14,6 +14,10 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   @default_trailers HTTP2.server_trailers()
   @trailers_flag 0b1000_0000
 
+  # 4 MB – matches gRPC-Go's default max receive message size.
+  # Override per-server with the :max_body_size option (bytes).
+  @default_max_body_size 4 * 1024 * 1024
+
   @type init_state :: {
           endpoint :: atom(),
           server :: {name :: String.t(), module()},
@@ -101,6 +105,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           Process.send_after(self(), {:handling_timeout, self()}, timeout_ms)
         end
 
+      max_body_size = Map.get(opts, :max_body_size, @default_max_body_size)
+
       {
         :cowboy_loop,
         req,
@@ -110,7 +116,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           pending_reader: nil,
           access_mode: access_mode,
           codec: codec,
-          exception_log_filter: exception_log_filter
+          exception_log_filter: exception_log_filter,
+          max_body_size: max_body_size
         }
       }
     else
@@ -346,13 +353,19 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   # APIs end
 
   def info({:read_full_body, ref, pid}, req, state) do
-    {s, body, req} = read_full_body(req, "", state[:handling_timer])
+    {s, body, req} = read_full_body(req, <<>>, state[:handling_timer], state.max_body_size)
     send(pid, {ref, {s, body}})
     {:ok, req, state}
   catch
     :exit, :timeout ->
       Logger.warning("Timeout when reading full body")
       info({:handling_timeout, self()}, req, state)
+
+    :throw, {:body_too_large, _size} ->
+      Logger.warning("Request body exceeded max_body_size (#{state.max_body_size} bytes)")
+      error = RPCError.exception(status: :resource_exhausted, message: "Request body too large")
+      req = send_error(req, error, state, :body_too_large)
+      {:stop, req, state}
   end
 
   def info({:read_body, ref, pid}, req, state) do
@@ -622,12 +635,27 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  defp read_full_body(req, body, timer) do
+  defp read_full_body(req, body, timer, max_bytes) do
     result = :cowboy_req.read_body(req, timeout_left_opt(timer))
 
     case result do
-      {:ok, data, req} -> {:ok, body <> data, req}
-      {:more, data, req} -> read_full_body(req, body <> data, timer)
+      {:ok, data, req} ->
+        total = body <> data
+
+        if byte_size(total) > max_bytes do
+          throw({:body_too_large, byte_size(total)})
+        else
+          {:ok, total, req}
+        end
+
+      {:more, data, req} ->
+        total = body <> data
+
+        if byte_size(total) > max_bytes do
+          throw({:body_too_large, byte_size(total)})
+        else
+          read_full_body(req, total, timer, max_bytes)
+        end
     end
   end
 
@@ -669,7 +697,10 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   defp timeout_left_opt(timer, opts \\ %{}) do
     case timer do
       nil ->
-        Map.put(opts, :timeout, :infinity)
+        # No grpc-timeout header was supplied. Do not override cowboy's built-in
+        # per-chunk read timeout (15 s by default) with :infinity, which would
+        # allow a slow-trickle client to hold the connection open indefinitely.
+        opts
 
       timer ->
         case Process.read_timer(timer) do

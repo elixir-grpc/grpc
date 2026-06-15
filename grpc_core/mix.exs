@@ -28,7 +28,7 @@ defmodule GRPC.Core.MixProject do
 
   defp deps do
     [
-      {:protobuf, "~> 0.14"},
+      {:protobuf, "~> 0.17"},
       {:jason, ">= 0.0.0"},
       {:telemetry, "~> 1.0"},
       {:googleapis, "~> 0.1.0"},

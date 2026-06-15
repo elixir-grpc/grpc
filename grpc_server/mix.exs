@@ -33,14 +33,15 @@ defmodule GRPC.Server.MixProject do
 
   defp deps do
     [
-      # {:grpc_core, path: "../grpc_core"},
-      {:grpc_core, "~> 1.0.0-rc.1"},
-      {:protobuf, "~> 0.14"},
+      {:grpc_core, path: "../grpc_core"},
+      # {:grpc_core, "~> 1.0.0-rc.1"},
+      {:protobuf, "~> 0.17"},
       {:cowboy, "~> 2.14"},
       {:cowlib, "~> 2.14"},
       {:flow, "~> 1.2"},
       {:protobuf_generate, "~> 0.1.3", only: [:dev, :test]},
       {:ex_parameterized, "~> 1.3.7", only: :test},
+      {:gun, "~> 2.0", only: :test},
       {:mox, "~> 1.2", only: :test},
       {:ex_doc, "~> 0.39", only: [:dev, :docs], runtime: false},
       {:makeup, "~> 1.2.1", only: [:dev, :docs], runtime: false},
