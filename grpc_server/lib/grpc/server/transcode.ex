@@ -22,7 +22,8 @@ defmodule GRPC.Server.Transcode do
       ) do
     path_bindings = map_path_bindings(path_bindings)
     query = Query.decode(query_string)
-    request = Map.merge(path_bindings, query)
+    # Path bindings take precedence over query parameters
+    request = Map.merge(query, path_bindings)
 
     Protobuf.JSON.from_decoded(request, req_mod)
   end
@@ -36,7 +37,8 @@ defmodule GRPC.Server.Transcode do
       ) do
     path_bindings = map_path_bindings(path_bindings)
     body_request = map_request_body(rule, body_request)
-    request = Map.merge(path_bindings, body_request)
+    # Path bindings take precedence over body parameters
+    request = Map.merge(body_request, path_bindings)
 
     Protobuf.JSON.from_decoded(request, req_mod)
   end
@@ -51,7 +53,8 @@ defmodule GRPC.Server.Transcode do
     path_bindings = map_path_bindings(path_bindings)
     query = Query.decode(query_string)
     body_request = map_request_body(rule, body_request)
-    request = Enum.reduce([query, body_request], path_bindings, &Map.merge(&2, &1))
+    # Path bindings take precedence over query parameters and body parameters
+    request = Enum.reduce([query, body_request], path_bindings, &Map.merge(&1, &2))
 
     Protobuf.JSON.from_decoded(request, req_mod)
   end
