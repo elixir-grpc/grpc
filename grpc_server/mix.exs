@@ -35,7 +35,7 @@ defmodule GRPC.Server.MixProject do
     [
       {:grpc_core, path: "../grpc_core"},
       # {:grpc_core, "~> 1.0.0-rc.1"},
-      {:protobuf, "~> 0.14"},
+      {:protobuf, "~> 0.17"},
       {:cowboy, "~> 2.14"},
       {:cowlib, "~> 2.14"},
       {:flow, "~> 1.2"},

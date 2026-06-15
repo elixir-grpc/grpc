@@ -6,7 +6,7 @@ defmodule GRPC.Codec.WebText do
   end
 
   def encode(struct, _opts \\ []) do
-    Protobuf.Encoder.encode(struct)
+    Protobuf.encode(struct)
   end
 
   def pack_for_channel(data) when is_list(data) do
@@ -24,6 +24,6 @@ defmodule GRPC.Codec.WebText do
   end
 
   def decode(binary, module) do
-    Protobuf.Decoder.decode(binary, module)
+    Protobuf.decode(binary, module)
   end
 end
