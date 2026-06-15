@@ -557,6 +557,8 @@ defmodule GRPC.Integration.ServerTest do
 
         {:ok, conn_pid} = :gun.open(~c"localhost", port)
 
+        assert_receive {:gun_up, ^conn_pid, :http}
+
         stream_ref =
           :gun.get(conn_pid, "/v1/messages/#{name}", [
             {"accept", "application/json"}

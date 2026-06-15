@@ -41,6 +41,7 @@ defmodule GRPC.Server.MixProject do
       {:flow, "~> 1.2"},
       {:protobuf_generate, "~> 0.1.3", only: [:dev, :test]},
       {:ex_parameterized, "~> 1.3.7", only: :test},
+      {:gun, "~> 2.0", only: :test},
       {:mox, "~> 1.2", only: :test},
       {:ex_doc, "~> 0.39", only: [:dev, :docs], runtime: false},
       {:makeup, "~> 1.2.1", only: [:dev, :docs], runtime: false},
