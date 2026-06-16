@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.0.0-rc.1 (2026-03-12)
+## v1.0.0 (2026-06-15)
 
 ### Enhancements
 
@@ -9,6 +9,10 @@
   * IPv6 support was added to the gRPC gun adapter, enabling connections over IPv6 networks.
   * Virtual channels can now be explicitly named, allowing clearer identification and management of channels.
   * Support was added for grpc-web trailers encoded in the message body, improving compatibility with grpc-web clients.
+  * The inbound gRPC deadline is now surfaced on `GRPC.Server.Stream` via the `deadline` field (absolute monotonic time in ms, or `nil` if no deadline was set) and the `GRPC.Server.Stream.remaining_ms/1` helper function, enabling deadline budget propagation in interceptors and handlers.
+  * `application/json` content-type matching in transcoding is now loosened to support additional content types with parameters.
+  * Boolean query parameters are now correctly coerced to Elixir boolean types in transcoding.
+  * Elixir 1.20 is now supported with updated dependency constraints.
 
 ### Bug Fixes
 
@@ -25,6 +29,10 @@
   * Fixed type system warnings related to Elixir 1.19.
   * Fixed an error handling issue in stream map_error.
   * Corrected the connection state initialization created by build_direct_state.
+  * Added a configurable request body size limit to prevent potential resource exhaustion.
+  * Fixed path parameters to correctly take precedence over query parameters in HTTP transcoding.
+  * Fixed unsafe `binary_to_term` decoding in the erlpack codec to block dangerous terms.
+  * Fixed a zip bomb vulnerability in the gzip compressor.
 
 ### Documentation Fixes
 

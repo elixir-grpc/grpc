@@ -2,7 +2,7 @@ defmodule GRPC.Core.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/elixir-grpc/grpc_core"
-  @version "1.0.0-rc.1"
+  @version "1.0.0"
 
   def project do
     [
@@ -32,7 +32,7 @@ defmodule GRPC.Core.MixProject do
       {:jason, ">= 0.0.0"},
       {:telemetry, "~> 1.0"},
       {:googleapis, "~> 0.1.0"},
-      {:ex_doc, "~> 0.39", only: [:dev, :docs], runtime: false},
+      {:ex_doc, "~> 0.40", only: [:dev, :docs], runtime: false},
       {:makeup, "~> 1.2.1", only: [:dev, :docs], runtime: false},
       {:makeup_syntect, "~> 0.1", only: [:dev, :docs], runtime: false}
     ]

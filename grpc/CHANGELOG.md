@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.0.0-rc.1 (2026-03-12)
+## v1.0.0 (2026-06-15)
 
 ### Enhancements
 
@@ -9,6 +9,9 @@
   * IPv6 support was added to the gRPC gun adapter, enabling connections over IPv6 networks.
   * Virtual channels can now be explicitly named, allowing clearer identification and management of channels.
   * Support was added for grpc-web trailers encoded in the message body, improving compatibility with grpc-web clients.
+  * Periodic DNS re-resolution is now supported for client-side service discovery, enabling automatic detection of new backends and removal of stale ones. New connect options: `resolve_interval`, `max_resolve_interval`, `min_resolve_interval`. Public API: `GRPC.Client.Connection.resolve_now/1`.
+  * `:gun` and `:mint` are now optional dependencies, allowing users to include only the HTTP client adapter they need.
+  * Elixir 1.20 is now supported with updated dependency constraints.
 
 ### Bug Fixes
 
@@ -25,6 +28,11 @@
   * Fixed type system warnings related to Elixir 1.19.
   * Fixed an error handling issue in stream map_error.
   * Corrected the connection state initialization created by build_direct_state.
+  * Fixed IPv6 target normalization and parsing crashes in `GRPC.Client.Connection`. Bracketed IPv6 addresses and bare IPv6 addresses are now correctly parsed across all resolver scheme prefixes.
+  * Fixed named Gun channels being terminated when the original caller process exits by moving connection ownership into adapter-owned processes.
+  * Fixed named channels to be scoped to the local node, preventing cross-node name collisions.
+  * Fixed a zip bomb vulnerability in the gzip compressor.
+  * Fixed the `GRPC.RPCError` type specification.
 
 ### Documentation Fixes
 
