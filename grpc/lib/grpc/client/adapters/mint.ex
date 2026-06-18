@@ -211,7 +211,11 @@ if Code.ensure_loaded?(Mint.HTTP) do
     end
 
     def handle_errors_receive_data(%GRPC.Client.Stream{payload: %{response: response}}, _opts) do
-      {:error, "Error occurred while receiving data: #{inspect(response)}"}
+      {:error,
+       GRPC.RPCError.exception(
+         GRPC.Status.unknown(),
+         "error occurred while receiving data: #{inspect(response)}"
+       )}
     end
 
     defp success_response?(%GRPC.Client.Stream{
