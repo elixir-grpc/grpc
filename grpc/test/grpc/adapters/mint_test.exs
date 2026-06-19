@@ -117,6 +117,19 @@ defmodule GRPC.Client.Adapters.MintTest do
     end
   end
 
+  describe "handle_errors_receive_data/2" do
+    test "returns a GRPC.RPCError with unknown status" do
+      response = {:error, :closed}
+      stream = build(:client_stream, payload: %{response: response})
+
+      assert {:error, %GRPC.RPCError{status: status, message: message}} =
+               Mint.handle_errors_receive_data(stream, [])
+
+      assert status == GRPC.Status.unknown()
+      assert message == "error occurred while receiving data: #{inspect(response)}"
+    end
+  end
+
   describe "connect/2 with retry option" do
     test "passes retry option to ConnectionProcess state", %{port: port} do
       channel = build(:channel, adapter: Mint, port: port, host: "localhost")
