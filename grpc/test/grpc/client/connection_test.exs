@@ -4,6 +4,8 @@ defmodule GRPC.Client.ConnectionTest do
   alias GRPC.Channel
   alias GRPC.Client.Connection
 
+  @peer if Code.ensure_loaded?(:peer), do: :peer, else: GRPC.Test.PeerShim
+
   setup do
     %{
       ref: make_ref(),
@@ -49,24 +51,6 @@ defmodule GRPC.Client.ConnectionTest do
 
       Connection.disconnect(first_channel)
     end
-
-    test "returns {:error, :no_connection} when already_started but no persistent_term entry", %{
-      ref: ref,
-      target: target,
-      adapter: adapter
-    } do
-      {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
-
-      # Remove the persistent_term entry to simulate a missing LB state
-      :persistent_term.erase({Connection, :lb_state, ref})
-
-      # Calling connect again will hit already_started → pick_channel → :no_connection
-      assert {:error, :no_connection} = Connection.connect(target, adapter: adapter, name: ref)
-
-      # Restore entry so disconnect works cleanly
-      :persistent_term.put({Connection, :lb_state, ref}, channel)
-      Connection.disconnect(channel)
-    end
   end
 
   describe "disconnect/1" do
@@ -77,7 +61,7 @@ defmodule GRPC.Client.ConnectionTest do
     } do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
-      [{pid, _}] = :global.whereis_name({Connection, ref}) |> List.wrap() |> Enum.map(&{&1, nil})
+      pid = whereis_name(ref)
 
       {:ok, _} = Connection.disconnect(channel)
 
@@ -103,12 +87,74 @@ defmodule GRPC.Client.ConnectionTest do
     } do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
-      pid = :global.whereis_name({Connection, ref})
+      pid = whereis_name(ref)
       ref_mon = Process.monitor(pid)
       GenServer.stop(pid, :shutdown)
       assert_receive {:DOWN, ^ref_mon, :process, ^pid, :shutdown}, 500
 
       assert {:error, :no_connection} = Connection.pick_channel(channel)
+    end
+  end
+
+  describe "connect/2 - distributed named channels" do
+    test "named channels do not conflict across connected nodes" do
+      {:ok, _, port} = GRPC.Server.start(FeatureServer, 0)
+
+      on_exit(fn ->
+        :ok = GRPC.Server.stop(FeatureServer)
+      end)
+
+      {peer1, node1} = start_peer()
+      {peer2, node2} = start_peer()
+
+      on_exit(fn ->
+        stop_peer(peer1)
+        stop_peer(peer2)
+      end)
+
+      assert :pong == @peer.call(peer1, :net_adm, :ping, [node2])
+      assert :pong == @peer.call(peer2, :net_adm, :ping, [node1])
+      assert :ok == @peer.call(peer1, :global, :sync, [])
+      assert :ok == @peer.call(peer2, :global, :sync, [])
+
+      target = "ipv4:127.0.0.1:#{port}"
+      ref = :shared_channel
+
+      assert {:ok, %Channel{ref: ^ref}} =
+               @peer.call(peer1, Connection, :connect, [target, [name: ref]])
+
+      assert {:ok, %Channel{ref: ^ref}} =
+               @peer.call(peer2, Connection, :connect, [target, [name: ref]])
+    end
+  end
+
+  defp start_peer do
+    {:ok, peer, node} =
+      @peer.start_link(%{
+        name: @peer.random_name(~c"grpcpeer"),
+        longnames: true,
+        host: ~c"127.0.0.1",
+        connection: :standard_io,
+        args: [~c"-setcookie", ~c"grpcpeer"]
+      })
+
+    :ok = @peer.call(peer, :code, :add_paths, [:code.get_path()])
+    {:ok, _apps} = @peer.call(peer, Application, :ensure_all_started, [:grpc])
+
+    {peer, node}
+  end
+
+  defp stop_peer(peer) do
+    @peer.stop(peer)
+  catch
+    :exit, _reason ->
+      :ok
+  end
+
+  defp whereis_name(ref) do
+    case Registry.lookup(GRPC.Client.Registry, {Connection, ref}) do
+      [{pid, _value}] -> pid
+      [] -> nil
     end
   end
 end

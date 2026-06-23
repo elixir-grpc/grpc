@@ -58,7 +58,7 @@ defmodule GRPC.ChannelTest do
       end
 
       test "cred uses https" do
-        cred = %{ssl: []}
+        cred = %GRPC.Credential{ssl: []}
 
         {:ok, channel} =
           GRPC.Stub.connect("#{unquote(addr)}:50051", adapter: ClientAdapter, cred: cred)

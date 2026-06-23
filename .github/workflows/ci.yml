@@ -14,13 +14,13 @@ jobs:
     runs-on: ubuntu-latest
     name: Check format
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: 26.1.x
-          elixir-version: 1.15.x
+          otp-version: 28.x
+          elixir-version: 1.20.x
       - name: Retrieve dependencies cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: mix-cache  # id to use in retrieve action
         with:
           path: deps
@@ -40,17 +40,17 @@ jobs:
         elixir: [1.15.x]
         include:
           - otp: 28.x
-            elixir: 1.19.x
+            elixir: 1.20.x
 
     needs: check_format
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{matrix.otp}}
           elixir-version: ${{matrix.elixir}}
       - name: Retrieve dependencies cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: mix-cache  # id to use in retrieve action
         with:
           path: deps
@@ -63,19 +63,25 @@ jobs:
         run: mix test --warnings-as-errors
       - name: Run Warning Tests
         run: mix test --only warning_test
+      - name: Run :mint optional dependency test
+        run: elixir script/adapter_test.exs mint
+        working-directory: ./grpc
+      - name: Run :gun optional dependency test
+        run: elixir script/adapter_test.exs gun
+        working-directory: ./grpc
   interop-tests:
     runs-on: ubuntu-latest
     name: Interop tests
     needs: check_format
     if: ${{ github.ref != 'refs/heads/master' }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: 26.1.x
-          elixir-version: 1.15.x
+          otp-version: 28.x
+          elixir-version: 1.20.x
       - name: Retrieve dependencies cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: mix-cache  # id to use in retrieve action
         with:
           path: deps
@@ -100,16 +106,16 @@ jobs:
         elixir: [1.15.x]
         include:
           - otp: 28.x
-            elixir: 1.19.x
+            elixir: 1.20.x
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ matrix.otp }}
           elixir-version: ${{ matrix.elixir }}
       - name: Retrieve dependencies cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: mix-cache  # id to use in retrieve action
         with:
           path: deps

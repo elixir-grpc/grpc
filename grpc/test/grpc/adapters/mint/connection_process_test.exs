@@ -223,7 +223,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       state: state
     } do
       # hacky to simulate a window size of zero since this is usually updated with the requests interaction
-      state = %{state | conn: %{state.conn | window_size: 0}}
+      state = %{state | conn: %{state.conn | send_window_size: 0}}
       # enqueue the payload onto the request queue
       {_, state, _} =
         ConnectionProcess.handle_call({:stream_body, request_ref, <<1, 2, 3>>}, self(), state)
@@ -237,7 +237,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     test "(body_size > window_size) chunk payload stream what is possible and enqueue the rest at the begining of the queue to give priority to the current request",
          %{request_ref: request_ref, state: state} do
       # hacky to simulate a window size of 2 bytes since this is usually updated with the requests interaction
-      state = %{state | conn: %{state.conn | window_size: 2}}
+      state = %{state | conn: %{state.conn | send_window_size: 2}}
       # enqueue the payload onto the request queue. Add to items to the queue,
       # this way we can check is the rest is of the payload goes to the first position to the queue
       {_, state, _} =
@@ -251,7 +251,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
       # mint update window_size for us.
       # This is how we check if the body was streamed
-      assert new_state.conn.window_size == 0
+      assert new_state.conn.send_window_size == 0
       assert {{:value, head_of_queue}, queue} = :queue.out(new_state.request_stream_queue)
       assert {{:value, rest}, {[], []}} = :queue.out(queue)
 

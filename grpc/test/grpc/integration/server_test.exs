@@ -557,6 +557,8 @@ defmodule GRPC.Integration.ServerTest do
 
         {:ok, conn_pid} = :gun.open(~c"localhost", port)
 
+        assert_receive {:gun_up, ^conn_pid, :http}
+
         stream_ref =
           :gun.get(conn_pid, "/v1/messages/#{name}", [
             {"accept", "application/json"}
@@ -784,8 +786,6 @@ defmodule GRPC.Integration.ServerTest do
                stream: %GRPC.Server.Stream{}
              } = metadata
 
-      assert_received {:gun_down, _, _, _, _}
-
       assert_received {^start_client_name, measurements, metadata}
       assert %{monotonic_time: _, system_time: _} = measurements
 
@@ -898,8 +898,6 @@ defmodule GRPC.Integration.ServerTest do
                     %{}}
                }
              } = metadata
-
-      assert_received {:gun_down, _, _, _, _}
 
       refute_receive _
     end

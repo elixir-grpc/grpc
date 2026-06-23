@@ -111,8 +111,6 @@ defmodule GRPC.Server do
   For more comprehensive documentation on annotation usage in `.proto` files [see](https://cloud.google.com/endpoints/docs/grpc/transcoding)
   """
 
-  require Logger
-
   alias GRPC.RPCError
   alias GRPC.Server.Router
   alias GRPC.Server.Transcode
@@ -434,7 +432,14 @@ defmodule GRPC.Server do
   @spec start_endpoint(atom(), non_neg_integer(), Keyword.t()) ::
           {atom(), any(), non_neg_integer()}
   def start_endpoint(endpoint, port, opts \\ []) do
-    opts = Keyword.validate!(opts, adapter: GRPC.Server.Adapters.Cowboy)
+    opts =
+      Keyword.validate!(opts,
+        adapter: GRPC.Server.Adapters.Cowboy,
+        adapter_opts: [],
+        exception_log_filter: nil,
+        max_body_size: nil
+      )
+
     adapter = opts[:adapter]
     servers = endpoint.__meta__(:servers)
     servers = GRPC.Server.servers_to_map(servers)
