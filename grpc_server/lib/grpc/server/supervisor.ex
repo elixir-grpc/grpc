@@ -45,6 +45,7 @@ defmodule GRPC.Server.Supervisor do
       This function will be called with a `GRPC.Server.Adapters.ReportException` struct and must return a boolean
       indicating whether or not a given exception should be logged or dropped. Defaults to `nil`, which means all exceptions will be logged.
     * `:adapter_opts` - options for the adapter.
+    * `:max_body_size` - the maximum message body size to accept in bytes
 
   Either `:endpoint` or `:servers` must be present, but not both.
   """
@@ -71,14 +72,15 @@ defmodule GRPC.Server.Supervisor do
              :start_server,
              :port,
              :adapter_opts,
-             :exception_log_filter
+             :exception_log_filter,
+             :max_body_size
            ]) do
         {:ok, _opts} ->
           opts
 
         {:error, _} ->
           raise ArgumentError,
-                "just [:endpoint, :servers, :start_server, :port, :adapter_opts, :exception_log_filter] are accepted as arguments, and any other keys for adapters should be passed as adapter_opts!"
+                "just [:endpoint, :servers, :start_server, :port, :adapter_opts, :exception_log_filter, :max_body_size] are accepted as arguments, and any other keys for adapters should be passed as adapter_opts!"
       end
 
     case validate_cred(opts) do
