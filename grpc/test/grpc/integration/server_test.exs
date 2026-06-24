@@ -327,7 +327,7 @@ defmodule GRPC.Integration.ServerTest do
     def filter(exception) do
       data = exception.adapter_extra[:req][:headers]["test-data"]
 
-      {pid, ref} = :erlang.binary_to_term(data)
+      {pid, ref} = data |> Base.decode64!() |> :erlang.binary_to_term()
       send(pid, {:exception_log_filter, ref, exception})
 
       true
@@ -343,7 +343,9 @@ defmodule GRPC.Integration.ServerTest do
       fn port ->
         {:ok, channel} =
           GRPC.Stub.connect("localhost:#{port}",
-            headers: [{"test-data", :erlang.term_to_binary({test_pid, ref})}]
+            headers: [
+              {"test-data", Base.encode64(:erlang.term_to_binary({test_pid, ref}))}
+            ]
           )
 
         req = %Helloworld.HelloRequest{name: "world"}
@@ -361,7 +363,7 @@ defmodule GRPC.Integration.ServerTest do
     def filter(exception) do
       data = exception.adapter_extra[:req][:headers]["test-data"]
 
-      {pid, ref} = :erlang.binary_to_term(data)
+      {pid, ref} = data |> Base.decode64!() |> :erlang.binary_to_term()
       send(pid, {:exception_log_filter, ref, exception})
 
       true
@@ -377,7 +379,9 @@ defmodule GRPC.Integration.ServerTest do
       fn port ->
         {:ok, channel} =
           GRPC.Stub.connect("localhost:#{port}",
-            headers: [{"test-data", :erlang.term_to_binary({test_pid, ref})}]
+            headers: [
+              {"test-data", Base.encode64(:erlang.term_to_binary({test_pid, ref}))}
+            ]
           )
 
         req = %Helloworld.HelloRequest{name: "unknown error", duration: 0}
