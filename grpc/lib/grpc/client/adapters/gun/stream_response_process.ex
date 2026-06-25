@@ -89,6 +89,11 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
     |> push_message({:error, {:stream_error, reason}}, true)
   end
 
+  def handle_info({:gun_error, _conn_pid, reason}, state) do
+    state
+    |> push_message({:error, {:connection_error, reason}}, true)
+  end
+
   def handle_info({:connection_down, reason}, state) do
     push_message(state, {:error, {:connection_error, reason}}, true)
   end
@@ -96,6 +101,10 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
   def handle_info(msg, state) do
     Logger.warning("#{inspect(__MODULE__)} received unexpected message: #{inspect(msg)}")
     push_message(state, {:error, {:unexpected_message, inspect(msg)}}, true)
+  end
+
+  defp push_message(%{done: true} = state, _message, _terminal?) do
+    {:noreply, state}
   end
 
   defp push_message(%{waiter: {from, timeout_ref}} = state, message, terminal?) do
