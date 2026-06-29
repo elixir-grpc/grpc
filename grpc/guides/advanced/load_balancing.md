@@ -41,3 +41,15 @@ iex> {:ok, channel} = GRPC.Stub.connect("unix:/tmp/my.sock")
 >__Note__: When using `DNS` target, the connection layer periodically refreshes endpoints.
 
 ---
+
+## Performance characteristics
+
+Round-robin balancing makes a real routing decision on every RPC, so each pick
+costs a little more than talking to a single static address — roughly **~290 ns
+added per pick** in exchange for genuine per-request distribution across
+backends. The pick path is lock-free (an ETS read plus an `:atomics` counter,
+no table- or key-level lock), so it scales with concurrency and stays well
+above any realistic per-connection RPC rate. Workloads that only ever talk to a
+single endpoint can use `:pick_first` to skip the rotation cost entirely.
+
+See [#527](https://github.com/elixir-grpc/grpc/pull/527) for detailed benchmarks.
