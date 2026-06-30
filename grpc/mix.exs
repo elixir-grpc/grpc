@@ -31,7 +31,7 @@ defmodule GRPC.MixProject do
     [
       # {:grpc_core, path: "../grpc_core"},
       {:grpc_core, "~> 1.0.0"},
-      {:gun, "~> 2.2.0", optional: true},
+      {:gun, "~> 2.4.0", optional: true},
       {:mint, "~> 1.9", optional: true},
       {:castore, "~> 1.0", optional: true},
       {:ex_doc, "~> 0.40", only: [:dev, :docs], runtime: false},
