@@ -76,6 +76,14 @@ defmodule GRPC.Client.Resolver.DNS do
   def update(state, _event), do: {:ok, state}
 
   @impl GRPC.Client.Resolver
+  def shutdown(%{worker_pid: pid}) when is_pid(pid) do
+    try do
+      GenServer.stop(pid)
+    catch
+      :exit, _ -> :ok
+    end
+  end
+
   def shutdown(_state), do: :ok
 
   defp lookup_addresses(host) do

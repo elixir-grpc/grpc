@@ -55,7 +55,18 @@ defmodule GRPC.Client.ReResolveTest do
     end)
 
     stub(resolver, :update, fn state, _event -> {:ok, state} end)
-    stub(resolver, :shutdown, fn _state -> :ok end)
+
+    stub(resolver, :shutdown, fn
+      %{worker_pid: pid} when is_pid(pid) ->
+        try do
+          GenServer.stop(pid)
+        catch
+          :exit, _ -> :ok
+        end
+
+      _ ->
+        :ok
+    end)
 
     %{
       ref: ref,
@@ -126,7 +137,18 @@ defmodule GRPC.Client.ReResolveTest do
     end)
 
     stub(resolver, :update, fn state, _event -> {:ok, state} end)
-    stub(resolver, :shutdown, fn _state -> :ok end)
+
+    stub(resolver, :shutdown, fn
+      %{worker_pid: pid} when is_pid(pid) ->
+        try do
+          GenServer.stop(pid)
+        catch
+          :exit, _ -> :ok
+        end
+
+      _ ->
+        :ok
+    end)
 
     Connection.connect(
       "dns://my-service.local:50051",

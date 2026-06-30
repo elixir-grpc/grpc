@@ -482,7 +482,7 @@ defmodule GRPC.Integration.ServerTest do
 
   test "gracefully handles server shutdown disconnects" do
     logs =
-      ExUnit.CaptureLog.capture_log(fn ->
+      ExUnit.CaptureLog.capture_log([level: :error], fn ->
         run_server(FeatureServer, fn port ->
           {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
           client_stream = Routeguide.RouteGuide.Stub.route_chat(channel)
