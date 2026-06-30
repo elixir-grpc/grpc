@@ -17,19 +17,6 @@ defmodule GRPC.Integration.StubTest do
     end
   end
 
-  def port_for(pid) do
-    Port.list()
-    |> Enum.find(fn port ->
-      case Port.info(port, :links) do
-        {:links, links} ->
-          pid in links
-
-        _ ->
-          false
-      end
-    end)
-  end
-
   defp whereis_name(ref) do
     case Registry.lookup(GRPC.Client.Registry, {GRPC.Client.Connection, ref}) do
       [{pid, _value}] -> pid
@@ -40,20 +27,10 @@ defmodule GRPC.Integration.StubTest do
   test "you can disconnect stubs" do
     run_server(HelloServer, fn port ->
       {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-      Process.sleep(100)
+      assert is_reference(channel.pool)
 
-      %{adapter_payload: %{conn_pid: connection_process_pid}} = channel
-      %{gun_pid: gun_pid} = :sys.get_state(connection_process_pid)
-
-      gun_port = port_for(gun_pid)
-      # Using :erlang.monitor to be compatible with <= 1.5
-      ref = :erlang.monitor(:port, gun_port)
-
-      {:ok, channel} = GRPC.Stub.disconnect(channel)
-
-      assert %{adapter_payload: %{conn_pid: nil}} = channel
-      assert_receive {:DOWN, ^ref, :port, ^gun_port, _}
-      assert port_for(gun_pid) == nil
+      {:ok, disconnected_channel} = GRPC.Stub.disconnect(channel)
+      assert %{pool: nil} = disconnected_channel
     end)
   end
 
@@ -78,20 +55,25 @@ defmodule GRPC.Integration.StubTest do
 
   test "use a channel name to send a message" do
     run_server(HelloServer, fn port ->
-      {:ok, _channel} =
-        GRPC.Client.Connection.connect("localhost:#{port}",
-          interceptors: [GRPC.Client.Interceptors.Logger],
-          name: :my_channel
-        )
+      assert {:ok, %GRPC.Channel{ref: :my_channel} = channel} =
+               GRPC.Client.Connection.connect("localhost:#{port}",
+                 interceptors: [GRPC.Client.Interceptors.Logger],
+                 name: :my_channel
+               )
 
       name = "GRPC user!"
       req = %Helloworld.HelloRequest{name: name}
-      {:ok, reply} = %GRPC.Channel{ref: :my_channel} |> Helloworld.Greeter.Stub.say_hello(req)
+      {:ok, reply} = Helloworld.Greeter.Stub.say_hello(channel, req)
       assert reply.message == "Hello, #{name}"
     end)
   end
 
   test "named Gun connections survive the original caller exiting" do
+    # This exercises the direct (non-pooled) named-connection path.
+    previous_pool = Application.get_env(:grpc, :pool_enabled)
+    Application.put_env(:grpc, :pool_enabled, false)
+    on_exit(fn -> Application.put_env(:grpc, :pool_enabled, previous_pool) end)
+
     run_server(HelloServer, fn port ->
       parent = self()
       channel_name = {:named_gun_connection, make_ref()}

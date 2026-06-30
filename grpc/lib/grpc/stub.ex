@@ -215,6 +215,14 @@ defmodule GRPC.Stub do
       without `:accepted_compressors`.
     * `:accepted_compressors` - tell servers accepted compressors, this can be used without `:compressor`
     * `:headers` - headers to attach to each request
+    * `:pool` - connection pool options (map):
+      * `:size` - number of persistent connections (default: `1`)
+      * `:max_overflow` - max extra connections when pool is saturated; `nil` for no limit (default: `0`)
+      * `:max_streams` - max concurrent streams per connection; `nil` for no client-side limit (default: `nil`)
+      * `:health_check_enabled` - send periodic gRPC health-check pings (default: `false`)
+
+  The pool can be disabled entirely by setting `config :grpc, pool_enabled: false` in your
+  application config, which restores the pre-pool behaviour (single direct connection per `connect/2` call).
 
   ## Examples
 
@@ -301,13 +309,53 @@ defmodule GRPC.Stub do
   def call(_service_mod, rpc, %{channel: channel} = stream, request, opts) do
     {_, {req_mod, req_stream}, {res_mod, response_stream}, _rpc_options} = rpc
 
+    with {:ok, ch, pool_lease} <- acquire_channel(channel, opts) do
+      stream = %{stream | channel: ch, request_mod: req_mod, response_mod: res_mod}
+
+      opts =
+        if req_stream || response_stream do
+          parse_req_opts([{:timeout, :infinity} | opts])
+        else
+          parse_req_opts([{:timeout, @default_timeout} | opts])
+        end
+
+      compressor = Keyword.get(opts, :compressor, ch.compressor)
+      accepted_compressors = Keyword.get(opts, :accepted_compressors, ch.accepted_compressors)
+
+      if not is_list(accepted_compressors) do
+        raise ArgumentError, "accepted_compressors is not a list"
+      end
+
+      accepted_compressors =
+        if compressor do
+          Enum.uniq([compressor | accepted_compressors])
+        else
+          accepted_compressors
+        end
+
+      stream = %{
+        stream
+        | codec: Keyword.get(opts, :codec, ch.codec),
+          compressor: compressor,
+          accepted_compressors: accepted_compressors
+      }
+
+      try do
+        GRPC.Telemetry.client_span(stream, request, fn ->
+          do_call(req_stream, stream, request, opts)
+        end)
+      after
+        release_channel(channel, pool_lease)
+      end
+    end
+  end
+
+  defp acquire_channel(%Channel{pool: nil} = channel, opts) do
     ch =
       case Connection.pick_channel(channel, opts) do
-        {:ok, %Channel{adapter_payload: adapter_payload} = ch} when is_map(adapter_payload) ->
-          conn_pid = Map.get(adapter_payload, :conn_pid)
-
-          if is_pid(conn_pid) and Process.alive?(conn_pid) do
-            ch
+        {:ok, %Channel{adapter_payload: %{conn_pid: conn_pid}} = picked} when is_pid(conn_pid) ->
+          if Process.alive?(conn_pid) do
+            picked
           else
             Logger.warning(
               "The connection process #{inspect(conn_pid)} is not alive, " <>
@@ -318,43 +366,34 @@ defmodule GRPC.Stub do
           end
 
         _ ->
-          # fallback to the channel in the stream
           channel
       end
 
-    stream = %{stream | channel: ch, request_mod: req_mod, response_mod: res_mod}
+    {:ok, ch, nil}
+  end
 
-    opts =
-      if req_stream || response_stream do
-        parse_req_opts([{:timeout, :infinity} | opts])
-      else
-        parse_req_opts([{:timeout, @default_timeout} | opts])
+  defp acquire_channel(%Channel{pool: pool_ref} = channel, opts) do
+    # Always go through pick_channel so the LB can rotate between address pools
+    actual_pool_ref =
+      case Connection.pick_channel(channel, opts) do
+        {:ok, %Channel{pool: picked_pool_ref}} -> picked_pool_ref
+        _ -> pool_ref
       end
 
-    compressor = Keyword.get(opts, :compressor, ch.compressor)
-    accepted_compressors = Keyword.get(opts, :accepted_compressors, ch.accepted_compressors)
+    case GRPC.Client.Pool.checkout(actual_pool_ref) do
+      {wrapped, actual_channel} ->
+        {:ok, actual_channel, {wrapped, actual_pool_ref}}
 
-    if not is_list(accepted_compressors) do
-      raise ArgumentError, "accepted_compressors is not a list"
+      nil ->
+        {:error,
+         GRPC.RPCError.exception(GRPC.Status.resource_exhausted(), "no pool channel available")}
     end
+  end
 
-    accepted_compressors =
-      if compressor do
-        Enum.uniq([compressor | accepted_compressors])
-      else
-        accepted_compressors
-      end
+  defp release_channel(_channel, nil), do: :ok
 
-    stream = %{
-      stream
-      | codec: Keyword.get(opts, :codec, ch.codec),
-        compressor: compressor,
-        accepted_compressors: accepted_compressors
-    }
-
-    GRPC.Telemetry.client_span(stream, request, fn ->
-      do_call(req_stream, stream, request, opts)
-    end)
+  defp release_channel(_channel, {wrapped_channel, pool_ref}) do
+    GRPC.Client.Pool.checkin(pool_ref, wrapped_channel)
   end
 
   defp do_call(
