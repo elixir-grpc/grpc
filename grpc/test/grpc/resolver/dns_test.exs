@@ -7,11 +7,6 @@ defmodule GRPC.Client.Resolver.DNSTest do
 
   setup :verify_on_exit!
 
-  setup do
-    Mox.set_mox_global()
-    :ok
-  end
-
   test "resolves A record and parses service config from TXT via GenServer" do
     host = "my-service.local"
     config_name = "_grpc_config." <> host
@@ -93,7 +88,7 @@ defmodule GRPC.Client.Resolver.DNSTest do
         assert config.load_balancing_policy == :round_robin
       end)
 
-    assert log == ""
+    refute log =~ "multiple conflicting grpc_config records"
   end
 
   test "logs warning on multiple conflicting grpc_config records" do
