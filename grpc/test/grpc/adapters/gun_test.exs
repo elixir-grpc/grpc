@@ -122,4 +122,22 @@ defmodule GRPC.Client.Adapters.GunTest do
       assert %{conn_pid: nil} = disconnected_again.adapter_payload
     end
   end
+
+  describe "receive_data/2" do
+    test "maps connection-level gun errors to internal RPC errors" do
+      {:ok, response_pid} = GRPC.Client.Adapters.Gun.StreamResponseProcess.start_link()
+
+      reason = {:protocol_error, :"The preface was not received in a reasonable amount of time."}
+      send(response_pid, {:gun_error, self(), reason})
+
+      stream = %GRPC.Client.Stream{payload: %{response_pid: response_pid}, server_stream: false}
+      internal = GRPC.Status.internal()
+
+      assert {:error, %GRPC.RPCError{status: ^internal, message: message}} =
+               Gun.receive_data(stream, timeout: 100)
+
+      assert message =~ ":connection_error"
+      assert message =~ "preface"
+    end
+  end
 end
