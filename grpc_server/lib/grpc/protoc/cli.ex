@@ -22,7 +22,6 @@ defmodule GRPC.Protoc.CLI do
 
   # Entrypoint for the escript (protoc-gen-elixir).
   @doc false
-  @spec main([String.t()]) :: :ok
   def main(args)
 
   def main(["--version"]) do
@@ -135,8 +134,6 @@ defmodule GRPC.Protoc.CLI do
 
   # Made public for testing.
   @doc false
-  @spec find_types(Context.t(), [Google.Protobuf.FileDescriptorProto.t()], [String.t()]) ::
-          Context.t()
   def find_types(%Context{} = ctx, descs, files_to_generate)
       when is_list(descs) and is_list(files_to_generate) do
     global_type_mapping =

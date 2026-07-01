@@ -1,14 +1,12 @@
 defmodule GRPC.Google.RPC do
   @moduledoc false
 
-  @spec encode_status(Google.Rpc.Status.t()) :: String.t()
   def encode_status(%Google.Rpc.Status{} = status) do
     status
     |> Google.Rpc.Status.encode()
     |> Base.encode64(padding: true)
   end
 
-  @spec decode_status(String.t()) :: {:ok, Google.Rpc.Status.t()} | {:error, term()}
   def decode_status(encoded_details_bin) when is_binary(encoded_details_bin) do
     {:ok,
      encoded_details_bin
