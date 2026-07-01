@@ -191,6 +191,15 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   # are returned as `{remaining_buffer, updated_queue}`.
   defp drain_buffer(buffer, compressor, codec, res_mod, responses_queue) do
     case GRPC.Message.get_message(buffer, compressor) do
+      {{:trailers, trailers}, rest} ->
+        drain_buffer(
+          rest,
+          compressor,
+          codec,
+          res_mod,
+          :queue.in(get_embedded_trailers_response(trailers), responses_queue)
+        )
+
       {{_, message}, rest} ->
         # TODO: add code here to handle compressor headers
         response = codec.decode(message, res_mod)
@@ -208,8 +217,19 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
     end
   end
 
+  defp get_embedded_trailers_response(trailers) do
+    trailers
+    |> parse_embedded_trailers()
+    |> get_decoded_headers_response(:trailers)
+  end
+
   defp get_headers_response(headers, type) do
-    decoded_trailers = GRPC.Transport.HTTP2.decode_headers(headers)
+    headers
+    |> GRPC.Transport.HTTP2.decode_headers()
+    |> get_decoded_headers_response(type)
+  end
+
+  defp get_decoded_headers_response(decoded_trailers, type) do
     status = String.to_integer(decoded_trailers["grpc-status"] || "0")
 
     if status == GRPC.Status.ok() do
@@ -224,6 +244,17 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
 
       {:error, rpc_error}
     end
+  end
+
+  # TODO: Replace this helper with GRPC.Message.parse_trailers/1 after the next
+  # grpc_core package release is used here.
+  defp parse_embedded_trailers(trailers) do
+    trailers
+    |> String.split("\r\n")
+    |> Enum.reduce(%{}, fn line, acc ->
+      [key, value] = String.split(line, ":", parts: 2)
+      Map.put(acc, key, String.trim(value))
+    end)
   end
 
   defp update_compressor({:headers, headers}, state) do

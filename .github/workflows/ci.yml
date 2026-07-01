@@ -69,6 +69,51 @@ jobs:
       - name: Run :gun optional dependency test
         run: elixir script/adapter_test.exs gun
         working-directory: ./grpc
+
+  dialyzer:
+    runs-on: ubuntu-latest
+    name: Dialyzer OTP ${{ matrix.otp }} / Elixir ${{ matrix.elixir }}
+    strategy:
+      matrix:
+        include:
+          - otp: 28.x
+            elixir: 1.20.x
+    needs: check_format
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
+      - name: Retrieve dependencies cache
+        uses: actions/cache@v5
+        id: mix-cache
+        with:
+          path: |
+            **/deps
+            **/_build
+          key: v1-${{ runner.os }}-mix-otp-${{ matrix.otp }}-elixir-${{ matrix.elixir }}-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            v1-${{ runner.os }}-mix-otp-${{ matrix.otp }}-elixir-${{ matrix.elixir }}-
+      - name: Cache Dialyzer PLTs
+        uses: actions/cache@v5
+        id: cache-plt
+        with:
+          path: grpc/priv/plts
+          key: v1-${{ runner.os }}-plt-otp-${{ matrix.otp }}-elixir-${{ matrix.elixir }}-${{ hashFiles('grpc/mix.lock') }}
+          restore-keys: |
+            v1-${{ runner.os }}-plt-otp-${{ matrix.otp }}-elixir-${{ matrix.elixir }}-
+      - name: Install Dependencies
+        run: mix deps.get 1>/dev/null
+        working-directory: ./grpc
+      - name: Build Dialyzer PLT
+        if: ${{ steps.cache-plt.outputs.cache-hit != 'true' }}
+        run: mix dialyzer --plt
+        working-directory: ./grpc
+      - name: Run Dialyzer
+        run: mix dialyzer --format github
+        working-directory: ./grpc
+
   interop-tests:
     runs-on: ubuntu-latest
     name: Interop tests

@@ -25,3 +25,6 @@ grpc-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+# Dialyzer PLTs are generated locally and cached in CI.
+/priv/plts/

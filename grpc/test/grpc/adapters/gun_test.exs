@@ -124,6 +124,41 @@ defmodule GRPC.Client.Adapters.GunTest do
   end
 
   describe "receive_data/2" do
+    test "server streams consume embedded trailer frames" do
+      for fin <- [:nofin, :fin] do
+        {:ok, response_pid} = GRPC.Client.Adapters.Gun.StreamResponseProcess.start_link()
+        monitor_ref = Process.monitor(response_pid)
+
+        stream =
+          build(:client_stream,
+            grpc_type: :server_stream,
+            payload: %{response_pid: response_pid},
+            server_stream: true
+          )
+
+        send(response_pid, {:gun_response, self(), make_ref(), :nofin, 200, []})
+
+        assert {:ok, response_stream, %{headers: %{}}} =
+                 Gun.receive_data(stream, timeout: 100, return_headers: true)
+
+        {:ok, response_data, _} =
+          build(:hello_reply_rpc)
+          |> GRPC.Codec.Proto.encode()
+          |> GRPC.Message.to_data()
+
+        {:ok, trailer_data, _} = embedded_trailers_data("grpc-status:0\r\ngrpc-message:OK")
+
+        send(response_pid, {:gun_data, self(), make_ref(), fin, response_data <> trailer_data})
+
+        assert [
+                 {:ok, %Helloworld.HelloReply{message: "Hello Luis"}},
+                 {:trailers, %{"grpc-message" => "OK", "grpc-status" => "0"}}
+               ] = Enum.to_list(response_stream)
+
+        assert_receive {:DOWN, ^monitor_ref, :process, ^response_pid, :normal}, 500
+      end
+    end
+
     test "maps connection-level gun errors to internal RPC errors" do
       {:ok, response_pid} = GRPC.Client.Adapters.Gun.StreamResponseProcess.start_link()
 
@@ -139,5 +174,11 @@ defmodule GRPC.Client.Adapters.GunTest do
       assert message =~ ":connection_error"
       assert message =~ "preface"
     end
+  end
+
+  # TODO: Replace this helper with GRPC.Message.to_trailers_data/1 after the next
+  # grpc_core package release is used here.
+  defp embedded_trailers_data(trailers) do
+    GRPC.Message.to_data(trailers, message_flag: 0b1000_0000)
   end
 end

@@ -17,16 +17,16 @@ defmodule GRPC.Channel do
   """
 
   @type t :: %__MODULE__{
-          host: String.t(),
-          port: non_neg_integer(),
-          scheme: String.t(),
-          cred: GRPC.Credential.t(),
-          ref: reference() | nil,
-          adapter: atom(),
+          host: String.t() | {:local, String.t()} | nil,
+          port: non_neg_integer() | nil,
+          scheme: String.t() | nil,
+          cred: GRPC.Credential.t() | nil,
+          ref: term(),
+          adapter: module() | nil,
           adapter_payload: any(),
           codec: module(),
-          interceptors: [],
-          compressor: module(),
+          interceptors: [{module(), term()}],
+          compressor: module() | nil,
           accepted_compressors: [module()],
           headers: list()
         }

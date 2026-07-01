@@ -16,7 +16,11 @@ defmodule GRPC.MixProject do
       package: package(),
       docs: docs(),
       name: "gRPC Client",
-      source_url: @source_url
+      source_url: @source_url,
+      dialyzer: [
+        plt_local_path: "priv/plts",
+        plt_core_path: "priv/plts"
+      ]
     ]
   end
 
@@ -34,6 +38,7 @@ defmodule GRPC.MixProject do
       {:gun, "~> 2.4.0", optional: true},
       {:mint, "~> 1.9", optional: true},
       {:castore, "~> 1.0", optional: true},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.40", only: [:dev, :docs], runtime: false},
       {:ex_parameterized, "~> 1.3.7", only: :test},
       {:mox, "~> 1.2", only: :test},

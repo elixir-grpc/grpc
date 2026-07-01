@@ -430,12 +430,9 @@ if Code.ensure_loaded?(:gun) do
          ) do
       case GRPC.Message.get_message(buffer) do
         {{:trailers, trailers}, rest} ->
-          new_stream =
-            stream
-            |> update_stream_with_trailers(trailers, opts[:return_headers])
-            |> Map.put(:buffer, rest)
-
-          {{:ok, trailers}, new_stream}
+          stream
+          |> Map.put(:buffer, rest)
+          |> update_stream_with_embedded_trailers(trailers, opts[:return_headers])
 
         {{_, message}, rest} ->
           reply = codec.decode(message, res_mod)
@@ -470,9 +467,42 @@ if Code.ensure_loaded?(:gun) do
       end
     end
 
+    defp update_stream_with_embedded_trailers(stream, trailers, return_headers?) do
+      trailers = decode_embedded_trailers(trailers)
+
+      stop_response_process(stream.payload.response_pid)
+      update_stream_with_decoded_trailers(stream, trailers, return_headers?)
+    end
+
+    defp stop_response_process(response_pid) do
+      GenServer.stop(response_pid, :normal)
+    catch
+      :exit, {:noproc, _} -> :ok
+    end
+
+    defp decode_embedded_trailers(trailers) do
+      trailers
+      |> parse_embedded_trailers()
+      |> GRPC.Transport.HTTP2.decode_headers()
+    end
+
+    # TODO: Replace this helper with GRPC.Message.parse_trailers/1 after the next
+    # grpc_core package release is used here.
+    defp parse_embedded_trailers(trailers) do
+      trailers
+      |> String.split("\r\n")
+      |> Enum.reduce(%{}, fn line, acc ->
+        [key, value] = String.split(line, ":", parts: 2)
+        Map.put(acc, key, String.trim(value))
+      end)
+    end
+
     defp update_stream_with_trailers(stream, trailers, return_headers?) do
       trailers = GRPC.Transport.HTTP2.decode_headers(trailers)
+      update_stream_with_decoded_trailers(stream, trailers, return_headers?)
+    end
 
+    defp update_stream_with_decoded_trailers(stream, trailers, return_headers?) do
       case parse_trailers(trailers) do
         :ok ->
           fin_resp = if return_headers?, do: {:trailers, trailers}

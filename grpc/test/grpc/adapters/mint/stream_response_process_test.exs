@@ -411,6 +411,24 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
              ]
     end
 
+    test "emits embedded trailers from data frames", %{pid: pid} do
+      {:ok, response_data, _} =
+        build(:hello_reply_rpc)
+        |> GRPC.Codec.Proto.encode()
+        |> GRPC.Message.to_data()
+
+      {:ok, trailer_data, _} = embedded_trailers_data("grpc-status:0\r\ngrpc-message:OK")
+
+      stream = StreamResponseProcess.build_stream(pid)
+      StreamResponseProcess.consume(pid, :data, response_data <> trailer_data)
+      StreamResponseProcess.done(pid)
+
+      assert Enum.to_list(stream) == [
+               {:ok, build(:hello_reply_rpc)},
+               {:trailers, %{"grpc-message" => "OK", "grpc-status" => "0"}}
+             ]
+    end
+
     test_with_params(
       "emits headers to stream",
       %{pid: pid},
@@ -439,5 +457,11 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
       end,
       do: [{:headers}, {:trailers}]
     )
+  end
+
+  # TODO: Replace this helper with GRPC.Message.to_trailers_data/1 after the next
+  # grpc_core package release is used here.
+  defp embedded_trailers_data(trailers) do
+    GRPC.Message.to_data(trailers, message_flag: 0b1000_0000)
   end
 end
