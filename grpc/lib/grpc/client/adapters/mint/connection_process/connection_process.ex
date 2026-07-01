@@ -19,8 +19,6 @@ if Code.ensure_loaded?(Mint.HTTP) do
     @doc """
     Starts and link connection process
     """
-    @spec start_link(Mint.Types.scheme(), Mint.Types.address(), :inet.port_number(), keyword()) ::
-            GenServer.on_start()
     def start_link(scheme, host, port, opts \\ []) do
       opts = Keyword.put(opts, :parent, self())
       GenServer.start_link(__MODULE__, {scheme, host, port, opts})
@@ -33,14 +31,6 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
       * :stream_response_pid (required) - the process to where send the responses coming from the connection will be sent to be processed
     """
-    @spec request(
-            pid :: pid(),
-            method :: String.t(),
-            path :: String.t(),
-            Mint.Types.headers(),
-            body :: iodata() | nil | :stream,
-            opts :: keyword()
-          ) :: {:ok, %{request_ref: Mint.Types.request_ref()}} | {:error, Mint.Types.error()}
     def request(pid, method, path, headers, body, opts \\ []) do
       GenServer.call(pid, {:request, method, path, headers, body, opts})
     end
@@ -48,7 +38,6 @@ if Code.ensure_loaded?(Mint.HTTP) do
     @doc """
     Closes the given connection.
     """
-    @spec disconnect(pid :: pid()) :: :ok
     def disconnect(pid) do
       GenServer.call(pid, :disconnect)
     end
@@ -56,11 +45,6 @@ if Code.ensure_loaded?(Mint.HTTP) do
     @doc """
     Streams a chunk of the request body on the connection or signals the end of the body.
     """
-    @spec stream_request_body(
-            pid(),
-            Mint.Types.request_ref(),
-            iodata() | :eof | {:eof, trailing_headers :: Mint.Types.headers()}
-          ) :: :ok | {:error, Mint.Types.error()}
     def stream_request_body(pid, request_ref, body) do
       GenServer.call(pid, {:stream_body, request_ref, body})
     end
@@ -68,7 +52,6 @@ if Code.ensure_loaded?(Mint.HTTP) do
     @doc """
     cancels an open request request
     """
-    @spec cancel(pid(), Mint.Types.request_ref()) :: :ok | {:error, Mint.Types.error()}
     def cancel(pid, request_ref) do
       GenServer.call(pid, {:cancel_request, request_ref})
     end

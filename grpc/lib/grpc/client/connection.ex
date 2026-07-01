@@ -179,7 +179,6 @@ defmodule GRPC.Client.Connection do
       iex> {:ok, ch} = GRPC.Client.Connection.connect("127.0.0.1:50051")
       iex> Grpc.Testing.TestService.Stub.empty_call(ch, %{})
   """
-  @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(target, opts \\ []) do
     case build_initial_state(target, opts) do
       {:ok, initial_state} ->
@@ -215,7 +214,6 @@ defmodule GRPC.Client.Connection do
       iex> GRPC.Client.Connection.disconnect(ch)
       {:ok, %GRPC.Channel{}}
   """
-  @spec disconnect(Channel.t()) :: {:ok, Channel.t()} | {:error, any()}
   def disconnect(%Channel{ref: ref} = channel) do
     GenServer.call(via(ref), {:disconnect, channel})
   end
@@ -238,7 +236,6 @@ defmodule GRPC.Client.Connection do
       iex> GRPC.Client.Connection.pick(ch)
       {:ok, %GRPC.Channel{host: "192.168.1.1", port: 50051}}
   """
-  @spec pick_channel(Channel.t(), keyword()) :: {:ok, Channel.t()} | {:error, term()}
   def pick_channel(%Channel{ref: ref} = _channel, _opts \\ []) do
     case :persistent_term.get({__MODULE__, ref}, nil) do
       {lb_mod, lb_state} when not is_nil(lb_mod) ->
@@ -258,7 +255,6 @@ defmodule GRPC.Client.Connection do
   Intended for use by health checks or heartbeat mechanisms that detect
   a backend has gone away and want to force a fresh DNS lookup.
   """
-  @spec resolve_now(Channel.t()) :: :ok
   def resolve_now(%Channel{ref: ref}) do
     GenServer.cast(via(ref), :resolve_now)
   end

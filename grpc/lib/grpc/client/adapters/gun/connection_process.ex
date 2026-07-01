@@ -20,8 +20,6 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   require Logger
   alias GRPC.Client.Adapters.Gun.StreamResponseProcess
 
-  @spec connect(GRPC.Channel.t(), map()) ::
-          {:ok, %{conn_pid: pid()}} | {:error, any()}
   def connect(channel, open_opts) when is_map(open_opts) do
     case DynamicSupervisor.start_child(GRPC.Client.Supervisor, child_spec(channel, open_opts)) do
       {:ok, connection_process_pid} ->
@@ -35,7 +33,6 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
     end
   end
 
-  @spec disconnect(pid()) :: :ok
   def disconnect(connection_process_pid) when is_pid(connection_process_pid) do
     GenServer.call(connection_process_pid, :disconnect)
   catch
@@ -43,24 +40,18 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
       :ok
   end
 
-  @spec request(pid(), iodata(), list(), iodata()) ::
-          {:ok, %{stream_ref: reference(), response_pid: pid()}} | {:error, any()}
   def request(connection_process_pid, path, headers, body) do
     GenServer.call(connection_process_pid, {:request, path, headers, body})
   end
 
-  @spec open_stream(pid(), iodata(), list()) ::
-          {:ok, %{stream_ref: reference(), response_pid: pid()}} | {:error, any()}
   def open_stream(connection_process_pid, path, headers) do
     GenServer.call(connection_process_pid, {:open_stream, path, headers})
   end
 
-  @spec send_data(pid(), reference(), :fin | :nofin, iodata()) :: :ok
   def send_data(connection_process_pid, stream_ref, fin, data) do
     GenServer.call(connection_process_pid, {:send_data, stream_ref, fin, data})
   end
 
-  @spec cancel(pid(), reference()) :: :ok
   def cancel(connection_process_pid, stream_ref) do
     GenServer.call(connection_process_pid, {:cancel, stream_ref})
   end
@@ -75,7 +66,6 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
     }
   end
 
-  @spec start_link(GRPC.Channel.t(), map()) :: GenServer.on_start()
   def start_link(channel, open_opts) do
     if is_nil(channel.ref) do
       GenServer.start_link(__MODULE__, {channel, open_opts})

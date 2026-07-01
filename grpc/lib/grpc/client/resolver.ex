@@ -113,9 +113,6 @@ defmodule GRPC.Client.Resolver do
 
   This function abstracts the resolution mechanism, allowing the gRPC client to obtain endpoints and service configuration regardless of the underlying target type.
   """
-  @spec resolve(String.t()) ::
-          {:ok, %{addresses: list(map()), service_config: GRPC.Client.ServiceConfig.t()}}
-          | {:error, term()}
   def resolve(target) do
     uri = URI.parse(target)
     scheme = uri.scheme || "dns"
