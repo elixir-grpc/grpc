@@ -73,6 +73,7 @@ defmodule GRPC.Client.Connection do
   use GenServer
   alias GRPC.Channel
   alias GRPC.Client.Connection.EndpointResolver
+  alias GRPC.Client.Pool
 
   require Logger
 
@@ -165,6 +166,14 @@ defmodule GRPC.Client.Connection do
     * `:codec` – request/response codec (default: `GRPC.Codec.Proto`)
     * `:compressor` / `:accepted_compressors` – message compression
     * `:headers` – default metadata headers
+    * `:pool` – connection pool options (map):
+      * `:size` – number of persistent connections (default: `1`)
+      * `:max_overflow` – max extra connections when pool is saturated; `nil` for no limit (default: `0`)
+      * `:max_streams` – max concurrent streams per connection; `nil` for no client-side limit (default: `nil`)
+      * `:health_check_enabled` – send periodic gRPC health-check pings (default: `false`)
+
+      The pool can be disabled entirely by setting `config :grpc, pool_enabled: false` in your
+      application config, which restores the pre-pool behaviour (single direct connection per `connect/2` call).
     * `:resolve_interval` – DNS re-resolution interval in ms (default: 30000)
     * `:max_resolve_interval` – backoff cap in ms (default: 300000)
     * `:min_resolve_interval` – rate-limit floor in ms (default: 5000)
@@ -281,7 +290,7 @@ defmodule GRPC.Client.Connection do
     :persistent_term.erase({__MODULE__, channel.ref})
     disconnect_real_channels(state.real_channels, adapter)
 
-    resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
+    resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}, pool: nil}}
     {:reply, resp, state, {:continue, :stop}}
   end
 
@@ -466,6 +475,10 @@ defmodule GRPC.Client.Connection do
     {:via, Registry, {GRPC.Client.Registry, {__MODULE__, ref}}}
   end
 
+  defp do_disconnect(_adapter, %Channel{pool: pool_ref}) when is_reference(pool_ref) do
+    Pool.stop_for_address(pool_ref)
+  end
+
   defp do_disconnect(adapter, channel) do
     adapter.disconnect(channel)
   rescue
@@ -492,7 +505,8 @@ defmodule GRPC.Client.Connection do
         resolver: GRPC.Client.Resolver,
         resolve_interval: @default_resolve_interval,
         max_resolve_interval: @default_max_resolve_interval,
-        min_resolve_interval: @default_min_resolve_interval
+        min_resolve_interval: @default_min_resolve_interval,
+        pool: %{size: 1, max_overflow: 0, max_streams: nil, health_check_enabled: false}
       )
 
     resolver = Keyword.get(opts, :resolver, GRPC.Client.Resolver)
@@ -679,14 +693,22 @@ defmodule GRPC.Client.Connection do
   defp choose_lb(_), do: GRPC.Client.LoadBalancing.PickFirst
 
   defp connect_real_channel(%Channel{scheme: "unix"} = vc, path, port, opts, adapter) do
-    %Channel{vc | host: path, port: port}
-    |> adapter.connect(opts[:adapter_opts])
+    connect_channel(%Channel{vc | host: path, port: port}, opts, adapter)
   end
 
   defp connect_real_channel(%Channel{} = vc, host, port, opts, adapter) do
-    %Channel{vc | host: host, port: port}
-    |> adapter.connect(opts[:adapter_opts])
+    connect_channel(%Channel{vc | host: host, port: port}, opts, adapter)
   end
+
+  defp connect_channel(%Channel{host: host, port: port} = channel, opts, adapter) do
+    if pool_enabled?() do
+      Pool.start_for_address(channel, host, port, opts)
+    else
+      adapter.connect(channel, opts[:adapter_opts])
+    end
+  end
+
+  defp pool_enabled?, do: Application.get_env(:grpc, :pool_enabled, false)
 
   defp init_interceptors(interceptors) do
     Enum.map(interceptors, fn
