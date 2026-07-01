@@ -3,6 +3,25 @@ defmodule GRPC.MessageTest do
 
   doctest GRPC.Message
 
+  test "parse_trailers/1 parses embedded trailer payloads" do
+    trailers = "grpc-status:0\r\ngrpc-message:OK"
+
+    assert GRPC.Message.parse_trailers(trailers) == %{
+             "grpc-message" => "OK",
+             "grpc-status" => "0"
+           }
+  end
+
+  test "to_trailers_data/2 encodes embedded trailer frames" do
+    trailers = "grpc-status:0\r\ngrpc-message:OK"
+
+    assert {:ok, data, _} =
+             GRPC.Message.to_trailers_data(trailers, compressor: GRPC.Compressor.Gzip)
+
+    assert {:trailers, %{"grpc-message" => "OK", "grpc-status" => "0"}, <<>>} =
+             GRPC.Message.from_data(%{compressor: nil}, data)
+  end
+
   test "compressor works" do
     message = String.duplicate("foo", 100)
 

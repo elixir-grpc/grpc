@@ -76,6 +76,20 @@ defmodule GRPC.Message do
   end
 
   @doc """
+  Transforms embedded trailers into a gRPC body binary.
+  """
+  @spec to_trailers_data(iodata(), keyword()) ::
+          {:ok, iodata(), non_neg_integer()} | {:error, String.t()}
+  def to_trailers_data(trailers, opts \\ []) do
+    opts =
+      opts
+      |> Keyword.delete(:compressor)
+      |> Keyword.put(:message_flag, @trailers_flag)
+
+    to_data(trailers, opts)
+  end
+
+  @doc """
   Transforms gRPC body into Protobuf data.
 
   ## Examples
@@ -139,7 +153,11 @@ defmodule GRPC.Message do
     end
   end
 
-  defp parse_trailers(data) do
+  @doc """
+  Parses an embedded trailers payload into a trailer map.
+  """
+  @spec parse_trailers(binary()) :: map()
+  def parse_trailers(data) do
     data
     |> String.split("\r\n")
     |> Enum.reduce(%{}, fn line, acc ->
