@@ -13,8 +13,6 @@ defmodule GRPC.Protoc.Generator.Service do
     [:assigns]
   )
 
-  @spec generate(Context.t(), Google.Protobuf.ServiceDescriptorProto.t()) ::
-          {String.t(), String.t()}
   def generate(%Context{} = ctx, %Google.Protobuf.ServiceDescriptorProto{} = desc) do
     # service can't be nested
     mod_name = Util.mod_name(ctx, [Macro.camelize(desc.name)])
@@ -36,6 +34,7 @@ defmodule GRPC.Protoc.Generator.Service do
          methods: methods,
          descriptor_fun_body: descriptor_fun_body,
          version: Util.version(),
+         gen_stubs?: GRPC.Protoc.CLI.gen_stubs?(ctx),
          module_doc?: false
        )
      )}

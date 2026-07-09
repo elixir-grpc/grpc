@@ -10,7 +10,6 @@ defmodule GRPC.Server.Router.Query do
 
   alias GRPC.Server.Router.FieldPath
 
-  @spec decode(String.t(), map()) :: %{optional(String.t()) => term()}
   def decode(query, acc \\ %{})
 
   def decode("", acc) do

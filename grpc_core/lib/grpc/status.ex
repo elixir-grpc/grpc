@@ -30,13 +30,11 @@ defmodule GRPC.Status do
   @doc """
   Not an error; returned on success.
   """
-  @spec ok :: t
   def ok, do: 0
 
   @doc """
   The operation was cancelled (typically by the caller).
   """
-  @spec cancelled() :: t()
   def cancelled, do: 1
 
   @doc """
@@ -48,7 +46,6 @@ defmodule GRPC.Status do
   errors raised by APIs that do not return enough error information
   may be converted to this error.
   """
-  @spec unknown :: t
   def unknown, do: 2
 
   @doc """
@@ -58,7 +55,6 @@ defmodule GRPC.Status do
   INVALID_ARGUMENT indicates arguments that are problematic regardless of
   the state of the system (e.g., a malformed file name).
   """
-  @spec invalid_argument :: t
   def invalid_argument, do: 3
 
   @doc """
@@ -69,19 +65,16 @@ defmodule GRPC.Status do
   successful response from a server could have been delayed long
   enough for the deadline to expire.
   """
-  @spec deadline_exceeded :: t
   def deadline_exceeded, do: 4
 
   @doc """
   Some requested entity (e.g., file or directory) was not found.
   """
-  @spec not_found :: t
   def not_found, do: 5
 
   @doc """
   Some entity that we attempted to create (e.g., file or directory) already exists.
   """
-  @spec already_exists :: t
   def already_exists, do: 6
 
   @doc """
@@ -94,14 +87,12 @@ defmodule GRPC.Status do
   used if the caller can not be identified (use UNAUTHENTICATED
   instead for those errors).
   """
-  @spec permission_denied :: t
   def permission_denied, do: 7
 
   @doc """
   Some resource has been exhausted, perhaps a per-user quota, or
   perhaps the entire file system is out of space.
   """
-  @spec resource_exhausted :: t
   def resource_exhausted, do: 8
 
   @doc """
@@ -111,7 +102,6 @@ defmodule GRPC.Status do
   For example, directory to be deleted may be non-empty,
   an rmdir operation is applied to a non-directory, etc.
   """
-  @spec failed_precondition :: t
   def failed_precondition, do: 9
 
   @doc """
@@ -120,7 +110,6 @@ defmodule GRPC.Status do
   Typically due to a concurrency issue like sequencer check failures,
   transaction aborts, etc.
   """
-  @spec aborted() :: t()
   def aborted, do: 10
 
   @doc """
@@ -128,13 +117,11 @@ defmodule GRPC.Status do
 
   E.g., seeking or reading past end of file.
   """
-  @spec out_of_range :: t
   def out_of_range, do: 11
 
   @doc """
   Operation is not implemented or not supported/enabled in this service.
   """
-  @spec unimplemented :: t
   def unimplemented, do: 12
 
   @doc """
@@ -143,7 +130,6 @@ defmodule GRPC.Status do
   Means some invariants expected by underlying system has been broken.
   If you see one of these errors, something is very broken.
   """
-  @spec internal :: t
   def internal, do: 13
 
   @doc """
@@ -152,22 +138,18 @@ defmodule GRPC.Status do
   This is a most likely a transient condition and may be corrected by retrying with
   a backoff.
   """
-  @spec unavailable :: t
   def unavailable, do: 14
 
   @doc """
   Unrecoverable data loss or corruption.
   """
-  @spec data_loss :: t
   def data_loss, do: 15
 
   @doc """
   The request does not have valid authentication credentials for the operation.
   """
-  @spec unauthenticated :: t
   def unauthenticated, do: 16
 
-  @spec code_name(t()) :: binary()
   def code_name(0), do: "OK"
   def code_name(1), do: "Canceled"
   def code_name(2), do: "Unknown"
@@ -186,7 +168,6 @@ defmodule GRPC.Status do
   def code_name(15), do: "DataLoss"
   def code_name(16), do: "Unauthenticated"
 
-  @spec http_code(t()) :: t()
   def http_code(0), do: 200
   def http_code(1), do: 400
   def http_code(2), do: 500
@@ -205,7 +186,6 @@ defmodule GRPC.Status do
   def http_code(15), do: 500
   def http_code(16), do: 401
 
-  @spec status_message(t()) :: String.t() | nil
   def status_message(0), do: nil
   def status_message(1), do: "The operation was cancelled (typically by the caller)"
   def status_message(2), do: "Unknown error"

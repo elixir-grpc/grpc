@@ -18,16 +18,11 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   # TODO: Refactor the GenServer.call/3 occurrences on this module to produce
   # telemetry events and log entries in case of failures
 
-  @typep accepted_types :: :data | :trailers | :headers | :error
-  @typep data_types :: binary() | Mint.Types.headers() | Mint.Types.error()
-
   @accepted_types [:data, :trailers, :headers, :error]
   @header_types [:headers, :trailers]
 
   use GenServer
 
-  @spec start_link(GRPC.Client.Stream.t(), send_headers_or_trailers? :: boolean()) ::
-          GenServer.on_start()
   def start_link(stream, send_headers_or_trailers?) do
     GenServer.start_link(__MODULE__, {stream, send_headers_or_trailers?})
   end
@@ -36,7 +31,6 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   Given a pid from this process, build an Elixir.Stream that will consume the accumulated
   data inside this process
   """
-  @spec build_stream(pid(), produce_trailers? :: boolean) :: Enumerable.t()
   def build_stream(pid, produce_trailers? \\ true) do
     Stream.unfold(pid, fn pid ->
       pid
@@ -62,7 +56,6 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
     once all messages are produced. This process will automatically
     be killed.
   """
-  @spec done(pid()) :: :ok
   def done(pid) do
     :ok = GenServer.call(pid, {:consume_response, :done})
     :ok
@@ -71,7 +64,6 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   @doc """
   Consume an incoming data or trailers/headers
   """
-  @spec consume(pid(), type :: accepted_types, data :: data_types) :: :ok
   def consume(pid, type, data) when type in @accepted_types do
     :ok = GenServer.call(pid, {:consume_response, {type, data}})
     :ok

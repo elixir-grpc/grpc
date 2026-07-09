@@ -1,7 +1,6 @@
 defmodule GRPC.Server.Router.FieldPath do
   @moduledoc false
 
-  @spec decode_pair({binary(), term()}, map()) :: map()
   def decode_pair({key, value}, acc) do
     parts = :binary.split(key, ".", [:global])
     assign_map(parts, value, acc)

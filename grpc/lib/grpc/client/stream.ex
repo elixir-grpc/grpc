@@ -71,7 +71,6 @@ defmodule GRPC.Client.Stream do
   end
 
   @doc false
-  @spec send_request(GRPC.Client.Stream.t(), struct, Keyword.t()) :: GRPC.Client.Stream.t()
   def send_request(
         %{codec: codec, channel: %{adapter: adapter}, compressor: compressor} = stream,
         request,
