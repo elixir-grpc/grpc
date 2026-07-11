@@ -110,7 +110,7 @@ defmodule GRPC.Client.Connection do
       start:
         {GenServer, :start_link,
          [__MODULE__, initial_state, [name: via(initial_state.virtual_channel.ref)]]},
-      restart: :transient,
+      restart: :temporary,
       type: :worker,
       shutdown: 5000
     }
@@ -185,8 +185,15 @@ defmodule GRPC.Client.Connection do
         ch = initial_state.virtual_channel
 
         case DynamicSupervisor.start_child(GRPC.Client.Supervisor, child_spec(initial_state)) do
-          {:ok, _pid} ->
-            finalize_connection(ch, opts)
+          {:ok, pid} ->
+            case finalize_connection(ch, opts) do
+              {:ok, %Channel{}} = result ->
+                result
+
+              {:error, _reason} = error ->
+                DynamicSupervisor.terminate_child(GRPC.Client.Supervisor, pid)
+                error
+            end
 
           {:error, {:already_started, _pid}} ->
             finalize_connection(ch, opts)
