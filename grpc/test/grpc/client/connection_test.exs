@@ -29,7 +29,8 @@ defmodule GRPC.Client.ConnectionTest do
       ref: make_ref(),
       ip: "127.0.0.1",
       target: "ipv4:127.0.0.1:50051",
-      adapter: GRPC.Test.ClientAdapter
+      adapter: GRPC.Test.ClientAdapter,
+      supervisor_children: DynamicSupervisor.count_children(GRPC.Client.Supervisor).active
     }
   end
 
@@ -56,7 +57,8 @@ defmodule GRPC.Client.ConnectionTest do
   describe "connect/2 - failed finalize" do
     test "terminates a newly started child when no channel can be picked", %{
       ref: ref,
-      adapter: adapter
+      adapter: adapter,
+      supervisor_children: supervisor_children
     } do
       Application.put_env(:grpc, NoPickResolver, self())
       on_exit(fn -> Application.delete_env(:grpc, NoPickResolver) end)
@@ -76,7 +78,7 @@ defmodule GRPC.Client.ConnectionTest do
       end)
 
       assert_eventually(fn ->
-        DynamicSupervisor.count_children(GRPC.Client.Supervisor).active == 0
+        DynamicSupervisor.count_children(GRPC.Client.Supervisor).active == supervisor_children
       end)
     end
   end
@@ -117,7 +119,8 @@ defmodule GRPC.Client.ConnectionTest do
     test "GenServer process is no longer alive after disconnect", %{
       ref: ref,
       target: target,
-      adapter: adapter
+      adapter: adapter,
+      supervisor_children: supervisor_children
     } do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
@@ -133,7 +136,7 @@ defmodule GRPC.Client.ConnectionTest do
       end)
 
       assert_eventually(fn ->
-        DynamicSupervisor.count_children(GRPC.Client.Supervisor).active == 0
+        DynamicSupervisor.count_children(GRPC.Client.Supervisor).active == supervisor_children
       end)
     end
 
@@ -151,7 +154,8 @@ defmodule GRPC.Client.ConnectionTest do
     test "an abnormally stopped process is cleaned up without being restarted", %{
       ref: ref,
       target: target,
-      adapter: adapter
+      adapter: adapter,
+      supervisor_children: supervisor_children
     } do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
@@ -167,7 +171,7 @@ defmodule GRPC.Client.ConnectionTest do
       end)
 
       assert_eventually(fn ->
-        DynamicSupervisor.count_children(GRPC.Client.Supervisor).active == 0
+        DynamicSupervisor.count_children(GRPC.Client.Supervisor).active == supervisor_children
       end)
     end
   end
@@ -258,7 +262,8 @@ defmodule GRPC.Client.ConnectionTest do
   describe "resource leaks over repeated connect/disconnect" do
     test "50 binary-heavy cycles leave supervisor memory bounded after garbage collection", %{
       target: target,
-      adapter: adapter
+      adapter: adapter,
+      supervisor_children: supervisor_children
     } do
       supervisor = Process.whereis(GRPC.Client.Supervisor)
       :erlang.garbage_collect(supervisor)
@@ -277,7 +282,8 @@ defmodule GRPC.Client.ConnectionTest do
       :erlang.garbage_collect(supervisor)
       {:memory, after_memory} = Process.info(supervisor, :memory)
 
-      assert %{active: 0} = DynamicSupervisor.count_children(GRPC.Client.Supervisor)
+      assert %{active: ^supervisor_children} =
+               DynamicSupervisor.count_children(GRPC.Client.Supervisor)
 
       assert after_memory <= before_memory + 100_000,
              "supervisor memory grew: before=#{before_memory} after=#{after_memory}"
