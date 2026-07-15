@@ -69,15 +69,10 @@ if Code.ensure_loaded?(Mint.HTTP) do
     end
 
     def stream_response_pid(state, ref) do
-      case state.requests do
-        %{^ref => %{stream_response_pid: pid}} -> pid
-        _ -> nil
-      end
+      state.requests[ref].stream_response_pid
     end
 
-    def has_ref?(state, ref) do
-      Map.has_key?(state.requests, ref)
-    end
+    defguard has_request_ref?(state, ref) when is_map_key(state.requests, ref)
 
     def pop_ref(state, ref) do
       pop_in(state.requests[ref])
