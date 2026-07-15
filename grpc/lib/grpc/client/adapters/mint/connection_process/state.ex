@@ -72,7 +72,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       state.requests[ref].stream_response_pid
     end
 
-    defguard has_request_ref?(state, ref) when is_map_key(state.requests, ref)
+    defguard has_request_ref(state, ref) when is_map_key(state.requests, ref)
 
     def pop_ref(state, ref) do
       pop_in(state.requests[ref])
