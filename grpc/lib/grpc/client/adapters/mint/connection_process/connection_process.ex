@@ -164,7 +164,12 @@ if Code.ensure_loaded?(Mint.HTTP) do
     end
 
     def handle_call({:cancel_request, request_ref}, _from, state) do
-      state = process_response({:done, request_ref}, state)
+      state =
+        if State.has_ref?(state, request_ref) do
+          process_response({:done, request_ref}, state)
+        else
+          state
+        end
 
       case Mint.HTTP2.cancel_request(state.conn, request_ref) do
         {:ok, conn} -> {:reply, :ok, State.update_conn(state, conn)}
@@ -227,6 +232,14 @@ if Code.ensure_loaded?(Mint.HTTP) do
     def terminate(_reason, _state) do
       :normal
     end
+
+    defp process_response({_kind, request_ref, _}, state)
+         when not is_map_key(state.requests, request_ref),
+         do: state
+
+    defp process_response({_kind, request_ref}, state)
+         when not is_map_key(state.requests, request_ref),
+         do: state
 
     defp process_response({:status, request_ref, status}, state) do
       State.update_response_status(state, request_ref, status)
