@@ -211,6 +211,18 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert :queue.is_empty(response_state.responses)
       assert true == response_state.done
     end
+
+    test "is a no-op on state.requests when the ref was already popped",
+         %{request_ref: request_ref, state: state} do
+      {_ref, state_without_ref} = pop_in(state.requests[request_ref])
+      assert %{} == state_without_ref.requests
+
+      response =
+        ConnectionProcess.handle_call({:cancel_request, request_ref}, nil, state_without_ref)
+
+      assert {:reply, _reply, new_state} = response
+      assert %{} == new_state.requests
+    end
   end
 
   describe "handle_continue/2 - :process_stream_queue" do

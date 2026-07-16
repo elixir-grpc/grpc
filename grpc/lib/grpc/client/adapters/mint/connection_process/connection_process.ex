@@ -13,6 +13,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
     alias GRPC.Client.Adapters.Mint.StreamResponseProcess
 
     require Logger
+    require State
 
     @connection_closed_error "the connection is closed"
 
@@ -163,13 +164,18 @@ if Code.ensure_loaded?(Mint.HTTP) do
        {:continue, :process_request_stream_queue}}
     end
 
-    def handle_call({:cancel_request, request_ref}, _from, state) do
+    def handle_call({:cancel_request, request_ref}, _from, state)
+        when State.has_request_ref(state, request_ref) do
       state = process_response({:done, request_ref}, state)
 
       case Mint.HTTP2.cancel_request(state.conn, request_ref) do
         {:ok, conn} -> {:reply, :ok, State.update_conn(state, conn)}
         {:error, conn, error} -> {:reply, {:error, error}, State.update_conn(state, conn)}
       end
+    end
+
+    def handle_call({:cancel_request, _request_ref}, _from, state) do
+      {:reply, :ok, state}
     end
 
     @impl true
