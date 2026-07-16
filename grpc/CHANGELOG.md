@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Enhancements
+
+  * Client connections can now be declared in an application's supervision tree, either as a `GRPC.Client.Connection` child spec or through `use GRPC.Client.Connection, otp_app: ...`. Supervised connections establish asynchronously and retry with exponential backoff when the backend is unreachable, instead of failing supervisor startup. New public API: `GRPC.Client.Connection.get_channel/1`, `get_channel!/1`, and `await_ready/2`.
+
+### Behavior Changes
+
+  * `GRPC.Client.Connection.connect/2` now waits at most `:connect_timeout` (default: 15000 ms) for the first establishment attempt instead of blocking indefinitely.
+  * When all resolved addresses fail to dial, `connect/2` returns the first underlying dial error (e.g. `{:error, :connection_refused}`) instead of `{:error, :no_addresses}`.
+  * Calling `connect/2` with a `:name` already registered to a different target now returns `{:error, {:already_started_with_different_target, target}}` instead of silently returning the existing connection's channel.
+
 ## v1.0.0 (2026-06-15)
 
 ### Enhancements

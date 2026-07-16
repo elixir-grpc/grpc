@@ -7,6 +7,33 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
     use GRPC.Client.Connection, otp_app: :grpc
   end
 
+  defmodule TrackingResolver do
+    def resolve(_target) do
+      {:ok, %{addresses: [%{address: "127.0.0.1", port: 50051}], service_config: nil}}
+    end
+
+    def init(_target, _opts) do
+      worker =
+        spawn_link(fn ->
+          receive do
+            :stop -> :ok
+          end
+        end)
+
+      send(test_pid(), {:resolver_init, worker})
+      {:ok, %{worker_pid: worker}}
+    end
+
+    def update(state, _event), do: {:ok, state}
+
+    def shutdown(%{worker_pid: pid}) do
+      send(pid, :stop)
+      :ok
+    end
+
+    defp test_pid, do: Application.get_env(:grpc, :tracking_resolver_test_pid)
+  end
+
   describe "child_spec/1 and start_link/1" do
     test "starts a named connection from an inline child spec" do
       name = unique_name("inline")
@@ -138,6 +165,119 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
              end)
 
       assert {:ok, %GRPC.Channel{}} = Connection.pick_channel(%GRPC.Channel{ref: name})
+    end
+  end
+
+  describe "await_ready/2 waiter lifecycle" do
+    setup do
+      Application.put_env(:grpc, :grpc_test_failing_hosts, ["127.0.0.1"])
+      on_exit(fn -> Application.delete_env(:grpc, :grpc_test_failing_hosts) end)
+      :ok
+    end
+
+    test "waiters are pruned when the caller dies" do
+      name = unique_name("waiter_down")
+
+      start_supervised!(
+        {Connection,
+         name: name, target: "ipv4:127.0.0.1:50051", adapter: GRPC.Test.FailingClientAdapter}
+      )
+
+      pid = whereis_connection(name)
+      waiter = spawn(fn -> Connection.await_ready(name, 30_000) end)
+
+      assert eventually(fn -> length(:sys.get_state(pid).waiters) == 1 end)
+
+      Process.exit(waiter, :kill)
+
+      assert eventually(fn -> :sys.get_state(pid).waiters == [] end)
+    end
+
+    test "repeated timed-out calls from the same caller do not accumulate" do
+      name = unique_name("waiter_dedup")
+
+      start_supervised!(
+        {Connection,
+         name: name, target: "ipv4:127.0.0.1:50051", adapter: GRPC.Test.FailingClientAdapter}
+      )
+
+      pid = whereis_connection(name)
+
+      for _ <- 1..5 do
+        assert {:error, :timeout} = Connection.await_ready(name, 50)
+      end
+
+      assert length(:sys.get_state(pid).waiters) == 1
+    end
+
+    test "pending waiters get {:error, :not_started} when the connection is disconnected" do
+      name = unique_name("waiter_disconnect")
+
+      start_supervised!(
+        {Connection,
+         name: name, target: "ipv4:127.0.0.1:50051", adapter: GRPC.Test.FailingClientAdapter}
+      )
+
+      pid = whereis_connection(name)
+      task = Task.async(fn -> Connection.await_ready(name, 30_000) end)
+
+      assert eventually(fn -> length(:sys.get_state(pid).waiters) == 1 end)
+
+      assert {:ok, %GRPC.Channel{}} = Connection.disconnect(name)
+      assert {:error, :not_started} = Task.await(task)
+    end
+  end
+
+  describe "abnormal termination" do
+    @tag capture_log: true
+    test "the channel handle survives a crash so it can span the restart window" do
+      name = unique_name("crash_handle")
+      Process.flag(:trap_exit, true)
+
+      {:ok, pid} =
+        Connection.start_link("ipv4:127.0.0.1:50051",
+          name: name,
+          adapter: GRPC.Test.ClientAdapter
+        )
+
+      on_exit(fn -> :persistent_term.erase({Connection, :channel, name}) end)
+
+      assert :ok = Connection.await_ready(name, 2_000)
+
+      :sys.terminate(pid, :boom)
+      assert_receive {:EXIT, ^pid, :boom}, 1_000
+
+      assert {:ok, %GRPC.Channel{ref: ^name}} = Connection.get_channel(name)
+      assert {:error, :no_connection} = Connection.pick_channel(%GRPC.Channel{ref: name})
+    end
+  end
+
+  describe "resolver worker exits" do
+    @tag capture_log: true
+    test "re-init only happens for the resolver worker's own pid" do
+      name = unique_name("exit_gate")
+      Application.put_env(:grpc, :tracking_resolver_test_pid, self())
+      on_exit(fn -> Application.delete_env(:grpc, :tracking_resolver_test_pid) end)
+
+      start_supervised!(
+        {Connection,
+         name: name,
+         target: "ipv4:127.0.0.1:50051",
+         resolver: TrackingResolver,
+         adapter: GRPC.Test.ClientAdapter}
+      )
+
+      assert :ok = Connection.await_ready(name, 2_000)
+      assert_receive {:resolver_init, worker}
+
+      conn = whereis_connection(name)
+
+      other = spawn(fn -> :ok end)
+      send(conn, {:EXIT, other, :some_crash})
+      refute_receive {:resolver_init, _}, 200
+
+      Process.exit(worker, :kill)
+      assert_receive {:resolver_init, _new_worker}, 1_000
     end
   end
 

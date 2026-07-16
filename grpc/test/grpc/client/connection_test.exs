@@ -6,6 +6,16 @@ defmodule GRPC.Client.ConnectionTest do
 
   @peer if Code.ensure_loaded?(:peer), do: :peer, else: GRPC.Test.PeerShim
 
+  defmodule CountingInterceptor do
+    def init(opts) do
+      if pid = Application.get_env(:grpc, :counting_interceptor_pid) do
+        send(pid, :interceptor_init)
+      end
+
+      opts
+    end
+  end
+
   setup do
     %{
       ref: make_ref(),
@@ -50,11 +60,24 @@ defmodule GRPC.Client.ConnectionTest do
       Connection.disconnect(first_channel)
     end
 
+    test "returns an error when the name is already registered to a different target", %{
+      ref: ref,
+      target: target,
+      adapter: adapter
+    } do
+      {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
+
+      assert {:error, {:already_started_with_different_target, ^target}} =
+               Connection.connect("ipv4:127.0.0.1:50052", adapter: adapter, name: ref)
+
+      Connection.disconnect(channel)
+    end
+
     test "returns {:error, :no_connection} when already_started but the persistent_term entry is missing",
          %{ref: ref, target: target, adapter: adapter} do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
-      key = {Connection, ref}
+      key = {Connection, :lb, ref}
       entry = :persistent_term.get(key)
       :persistent_term.erase(key)
 
@@ -241,6 +264,27 @@ defmodule GRPC.Client.ConnectionTest do
         )
       end
     end
+
+    test "interceptor init/1 runs once per connect", %{
+      ref: ref,
+      target: target,
+      adapter: adapter
+    } do
+      Application.put_env(:grpc, :counting_interceptor_pid, self())
+      on_exit(fn -> Application.delete_env(:grpc, :counting_interceptor_pid) end)
+
+      {:ok, channel} =
+        Connection.connect(target,
+          adapter: adapter,
+          name: ref,
+          interceptors: [CountingInterceptor]
+        )
+
+      assert_receive :interceptor_init
+      refute_receive :interceptor_init, 100
+
+      Connection.disconnect(channel)
+    end
   end
 
   describe "connect/2 - distributed named channels" do
@@ -276,7 +320,7 @@ defmodule GRPC.Client.ConnectionTest do
   end
 
   defp connection_pt_count do
-    Enum.count(:persistent_term.get(), &match?({{Connection, _}, _}, &1))
+    Enum.count(:persistent_term.get(), &match?({{Connection, _, _}, _}, &1))
   end
 
   defp lb_tid(ref) do

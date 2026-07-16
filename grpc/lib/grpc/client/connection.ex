@@ -149,7 +149,7 @@ defmodule GRPC.Client.Connection do
           established?: boolean(),
           last_error: term() | nil,
           retry_attempt: non_neg_integer(),
-          waiters: [GenServer.from()]
+          waiters: [{pid(), GenServer.from(), reference()}]
         }
 
   defstruct virtual_channel: nil,
@@ -253,6 +253,8 @@ defmodule GRPC.Client.Connection do
   Returns:
 
     * `{:ok, channel}` – a `GRPC.Channel` usable with stubs
+    * `{:error, {:already_started_with_different_target, target}}` – the name
+      is already registered to a connection with a different target
     * `{:error, reason}` – if connection fails
 
   ## Examples
@@ -264,15 +266,16 @@ defmodule GRPC.Client.Connection do
     opts = Keyword.put_new_lazy(opts, :name, &make_ref/0)
 
     # Validate the target and options in the caller so configuration errors
-    # raise here instead of crashing the spawned process.
-    _ = build_initial_state(target, opts)
+    # raise here instead of crashing the spawned process. Interceptor init is
+    # skipped here so it only runs once, in the connection process.
+    validated = build_initial_state(target, opts, _init_interceptors? = false)
 
     timeout = Keyword.get(opts, :connect_timeout, @default_connect_timeout)
     name = opts[:name]
 
     case DynamicSupervisor.start_child(GRPC.Client.Supervisor, child_spec({target, opts})) do
       {:ok, pid} ->
-        case ready_status(name, timeout) do
+        case ready_status(name, validated.resolver_target, timeout) do
           :ok ->
             finalize_connection(name)
 
@@ -282,7 +285,7 @@ defmodule GRPC.Client.Connection do
         end
 
       {:error, {:already_started, _pid}} ->
-        case ready_status(name, timeout) do
+        case ready_status(name, validated.resolver_target, timeout) do
           :ok -> finalize_connection(name)
           {:error, reason} -> {:error, reason}
         end
@@ -299,6 +302,9 @@ defmodule GRPC.Client.Connection do
   is still retrying when `timeout` elapses. Unlike `connect/2`, a failed
   establishment attempt does not resolve the wait: the process keeps
   retrying with backoff and this call returns as soon as an attempt succeeds.
+
+  Returns `{:error, :not_started}` if the connection is not running, or if it
+  is disconnected or shut down while waiting.
   """
   def await_ready(ref_or_channel, timeout \\ 5_000)
 
@@ -309,6 +315,9 @@ defmodule GRPC.Client.Connection do
   catch
     :exit, {:timeout, _} -> {:error, :timeout}
     :exit, {:noproc, _} -> {:error, :not_started}
+    :exit, {:normal, _} -> {:error, :not_started}
+    :exit, {:shutdown, _} -> {:error, :not_started}
+    :exit, {{:shutdown, _}, _} -> {:error, :not_started}
     :exit, {reason, _} -> {:error, reason}
   end
 
@@ -466,20 +475,25 @@ defmodule GRPC.Client.Connection do
   def handle_cast(:resolve_now, state), do: {:noreply, state}
 
   @impl GenServer
-  def handle_call(:ready_status, _from, %__MODULE__{established?: true} = state) do
-    {:reply, :ok, state}
-  end
+  def handle_call({:ready_status, expected_target}, _from, state) do
+    cond do
+      expected_target != state.resolver_target ->
+        {:reply, {:error, {:already_started_with_different_target, state.resolver_target}}, state}
 
-  def handle_call(:ready_status, _from, state) do
-    {:reply, {:error, state.last_error || :connecting}, state}
+      state.established? ->
+        {:reply, :ok, state}
+
+      true ->
+        {:reply, {:error, state.last_error || :connecting}, state}
+    end
   end
 
   def handle_call(:await_ready, _from, %__MODULE__{established?: true} = state) do
     {:reply, :ok, state}
   end
 
-  def handle_call(:await_ready, from, state) do
-    {:noreply, %{state | waiters: [from | state.waiters]}}
+  def handle_call(:await_ready, {caller_pid, _tag} = from, state) do
+    {:noreply, %{state | waiters: add_waiter(state.waiters, caller_pid, from)}}
   end
 
   def handle_call({:disconnect, %Channel{adapter: adapter} = channel}, _from, state) do
@@ -491,9 +505,18 @@ defmodule GRPC.Client.Connection do
     :persistent_term.erase(channel_key(channel.ref))
     disconnect_real_channels(state.real_channels, adapter)
 
+    reply_waiters(state.waiters, {:error, :not_started})
+
     resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
 
-    state = %{state | established?: false, real_channels: %{}, resolver_state: nil}
+    state = %{
+      state
+      | established?: false,
+        real_channels: %{},
+        resolver_state: nil,
+        waiters: []
+    }
+
     {:reply, resp, state, {:continue, :stop}}
   end
 
@@ -509,27 +532,38 @@ defmodule GRPC.Client.Connection do
     {:noreply, state}
   end
 
-  def handle_info({:EXIT, _pid, reason}, %{resolver: resolver, resolver_state: rs} = state)
-      when not is_nil(rs) and reason != :normal do
-    Logger.warning("Resolver worker exited: #{inspect(reason)}, re-initializing")
-
-    state =
-      if function_exported?(resolver, :init, 2) do
-        case resolver.init(state.resolver_target,
-               connection_pid: self(),
-               connect_opts: state.connect_opts
-             ) do
-          {:ok, new_rs} -> %{state | resolver_state: new_rs}
-          {:error, _} -> %{state | resolver_state: nil}
-        end
-      else
-        %{state | resolver_state: nil}
-      end
-
-    {:noreply, state}
-  end
-
   def handle_info({:EXIT, _pid, :normal}, state), do: {:noreply, state}
+
+  def handle_info({:EXIT, pid, reason}, %{resolver: resolver, resolver_state: rs} = state)
+      when not is_nil(rs) do
+    # Adapter connection processes are linked too, so re-init must be gated
+    # on the resolver worker's own pid: re-initializing on any linked exit
+    # would spawn a duplicate worker and orphan the live one.
+    if pid == resolver_worker_pid(rs) do
+      Logger.warning("Resolver worker exited: #{inspect(reason)}, re-initializing")
+
+      state =
+        if function_exported?(resolver, :init, 2) do
+          case resolver.init(state.resolver_target,
+                 connection_pid: self(),
+                 connect_opts: state.connect_opts
+               ) do
+            {:ok, new_rs} -> %{state | resolver_state: new_rs}
+            {:error, _} -> %{state | resolver_state: nil}
+          end
+        else
+          %{state | resolver_state: nil}
+        end
+
+      {:noreply, state}
+    else
+      Logger.warning(
+        "#{inspect(__MODULE__)} received :EXIT from #{inspect(pid)} reason: #{inspect(reason)}"
+      )
+
+      {:noreply, state}
+    end
+  end
 
   def handle_info({:EXIT, pid, reason}, state) do
     Logger.warning(
@@ -539,12 +573,18 @@ defmodule GRPC.Client.Connection do
     {:noreply, state}
   end
 
-  def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
-    Logger.warning(
-      "#{inspect(__MODULE__)} received :DOWN from #{inspect(pid)} with reason: #{inspect(reason)}"
-    )
+  def handle_info({:DOWN, mon, :process, pid, reason}, state) do
+    case Enum.split_with(state.waiters, fn {_pid, _from, m} -> m == mon end) do
+      {[], _} ->
+        Logger.warning(
+          "#{inspect(__MODULE__)} received :DOWN from #{inspect(pid)} with reason: #{inspect(reason)}"
+        )
 
-    {:noreply, state}
+        {:noreply, state}
+
+      {_dropped, remaining} ->
+        {:noreply, %{state | waiters: remaining}}
+    end
   end
 
   def handle_info(msg, state) do
@@ -554,14 +594,21 @@ defmodule GRPC.Client.Connection do
   end
 
   @impl GenServer
-  def terminate(_reason, %__MODULE__{virtual_channel: %{ref: ref}} = state) do
+  def terminate(reason, %__MODULE__{virtual_channel: %{ref: ref}} = state) do
     if state.resolver_state && function_exported?(state.resolver, :shutdown, 1) do
       state.resolver.shutdown(state.resolver_state)
     end
 
     disconnect_real_channels(state.real_channels, state.adapter)
     :persistent_term.erase(lb_key(ref))
-    :persistent_term.erase(channel_key(ref))
+
+    # On a crash the supervisor restarts the process and init/1 re-registers
+    # the handle; erasing it here would make get_channel!/1 raise during the
+    # restart window.
+    if normal_shutdown?(reason) do
+      :persistent_term.erase(channel_key(ref))
+    end
+
     :ok
   rescue
     _ -> :ok
@@ -586,17 +633,21 @@ defmodule GRPC.Client.Connection do
     {target, opts}
   end
 
-  defp ready_status(ref, timeout) do
-    GenServer.call(via(ref), :ready_status, timeout)
+  defp ready_status(ref, expected_target, timeout) do
+    GenServer.call(via(ref), {:ready_status, expected_target}, timeout)
   catch
     :exit, {:timeout, _} -> {:error, :timeout}
+    :exit, {:noproc, _} -> {:error, :not_started}
+    :exit, {:normal, _} -> {:error, :not_started}
+    :exit, {:shutdown, _} -> {:error, :not_started}
+    :exit, {{:shutdown, _}, _} -> {:error, :not_started}
     :exit, {reason, _} -> {:error, reason}
   end
 
   defp attempt_establish(state) do
     case establish(state) do
       {:ok, established_state} ->
-        Enum.each(established_state.waiters, &GenServer.reply(&1, :ok))
+        reply_waiters(established_state.waiters, :ok)
 
         {:noreply,
          %{
@@ -691,12 +742,36 @@ defmodule GRPC.Client.Connection do
              connection_pid: self(),
              connect_opts: state.connect_opts
            ) do
-        {:ok, resolver_state} -> resolver_state
-        {:error, _reason} -> nil
+        {:ok, resolver_state} ->
+          resolver_state
+
+        {:error, reason} ->
+          Logger.warning(
+            "Failed to initialize resolver for #{state.resolver_target}: " <>
+              "#{inspect(reason)}, background re-resolution disabled"
+          )
+
+          nil
       end
     else
       nil
     end
+  end
+
+  # A caller whose await_ready call already timed out leaves a stale entry
+  # behind; replacing entries per caller pid and monitoring the caller keeps
+  # the waiter list bounded during long outages.
+  defp add_waiter(waiters, caller_pid, from) do
+    {stale, rest} = Enum.split_with(waiters, fn {pid, _from, _mon} -> pid == caller_pid end)
+    Enum.each(stale, fn {_pid, _from, mon} -> Process.demonitor(mon, [:flush]) end)
+    [{caller_pid, from, Process.monitor(caller_pid)} | rest]
+  end
+
+  defp reply_waiters(waiters, reply) do
+    Enum.each(waiters, fn {_pid, from, mon} ->
+      Process.demonitor(mon, [:flush])
+      GenServer.reply(from, reply)
+    end)
   end
 
   defp backoff_delay(attempt) do
@@ -820,8 +895,17 @@ defmodule GRPC.Client.Connection do
     {:via, Registry, {GRPC.Client.Registry, {__MODULE__, ref}}}
   end
 
-  defp lb_key(ref), do: {__MODULE__, ref}
-  defp channel_key(ref), do: {__MODULE__, {:channel, ref}}
+  defp lb_key(ref), do: {__MODULE__, :lb, ref}
+  defp channel_key(ref), do: {__MODULE__, :channel, ref}
+
+  defp normal_shutdown?(:normal), do: true
+  defp normal_shutdown?(:shutdown), do: true
+  defp normal_shutdown?({:shutdown, _}), do: true
+  defp normal_shutdown?(_), do: false
+
+  defp resolver_worker_pid({_mod, %{worker_pid: pid}}) when is_pid(pid), do: pid
+  defp resolver_worker_pid(%{worker_pid: pid}) when is_pid(pid), do: pid
+  defp resolver_worker_pid(_), do: nil
 
   defp do_disconnect(adapter, channel) do
     adapter.disconnect(channel)
@@ -833,7 +917,7 @@ defmodule GRPC.Client.Connection do
       :ok
   end
 
-  defp build_initial_state(target, opts) do
+  defp build_initial_state(target, opts, init_interceptors? \\ true) do
     opts =
       Keyword.validate!(opts,
         cred: nil,
@@ -860,7 +944,9 @@ defmodule GRPC.Client.Connection do
 
     {norm_target, norm_opts, scheme} = normalize_target_and_opts(target, opts)
     cred = resolve_credential(norm_opts[:cred], scheme)
-    interceptors = init_interceptors(norm_opts[:interceptors])
+
+    interceptors =
+      if init_interceptors?, do: init_interceptors(norm_opts[:interceptors]), else: []
 
     accepted_compressors =
       build_compressor_list(norm_opts[:compressor], norm_opts[:accepted_compressors])
