@@ -216,6 +216,33 @@ defmodule GRPC.Client.ConnectionTest do
     end
   end
 
+  describe "connect/2 - fail-fast contract" do
+    test "returns the dial error and tears the process down when the backend is unreachable", %{
+      ref: ref
+    } do
+      Application.put_env(:grpc, :grpc_test_failing_hosts, ["127.0.0.1"])
+      on_exit(fn -> Application.delete_env(:grpc, :grpc_test_failing_hosts) end)
+
+      assert {:error, :connection_refused} =
+               Connection.connect("ipv4:127.0.0.1:50051",
+                 adapter: GRPC.Test.FailingClientAdapter,
+                 name: ref
+               )
+
+      # Registry entries are cleaned up asynchronously after the process exits
+      assert eventually(fn -> whereis_name(ref) == nil end)
+    end
+
+    test "raises in the caller on invalid options" do
+      assert_raise ArgumentError, fn ->
+        Connection.connect("ipv4:127.0.0.1:50051",
+          adapter: GRPC.Test.ClientAdapter,
+          adapter_opts: :not_a_list
+        )
+      end
+    end
+  end
+
   describe "connect/2 - distributed named channels" do
     test "named channels do not conflict across connected nodes" do
       {:ok, _, port} = GRPC.Server.start(FeatureServer, 0)
@@ -285,6 +312,19 @@ defmodule GRPC.Client.ConnectionTest do
     case Registry.lookup(GRPC.Client.Registry, {Connection, ref}) do
       [{pid, _value}] -> pid
       [] -> nil
+    end
+  end
+
+  defp eventually(fun, retries \\ 50)
+
+  defp eventually(fun, 0), do: fun.()
+
+  defp eventually(fun, retries) do
+    if fun.() do
+      true
+    else
+      Process.sleep(50)
+      eventually(fun, retries - 1)
     end
   end
 end
