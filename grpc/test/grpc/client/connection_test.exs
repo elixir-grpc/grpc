@@ -244,12 +244,11 @@ defmodule GRPC.Client.ConnectionTest do
       ref: ref
     } do
       attach_telemetry([:grpc, :client, :connection, :disconnected])
-      Application.put_env(:grpc, :grpc_test_failing_hosts, ["127.0.0.1"])
-      on_exit(fn -> Application.delete_env(:grpc, :grpc_test_failing_hosts) end)
 
       assert {:error, :connection_refused} =
                Connection.connect("ipv4:127.0.0.1:50051",
                  adapter: GRPC.Test.FailingClientAdapter,
+                 adapter_opts: [failing_hosts: ["127.0.0.1"]],
                  name: ref
                )
 
@@ -362,19 +361,6 @@ defmodule GRPC.Client.ConnectionTest do
     case Registry.lookup(GRPC.Client.Registry, {Connection, ref}) do
       [{pid, _value}] -> pid
       [] -> nil
-    end
-  end
-
-  defp eventually(fun, retries \\ 50)
-
-  defp eventually(fun, 0), do: fun.()
-
-  defp eventually(fun, retries) do
-    if fun.() do
-      true
-    else
-      Process.sleep(50)
-      eventually(fun, retries - 1)
     end
   end
 end

@@ -32,4 +32,24 @@ defmodule GRPC.Client.DataCase do
 
     ExUnit.Callbacks.on_exit(fn -> :telemetry.detach(handler_id) end)
   end
+
+  @doc """
+  Polls `fun` until it returns a truthy value or the retries run out,
+  returning the last result. Only for effects with no observable signal to
+  await, e.g. `Registry` unregistration or another process's internal state
+  via `:sys.get_state/1`; prefer `assert_receive` on a message or telemetry
+  event when one exists.
+  """
+  def eventually(fun, retries \\ 50)
+
+  def eventually(fun, 0), do: fun.()
+
+  def eventually(fun, retries) do
+    if fun.() do
+      true
+    else
+      Process.sleep(50)
+      eventually(fun, retries - 1)
+    end
+  end
 end

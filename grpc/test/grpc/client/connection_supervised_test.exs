@@ -1,5 +1,5 @@
 defmodule GRPC.Client.ConnectionSupervisedTest do
-  use GRPC.Client.DataCase, async: false
+  use GRPC.Client.DataCase, async: true
 
   alias GRPC.Client.Connection
 
@@ -75,12 +75,13 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
 
     test "returns the handle even while the connection is still establishing" do
       name = unique_name("connecting")
-      Application.put_env(:grpc, :grpc_test_failing_hosts, ["127.0.0.1"])
-      on_exit(fn -> Application.delete_env(:grpc, :grpc_test_failing_hosts) end)
 
       start_supervised!(
         {Connection,
-         name: name, target: "ipv4:127.0.0.1:50051", adapter: GRPC.Test.FailingClientAdapter}
+         name: name,
+         target: "ipv4:127.0.0.1:50051",
+         adapter: GRPC.Test.FailingClientAdapter,
+         adapter_opts: [failing_hosts: ["127.0.0.1"]]}
       )
 
       assert {:ok, %GRPC.Channel{ref: ^name}} = Connection.get_channel(name)
@@ -130,12 +131,14 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
       name = unique_name("flaky")
       attach_telemetry([:grpc, :client, :connection, :connect_error])
       attach_telemetry([:grpc, :client, :connection, :connected])
-      Application.put_env(:grpc, :grpc_test_failing_hosts, ["127.0.0.1"])
-      on_exit(fn -> Application.delete_env(:grpc, :grpc_test_failing_hosts) end)
+      hosts = start_supervised!({Agent, fn -> ["127.0.0.1"] end})
 
       start_supervised!(
         {Connection,
-         name: name, target: "ipv4:127.0.0.1:50051", adapter: GRPC.Test.FailingClientAdapter}
+         name: name,
+         target: "ipv4:127.0.0.1:50051",
+         adapter: GRPC.Test.FailingClientAdapter,
+         adapter_opts: [failing_hosts: fn -> Agent.get(hosts, & &1) end]}
       )
 
       assert_receive {:telemetry, [:grpc, :client, :connection, :connect_error],
@@ -144,7 +147,7 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
 
       assert {:error, :timeout} = Connection.await_ready(name, 100)
 
-      Application.put_env(:grpc, :grpc_test_failing_hosts, [])
+      Agent.update(hosts, fn _ -> [] end)
       send(whereis_connection(name), :retry_establish)
 
       assert_receive {:telemetry, [:grpc, :client, :connection, :connected],
@@ -185,18 +188,19 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
 
   describe "await_ready/2 waiter lifecycle" do
     setup do
-      Application.put_env(:grpc, :grpc_test_failing_hosts, ["127.0.0.1"])
-      on_exit(fn -> Application.delete_env(:grpc, :grpc_test_failing_hosts) end)
-      :ok
+      %{
+        connection_opts: [
+          target: "ipv4:127.0.0.1:50051",
+          adapter: GRPC.Test.FailingClientAdapter,
+          adapter_opts: [failing_hosts: ["127.0.0.1"]]
+        ]
+      }
     end
 
-    test "waiters are pruned when the caller dies" do
+    test "waiters are pruned when the caller dies", %{connection_opts: connection_opts} do
       name = unique_name("waiter_down")
 
-      start_supervised!(
-        {Connection,
-         name: name, target: "ipv4:127.0.0.1:50051", adapter: GRPC.Test.FailingClientAdapter}
-      )
+      start_supervised!({Connection, [name: name] ++ connection_opts})
 
       pid = whereis_connection(name)
       waiter = spawn(fn -> Connection.await_ready(name, 30_000) end)
@@ -208,13 +212,12 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
       assert eventually(fn -> :sys.get_state(pid).waiters == [] end)
     end
 
-    test "repeated timed-out calls from the same caller do not accumulate" do
+    test "repeated timed-out calls from the same caller do not accumulate", %{
+      connection_opts: connection_opts
+    } do
       name = unique_name("waiter_dedup")
 
-      start_supervised!(
-        {Connection,
-         name: name, target: "ipv4:127.0.0.1:50051", adapter: GRPC.Test.FailingClientAdapter}
-      )
+      start_supervised!({Connection, [name: name] ++ connection_opts})
 
       pid = whereis_connection(name)
 
@@ -225,13 +228,12 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
       assert length(:sys.get_state(pid).waiters) == 1
     end
 
-    test "pending waiters get {:error, :not_started} when the connection is disconnected" do
+    test "pending waiters get {:error, :not_started} when the connection is disconnected", %{
+      connection_opts: connection_opts
+    } do
       name = unique_name("waiter_disconnect")
 
-      start_supervised!(
-        {Connection,
-         name: name, target: "ipv4:127.0.0.1:50051", adapter: GRPC.Test.FailingClientAdapter}
-      )
+      start_supervised!({Connection, [name: name] ++ connection_opts})
 
       pid = whereis_connection(name)
       task = Task.async(fn -> Connection.await_ready(name, 30_000) end)
@@ -321,19 +323,6 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
     case Registry.lookup(GRPC.Client.Registry, {Connection, name}) do
       [{pid, _value}] -> pid
       [] -> nil
-    end
-  end
-
-  defp eventually(fun, retries \\ 50)
-
-  defp eventually(fun, 0), do: fun.()
-
-  defp eventually(fun, retries) do
-    if fun.() do
-      true
-    else
-      Process.sleep(50)
-      eventually(fun, retries - 1)
     end
   end
 end
