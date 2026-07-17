@@ -212,6 +212,22 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert true == response_state.done
     end
 
+    test "replies :ok and pops the ref when the stream response process is dead",
+         %{
+           request_ref: request_ref,
+           stream_response_pid: response_pid,
+           state: state
+         } do
+      Process.unlink(response_pid)
+      monitor = Process.monitor(response_pid)
+      Process.exit(response_pid, :kill)
+      assert_receive {:DOWN, ^monitor, :process, ^response_pid, :killed}
+
+      response = ConnectionProcess.handle_call({:cancel_request, request_ref}, nil, state)
+      assert {:reply, :ok, new_state} = response
+      assert %{} == new_state.requests
+    end
+
     test "is a no-op on state.requests when the ref was already popped",
          %{request_ref: request_ref, state: state} do
       {_ref, state_without_ref} = pop_in(state.requests[request_ref])
@@ -476,6 +492,58 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     end
   end
 
+  describe "handle_info - connection_closed - with dead stream response process" do
+    setup :valid_connection
+    setup :valid_stream_request
+    setup :valid_stream_response
+
+    test "does not crash when ending the stream response process fails",
+         %{
+           state: state,
+           stream_response_pid: response_pid
+         } do
+      Process.unlink(response_pid)
+      monitor = Process.monitor(response_pid)
+      Process.exit(response_pid, :kill)
+      assert_receive {:DOWN, ^monitor, :process, ^response_pid, :killed}
+
+      socket = state.conn.socket
+      tcp_message = {:tcp_closed, socket}
+
+      assert {:noreply, new_state} = ConnectionProcess.handle_info(tcp_message, state)
+      assert new_state.conn.state == :closed
+      assert_receive {:elixir_grpc, :connection_down, _pid}, 500
+    end
+  end
+
+  describe "handle_info - response frames for a dead stream response process" do
+    setup :valid_connection
+
+    test "cancels the affected request and keeps the connection alive", %{
+      process_pid: pid,
+      request: {method, path, headers}
+    } do
+      dead_pid = spawn(fn -> :ok end)
+      monitor = Process.monitor(dead_pid)
+      assert_receive {:DOWN, ^monitor, :process, ^dead_pid, _reason}
+
+      logs =
+        capture_log(fn ->
+          {:ok, %{request_ref: request_ref}} =
+            ConnectionProcess.request(pid, method, path, headers, :stream,
+              stream_response_pid: dead_pid
+            )
+
+          :ok = ConnectionProcess.stream_request_body(pid, request_ref, :eof)
+
+          wait_until(fn -> :sys.get_state(pid).requests == %{} end)
+        end)
+
+      assert Process.alive?(pid)
+      assert logs =~ "is not alive"
+    end
+  end
+
   describe "retry_timeout/1" do
     test "returns exponentially increasing timeouts" do
       t1 = ConnectionProcess.retry_timeout(1)
@@ -582,4 +650,19 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   end
 
   defp valid_connection_with_retry(ctx), do: valid_connection(ctx, retry: 3)
+
+  defp wait_until(fun, timeout \\ 2_000)
+
+  defp wait_until(fun, timeout) when timeout <= 0 do
+    assert fun.()
+  end
+
+  defp wait_until(fun, timeout) do
+    if fun.() do
+      :ok
+    else
+      Process.sleep(20)
+      wait_until(fun, timeout - 20)
+    end
+  end
 end
