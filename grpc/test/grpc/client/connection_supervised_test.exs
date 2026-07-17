@@ -199,30 +199,57 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
 
     test "waiters are pruned when the caller dies", %{connection_opts: connection_opts} do
       name = unique_name("waiter_down")
+      attach_telemetry([:grpc, :client, :connection, :await_ready, :start])
+      attach_telemetry([:grpc, :client, :connection, :await_ready, :stop])
 
       start_supervised!({Connection, [name: name] ++ connection_opts})
 
       pid = whereis_connection(name)
       waiter = spawn(fn -> Connection.await_ready(name, 30_000) end)
 
-      assert eventually(fn -> length(:sys.get_state(pid).waiters) == 1 end)
+      assert_receive {:telemetry, [:grpc, :client, :connection, :await_ready, :start], _,
+                      %{name: ^name, caller: ^waiter}},
+                     1_000
+
+      assert length(:sys.get_state(pid).waiters) == 1
 
       Process.exit(waiter, :kill)
 
-      assert eventually(fn -> :sys.get_state(pid).waiters == [] end)
+      assert_receive {:telemetry, [:grpc, :client, :connection, :await_ready, :stop],
+                      %{duration: _}, %{name: ^name, caller: ^waiter, result: :abandoned}},
+                     1_000
+
+      assert :sys.get_state(pid).waiters == []
     end
 
     test "repeated timed-out calls from the same caller do not accumulate", %{
       connection_opts: connection_opts
     } do
       name = unique_name("waiter_dedup")
+      attach_telemetry([:grpc, :client, :connection, :await_ready, :start])
+      attach_telemetry([:grpc, :client, :connection, :await_ready, :stop])
 
       start_supervised!({Connection, [name: name] ++ connection_opts})
 
       pid = whereis_connection(name)
+      caller = self()
 
       for _ <- 1..5 do
         assert {:error, :timeout} = Connection.await_ready(name, 50)
+      end
+
+      # Five starts prove the connection registered every call; each re-entry
+      # replaces the caller's stale entry, closing its span as :abandoned.
+      for _ <- 1..5 do
+        assert_receive {:telemetry, [:grpc, :client, :connection, :await_ready, :start], _,
+                        %{name: ^name, caller: ^caller}},
+                       1_000
+      end
+
+      for _ <- 1..4 do
+        assert_receive {:telemetry, [:grpc, :client, :connection, :await_ready, :stop], _,
+                        %{name: ^name, caller: ^caller, result: :abandoned}},
+                       1_000
       end
 
       assert length(:sys.get_state(pid).waiters) == 1
@@ -232,15 +259,24 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
       connection_opts: connection_opts
     } do
       name = unique_name("waiter_disconnect")
+      attach_telemetry([:grpc, :client, :connection, :await_ready, :start])
+      attach_telemetry([:grpc, :client, :connection, :await_ready, :stop])
 
       start_supervised!({Connection, [name: name] ++ connection_opts})
 
-      pid = whereis_connection(name)
       task = Task.async(fn -> Connection.await_ready(name, 30_000) end)
+      task_pid = task.pid
 
-      assert eventually(fn -> length(:sys.get_state(pid).waiters) == 1 end)
+      assert_receive {:telemetry, [:grpc, :client, :connection, :await_ready, :start], _,
+                      %{name: ^name, caller: ^task_pid}},
+                     1_000
 
       assert {:ok, %GRPC.Channel{}} = Connection.disconnect(name)
+
+      assert_receive {:telemetry, [:grpc, :client, :connection, :await_ready, :stop], _,
+                      %{name: ^name, caller: ^task_pid, result: :disconnected}},
+                     1_000
+
       assert {:error, :not_started} = Task.await(task)
     end
   end

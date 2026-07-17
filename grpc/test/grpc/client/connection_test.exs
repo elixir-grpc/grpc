@@ -253,12 +253,11 @@ defmodule GRPC.Client.ConnectionTest do
                )
 
       assert_receive {:telemetry, [:grpc, :client, :connection, :disconnected], _,
-                      %{name: ^ref, reason: :shutdown}},
+                      %{name: ^ref, reason: :shutdown, pid: pid}},
                      1_000
 
-      # The Registry unregisters entries asynchronously after the process
-      # exits, so this last check still has to poll.
-      assert eventually(fn -> whereis_name(ref) == nil end)
+      mon = Process.monitor(pid)
+      assert_receive {:DOWN, ^mon, :process, ^pid, _reason}, 1_000
     end
 
     test "raises in the caller on invalid options" do

@@ -94,15 +94,28 @@ defmodule GRPC.Client.Connection do
     * `[:grpc, :client, :connection, :connected]` – establishment succeeded,
       including re-establishment after retries or a supervisor restart.
       * Measurements: `:retry_attempt` – failed attempts before this success
-      * Metadata: `:name`, `:target`
+      * Metadata: `:name`, `:target`, `:pid`
     * `[:grpc, :client, :connection, :connect_error]` – an establishment
       attempt failed and a retry was scheduled.
       * Measurements: `:retry_delay` – milliseconds until the next attempt
-      * Metadata: `:name`, `:target`, `:reason`, `:retry_attempt`
+      * Metadata: `:name`, `:target`, `:pid`, `:reason`, `:retry_attempt`
     * `[:grpc, :client, :connection, :disconnected]` – the connection process
       shut down, after its resources were released.
       * Measurements: none
-      * Metadata: `:name`, `:target`, `:reason`
+      * Metadata: `:name`, `:target`, `:pid`, `:reason`
+    * `[:grpc, :client, :connection, :await_ready, :start]` – a caller started
+      waiting in `await_ready/2`.
+      * Measurements: `:system_time`
+      * Metadata: `:name`, `:target`, `:pid`, `:caller`
+    * `[:grpc, :client, :connection, :await_ready, :stop]` – the wait ended.
+      * Measurements: `:duration` – as measured through `System.monotonic_time()`
+      * Metadata: `:name`, `:target`, `:pid`, `:caller`, `:result` – `:ok`
+        when the connection became ready, `:disconnected` when it shut down
+        while the caller was waiting, `:abandoned` when the caller died or
+        timed out and re-entered the wait
+
+  The `:pid` metadata is the connection process, useful for correlating
+  events with process logs and crash reports.
 
   ## Examples
 
@@ -156,6 +169,8 @@ defmodule GRPC.Client.Connection do
   @connected_event [:grpc, :client, :connection, :connected]
   @connect_error_event [:grpc, :client, :connection, :connect_error]
   @disconnected_event [:grpc, :client, :connection, :disconnected]
+  @await_ready_start_event [:grpc, :client, :connection, :await_ready, :start]
+  @await_ready_stop_event [:grpc, :client, :connection, :await_ready, :stop]
 
   @type t :: %__MODULE__{
           virtual_channel: Channel.t(),
@@ -170,7 +185,7 @@ defmodule GRPC.Client.Connection do
           established?: boolean(),
           last_error: term() | nil,
           retry_attempt: non_neg_integer(),
-          waiters: [{pid(), GenServer.from(), reference()}]
+          waiters: [{pid(), GenServer.from(), reference(), integer()}]
         }
 
   defstruct virtual_channel: nil,
@@ -499,12 +514,16 @@ defmodule GRPC.Client.Connection do
     end
   end
 
-  def handle_call(:await_ready, _from, %__MODULE__{established?: true} = state) do
+  def handle_call(:await_ready, {caller_pid, _tag}, %__MODULE__{established?: true} = state) do
+    await_ready_start(state, caller_pid)
+    await_ready_stop(state, caller_pid, System.monotonic_time(), :ok)
     {:reply, :ok, state}
   end
 
   def handle_call(:await_ready, {caller_pid, _tag} = from, state) do
-    {:noreply, %{state | waiters: add_waiter(state.waiters, caller_pid, from)}}
+    state = %{state | waiters: add_waiter(state, caller_pid, from)}
+    await_ready_start(state, caller_pid)
+    {:noreply, state}
   end
 
   def handle_call({:disconnect, %Channel{adapter: adapter} = channel}, _from, state) do
@@ -516,7 +535,7 @@ defmodule GRPC.Client.Connection do
     :persistent_term.erase(channel_key(channel.ref))
     disconnect_real_channels(state.real_channels, adapter)
 
-    reply_waiters(state.waiters, {:error, :not_started})
+    reply_waiters(state, state.waiters, {:error, :not_started}, :disconnected)
 
     resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
 
@@ -585,7 +604,7 @@ defmodule GRPC.Client.Connection do
   end
 
   def handle_info({:DOWN, mon, :process, pid, reason}, state) do
-    case Enum.split_with(state.waiters, fn {_pid, _from, m} -> m == mon end) do
+    case Enum.split_with(state.waiters, fn {_pid, _from, m, _started_at} -> m == mon end) do
       {[], _} ->
         Logger.warning(
           "#{inspect(__MODULE__)} received :DOWN from #{inspect(pid)} with reason: #{inspect(reason)}"
@@ -593,7 +612,11 @@ defmodule GRPC.Client.Connection do
 
         {:noreply, state}
 
-      {_dropped, remaining} ->
+      {dropped, remaining} ->
+        Enum.each(dropped, fn {caller_pid, _from, _mon, started_at} ->
+          await_ready_stop(state, caller_pid, started_at, :abandoned)
+        end)
+
         {:noreply, %{state | waiters: remaining}}
     end
   end
@@ -620,11 +643,11 @@ defmodule GRPC.Client.Connection do
       :persistent_term.erase(channel_key(ref))
     end
 
-    :telemetry.execute(@disconnected_event, %{}, %{
-      name: ref,
-      target: state.resolver_target,
-      reason: reason
-    })
+    :telemetry.execute(
+      @disconnected_event,
+      %{},
+      state |> lifecycle_metadata() |> Map.put(:reason, reason)
+    )
 
     :ok
   rescue
@@ -664,12 +687,13 @@ defmodule GRPC.Client.Connection do
   defp attempt_establish(state) do
     case establish(state) do
       {:ok, established_state} ->
-        :telemetry.execute(@connected_event, %{retry_attempt: state.retry_attempt}, %{
-          name: state.virtual_channel.ref,
-          target: state.resolver_target
-        })
+        :telemetry.execute(
+          @connected_event,
+          %{retry_attempt: state.retry_attempt},
+          lifecycle_metadata(state)
+        )
 
-        reply_waiters(established_state.waiters, :ok)
+        reply_waiters(established_state, established_state.waiters, :ok, :ok)
 
         {:noreply,
          %{
@@ -683,12 +707,13 @@ defmodule GRPC.Client.Connection do
       {:error, reason} ->
         delay = backoff_delay(state.retry_attempt)
 
-        :telemetry.execute(@connect_error_event, %{retry_delay: delay}, %{
-          name: state.virtual_channel.ref,
-          target: state.resolver_target,
-          reason: reason,
-          retry_attempt: state.retry_attempt
-        })
+        :telemetry.execute(
+          @connect_error_event,
+          %{retry_delay: delay},
+          state
+          |> lifecycle_metadata()
+          |> Map.merge(%{reason: reason, retry_attempt: state.retry_attempt})
+        )
 
         Logger.warning(
           "Failed to establish gRPC connection to #{state.resolver_target}: " <>
@@ -790,17 +815,44 @@ defmodule GRPC.Client.Connection do
   # A caller whose await_ready call already timed out leaves a stale entry
   # behind; replacing entries per caller pid and monitoring the caller keeps
   # the waiter list bounded during long outages.
-  defp add_waiter(waiters, caller_pid, from) do
-    {stale, rest} = Enum.split_with(waiters, fn {pid, _from, _mon} -> pid == caller_pid end)
-    Enum.each(stale, fn {_pid, _from, mon} -> Process.demonitor(mon, [:flush]) end)
-    [{caller_pid, from, Process.monitor(caller_pid)} | rest]
+  defp add_waiter(%__MODULE__{waiters: waiters} = state, caller_pid, from) do
+    {stale, rest} =
+      Enum.split_with(waiters, fn {pid, _from, _mon, _started_at} -> pid == caller_pid end)
+
+    Enum.each(stale, fn {pid, _from, mon, started_at} ->
+      Process.demonitor(mon, [:flush])
+      await_ready_stop(state, pid, started_at, :abandoned)
+    end)
+
+    [{caller_pid, from, Process.monitor(caller_pid), System.monotonic_time()} | rest]
   end
 
-  defp reply_waiters(waiters, reply) do
-    Enum.each(waiters, fn {_pid, from, mon} ->
+  defp reply_waiters(state, waiters, reply, result) do
+    Enum.each(waiters, fn {pid, from, mon, started_at} ->
       Process.demonitor(mon, [:flush])
+      await_ready_stop(state, pid, started_at, result)
       GenServer.reply(from, reply)
     end)
+  end
+
+  defp await_ready_start(state, caller) do
+    :telemetry.execute(
+      @await_ready_start_event,
+      %{system_time: System.system_time()},
+      state |> lifecycle_metadata() |> Map.put(:caller, caller)
+    )
+  end
+
+  defp await_ready_stop(state, caller, started_at, result) do
+    :telemetry.execute(
+      @await_ready_stop_event,
+      %{duration: System.monotonic_time() - started_at},
+      state |> lifecycle_metadata() |> Map.merge(%{caller: caller, result: result})
+    )
+  end
+
+  defp lifecycle_metadata(%__MODULE__{} = state) do
+    %{name: state.virtual_channel.ref, target: state.resolver_target, pid: self()}
   end
 
   defp backoff_delay(attempt) do

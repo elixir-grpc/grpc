@@ -5,7 +5,7 @@
 ### Enhancements
 
   * Client connections can now be declared in an application's supervision tree, either as a `GRPC.Client.Connection` child spec or through `use GRPC.Client.Connection, otp_app: ...`. Supervised connections establish asynchronously and retry with exponential backoff when the backend is unreachable, instead of failing supervisor startup. New public API: `GRPC.Client.Connection.get_channel/1`, `get_channel!/1`, and `await_ready/2`.
-  * Connection processes emit telemetry events for lifecycle transitions: `[:grpc, :client, :connection, :connected]`, `[:grpc, :client, :connection, :connect_error]`, and `[:grpc, :client, :connection, :disconnected]`.
+  * Connection processes emit telemetry events for lifecycle transitions (`[:grpc, :client, :connection, :connected]`, `[:grpc, :client, :connection, :connect_error]`, `[:grpc, :client, :connection, :disconnected]`) and for callers blocking in `await_ready/2` (`[:grpc, :client, :connection, :await_ready, :start]` and `[:grpc, :client, :connection, :await_ready, :stop]`).
 
 ### Behavior Changes
 
