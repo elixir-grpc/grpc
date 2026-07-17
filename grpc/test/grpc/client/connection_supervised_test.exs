@@ -128,6 +128,8 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
   describe "resiliency" do
     test "stays alive and retries when the backend is down at boot" do
       name = unique_name("flaky")
+      attach_telemetry([:grpc, :client, :connection, :connect_error])
+      attach_telemetry([:grpc, :client, :connection, :connected])
       Application.put_env(:grpc, :grpc_test_failing_hosts, ["127.0.0.1"])
       on_exit(fn -> Application.delete_env(:grpc, :grpc_test_failing_hosts) end)
 
@@ -136,11 +138,20 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
          name: name, target: "ipv4:127.0.0.1:50051", adapter: GRPC.Test.FailingClientAdapter}
       )
 
+      assert_receive {:telemetry, [:grpc, :client, :connection, :connect_error],
+                      %{retry_delay: _}, %{name: ^name, reason: :connection_refused}},
+                     1_000
+
       assert {:error, :timeout} = Connection.await_ready(name, 100)
 
       Application.put_env(:grpc, :grpc_test_failing_hosts, [])
       send(whereis_connection(name), :retry_establish)
 
+      assert_receive {:telemetry, [:grpc, :client, :connection, :connected],
+                      %{retry_attempt: attempt}, %{name: ^name}},
+                     2_000
+
+      assert attempt >= 1
       assert :ok = Connection.await_ready(name, 2_000)
 
       assert {:ok, %GRPC.Channel{host: "127.0.0.1"}} =
@@ -149,23 +160,25 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
 
     test "re-establishes after the connection process is killed" do
       name = unique_name("restart")
+      attach_telemetry([:grpc, :client, :connection, :connected])
 
       start_supervised!(
         {Connection, name: name, target: "ipv4:127.0.0.1:50051", adapter: GRPC.Test.ClientAdapter}
       )
 
       assert :ok = Connection.await_ready(name, 2_000)
+      assert_receive {:telemetry, [:grpc, :client, :connection, :connected], _, %{name: ^name}}
 
       pid = whereis_connection(name)
       Process.exit(pid, :kill)
 
-      assert eventually(fn ->
-               case whereis_connection(name) do
-                 nil -> false
-                 new_pid -> new_pid != pid and Connection.await_ready(name, 500) == :ok
-               end
-             end)
+      # A second :connected event can only come from the restarted process
+      # re-establishing from scratch.
+      assert_receive {:telemetry, [:grpc, :client, :connection, :connected], _, %{name: ^name}},
+                     2_000
 
+      assert whereis_connection(name) != pid
+      assert :ok = Connection.await_ready(name, 2_000)
       assert {:ok, %GRPC.Channel{}} = Connection.pick_channel(%GRPC.Channel{ref: name})
     end
   end
@@ -286,6 +299,7 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
   describe "disconnect/1 by name" do
     test "disconnects a named connection" do
       name = unique_name("disconnect")
+      attach_telemetry([:grpc, :client, :connection, :disconnected])
 
       start_supervised!(
         {Connection, name: name, target: "ipv4:127.0.0.1:50051", adapter: GRPC.Test.ClientAdapter}
@@ -293,7 +307,11 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
 
       assert :ok = Connection.await_ready(name, 2_000)
       assert {:ok, %GRPC.Channel{}} = Connection.disconnect(name)
-      assert eventually(fn -> Connection.get_channel(name) == {:error, :not_started} end)
+      assert {:error, :not_started} = Connection.get_channel(name)
+
+      assert_receive {:telemetry, [:grpc, :client, :connection, :disconnected], _,
+                      %{name: ^name, reason: :normal}},
+                     1_000
     end
   end
 

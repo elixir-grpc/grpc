@@ -243,6 +243,7 @@ defmodule GRPC.Client.ConnectionTest do
     test "returns the dial error and tears the process down when the backend is unreachable", %{
       ref: ref
     } do
+      attach_telemetry([:grpc, :client, :connection, :disconnected])
       Application.put_env(:grpc, :grpc_test_failing_hosts, ["127.0.0.1"])
       on_exit(fn -> Application.delete_env(:grpc, :grpc_test_failing_hosts) end)
 
@@ -252,7 +253,12 @@ defmodule GRPC.Client.ConnectionTest do
                  name: ref
                )
 
-      # Registry entries are cleaned up asynchronously after the process exits
+      assert_receive {:telemetry, [:grpc, :client, :connection, :disconnected], _,
+                      %{name: ^ref, reason: :shutdown}},
+                     1_000
+
+      # The Registry unregisters entries asynchronously after the process
+      # exits, so this last check still has to poll.
       assert eventually(fn -> whereis_name(ref) == nil end)
     end
 

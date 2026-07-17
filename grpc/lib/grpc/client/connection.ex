@@ -87,6 +87,23 @@ defmodule GRPC.Client.Connection do
 
   See [`GRPC.Client.Resolver`](GRPC.Client.Resolver) for the full specification.
 
+  ## Telemetry
+
+  Connection processes emit the following events:
+
+    * `[:grpc, :client, :connection, :connected]` – establishment succeeded,
+      including re-establishment after retries or a supervisor restart.
+      * Measurements: `:retry_attempt` – failed attempts before this success
+      * Metadata: `:name`, `:target`
+    * `[:grpc, :client, :connection, :connect_error]` – an establishment
+      attempt failed and a retry was scheduled.
+      * Measurements: `:retry_delay` – milliseconds until the next attempt
+      * Metadata: `:name`, `:target`, `:reason`, `:retry_attempt`
+    * `[:grpc, :client, :connection, :disconnected]` – the connection process
+      shut down, after its resources were released.
+      * Measurements: none
+      * Metadata: `:name`, `:target`, `:reason`
+
   ## Examples
 
   ### Basic connect and RPC
@@ -135,6 +152,10 @@ defmodule GRPC.Client.Connection do
   @backoff_multiplier 1.6
   @backoff_max 120_000
   @backoff_jitter 0.2
+
+  @connected_event [:grpc, :client, :connection, :connected]
+  @connect_error_event [:grpc, :client, :connection, :connect_error]
+  @disconnected_event [:grpc, :client, :connection, :disconnected]
 
   @type t :: %__MODULE__{
           virtual_channel: Channel.t(),
@@ -599,6 +620,12 @@ defmodule GRPC.Client.Connection do
       :persistent_term.erase(channel_key(ref))
     end
 
+    :telemetry.execute(@disconnected_event, %{}, %{
+      name: ref,
+      target: state.resolver_target,
+      reason: reason
+    })
+
     :ok
   rescue
     _ -> :ok
@@ -637,6 +664,11 @@ defmodule GRPC.Client.Connection do
   defp attempt_establish(state) do
     case establish(state) do
       {:ok, established_state} ->
+        :telemetry.execute(@connected_event, %{retry_attempt: state.retry_attempt}, %{
+          name: state.virtual_channel.ref,
+          target: state.resolver_target
+        })
+
         reply_waiters(established_state.waiters, :ok)
 
         {:noreply,
@@ -650,6 +682,13 @@ defmodule GRPC.Client.Connection do
 
       {:error, reason} ->
         delay = backoff_delay(state.retry_attempt)
+
+        :telemetry.execute(@connect_error_event, %{retry_delay: delay}, %{
+          name: state.virtual_channel.ref,
+          target: state.resolver_target,
+          reason: reason,
+          retry_attempt: state.retry_attempt
+        })
 
         Logger.warning(
           "Failed to establish gRPC connection to #{state.resolver_target}: " <>
