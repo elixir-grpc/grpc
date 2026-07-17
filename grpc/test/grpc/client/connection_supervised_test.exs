@@ -99,8 +99,10 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
 
       start_supervised!(ConfiguredConnection)
 
-      assert :ok = ConfiguredConnection.await_ready(2_000)
-      assert %GRPC.Channel{ref: ConfiguredConnection} = ConfiguredConnection.get_channel!()
+      assert :ok = Connection.await_ready(ConfiguredConnection, 2_000)
+
+      assert %GRPC.Channel{ref: ConfiguredConnection} =
+               Connection.get_channel!(ConfiguredConnection)
 
       assert {:ok, %GRPC.Channel{port: 50052}} =
                Connection.pick_channel(%GRPC.Channel{ref: ConfiguredConnection})
@@ -116,7 +118,7 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
 
       start_supervised!({ConfiguredConnection, target: "ipv4:127.0.0.1:50053"})
 
-      assert :ok = ConfiguredConnection.await_ready(2_000)
+      assert :ok = Connection.await_ready(ConfiguredConnection, 2_000)
 
       assert {:ok, %GRPC.Channel{port: 50053}} =
                Connection.pick_channel(%GRPC.Channel{ref: ConfiguredConnection})

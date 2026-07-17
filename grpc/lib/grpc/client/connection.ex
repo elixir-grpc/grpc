@@ -57,7 +57,7 @@ defmodule GRPC.Client.Connection do
       # in your supervision tree
       children = [MyApp.PaymentsConnection]
 
-      channel = MyApp.PaymentsConnection.get_channel!()
+      channel = GRPC.Client.Connection.get_channel!(MyApp.PaymentsConnection)
       Payments.Stub.charge(channel, request)
 
   Options are merged in this order (later wins): options given to
@@ -442,16 +442,6 @@ defmodule GRPC.Client.Connection do
           opts
         )
       end
-
-      def get_channel, do: GRPC.Client.Connection.get_channel(__MODULE__)
-
-      def get_channel!, do: GRPC.Client.Connection.get_channel!(__MODULE__)
-
-      def await_ready(timeout \\ 5_000) do
-        GRPC.Client.Connection.await_ready(__MODULE__, timeout)
-      end
-
-      def disconnect, do: GRPC.Client.Connection.disconnect(__MODULE__)
 
       defoverridable child_spec: 1
     end
