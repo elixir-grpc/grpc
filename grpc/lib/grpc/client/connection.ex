@@ -39,6 +39,7 @@ defmodule GRPC.Client.Connection do
          lb_policy: :round_robin}
       ]
 
+      :ok = GRPC.Client.Connection.await_ready(MyApp.PaymentsConnection, 10_000)
       channel = GRPC.Client.Connection.get_channel!(MyApp.PaymentsConnection)
       Payments.Stub.charge(channel, request)
 
