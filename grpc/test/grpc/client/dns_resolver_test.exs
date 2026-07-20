@@ -36,6 +36,14 @@ defmodule GRPC.Client.ReResolveTest do
 
   setup do
     Mox.set_mox_global()
+
+    # These tests exercise the direct (non-pooled) connection manager, so the pool
+    # must be disabled regardless of the environment default. Safe here because the
+    # module is async: false.
+    previous_pool = Application.get_env(:grpc, :pool_enabled)
+    Application.put_env(:grpc, :pool_enabled, false)
+    on_exit(fn -> Application.put_env(:grpc, :pool_enabled, previous_pool) end)
+
     ref = make_ref()
     resolver = GRPC.Client.MockResolver
 

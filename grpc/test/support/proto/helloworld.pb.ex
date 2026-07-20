@@ -13,6 +13,22 @@ defmodule Helloworld.HelloReply do
   field(:message, 1, type: :string)
 end
 
+defmodule Helloworld.LoopBackRequest do
+  @moduledoc false
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
+
+  field(:client_pid, 1, type: :bytes)
+  field(:client_msg, 2, type: :bytes)
+  field(:client_name, 3, type: :string)
+end
+
+defmodule Helloworld.LoopBackReply do
+  @moduledoc false
+  use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
+
+  field(:message, 1, type: :string)
+end
+
 defmodule Helloworld.HeaderRequest do
   @moduledoc false
   use Protobuf, protoc_gen_elixir_version: "0.14.1", syntax: :proto3
@@ -33,6 +49,8 @@ defmodule Helloworld.Greeter.Service do
   rpc(:SayHello, Helloworld.HelloRequest, Helloworld.HelloReply, %{})
 
   rpc(:CheckHeaders, Helloworld.HeaderRequest, Helloworld.HeaderReply, %{})
+
+  rpc(:LoopBack, Helloworld.LoopBackRequest, Helloworld.LoopBackReply, %{})
 end
 
 defmodule Helloworld.Greeter.Stub do
