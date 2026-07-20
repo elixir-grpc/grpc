@@ -44,29 +44,6 @@ defmodule GRPC.Client.Connection do
       channel = GRPC.Client.Connection.get_channel!(MyApp.PaymentsConnection)
       Payments.Stub.charge(channel, request)
 
-  Or define a connection module and configure it through the application
-  environment:
-
-      defmodule MyApp.PaymentsConnection do
-        use GRPC.Client.Connection, otp_app: :my_app
-      end
-
-      # config/runtime.exs
-      config :my_app, MyApp.PaymentsConnection,
-        target: "dns://payments.internal:50051",
-        lb_policy: :round_robin
-
-      # in your supervision tree
-      children = [MyApp.PaymentsConnection]
-
-      # use get_channel/1 for the non-raising variant
-      channel = GRPC.Client.Connection.get_channel!(MyApp.PaymentsConnection)
-      Payments.Stub.charge(channel, request)
-
-  Options are merged in this order (later wins): options given to
-  `use GRPC.Client.Connection`, then the application environment, then
-  options passed to `start_link/1`.
-
   The channel handle returned by `get_channel/1` is valid as soon as the
   process is running, even while the connection is still being established;
   RPCs return `{:error, :no_connection}` style errors until then.
@@ -244,16 +221,6 @@ defmodule GRPC.Client.Connection do
   def start_link(target, opts) do
     opts = Keyword.put_new_lazy(opts, :name, &make_ref/0)
     GenServer.start_link(__MODULE__, {target, opts}, name: via(opts[:name]))
-  end
-
-  @doc false
-  # Runtime entry point for `use`-based connection modules.
-  def start_link(module, otp_app, use_opts, opts) do
-    use_opts
-    |> Keyword.merge(Application.get_env(otp_app, module, []))
-    |> Keyword.merge(opts)
-    |> Keyword.put(:name, module)
-    |> start_link()
   end
 
   @impl GenServer
@@ -477,34 +444,6 @@ defmodule GRPC.Client.Connection do
   """
   def resolve_now(%Channel{ref: ref}) do
     GenServer.cast(via(ref), :resolve_now)
-  end
-
-  defmacro __using__(use_opts) do
-    quote bind_quoted: [use_opts: use_opts] do
-      @grpc_connection_otp_app Keyword.fetch!(use_opts, :otp_app)
-      @grpc_connection_opts Keyword.delete(use_opts, :otp_app)
-
-      def child_spec(opts) do
-        %{
-          id: __MODULE__,
-          start: {__MODULE__, :start_link, [opts]},
-          restart: :transient,
-          type: :worker,
-          shutdown: 5000
-        }
-      end
-
-      def start_link(opts \\ []) do
-        GRPC.Client.Connection.start_link(
-          __MODULE__,
-          @grpc_connection_otp_app,
-          @grpc_connection_opts,
-          opts
-        )
-      end
-
-      defoverridable child_spec: 1
-    end
   end
 
   @impl GenServer

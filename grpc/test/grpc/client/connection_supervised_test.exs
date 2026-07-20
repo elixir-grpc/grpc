@@ -3,10 +3,6 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
 
   alias GRPC.Client.Connection
 
-  defmodule ConfiguredConnection do
-    use GRPC.Client.Connection, otp_app: :grpc
-  end
-
   defmodule TrackingResolver do
     def resolve(_target) do
       {:ok, %{addresses: [%{address: "127.0.0.1", port: 50051}], service_config: nil}}
@@ -86,43 +82,6 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
 
       assert {:ok, %GRPC.Channel{ref: ^name}} = Connection.get_channel(name)
       assert {:error, :no_connection} = Connection.pick_channel(%GRPC.Channel{ref: name})
-    end
-  end
-
-  describe "use GRPC.Client.Connection" do
-    test "reads configuration from the application environment" do
-      Application.put_env(:grpc, ConfiguredConnection,
-        target: "ipv4:127.0.0.1:50052",
-        adapter: GRPC.Test.ClientAdapter
-      )
-
-      on_exit(fn -> Application.delete_env(:grpc, ConfiguredConnection) end)
-
-      start_supervised!(ConfiguredConnection)
-
-      assert :ok = Connection.await_ready(ConfiguredConnection, 2_000)
-
-      assert %GRPC.Channel{ref: ConfiguredConnection} =
-               Connection.get_channel!(ConfiguredConnection)
-
-      assert {:ok, %GRPC.Channel{port: 50052}} =
-               Connection.pick_channel(%GRPC.Channel{ref: ConfiguredConnection})
-    end
-
-    test "start_link options override the application environment" do
-      Application.put_env(:grpc, ConfiguredConnection,
-        target: "ipv4:127.0.0.1:50052",
-        adapter: GRPC.Test.ClientAdapter
-      )
-
-      on_exit(fn -> Application.delete_env(:grpc, ConfiguredConnection) end)
-
-      start_supervised!({ConfiguredConnection, target: "ipv4:127.0.0.1:50053"})
-
-      assert :ok = Connection.await_ready(ConfiguredConnection, 2_000)
-
-      assert {:ok, %GRPC.Channel{port: 50053}} =
-               Connection.pick_channel(%GRPC.Channel{ref: ConfiguredConnection})
     end
   end
 
