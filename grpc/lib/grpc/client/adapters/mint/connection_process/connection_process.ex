@@ -16,6 +16,10 @@ if Code.ensure_loaded?(Mint.HTTP) do
     require State
 
     @connection_closed_error "the connection is closed"
+    @stream_response_dead_event [:grpc, :client, :mint, :stream_response, :dead]
+    @reconnect_stop_event [:grpc, :client, :mint, :reconnect, :stop]
+    @reconnect_error_event [:grpc, :client, :mint, :reconnect, :error]
+    @reconnect_exhausted_event [:grpc, :client, :mint, :reconnect, :exhausted]
 
     @doc """
     Starts and link connection process
@@ -291,6 +295,12 @@ if Code.ensure_loaded?(Mint.HTTP) do
         "stream response process #{inspect(pid)} is not alive (#{inspect(reason)}), cancelling request #{inspect(request_ref)}"
       )
 
+      :telemetry.execute(@stream_response_dead_event, %{}, %{
+        request_ref: request_ref,
+        stream_response_pid: pid,
+        reason: reason
+      })
+
       {_ref, state} = State.pop_ref(state, request_ref)
       state = drop_queued_request_chunks(state, request_ref)
 
@@ -450,6 +460,12 @@ if Code.ensure_loaded?(Mint.HTTP) do
         "Connection retry exhausted (#{attempt}/#{max}) for #{state.scheme}://#{state.host}:#{state.port}"
       )
 
+      :telemetry.execute(
+        @reconnect_exhausted_event,
+        %{},
+        reconnect_metadata(state, attempt)
+      )
+
       send(state.parent, {:elixir_grpc, :connection_down, self()})
       {:noreply, state}
     end
@@ -461,9 +477,17 @@ if Code.ensure_loaded?(Mint.HTTP) do
         "Attempting reconnection #{next_attempt}/#{state.retry} to #{state.scheme}://#{state.host}:#{state.port}"
       )
 
+      start = System.monotonic_time()
+
       case Mint.HTTP.connect(state.scheme, state.host, state.port, state.connect_opts) do
         {:ok, conn} ->
           Logger.info("Reconnected successfully to #{state.scheme}://#{state.host}:#{state.port}")
+
+          :telemetry.execute(
+            @reconnect_stop_event,
+            %{duration: System.monotonic_time() - start},
+            reconnect_metadata(state, next_attempt)
+          )
 
           new_state = %{state | conn: conn, retry_attempt: 0}
           {:noreply, new_state}
@@ -473,10 +497,26 @@ if Code.ensure_loaded?(Mint.HTTP) do
             "Reconnection attempt #{next_attempt}/#{state.retry} failed: #{inspect(reason)}"
           )
 
-          timeout = retry_timeout(next_attempt)
+          :telemetry.execute(
+            @reconnect_error_event,
+            %{duration: System.monotonic_time() - start},
+            Map.put(reconnect_metadata(state, next_attempt), :reason, reason)
+          )
+
+          timeout = state.retry_timeout_ms || retry_timeout(next_attempt)
           Process.send_after(self(), :reconnect, timeout)
           {:noreply, %{state | retry_attempt: next_attempt}}
       end
+    end
+
+    defp reconnect_metadata(state, attempt) do
+      %{
+        scheme: state.scheme,
+        host: state.host,
+        port: state.port,
+        attempt: attempt,
+        max: state.retry
+      }
     end
 
     @doc false
