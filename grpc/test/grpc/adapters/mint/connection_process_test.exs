@@ -579,8 +579,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
       :ok = ConnectionProcess.stream_request_body(pid, request_ref, :eof)
 
-      assert_receive {:telemetry, [:grpc, :client, :mint, :stream_response, :dead], %{},
-                      metadata}
+      assert_receive {:telemetry, [:grpc, :client, :mint, :stream_response, :dead], %{}, metadata}
 
       assert metadata.request_ref == request_ref
       assert metadata.stream_response_pid == dead_pid
