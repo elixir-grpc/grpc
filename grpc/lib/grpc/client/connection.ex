@@ -40,6 +40,7 @@ defmodule GRPC.Client.Connection do
       ]
 
       :ok = GRPC.Client.Connection.await_ready(MyApp.PaymentsConnection, 10_000)
+      # use get_channel/1 for the non-raising variant
       channel = GRPC.Client.Connection.get_channel!(MyApp.PaymentsConnection)
       Payments.Stub.charge(channel, request)
 
@@ -58,6 +59,7 @@ defmodule GRPC.Client.Connection do
       # in your supervision tree
       children = [MyApp.PaymentsConnection]
 
+      # use get_channel/1 for the non-raising variant
       channel = GRPC.Client.Connection.get_channel!(MyApp.PaymentsConnection)
       Payments.Stub.charge(channel, request)
 
