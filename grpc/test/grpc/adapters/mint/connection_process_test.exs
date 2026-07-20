@@ -708,11 +708,24 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   end
 
   defp valid_stream_request(%{request: {method, path, headers}, process_pid: pid}) do
+    # Must not use self() here: a fast server response makes ConnectionProcess
+    # GenServer.call the stream response pid while this setup is blocked in
+    # :sys.get_state/1, which deadlocks the test process.
+    stream = build(:client_stream)
+    {:ok, stream_response_pid} = StreamResponseProcess.start_link(stream, true)
+
     {:ok, %{request_ref: request_ref}} =
-      ConnectionProcess.request(pid, method, path, headers, :stream, stream_response_pid: self())
+      ConnectionProcess.request(pid, method, path, headers, :stream,
+        stream_response_pid: stream_response_pid
+      )
 
     state = :sys.get_state(pid)
-    %{request_ref: request_ref, state: state}
+
+    %{
+      request_ref: request_ref,
+      state: state,
+      stream_response_pid: stream_response_pid
+    }
   end
 
   defp valid_stream_response(%{request_ref: request_ref, state: state} = ctx) do
