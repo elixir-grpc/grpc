@@ -164,7 +164,7 @@ defmodule GRPC.Client.Connection do
   @default_max_resolve_interval 300_000
   @default_min_resolve_interval 5_000
   @default_connect_timeout 15_000
-  @backoff_initial 1_000
+  @backoff_initial 100
   @backoff_multiplier 1.6
   @backoff_max 120_000
   @backoff_jitter 0.2
@@ -861,7 +861,7 @@ defmodule GRPC.Client.Connection do
   defp backoff_delay(attempt) do
     base = min(@backoff_initial * :math.pow(@backoff_multiplier, attempt), @backoff_max)
     jitter = (:rand.uniform() * 2 - 1) * @backoff_jitter * base
-    max(trunc(base + jitter), 0)
+    trunc(base + jitter)
   end
 
   defp finalize_connection(ref) do
