@@ -518,14 +518,14 @@ defmodule GRPC.Client.Connection do
   end
 
   def handle_call(:await_ready, {caller_pid, _tag}, %__MODULE__{established?: true} = state) do
-    await_ready_start(state, caller_pid)
-    await_ready_stop(state, caller_pid, System.monotonic_time(), :ok)
+    emit_await_ready_start(state, caller_pid)
+    emit_await_ready_stop(state, caller_pid, System.monotonic_time(), :ok)
     {:reply, :ok, state}
   end
 
   def handle_call(:await_ready, {caller_pid, _tag} = from, state) do
     state = %{state | waiters: add_waiter(state, caller_pid, from)}
-    await_ready_start(state, caller_pid)
+    emit_await_ready_start(state, caller_pid)
     {:noreply, state}
   end
 
@@ -617,7 +617,7 @@ defmodule GRPC.Client.Connection do
 
       {dropped, remaining} ->
         Enum.each(dropped, fn {caller_pid, _from, _mon, started_at} ->
-          await_ready_stop(state, caller_pid, started_at, :abandoned)
+          emit_await_ready_stop(state, caller_pid, started_at, :abandoned)
         end)
 
         {:noreply, %{state | waiters: remaining}}
@@ -824,7 +824,7 @@ defmodule GRPC.Client.Connection do
 
     Enum.each(stale, fn {pid, _from, mon, started_at} ->
       Process.demonitor(mon, [:flush])
-      await_ready_stop(state, pid, started_at, :abandoned)
+      emit_await_ready_stop(state, pid, started_at, :abandoned)
     end)
 
     [{caller_pid, from, Process.monitor(caller_pid), System.monotonic_time()} | rest]
@@ -833,12 +833,12 @@ defmodule GRPC.Client.Connection do
   defp reply_waiters(state, waiters, reply, result) do
     Enum.each(waiters, fn {pid, from, mon, started_at} ->
       Process.demonitor(mon, [:flush])
-      await_ready_stop(state, pid, started_at, result)
+      emit_await_ready_stop(state, pid, started_at, result)
       GenServer.reply(from, reply)
     end)
   end
 
-  defp await_ready_start(state, caller) do
+  defp emit_await_ready_start(state, caller) do
     :telemetry.execute(
       @await_ready_start_event,
       %{system_time: System.system_time()},
@@ -846,7 +846,7 @@ defmodule GRPC.Client.Connection do
     )
   end
 
-  defp await_ready_stop(state, caller, started_at, result) do
+  defp emit_await_ready_stop(state, caller, started_at, result) do
     :telemetry.execute(
       @await_ready_stop_event,
       %{duration: System.monotonic_time() - started_at},
