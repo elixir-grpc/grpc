@@ -344,6 +344,27 @@ defmodule GRPC.Client.Connection do
 
   Returns `{:error, :not_started}` if the connection is not running, or if it
   is disconnected or shut down while waiting.
+
+  ## Examples
+
+  Waiting for a supervised connection before issuing the first RPC, for
+  example inside a release readiness check or a worker's `init/1`:
+
+      case GRPC.Client.Connection.await_ready(MyApp.PaymentsConnection, 10_000) do
+        :ok ->
+          channel = GRPC.Client.Connection.get_channel!(MyApp.PaymentsConnection)
+          Payments.Stub.charge(channel, request)
+
+        {:error, :timeout} ->
+          # Still unreachable after 10s; the process keeps retrying in the
+          # background, so a later await_ready/2 or RPC may succeed.
+          {:error, :payments_unavailable}
+      end
+
+  It also accepts the channel handle returned by `get_channel/1`:
+
+      {:ok, channel} = GRPC.Client.Connection.get_channel(MyApp.PaymentsConnection)
+      :ok = GRPC.Client.Connection.await_ready(channel, 10_000)
   """
   def await_ready(ref_or_channel, timeout \\ 5_000)
 
