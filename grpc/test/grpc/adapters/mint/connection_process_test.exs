@@ -447,8 +447,11 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
     test "notifies parent when all retry attempts are exhausted", %{
       state: state,
-      port: port
+      port: port,
+      process_pid: pid
     } do
+      # Close the live client first so Cowboy shutdown does not wait on drain.
+      :ok = ConnectionProcess.disconnect(pid)
       :ok = GRPC.Server.stop_endpoint(ReconnectExhaustedEndpoint)
 
       exhausted_state = %{state | retry: 1, retry_attempt: 1}
@@ -459,7 +462,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert_receive {:telemetry, [:grpc, :client, :mint, :reconnect, :exhausted], %{}, metadata}
       assert metadata.attempt == 1
       assert metadata.max == 1
-      assert metadata.host == "localhost"
+      assert metadata.host == "127.0.0.1"
       assert metadata.port == port
       assert metadata.scheme == :http
     end
@@ -627,7 +630,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert measurements.duration >= 0
       assert metadata.attempt == 2
       assert metadata.max == 3
-      assert metadata.host == "localhost"
+      assert metadata.host == "127.0.0.1"
       assert metadata.port == port
       assert metadata.scheme == :http
     end
@@ -641,11 +644,14 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
     test "schedules another reconnect when server is unavailable", %{
       state: state,
-      port: port
+      port: port,
+      process_pid: pid
     } do
+      # Close the live client first so Cowboy shutdown does not wait on drain.
+      :ok = ConnectionProcess.disconnect(pid)
       :ok = GRPC.Server.stop_endpoint(ReconnectUnavailableEndpoint)
 
-      failed_state = %{state | retry_attempt: 0}
+      failed_state = %{state | retry_attempt: 0, retry_timeout_ms: 10}
       assert {:noreply, new_state} = ConnectionProcess.handle_info(:reconnect, failed_state)
       assert new_state.retry_attempt == 1
       assert_receive :reconnect, 5_000
@@ -657,7 +663,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert measurements.duration >= 0
       assert metadata.attempt == 1
       assert metadata.max == 3
-      assert metadata.host == "localhost"
+      assert metadata.host == "127.0.0.1"
       assert metadata.port == port
       assert metadata.scheme == :http
       assert metadata.reason != nil
@@ -678,7 +684,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     {:ok, pid} =
       ConnectionProcess.start_link(
         :http,
-        "localhost",
+        "127.0.0.1",
         port,
         Keyword.merge([protocols: [:http2]], opts)
       )

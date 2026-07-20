@@ -503,7 +503,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
             Map.put(reconnect_metadata(state, next_attempt), :reason, reason)
           )
 
-          timeout = retry_timeout(next_attempt)
+          timeout = state.retry_timeout_ms || retry_timeout(next_attempt)
           Process.send_after(self(), :reconnect, timeout)
           {:noreply, %{state | retry_attempt: next_attempt}}
       end

@@ -76,9 +76,11 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
 
   @impl GenServer
   def init({%{host: host, port: port}, open_opts}) do
+    {await_timeout, open_opts} = Map.pop(open_opts, :await_timeout, 5_000)
+
     case open(host, port, open_opts) do
       {:ok, gun_pid} ->
-        case :gun.await_up(gun_pid) do
+        case :gun.await_up(gun_pid, await_timeout) do
           {:ok, :http2} ->
             {:ok, %{gun_pid: gun_pid, response_processes: %{}}}
 
