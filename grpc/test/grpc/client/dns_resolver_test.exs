@@ -30,9 +30,9 @@ defmodule GRPC.Client.ReResolveTest do
   alias GRPC.Channel
   alias GRPC.Client.Connection
 
-  @resolve_interval 200
-  @wait @resolve_interval + 100
-  @wait_after_backoff @resolve_interval * 2 + 150
+  @resolve_interval 50
+  @wait @resolve_interval + 30
+  @wait_after_backoff @resolve_interval * 2 + 50
 
   setup do
     Mox.set_mox_global()
@@ -666,7 +666,7 @@ defmodule GRPC.Client.ReResolveTest do
           resolve_interval: 50
         )
 
-      Process.sleep(200)
+      Process.sleep(@wait)
 
       assert {:ok, _} = Connection.pick_channel(channel)
       assert is_nil(get_state(ctx.ref).resolver_state)
@@ -1169,9 +1169,9 @@ defmodule GRPC.Client.ReResolveTest do
           lb_policy: :round_robin
         )
 
-      # Simulate a resolver that takes a long time
+      # Simulate a resolver that takes long enough to overlap pick_channel
       stub(ctx.resolver, :resolve, fn _target ->
-        Process.sleep(2_000)
+        Process.sleep(200)
         {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
       end)
 

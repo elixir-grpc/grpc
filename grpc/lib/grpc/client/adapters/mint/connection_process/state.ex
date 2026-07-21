@@ -9,6 +9,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       :host,
       :port,
       :connect_opts,
+      :retry_timeout_ms,
       requests: %{},
       request_stream_queue: :queue.new(),
       retry: 0,
@@ -23,6 +24,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
             host: Mint.Types.address() | nil,
             port: :inet.port_number() | nil,
             connect_opts: keyword(),
+            retry_timeout_ms: non_neg_integer() | nil,
             retry: non_neg_integer(),
             retry_attempt: non_neg_integer()
           }

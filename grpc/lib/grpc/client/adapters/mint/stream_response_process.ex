@@ -16,7 +16,7 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   # available inside the process.
   #
   # TODO: Refactor the GenServer.call/3 occurrences on this module to produce
-  # telemetry events and log entries in case of failures
+  # telemetry events in case of failures
 
   @accepted_types [:data, :trailers, :headers, :error]
   @header_types [:headers, :trailers]
@@ -55,18 +55,26 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   Cast a message to process to inform that the stream has finished
     once all messages are produced. This process will automatically
     be killed.
+
+  Returns `:ok`, or `{:error, reason}` when the stream response process
+  is no longer alive (e.g. the caller gave up on the request).
   """
   def done(pid) do
-    :ok = GenServer.call(pid, {:consume_response, :done})
-    :ok
+    GenServer.call(pid, {:consume_response, :done})
+  catch
+    :exit, {reason, {GenServer, :call, _args}} -> {:error, reason}
   end
 
   @doc """
-  Consume an incoming data or trailers/headers
+  Consume an incoming data or trailers/headers.
+
+  Returns `:ok`, or `{:error, reason}` when the stream response process
+  is no longer alive (e.g. the caller gave up on the request).
   """
   def consume(pid, type, data) when type in @accepted_types do
-    :ok = GenServer.call(pid, {:consume_response, {type, data}})
-    :ok
+    GenServer.call(pid, {:consume_response, {type, data}})
+  catch
+    :exit, {reason, {GenServer, :call, _args}} -> {:error, reason}
   end
 
   # Callbacks
