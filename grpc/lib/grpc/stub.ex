@@ -215,6 +215,13 @@ defmodule GRPC.Stub do
       without `:accepted_compressors`.
     * `:accepted_compressors` - tell servers accepted compressors, this can be used without `:compressor`
     * `:headers` - headers to attach to each request
+    * `:lb_policy` - load-balancing policy (`:pick_first`, `:round_robin`)
+    * `:name` - a stable identity for the connection; connecting again with
+      the same name reuses the running connection
+
+  For long-running clients, prefer declaring the connection in your
+  supervision tree with `GRPC.Client.Connection` instead of calling
+  `connect/2` at runtime.
 
   ## Examples
 
