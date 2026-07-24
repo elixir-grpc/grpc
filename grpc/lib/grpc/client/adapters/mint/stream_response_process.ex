@@ -16,18 +16,13 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   # available inside the process.
   #
   # TODO: Refactor the GenServer.call/3 occurrences on this module to produce
-  # telemetry events and log entries in case of failures
-
-  @typep accepted_types :: :data | :trailers | :headers | :error
-  @typep data_types :: binary() | Mint.Types.headers() | Mint.Types.error()
+  # telemetry events in case of failures
 
   @accepted_types [:data, :trailers, :headers, :error]
   @header_types [:headers, :trailers]
 
   use GenServer
 
-  @spec start_link(GRPC.Client.Stream.t(), send_headers_or_trailers? :: boolean()) ::
-          GenServer.on_start()
   def start_link(stream, send_headers_or_trailers?) do
     GenServer.start_link(__MODULE__, {stream, send_headers_or_trailers?})
   end
@@ -36,7 +31,6 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   Given a pid from this process, build an Elixir.Stream that will consume the accumulated
   data inside this process
   """
-  @spec build_stream(pid(), produce_trailers? :: boolean) :: Enumerable.t()
   def build_stream(pid, produce_trailers? \\ true) do
     Stream.unfold(pid, fn pid ->
       pid
@@ -61,20 +55,26 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   Cast a message to process to inform that the stream has finished
     once all messages are produced. This process will automatically
     be killed.
+
+  Returns `:ok`, or `{:error, reason}` when the stream response process
+  is no longer alive (e.g. the caller gave up on the request).
   """
-  @spec done(pid()) :: :ok
   def done(pid) do
-    :ok = GenServer.call(pid, {:consume_response, :done})
-    :ok
+    GenServer.call(pid, {:consume_response, :done})
+  catch
+    :exit, {reason, {GenServer, :call, _args}} -> {:error, reason}
   end
 
   @doc """
-  Consume an incoming data or trailers/headers
+  Consume an incoming data or trailers/headers.
+
+  Returns `:ok`, or `{:error, reason}` when the stream response process
+  is no longer alive (e.g. the caller gave up on the request).
   """
-  @spec consume(pid(), type :: accepted_types, data :: data_types) :: :ok
   def consume(pid, type, data) when type in @accepted_types do
-    :ok = GenServer.call(pid, {:consume_response, {type, data}})
-    :ok
+    GenServer.call(pid, {:consume_response, {type, data}})
+  catch
+    :exit, {reason, {GenServer, :call, _args}} -> {:error, reason}
   end
 
   # Callbacks

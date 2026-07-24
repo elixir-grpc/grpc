@@ -764,7 +764,7 @@ defmodule GRPC.Integration.ServerTest do
       run_server([HelloServer], fn port ->
         {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
-        req = %Helloworld.HelloRequest{name: "delay", duration: 1000}
+        req = %Helloworld.HelloRequest{name: "delay", duration: 20}
 
         assert {:ok, _} = Helloworld.Greeter.Stub.say_hello(channel, req)
       end)
@@ -781,7 +781,7 @@ defmodule GRPC.Integration.ServerTest do
 
       assert_received {^stop_server_name, measurements, metadata}
       assert %{duration: duration} = measurements
-      assert duration > 1000
+      assert System.convert_time_unit(duration, :native, :millisecond) >= 20
 
       assert %{
                server: HelloServer,
@@ -803,7 +803,7 @@ defmodule GRPC.Integration.ServerTest do
 
       assert_received {^stop_client_name, measurements, metadata}
       assert %{duration: duration} = measurements
-      assert duration > 1100
+      assert System.convert_time_unit(duration, :native, :millisecond) >= 20
 
       assert %{
                stream: %GRPC.Client.Stream{
@@ -839,7 +839,7 @@ defmodule GRPC.Integration.ServerTest do
       run_server([HelloServer], fn port ->
         {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
 
-        req = %Helloworld.HelloRequest{name: "raise", duration: 1100}
+        req = %Helloworld.HelloRequest{name: "raise", duration: 20}
 
         assert {:error, %GRPC.RPCError{status: 2}} =
                  Helloworld.Greeter.Stub.say_hello(channel, req)
@@ -857,7 +857,7 @@ defmodule GRPC.Integration.ServerTest do
 
       assert_received {^exception_server_name, measurements, metadata}
       assert %{duration: duration} = measurements
-      assert duration > 1100
+      assert System.convert_time_unit(duration, :native, :millisecond) >= 20
 
       assert %{
                server: HelloServer,
@@ -893,7 +893,7 @@ defmodule GRPC.Integration.ServerTest do
 
       assert_received {^stop_client_name, measurements, metadata}
       assert %{duration: duration} = measurements
-      assert duration > 1100
+      assert System.convert_time_unit(duration, :native, :millisecond) >= 20
 
       assert %{
                stream: %GRPC.Client.Stream{

@@ -48,8 +48,6 @@ defmodule GRPC.Server.Adapters.Cowboy do
   @doc """
   Return a child_spec to start server. See `GRPC.Server.Adapters.Cowboy.start/4` for a list of supported options.
   """
-  @spec child_spec(atom(), %{String.t() => [module()]}, non_neg_integer(), Keyword.t()) ::
-          Supervisor.child_spec()
   def child_spec(endpoint, servers, port, opts) do
     [ref, trans_opts, proto_opts] = cowboy_start_args(endpoint, servers, port, opts)
     trans_opts = Map.put(trans_opts, :connection_type, :supervisor)
@@ -86,8 +84,6 @@ defmodule GRPC.Server.Adapters.Cowboy do
   end
 
   # spec: :supervisor.mfargs doesn't work
-  @spec start_link(atom(), atom(), %{String.t() => [module()]}, any()) ::
-          {:ok, pid()} | {:error, any()}
   def start_link(scheme, endpoint, servers, {m, f, [ref | _] = a}) do
     case apply(m, f, a) do
       {:ok, pid} ->
@@ -112,12 +108,10 @@ defmodule GRPC.Server.Adapters.Cowboy do
     :cowboy.stop_listener(servers_name(endpoint, servers))
   end
 
-  @spec read_body(GRPC.Server.Adapter.state()) :: {:ok, binary()}
   def read_body(%{pid: pid}) do
     Handler.read_full_body(pid)
   end
 
-  @spec reading_stream(GRPC.Server.Adapter.state()) :: Enumerable.t()
   def reading_stream(%{pid: pid}) do
     Stream.unfold(%{pid: pid, need_more: true, buffer: <<>>}, fn acc -> read_stream(acc) end)
   end

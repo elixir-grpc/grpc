@@ -20,9 +20,10 @@ defmodule GRPC.Protoc.CLI do
 
   alias Protobuf.Protoc.Context
 
+  @gen_stubs_disabled_plugin "__grpc_server_gen_stubs_disabled__"
+
   # Entrypoint for the escript (protoc-gen-elixir).
   @doc false
-  @spec main([String.t()]) :: :ok
   def main(args)
 
   def main(["--version"]) do
@@ -75,6 +76,11 @@ defmodule GRPC.Protoc.CLI do
     Google.Protobuf.Compiler.CodeGeneratorResponse.Feature.value(:FEATURE_PROTO3_OPTIONAL)
   end
 
+  @doc false
+  def gen_stubs?(%Context{plugins: plugins}) do
+    @gen_stubs_disabled_plugin not in plugins
+  end
+
   # Made public for testing.
   @doc false
   def parse_params(%Context{} = ctx, params_str) when is_binary(params_str) do
@@ -84,7 +90,16 @@ defmodule GRPC.Protoc.CLI do
   end
 
   defp parse_param("plugins=" <> plugins, %Context{} = ctx) do
-    %Context{ctx | plugins: String.split(plugins, "+")}
+    plugins = String.split(plugins, "+")
+
+    plugins =
+      if gen_stubs?(ctx) do
+        plugins
+      else
+        [@gen_stubs_disabled_plugin | plugins]
+      end
+
+    %Context{ctx | plugins: plugins}
   end
 
   defp parse_param("gen_descriptors=" <> value, %Context{} = ctx) do
@@ -94,6 +109,19 @@ defmodule GRPC.Protoc.CLI do
 
       other ->
         raise "invalid value for gen_descriptors option, expected \"true\", got: #{inspect(other)}"
+    end
+  end
+
+  defp parse_param("gen_stubs=" <> value, %Context{} = ctx) do
+    case value do
+      "true" ->
+        put_gen_stubs(ctx, true)
+
+      "false" ->
+        put_gen_stubs(ctx, false)
+
+      other ->
+        raise "invalid value for gen_stubs option, expected \"true\" or \"false\", got: #{inspect(other)}"
     end
   end
 
@@ -133,10 +161,21 @@ defmodule GRPC.Protoc.CLI do
     ctx
   end
 
+  defp put_gen_stubs(%Context{} = ctx, true) do
+    %Context{ctx | plugins: List.delete(ctx.plugins, @gen_stubs_disabled_plugin)}
+  end
+
+  defp put_gen_stubs(%Context{} = ctx, false) do
+    plugins =
+      ctx.plugins
+      |> List.delete(@gen_stubs_disabled_plugin)
+      |> then(&[@gen_stubs_disabled_plugin | &1])
+
+    %Context{ctx | plugins: plugins}
+  end
+
   # Made public for testing.
   @doc false
-  @spec find_types(Context.t(), [Google.Protobuf.FileDescriptorProto.t()], [String.t()]) ::
-          Context.t()
   def find_types(%Context{} = ctx, descs, files_to_generate)
       when is_list(descs) and is_list(files_to_generate) do
     global_type_mapping =

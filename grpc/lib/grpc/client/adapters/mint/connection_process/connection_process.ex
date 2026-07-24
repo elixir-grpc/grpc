@@ -13,14 +13,17 @@ if Code.ensure_loaded?(Mint.HTTP) do
     alias GRPC.Client.Adapters.Mint.StreamResponseProcess
 
     require Logger
+    require State
 
     @connection_closed_error "the connection is closed"
+    @stream_response_dead_event [:grpc, :client, :mint, :stream_response, :dead]
+    @reconnect_stop_event [:grpc, :client, :mint, :reconnect, :stop]
+    @reconnect_error_event [:grpc, :client, :mint, :reconnect, :error]
+    @reconnect_exhausted_event [:grpc, :client, :mint, :reconnect, :exhausted]
 
     @doc """
     Starts and link connection process
     """
-    @spec start_link(Mint.Types.scheme(), Mint.Types.address(), :inet.port_number(), keyword()) ::
-            GenServer.on_start()
     def start_link(scheme, host, port, opts \\ []) do
       opts = Keyword.put(opts, :parent, self())
       GenServer.start_link(__MODULE__, {scheme, host, port, opts})
@@ -33,14 +36,6 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
       * :stream_response_pid (required) - the process to where send the responses coming from the connection will be sent to be processed
     """
-    @spec request(
-            pid :: pid(),
-            method :: String.t(),
-            path :: String.t(),
-            Mint.Types.headers(),
-            body :: iodata() | nil | :stream,
-            opts :: keyword()
-          ) :: {:ok, %{request_ref: Mint.Types.request_ref()}} | {:error, Mint.Types.error()}
     def request(pid, method, path, headers, body, opts \\ []) do
       GenServer.call(pid, {:request, method, path, headers, body, opts})
     end
@@ -48,7 +43,6 @@ if Code.ensure_loaded?(Mint.HTTP) do
     @doc """
     Closes the given connection.
     """
-    @spec disconnect(pid :: pid()) :: :ok
     def disconnect(pid) do
       GenServer.call(pid, :disconnect)
     end
@@ -56,11 +50,6 @@ if Code.ensure_loaded?(Mint.HTTP) do
     @doc """
     Streams a chunk of the request body on the connection or signals the end of the body.
     """
-    @spec stream_request_body(
-            pid(),
-            Mint.Types.request_ref(),
-            iodata() | :eof | {:eof, trailing_headers :: Mint.Types.headers()}
-          ) :: :ok | {:error, Mint.Types.error()}
     def stream_request_body(pid, request_ref, body) do
       GenServer.call(pid, {:stream_body, request_ref, body})
     end
@@ -68,7 +57,6 @@ if Code.ensure_loaded?(Mint.HTTP) do
     @doc """
     cancels an open request request
     """
-    @spec cancel(pid(), Mint.Types.request_ref()) :: :ok | {:error, Mint.Types.error()}
     def cancel(pid, request_ref) do
       GenServer.call(pid, {:cancel_request, request_ref})
     end
@@ -180,13 +168,18 @@ if Code.ensure_loaded?(Mint.HTTP) do
        {:continue, :process_request_stream_queue}}
     end
 
-    def handle_call({:cancel_request, request_ref}, _from, state) do
+    def handle_call({:cancel_request, request_ref}, _from, state)
+        when State.has_request_ref(state, request_ref) do
       state = process_response({:done, request_ref}, state)
 
       case Mint.HTTP2.cancel_request(state.conn, request_ref) do
         {:ok, conn} -> {:reply, :ok, State.update_conn(state, conn)}
         {:error, conn, error} -> {:reply, {:error, error}, State.update_conn(state, conn)}
       end
+    end
+
+    def handle_call({:cancel_request, _request_ref}, _from, state) do
+      {:reply, :ok, state}
     end
 
     @impl true
@@ -248,6 +241,14 @@ if Code.ensure_loaded?(Mint.HTTP) do
       :normal
     end
 
+    # Frames may still arrive for a stream whose state was already dropped
+    # (e.g. cancelled after its response process died mid-batch). Ignore them
+    # instead of crashing the whole connection.
+    defp process_response(response, state)
+         when not State.has_request_ref(state, elem(response, 1)) do
+      state
+    end
+
     defp process_response({:status, request_ref, status}, state) do
       State.update_response_status(state, request_ref, status)
     end
@@ -255,30 +256,14 @@ if Code.ensure_loaded?(Mint.HTTP) do
     defp process_response({:headers, request_ref, headers}, state) do
       if State.empty_headers?(state, request_ref) do
         new_state = State.update_response_headers(state, request_ref, headers)
-
-        :ok =
-          new_state
-          |> State.stream_response_pid(request_ref)
-          |> StreamResponseProcess.consume(:headers, headers)
-
-        new_state
+        consume_or_cancel_stream(new_state, request_ref, :headers, headers)
       else
-        :ok =
-          state
-          |> State.stream_response_pid(request_ref)
-          |> StreamResponseProcess.consume(:trailers, headers)
-
-        state
+        consume_or_cancel_stream(state, request_ref, :trailers, headers)
       end
     end
 
     defp process_response({:data, request_ref, new_data}, state) do
-      :ok =
-        state
-        |> State.stream_response_pid(request_ref)
-        |> StreamResponseProcess.consume(:data, new_data)
-
-      state
+      consume_or_cancel_stream(state, request_ref, :data, new_data)
     end
 
     # A stream-level error, e.g. Mint.HTTPError{reason: :unprocessed} for
@@ -286,23 +271,64 @@ if Code.ensure_loaded?(Mint.HTTP) do
     # error to the caller and drop the request instead of crashing the whole
     # connection process with a FunctionClauseError (which also skips the
     # retry logic and the :connection_down notification).
-    defp process_response({:error, request_ref, error}, state) do
-      pid = State.stream_response_pid(state, request_ref)
-      :ok = StreamResponseProcess.consume(pid, :error, error)
-      :ok = StreamResponseProcess.done(pid)
+    defp process_response({:error, request_ref, reason}, state) do
+      state
+      |> State.stream_response_pid(request_ref)
+      |> end_stream_response(reason)
 
       {_ref, new_state} = State.pop_ref(state, request_ref)
       new_state
     end
 
     defp process_response({:done, request_ref}, state) do
-      :ok =
-        state
-        |> State.stream_response_pid(request_ref)
-        |> StreamResponseProcess.done()
+      state
+      |> State.stream_response_pid(request_ref)
+      |> StreamResponseProcess.done()
 
       {_ref, new_state} = State.pop_ref(state, request_ref)
       new_state
+    end
+
+    defp consume_or_cancel_stream(state, request_ref, type, data) do
+      pid = State.stream_response_pid(state, request_ref)
+
+      case StreamResponseProcess.consume(pid, type, data) do
+        :ok -> state
+        {:error, reason} -> cancel_dead_stream(state, request_ref, pid, reason)
+      end
+    end
+
+    defp cancel_dead_stream(state, request_ref, pid, reason) do
+      Logger.warning(
+        "stream response process #{inspect(pid)} is not alive (#{inspect(reason)}), cancelling request #{inspect(request_ref)}"
+      )
+
+      :telemetry.execute(@stream_response_dead_event, %{}, %{
+        request_ref: request_ref,
+        stream_response_pid: pid,
+        reason: reason
+      })
+
+      {_ref, state} = State.pop_ref(state, request_ref)
+      state = drop_queued_request_chunks(state, request_ref)
+
+      case Mint.HTTP2.cancel_request(state.conn, request_ref) do
+        {:ok, conn} -> State.update_conn(state, conn)
+        {:error, conn, _error} -> State.update_conn(state, conn)
+      end
+    end
+
+    defp drop_queued_request_chunks(state, request_ref) do
+      {dropped, kept} =
+        state.request_stream_queue
+        |> :queue.to_list()
+        |> Enum.split_with(&match?({^request_ref, _body, _from}, &1))
+
+      for {_ref, _body, from} <- dropped, not is_nil(from) do
+        GenServer.reply(from, {:error, "the request was cancelled"})
+      end
+
+      State.update_request_stream_queue(state, :queue.from_list(kept))
     end
 
     defp chunk_body_and_enqueue_rest({request_ref, body, from}, state) do
@@ -325,10 +351,9 @@ if Code.ensure_loaded?(Mint.HTTP) do
             # isn't the same one that's expecting the reply.
             GenServer.reply(from, {:error, error})
           else
-            :ok =
-              state
-              |> State.stream_response_pid(request_ref)
-              |> StreamResponseProcess.consume(:error, error)
+            state
+            |> State.stream_response_pid(request_ref)
+            |> StreamResponseProcess.consume(:error, error)
           end
 
           {:noreply, State.update_conn(state, conn)}
@@ -350,10 +375,9 @@ if Code.ensure_loaded?(Mint.HTTP) do
           if not send_eof? do
             GenServer.reply(from, {:error, error})
           else
-            :ok =
-              state
-              |> State.stream_response_pid(request_ref)
-              |> StreamResponseProcess.consume(:error, error)
+            state
+            |> State.stream_response_pid(request_ref)
+            |> StreamResponseProcess.consume(:error, error)
           end
 
           check_request_stream_queue(State.update_conn(state, conn))
@@ -402,12 +426,12 @@ if Code.ensure_loaded?(Mint.HTTP) do
             {ref, _body, nil} ->
               acc_state
               |> State.stream_response_pid(ref)
-              |> send_connection_close_and_end_stream_response()
+              |> end_stream_response(@connection_closed_error)
 
             {ref, _body, from} ->
               acc_state
               |> State.stream_response_pid(ref)
-              |> send_connection_close_and_end_stream_response()
+              |> end_stream_response(@connection_closed_error)
 
               GenServer.reply(from, {:error, @connection_closed_error})
           end
@@ -420,7 +444,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       |> Enum.each(fn {ref, _} ->
         new_state
         |> State.stream_response_pid(ref)
-        |> send_connection_close_and_end_stream_response()
+        |> end_stream_response(@connection_closed_error)
       end)
 
       clean_state = State.update_request_stream_queue(%{new_state | requests: %{}}, :queue.new())
@@ -433,15 +457,21 @@ if Code.ensure_loaded?(Mint.HTTP) do
       end
     end
 
-    defp send_connection_close_and_end_stream_response(pid) do
-      :ok = StreamResponseProcess.consume(pid, :error, @connection_closed_error)
-      :ok = StreamResponseProcess.done(pid)
+    defp end_stream_response(pid, error) do
+      StreamResponseProcess.consume(pid, :error, error)
+      StreamResponseProcess.done(pid)
     end
 
     defp attempt_reconnect(%{retry: max, retry_attempt: attempt} = state)
          when attempt >= max do
       Logger.warning(
         "Connection retry exhausted (#{attempt}/#{max}) for #{state.scheme}://#{state.host}:#{state.port}"
+      )
+
+      :telemetry.execute(
+        @reconnect_exhausted_event,
+        %{},
+        reconnect_metadata(state, attempt)
       )
 
       send(state.parent, {:elixir_grpc, :connection_down, self()})
@@ -455,9 +485,17 @@ if Code.ensure_loaded?(Mint.HTTP) do
         "Attempting reconnection #{next_attempt}/#{state.retry} to #{state.scheme}://#{state.host}:#{state.port}"
       )
 
+      start = System.monotonic_time()
+
       case Mint.HTTP.connect(state.scheme, state.host, state.port, state.connect_opts) do
         {:ok, conn} ->
           Logger.info("Reconnected successfully to #{state.scheme}://#{state.host}:#{state.port}")
+
+          :telemetry.execute(
+            @reconnect_stop_event,
+            %{duration: System.monotonic_time() - start},
+            reconnect_metadata(state, next_attempt)
+          )
 
           new_state = %{state | conn: conn, retry_attempt: 0, ready?: false}
           {:noreply, new_state}
@@ -467,10 +505,26 @@ if Code.ensure_loaded?(Mint.HTTP) do
             "Reconnection attempt #{next_attempt}/#{state.retry} failed: #{inspect(reason)}"
           )
 
-          timeout = retry_timeout(next_attempt)
+          :telemetry.execute(
+            @reconnect_error_event,
+            %{duration: System.monotonic_time() - start},
+            Map.put(reconnect_metadata(state, next_attempt), :reason, reason)
+          )
+
+          timeout = state.retry_timeout_ms || retry_timeout(next_attempt)
           Process.send_after(self(), :reconnect, timeout)
           {:noreply, %{state | retry_attempt: next_attempt}}
       end
+    end
+
+    defp reconnect_metadata(state, attempt) do
+      %{
+        scheme: state.scheme,
+        host: state.host,
+        port: state.port,
+        attempt: attempt,
+        max: state.retry
+      }
     end
 
     @doc false

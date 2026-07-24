@@ -57,7 +57,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   which is the point where we call the functions implemented by users (aka the modules who use
   the `GRPC.Server` macro)
   """
-  @spec init(:cowboy_req.req(), state :: init_state) :: init_result
   def init(req, {endpoint, {_name, server}, route, opts} = state) do
     http_method = extract_http_method(req)
     exception_log_filter = extract_exception_log_filter_opt(opts)
@@ -221,7 +220,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   Synchronously reads the whole body content of a given request.
   Raise in case of a timeout.
   """
-  @spec read_full_body(stream_pid :: pid) :: binary()
   def read_full_body(pid) do
     sync_call(pid, :read_full_body)
   end
@@ -230,7 +228,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   Synchronously reads a chunk of body content of a given request.
   Raise in case of a timeout.
   """
-  @spec read_body(stream_pid :: pid) :: binary()
   def read_body(pid) do
     sync_call(pid, :read_body)
   end
@@ -239,13 +236,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   Asynchronously send back to client a chunk of `data`, when `http_transcode?` is true, the
   data is sent back as it's, with no transformation of protobuf binaries to http2 data frames.
   """
-  @spec stream_body(
-          stream_pid :: pid,
-          data :: iodata,
-          opts :: list(stream_body_opts),
-          is_fin,
-          http_transcode? :: boolean()
-        ) :: :ok
   def stream_body(pid, data, opts, is_fin, http_transcode? \\ false) do
     send(pid, {:stream_body, data, opts, is_fin, http_transcode?})
     :ok
@@ -254,7 +244,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   @doc """
   Asynchronously send back to the client the http status and the headers for a given request.
   """
-  @spec stream_reply(stream_pid :: pid, status :: non_neg_integer(), headers :: headers) :: :ok
   def stream_reply(pid, status, headers) do
     send(pid, {:stream_reply, status, headers})
     :ok
@@ -264,7 +253,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   Asynchronously set the headers for a given request. This function does not send any
   data back to the client. It simply appends the headers to be used in the response.
   """
-  @spec set_resp_headers(stream_pid :: pid, headers :: headers) :: :ok
   def set_resp_headers(pid, headers) do
     send(pid, {:set_resp_headers, headers})
     :ok
@@ -274,7 +262,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   Asynchronously set the trailer headers for a given request. This function does not send any
   data back to the client. It simply appends the trailer headers to be used in the response.
   """
-  @spec set_resp_trailers(stream_pid :: pid, trailers :: headers) :: :ok
   def set_resp_trailers(pid, trailers) do
     send(pid, {:set_resp_trailers, trailers})
     :ok
@@ -285,7 +272,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   the `grpc-accept-encoding` header is present on the original request, otherwise no compression
   is applied.
   """
-  @spec set_compressor(stream_pid :: pid, compressor :: module) :: :ok
   def set_compressor(pid, compressor) do
     send(pid, {:set_compressor, compressor})
     :ok
@@ -294,7 +280,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   @doc """
   Asynchronously stream the given trailers of request back to client.
   """
-  @spec stream_trailers(stream_pid :: pid, trailers :: headers) :: :ok
   def stream_trailers(pid, trailers) do
     send(pid, {:stream_trailers, trailers})
     :ok
@@ -303,7 +288,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   @doc """
   Return all request headers.
   """
-  @spec get_headers(stream_pid :: pid) :: :cowboy.http_headers()
   def get_headers(pid) do
     sync_call(pid, :get_headers)
   end
@@ -311,7 +295,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   @doc """
   Return the peer IP address and port number
   """
-  @spec get_peer(stream_pid :: pid) :: {:inet.ip_address(), :inet.port_number()}
   def get_peer(pid) do
     sync_call(pid, :get_peer)
   end
@@ -320,7 +303,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   Return the client TLS certificate. `:undefined` is returned if no certificate was specified
   when establishing the connection.
   """
-  @spec get_cert(stream_pid :: pid) :: binary() | :undefined
   def get_cert(pid) do
     sync_call(pid, :get_cert)
   end
@@ -328,7 +310,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   @doc """
   Return the query string for the request URI.
   """
-  @spec get_qs(stream_pid :: pid) :: binary()
   def get_qs(pid) do
     sync_call(pid, :get_qs)
   end
@@ -336,7 +317,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   @doc """
   Return all bindings of a given request.
   """
-  @spec get_bindings(stream_pid :: pid) :: :cowboy_router.bindings()
   def get_bindings(pid) do
     sync_call(pid, :get_bindings)
   end

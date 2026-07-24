@@ -23,6 +23,35 @@ defmodule GRPC.Client.Connection do
   * Each call to `pick/2` dispatches to the LB module, which selects a channel
     per request. DNS re-resolution reconciles the LB's channel list in place.
 
+  ## Supervised connections
+
+  For long-running clients, declare the connection in your own supervision
+  tree instead of calling `connect/2` at runtime. In that mode, establishment
+  happens asynchronously after process start: if the backend is unreachable,
+  the process stays alive and retries with exponential backoff instead of
+  failing supervisor startup. Use `await_ready/2` to block until the channel
+  is usable.
+
+      children = [
+        {GRPC.Client.Connection,
+         name: MyApp.PaymentsConnection,
+         target: "dns://payments.internal:50051",
+         lb_policy: :round_robin}
+      ]
+
+      :ok = GRPC.Client.Connection.await_ready(MyApp.PaymentsConnection, 10_000)
+      # use get_channel/1 for the non-raising variant
+      channel = GRPC.Client.Connection.get_channel!(MyApp.PaymentsConnection)
+      Payments.Stub.charge(channel, request)
+
+  The channel handle returned by `get_channel/1` is valid as soon as the
+  process is running, even while the connection is still being established;
+  RPCs return `{:error, :no_connection}` style errors until then.
+
+  `connect/2` keeps its historical fail-fast contract: it blocks until the
+  first establishment attempt finishes and returns `{:error, reason}` (tearing
+  the process down) if that attempt fails.
+
   ## Target syntax
 
   The `target` argument to `connect/2` accepts URI-like strings that are resolved
@@ -37,6 +66,36 @@ defmodule GRPC.Client.Connection do
     * `"127.0.0.1:50051"` (implicit DNS / fallback to IPv4)
 
   See [`GRPC.Client.Resolver`](GRPC.Client.Resolver) for the full specification.
+
+  ## Telemetry
+
+  Connection processes emit the following events:
+
+    * `[:grpc, :client, :connection, :connected]` – establishment succeeded,
+      including re-establishment after retries or a supervisor restart.
+      * Measurements: `:retry_attempt` – failed attempts before this success
+      * Metadata: `:name`, `:target`, `:pid`
+    * `[:grpc, :client, :connection, :connect_error]` – an establishment
+      attempt failed and a retry was scheduled.
+      * Measurements: `:retry_delay` – milliseconds until the next attempt
+      * Metadata: `:name`, `:target`, `:pid`, `:reason`, `:retry_attempt`
+    * `[:grpc, :client, :connection, :disconnected]` – the connection process
+      shut down, after its resources were released.
+      * Measurements: none
+      * Metadata: `:name`, `:target`, `:pid`, `:reason`
+    * `[:grpc, :client, :connection, :await_ready, :start]` – a caller started
+      waiting in `await_ready/2`.
+      * Measurements: `:system_time`
+      * Metadata: `:name`, `:target`, `:pid`, `:caller`
+    * `[:grpc, :client, :connection, :await_ready, :stop]` – the wait ended.
+      * Measurements: `:duration` – as measured through `System.monotonic_time()`
+      * Metadata: `:name`, `:target`, `:pid`, `:caller`, `:result` – `:ok`
+        when the connection became ready, `:disconnected` when it shut down
+        while the caller was waiting, `:abandoned` when the caller died or
+        timed out and re-entered the wait
+
+  The `:pid` metadata is the connection process, useful for correlating
+  events with process logs and crash reports.
 
   ## Examples
 
@@ -81,17 +140,32 @@ defmodule GRPC.Client.Connection do
   @default_resolve_interval 30_000
   @default_max_resolve_interval 300_000
   @default_min_resolve_interval 5_000
+  @default_connect_timeout 15_000
+  @backoff_initial 100
+  @backoff_multiplier 1.6
+  @backoff_max 120_000
+  @backoff_jitter 0.2
+
+  @connected_event [:grpc, :client, :connection, :connected]
+  @connect_error_event [:grpc, :client, :connection, :connect_error]
+  @disconnected_event [:grpc, :client, :connection, :disconnected]
+  @await_ready_start_event [:grpc, :client, :connection, :await_ready, :start]
+  @await_ready_stop_event [:grpc, :client, :connection, :await_ready, :stop]
 
   @type t :: %__MODULE__{
-          virtual_channel: Channel.t(),
-          real_channels: %{String.t() => {:connected, Channel.t()} | {:failed, any()}},
+          virtual_channel: struct(),
+          real_channels: %{String.t() => {:connected, struct()} | {:failed, any()}},
           lb_mod: module() | nil,
           lb_state: term() | nil,
           resolver: module() | nil,
           adapter: module(),
           resolver_target: String.t() | nil,
           connect_opts: keyword(),
-          resolver_state: term() | nil
+          resolver_state: term() | nil,
+          established?: boolean(),
+          last_error: term() | nil,
+          retry_attempt: non_neg_integer(),
+          waiters: [{pid(), GenServer.from(), reference(), integer()}]
         }
 
   defstruct virtual_channel: nil,
@@ -102,51 +176,62 @@ defmodule GRPC.Client.Connection do
             adapter: GRPC.Client.Adapters.Gun,
             resolver_target: nil,
             connect_opts: [],
-            resolver_state: nil
+            resolver_state: nil,
+            established?: false,
+            last_error: nil,
+            retry_attempt: 0,
+            waiters: []
 
-  def child_spec(initial_state) do
+  @doc """
+  Returns a child spec for running a connection under a supervisor.
+
+  Accepts the same options as `connect/2` plus the required `:target` and
+  `:name` keys. The spec only captures the target and options, so a restarted
+  process re-resolves and re-dials from scratch instead of reusing stale
+  state.
+  """
+  def child_spec({target, opts}) do
+    opts = Keyword.put_new_lazy(opts, :name, &make_ref/0)
+
     %{
-      id: {__MODULE__, initial_state.virtual_channel.ref},
-      start:
-        {GenServer, :start_link,
-         [__MODULE__, initial_state, [name: via(initial_state.virtual_channel.ref)]]},
+      id: {__MODULE__, opts[:name]},
+      start: {__MODULE__, :start_link, [target, opts]},
       restart: :transient,
       type: :worker,
       shutdown: 5000
     }
   end
 
+  def child_spec(opts) when is_list(opts) do
+    child_spec(pop_target!(opts))
+  end
+
+  @doc """
+  Starts a connection process linked to the caller.
+
+  Accepts the same options as `child_spec/1`. Establishment (resolution and
+  dialing) happens asynchronously after the process starts; use
+  `await_ready/2` to block until the channel is usable.
+  """
+  def start_link(opts) when is_list(opts) do
+    {target, opts} = pop_target!(opts)
+    start_link(target, opts)
+  end
+
+  def start_link(target, opts) do
+    opts = Keyword.put_new_lazy(opts, :name, &make_ref/0)
+    GenServer.start_link(__MODULE__, {target, opts}, name: via(opts[:name]))
+  end
+
   @impl GenServer
-  def init(%__MODULE__{} = state) do
+  def init({target, opts}) do
     Process.flag(:trap_exit, true)
 
-    connected = connected_channels(state.real_channels)
+    state = build_initial_state(target, opts)
 
-    case state.lb_mod.init(channels: connected) do
-      {:ok, lb_state} ->
-        state = %{state | lb_state: lb_state}
+    :persistent_term.put(channel_key(state.virtual_channel.ref), state.virtual_channel)
 
-        state =
-          if function_exported?(state.resolver, :init, 2) do
-            {:ok, resolver_state} =
-              state.resolver.init(state.resolver_target,
-                connection_pid: self(),
-                connect_opts: state.connect_opts
-              )
-
-            %{state | resolver_state: resolver_state}
-          else
-            state
-          end
-
-        :persistent_term.put({__MODULE__, state.virtual_channel.ref}, {state.lb_mod, lb_state})
-
-        {:ok, state}
-
-      {:error, reason} ->
-        disconnect_real_channels(state.real_channels, state.adapter)
-        {:stop, reason}
-    end
+    {:ok, state, {:continue, :establish}}
   end
 
   @doc """
@@ -165,6 +250,8 @@ defmodule GRPC.Client.Connection do
     * `:codec` – request/response codec (default: `GRPC.Codec.Proto`)
     * `:compressor` / `:accepted_compressors` – message compression
     * `:headers` – default metadata headers
+    * `:connect_timeout` – how long `connect/2` waits for the first
+      establishment attempt in ms (default: 15000)
     * `:resolve_interval` – DNS re-resolution interval in ms (default: 30000)
     * `:max_resolve_interval` – backoff cap in ms (default: 300000)
     * `:min_resolve_interval` – rate-limit floor in ms (default: 5000)
@@ -172,6 +259,8 @@ defmodule GRPC.Client.Connection do
   Returns:
 
     * `{:ok, channel}` – a `GRPC.Channel` usable with stubs
+    * `{:error, {:already_started_with_different_target, target}}` – the name
+      is already registered to a connection with a different target
     * `{:error, reason}` – if connection fails
 
   ## Examples
@@ -179,25 +268,116 @@ defmodule GRPC.Client.Connection do
       iex> {:ok, ch} = GRPC.Client.Connection.connect("127.0.0.1:50051")
       iex> Grpc.Testing.TestService.Stub.empty_call(ch, %{})
   """
-  @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(target, opts \\ []) do
-    case build_initial_state(target, opts) do
-      {:ok, initial_state} ->
-        ch = initial_state.virtual_channel
+    opts = Keyword.put_new_lazy(opts, :name, &make_ref/0)
 
-        case DynamicSupervisor.start_child(GRPC.Client.Supervisor, child_spec(initial_state)) do
-          {:ok, _pid} ->
-            finalize_connection(ch, opts)
+    # Validate the target and options in the caller so configuration errors
+    # raise here instead of crashing the spawned process. Interceptor init is
+    # skipped here so it only runs once, in the connection process.
+    validated = build_initial_state(target, opts, _init_interceptors? = false)
 
-          {:error, {:already_started, _pid}} ->
-            finalize_connection(ch, opts)
+    timeout = Keyword.get(opts, :connect_timeout, @default_connect_timeout)
+    name = opts[:name]
+
+    case DynamicSupervisor.start_child(GRPC.Client.Supervisor, child_spec({target, opts})) do
+      {:ok, pid} ->
+        case ready_status(name, validated.resolver_target, timeout) do
+          :ok ->
+            finalize_connection(name)
 
           {:error, reason} ->
+            _ = DynamicSupervisor.terminate_child(GRPC.Client.Supervisor, pid)
             {:error, reason}
+        end
+
+      {:error, {:already_started, _pid}} ->
+        case ready_status(name, validated.resolver_target, timeout) do
+          :ok -> finalize_connection(name)
+          {:error, reason} -> {:error, reason}
         end
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  @doc """
+  Blocks until the connection has at least one established channel.
+
+  Returns `:ok` once established, or `{:error, :timeout}` if the connection
+  is still retrying when `timeout` elapses. Unlike `connect/2`, a failed
+  establishment attempt does not resolve the wait: the process keeps
+  retrying with backoff and this call returns as soon as an attempt succeeds.
+
+  Returns `{:error, :not_started}` if the connection is not running, or if it
+  is disconnected or shut down while waiting.
+
+  ## Examples
+
+  Waiting for a supervised connection before issuing the first RPC, for
+  example inside a release readiness check or a worker's `init/1`:
+
+      case GRPC.Client.Connection.await_ready(MyApp.PaymentsConnection, 10_000) do
+        :ok ->
+          channel = GRPC.Client.Connection.get_channel!(MyApp.PaymentsConnection)
+          Payments.Stub.charge(channel, request)
+
+        {:error, :timeout} ->
+          # Still unreachable after 10s; the process keeps retrying in the
+          # background, so a later await_ready/2 or RPC may succeed.
+          {:error, :payments_unavailable}
+      end
+
+  It also accepts the channel handle returned by `get_channel/1`:
+
+      {:ok, channel} = GRPC.Client.Connection.get_channel(MyApp.PaymentsConnection)
+      :ok = GRPC.Client.Connection.await_ready(channel, 10_000)
+  """
+  def await_ready(ref_or_channel, timeout \\ 5_000)
+
+  def await_ready(%Channel{ref: ref}, timeout), do: await_ready(ref, timeout)
+
+  def await_ready(ref, timeout) do
+    GenServer.call(via(ref), :await_ready, timeout)
+  catch
+    :exit, {:timeout, _} -> {:error, :timeout}
+    :exit, {:noproc, _} -> {:error, :not_started}
+    :exit, {:normal, _} -> {:error, :not_started}
+    :exit, {:shutdown, _} -> {:error, :not_started}
+    :exit, {{:shutdown, _}, _} -> {:error, :not_started}
+    :exit, {reason, _} -> {:error, reason}
+  end
+
+  @doc """
+  Returns the `GRPC.Channel` handle for a running named connection.
+
+  The handle is a lightweight identity struct: stubs resolve it to a healthy
+  underlying connection on every RPC, so it stays valid across reconnects and
+  endpoint changes and can be fetched once and cached. It is readable as soon
+  as the process is running, even while establishment is still in progress.
+
+  Returns `{:error, :not_started}` if no connection with that name is running.
+  """
+  def get_channel(name) do
+    case :persistent_term.get(channel_key(name), nil) do
+      %Channel{} = channel -> {:ok, channel}
+      nil -> {:error, :not_started}
+    end
+  end
+
+  @doc """
+  Same as `get_channel/1`, but raises if the connection is not running.
+  """
+  def get_channel!(name) do
+    case get_channel(name) do
+      {:ok, channel} ->
+        channel
+
+      {:error, :not_started} ->
+        raise ArgumentError,
+              "no gRPC connection named #{inspect(name)} is running, " <>
+                "add `{GRPC.Client.Connection, name: #{inspect(name)}, target: ...}` " <>
+                "to your supervision tree"
     end
   end
 
@@ -215,9 +395,14 @@ defmodule GRPC.Client.Connection do
       iex> GRPC.Client.Connection.disconnect(ch)
       {:ok, %GRPC.Channel{}}
   """
-  @spec disconnect(Channel.t()) :: {:ok, Channel.t()} | {:error, any()}
   def disconnect(%Channel{ref: ref} = channel) do
     GenServer.call(via(ref), {:disconnect, channel})
+  end
+
+  def disconnect(name) do
+    with {:ok, channel} <- get_channel(name) do
+      disconnect(channel)
+    end
   end
 
   @doc """
@@ -238,9 +423,8 @@ defmodule GRPC.Client.Connection do
       iex> GRPC.Client.Connection.pick(ch)
       {:ok, %GRPC.Channel{host: "192.168.1.1", port: 50051}}
   """
-  @spec pick_channel(Channel.t(), keyword()) :: {:ok, Channel.t()} | {:error, term()}
   def pick_channel(%Channel{ref: ref} = _channel, _opts \\ []) do
-    case :persistent_term.get({__MODULE__, ref}, nil) do
+    case :persistent_term.get(lb_key(ref), nil) do
       {lb_mod, lb_state} when not is_nil(lb_mod) ->
         case lb_mod.pick(lb_state) do
           {:ok, %Channel{} = channel, _new_state} -> {:ok, channel}
@@ -258,9 +442,16 @@ defmodule GRPC.Client.Connection do
   Intended for use by health checks or heartbeat mechanisms that detect
   a backend has gone away and want to force a fresh DNS lookup.
   """
-  @spec resolve_now(Channel.t()) :: :ok
   def resolve_now(%Channel{ref: ref}) do
     GenServer.cast(via(ref), :resolve_now)
+  end
+
+  @impl GenServer
+  def handle_continue(:establish, state), do: attempt_establish(state)
+
+  def handle_continue(:stop, state) do
+    Logger.debug("#{inspect(__MODULE__)} stopping as requested")
+    {:stop, :normal, state}
   end
 
   @impl GenServer
@@ -273,45 +464,99 @@ defmodule GRPC.Client.Connection do
   def handle_cast(:resolve_now, state), do: {:noreply, state}
 
   @impl GenServer
+  def handle_call({:ready_status, expected_target}, _from, state) do
+    cond do
+      expected_target != state.resolver_target ->
+        {:reply, {:error, {:already_started_with_different_target, state.resolver_target}}, state}
+
+      state.established? ->
+        {:reply, :ok, state}
+
+      true ->
+        {:reply, {:error, state.last_error || :connecting}, state}
+    end
+  end
+
+  def handle_call(:await_ready, {caller_pid, _tag}, %__MODULE__{established?: true} = state) do
+    emit_await_ready_start(state, caller_pid)
+    emit_await_ready_stop(state, caller_pid, System.monotonic_time(), :ok)
+    {:reply, :ok, state}
+  end
+
+  def handle_call(:await_ready, {caller_pid, _tag} = from, state) do
+    state = %{state | waiters: add_waiter(state, caller_pid, from)}
+    emit_await_ready_start(state, caller_pid)
+    {:noreply, state}
+  end
+
   def handle_call({:disconnect, %Channel{adapter: adapter} = channel}, _from, state) do
     if state.resolver_state && function_exported?(state.resolver, :shutdown, 1) do
       state.resolver.shutdown(state.resolver_state)
     end
 
-    :persistent_term.erase({__MODULE__, channel.ref})
+    :persistent_term.erase(lb_key(channel.ref))
+    :persistent_term.erase(channel_key(channel.ref))
     disconnect_real_channels(state.real_channels, adapter)
 
+    reply_waiters(state, state.waiters, {:error, :not_started}, :disconnected)
+
     resp = {:ok, %Channel{channel | adapter_payload: %{conn_pid: nil}}}
+
+    state = %{
+      state
+      | established?: false,
+        real_channels: %{},
+        resolver_state: nil,
+        waiters: []
+    }
+
     {:reply, resp, state, {:continue, :stop}}
   end
 
   @impl GenServer
+  def handle_info(:retry_establish, %__MODULE__{established?: true} = state) do
+    {:noreply, state}
+  end
+
+  def handle_info(:retry_establish, state), do: attempt_establish(state)
+
   def handle_info({:resolver_update, result}, state) do
     state = handle_resolve_result(result, state)
     {:noreply, state}
   end
 
-  def handle_info({:EXIT, _pid, reason}, %{resolver: resolver, resolver_state: rs} = state)
-      when not is_nil(rs) and reason != :normal do
-    Logger.warning("Resolver worker exited: #{inspect(reason)}, re-initializing")
-
-    state =
-      if function_exported?(resolver, :init, 2) do
-        case resolver.init(state.resolver_target,
-               connection_pid: self(),
-               connect_opts: state.connect_opts
-             ) do
-          {:ok, new_rs} -> %{state | resolver_state: new_rs}
-          {:error, _} -> %{state | resolver_state: nil}
-        end
-      else
-        %{state | resolver_state: nil}
-      end
-
-    {:noreply, state}
-  end
-
   def handle_info({:EXIT, _pid, :normal}, state), do: {:noreply, state}
+
+  def handle_info({:EXIT, pid, reason}, %{resolver: resolver, resolver_state: rs} = state)
+      when not is_nil(rs) do
+    # Adapter connection processes are linked too, so re-init must be gated
+    # on the resolver worker's own pid: re-initializing on any linked exit
+    # would spawn a duplicate worker and orphan the live one.
+    if pid == resolver_worker_pid(rs) do
+      Logger.warning("Resolver worker exited: #{inspect(reason)}, re-initializing")
+
+      state =
+        if function_exported?(resolver, :init, 2) do
+          case resolver.init(state.resolver_target,
+                 connection_pid: self(),
+                 connect_opts: state.connect_opts
+               ) do
+            {:ok, new_rs} -> %{state | resolver_state: new_rs}
+            {:error, _} -> %{state | resolver_state: nil}
+          end
+        else
+          %{state | resolver_state: nil}
+        end
+
+      {:noreply, state}
+    else
+      Logger.warning(
+        "#{inspect(__MODULE__)} received :EXIT from #{inspect(pid)} reason: #{inspect(reason)}"
+      )
+
+      {:noreply, state}
+    end
+  end
 
   def handle_info({:EXIT, pid, reason}, state) do
     Logger.warning(
@@ -321,12 +566,22 @@ defmodule GRPC.Client.Connection do
     {:noreply, state}
   end
 
-  def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
-    Logger.warning(
-      "#{inspect(__MODULE__)} received :DOWN from #{inspect(pid)} with reason: #{inspect(reason)}"
-    )
+  def handle_info({:DOWN, mon, :process, pid, reason}, state) do
+    case Enum.split_with(state.waiters, fn {_pid, _from, m, _started_at} -> m == mon end) do
+      {[], _} ->
+        Logger.warning(
+          "#{inspect(__MODULE__)} received :DOWN from #{inspect(pid)} with reason: #{inspect(reason)}"
+        )
 
-    {:noreply, state}
+        {:noreply, state}
+
+      {dropped, remaining} ->
+        Enum.each(dropped, fn {caller_pid, _from, _mon, started_at} ->
+          emit_await_ready_stop(state, caller_pid, started_at, :abandoned)
+        end)
+
+        {:noreply, %{state | waiters: remaining}}
+    end
   end
 
   def handle_info(msg, state) do
@@ -336,14 +591,27 @@ defmodule GRPC.Client.Connection do
   end
 
   @impl GenServer
-  def handle_continue(:stop, state) do
-    Logger.debug("#{inspect(__MODULE__)} stopping as requested")
-    {:stop, :normal, state}
-  end
+  def terminate(reason, %__MODULE__{virtual_channel: %{ref: ref}} = state) do
+    if state.resolver_state && function_exported?(state.resolver, :shutdown, 1) do
+      state.resolver.shutdown(state.resolver_state)
+    end
 
-  @impl GenServer
-  def terminate(_reason, %{virtual_channel: %{ref: ref}}) do
-    :persistent_term.erase({__MODULE__, ref})
+    disconnect_real_channels(state.real_channels, state.adapter)
+    :persistent_term.erase(lb_key(ref))
+
+    # On a crash the supervisor restarts the process and init/1 re-registers
+    # the handle; erasing it here would make get_channel!/1 raise during the
+    # restart window.
+    if normal_shutdown?(reason) do
+      :persistent_term.erase(channel_key(ref))
+    end
+
+    :telemetry.execute(
+      @disconnected_event,
+      %{},
+      state |> lifecycle_metadata() |> Map.put(:reason, reason)
+    )
+
     :ok
   rescue
     _ -> :ok
@@ -351,8 +619,213 @@ defmodule GRPC.Client.Connection do
 
   def terminate(_reason, _state), do: :ok
 
-  defp finalize_connection(%Channel{} = ch, opts) do
-    case pick_channel(ch, opts) do
+  defp pop_target!(opts) do
+    {target, opts} = Keyword.pop(opts, :target)
+
+    unless is_binary(target) do
+      raise ArgumentError,
+            "the :target option is required and must be a string, got: #{inspect(target)}"
+    end
+
+    unless Keyword.has_key?(opts, :name) do
+      raise ArgumentError,
+            "the :name option is required for supervised connections, " <>
+              "e.g. `{GRPC.Client.Connection, name: MyApp.Connection, target: #{inspect(target)}}`"
+    end
+
+    {target, opts}
+  end
+
+  defp ready_status(ref, expected_target, timeout) do
+    GenServer.call(via(ref), {:ready_status, expected_target}, timeout)
+  catch
+    :exit, {:timeout, _} -> {:error, :timeout}
+    :exit, {:noproc, _} -> {:error, :not_started}
+    :exit, {:normal, _} -> {:error, :not_started}
+    :exit, {:shutdown, _} -> {:error, :not_started}
+    :exit, {{:shutdown, _}, _} -> {:error, :not_started}
+    :exit, {reason, _} -> {:error, reason}
+  end
+
+  defp attempt_establish(state) do
+    case establish(state) do
+      {:ok, established_state} ->
+        :telemetry.execute(
+          @connected_event,
+          %{retry_attempt: state.retry_attempt},
+          lifecycle_metadata(state)
+        )
+
+        reply_waiters(established_state, established_state.waiters, :ok, :ok)
+
+        {:noreply,
+         %{
+           established_state
+           | established?: true,
+             waiters: [],
+             retry_attempt: 0,
+             last_error: nil
+         }}
+
+      {:error, reason} ->
+        delay = backoff_delay(state.retry_attempt)
+
+        :telemetry.execute(
+          @connect_error_event,
+          %{retry_delay: delay},
+          state
+          |> lifecycle_metadata()
+          |> Map.merge(%{reason: reason, retry_attempt: state.retry_attempt})
+        )
+
+        Logger.warning(
+          "Failed to establish gRPC connection to #{state.resolver_target}: " <>
+            "#{inspect(reason)}, retrying in #{delay}ms"
+        )
+
+        Process.send_after(self(), :retry_establish, delay)
+        {:noreply, %{state | last_error: reason, retry_attempt: state.retry_attempt + 1}}
+    end
+  end
+
+  defp establish(%__MODULE__{} = state) do
+    norm_opts = state.connect_opts
+    adapter = state.adapter
+
+    {addresses, lb_mod} =
+      case state.resolver.resolve(state.resolver_target) do
+        {:ok, %{addresses: addresses, service_config: config}} ->
+          {addresses, choose_lb_mod(config, norm_opts[:lb_policy])}
+
+        {:error, _reason} ->
+          # Fall back to treating the target as a single direct endpoint. Any
+          # LB policy would only have one address to choose from, so PickFirst
+          # is the only meaningful choice.
+          {host, port} = EndpointResolver.split_host_port(state.resolver_target)
+          {[%{address: host, port: port}], GRPC.Client.LoadBalancing.PickFirst}
+      end
+
+    real_channels = build_real_channels(addresses, state.virtual_channel, norm_opts, adapter)
+
+    case init_lb(lb_mod, real_channels, adapter) do
+      {:ok, lb_state} ->
+        resolver_state = maybe_init_resolver(state)
+        :persistent_term.put(lb_key(state.virtual_channel.ref), {lb_mod, lb_state})
+
+        {:ok,
+         %__MODULE__{
+           state
+           | real_channels: real_channels,
+             lb_mod: lb_mod,
+             lb_state: lb_state,
+             resolver_state: resolver_state
+         }}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp init_lb(lb_mod, real_channels, adapter) do
+    case connected_channels(real_channels) do
+      [] ->
+        disconnect_real_channels(real_channels, adapter)
+        {:error, first_failure(real_channels) || :no_addresses}
+
+      connected ->
+        case lb_mod.init(channels: connected) do
+          {:ok, lb_state} ->
+            {:ok, lb_state}
+
+          {:error, reason} ->
+            disconnect_real_channels(real_channels, adapter)
+            {:error, reason}
+        end
+    end
+  end
+
+  defp first_failure(real_channels) do
+    Enum.find_value(real_channels, fn
+      {_key, {:failed, reason}} -> reason
+      _ -> nil
+    end)
+  end
+
+  defp maybe_init_resolver(%__MODULE__{resolver_state: rs}) when not is_nil(rs), do: rs
+
+  defp maybe_init_resolver(%__MODULE__{} = state) do
+    if Code.ensure_loaded?(state.resolver) and function_exported?(state.resolver, :init, 2) do
+      case state.resolver.init(state.resolver_target,
+             connection_pid: self(),
+             connect_opts: state.connect_opts
+           ) do
+        {:ok, resolver_state} ->
+          resolver_state
+
+        {:error, reason} ->
+          Logger.warning(
+            "Failed to initialize resolver for #{state.resolver_target}: " <>
+              "#{inspect(reason)}, background re-resolution disabled"
+          )
+
+          nil
+      end
+    else
+      nil
+    end
+  end
+
+  # A caller whose await_ready call already timed out leaves a stale entry
+  # behind; replacing entries per caller pid and monitoring the caller keeps
+  # the waiter list bounded during long outages.
+  defp add_waiter(%__MODULE__{waiters: waiters} = state, caller_pid, from) do
+    {stale, rest} =
+      Enum.split_with(waiters, fn {pid, _from, _mon, _started_at} -> pid == caller_pid end)
+
+    Enum.each(stale, fn {pid, _from, mon, started_at} ->
+      Process.demonitor(mon, [:flush])
+      emit_await_ready_stop(state, pid, started_at, :abandoned)
+    end)
+
+    [{caller_pid, from, Process.monitor(caller_pid), System.monotonic_time()} | rest]
+  end
+
+  defp reply_waiters(state, waiters, reply, result) do
+    Enum.each(waiters, fn {pid, from, mon, started_at} ->
+      Process.demonitor(mon, [:flush])
+      emit_await_ready_stop(state, pid, started_at, result)
+      GenServer.reply(from, reply)
+    end)
+  end
+
+  defp emit_await_ready_start(state, caller) do
+    :telemetry.execute(
+      @await_ready_start_event,
+      %{system_time: System.system_time()},
+      state |> lifecycle_metadata() |> Map.put(:caller, caller)
+    )
+  end
+
+  defp emit_await_ready_stop(state, caller, started_at, result) do
+    :telemetry.execute(
+      @await_ready_stop_event,
+      %{duration: System.monotonic_time() - started_at},
+      state |> lifecycle_metadata() |> Map.merge(%{caller: caller, result: result})
+    )
+  end
+
+  defp lifecycle_metadata(%__MODULE__{} = state) do
+    %{name: state.virtual_channel.ref, target: state.resolver_target, pid: self()}
+  end
+
+  defp backoff_delay(attempt) do
+    base = min(@backoff_initial * :math.pow(@backoff_multiplier, attempt), @backoff_max)
+    jitter = (:rand.uniform() * 2 - 1) * @backoff_jitter * base
+    trunc(base + jitter)
+  end
+
+  defp finalize_connection(ref) do
+    case pick_channel(%Channel{ref: ref}) do
       {:ok, %Channel{} = channel} -> {:ok, channel}
       _ -> {:error, :no_connection}
     end
@@ -387,7 +860,7 @@ defmodule GRPC.Client.Connection do
     real_channels =
       connect_new_channels(new_addresses, added, adapter, opts, state, real_channels)
 
-    rebalance_after_reconcile(new_addresses, real_channels, state)
+    rebalance_after_reconcile(real_channels, state)
   end
 
   defp disconnect_removed_channels(removed, adapter, real_channels) do
@@ -427,7 +900,7 @@ defmodule GRPC.Client.Connection do
     end)
   end
 
-  defp rebalance_after_reconcile(_new_addresses, real_channels, state) do
+  defp rebalance_after_reconcile(real_channels, state) do
     connected = connected_channels(real_channels)
 
     new_lb_state =
@@ -466,6 +939,18 @@ defmodule GRPC.Client.Connection do
     {:via, Registry, {GRPC.Client.Registry, {__MODULE__, ref}}}
   end
 
+  defp lb_key(ref), do: {__MODULE__, :lb, ref}
+  defp channel_key(ref), do: {__MODULE__, :channel, ref}
+
+  defp normal_shutdown?(:normal), do: true
+  defp normal_shutdown?(:shutdown), do: true
+  defp normal_shutdown?({:shutdown, _}), do: true
+  defp normal_shutdown?(_), do: false
+
+  defp resolver_worker_pid({_mod, %{worker_pid: pid}}) when is_pid(pid), do: pid
+  defp resolver_worker_pid(%{worker_pid: pid}) when is_pid(pid), do: pid
+  defp resolver_worker_pid(_), do: nil
+
   defp do_disconnect(adapter, channel) do
     adapter.disconnect(channel)
   rescue
@@ -476,7 +961,7 @@ defmodule GRPC.Client.Connection do
       :ok
   end
 
-  defp build_initial_state(target, opts) do
+  defp build_initial_state(target, opts, init_interceptors? \\ true) do
     opts =
       Keyword.validate!(opts,
         cred: nil,
@@ -489,6 +974,7 @@ defmodule GRPC.Client.Connection do
         accepted_compressors: [],
         headers: [],
         lb_policy: nil,
+        connect_timeout: @default_connect_timeout,
         resolver: GRPC.Client.Resolver,
         resolve_interval: @default_resolve_interval,
         max_resolve_interval: @default_max_resolve_interval,
@@ -497,16 +983,17 @@ defmodule GRPC.Client.Connection do
 
     resolver = Keyword.get(opts, :resolver, GRPC.Client.Resolver)
     adapter = Keyword.get(opts, :adapter, GRPC.Client.Adapters.Gun)
-    lb_policy_opt = Keyword.get(opts, :lb_policy)
+
+    validate_adapter_opts!(opts[:adapter_opts])
 
     {norm_target, norm_opts, scheme} = normalize_target_and_opts(target, opts)
     cred = resolve_credential(norm_opts[:cred], scheme)
-    interceptors = init_interceptors(norm_opts[:interceptors])
+
+    interceptors =
+      if init_interceptors?, do: init_interceptors(norm_opts[:interceptors]), else: []
 
     accepted_compressors =
       build_compressor_list(norm_opts[:compressor], norm_opts[:accepted_compressors])
-
-    validate_adapter_opts!(opts[:adapter_opts])
 
     virtual_channel = %Channel{
       scheme: scheme,
@@ -520,21 +1007,13 @@ defmodule GRPC.Client.Connection do
       headers: norm_opts[:headers]
     }
 
-    base_state = %__MODULE__{
+    %__MODULE__{
       virtual_channel: virtual_channel,
       resolver: resolver,
       adapter: adapter,
       resolver_target: norm_target,
       connect_opts: norm_opts
     }
-
-    case resolver.resolve(norm_target) do
-      {:ok, %{addresses: addresses, service_config: config}} ->
-        build_balanced_state(base_state, addresses, config, lb_policy_opt, norm_opts, adapter)
-
-      {:error, _reason} ->
-        build_direct_state(base_state, norm_target, norm_opts, adapter)
-    end
   end
 
   defp resolve_credential(nil, @secure_scheme), do: default_ssl_option()
@@ -553,14 +1032,7 @@ defmodule GRPC.Client.Connection do
     |> Enum.uniq()
   end
 
-  defp build_balanced_state(
-         %__MODULE__{} = base_state,
-         addresses,
-         config,
-         lb_policy_opt,
-         norm_opts,
-         adapter
-       ) do
+  defp choose_lb_mod(config, lb_policy_opt) do
     lb_policy =
       cond do
         is_map(config) and Map.has_key?(config, :load_balancing_policy) ->
@@ -573,57 +1045,12 @@ defmodule GRPC.Client.Connection do
           nil
       end
 
-    lb_mod = choose_lb(lb_policy)
-
-    real_channels =
-      build_real_channels(addresses, base_state.virtual_channel, norm_opts, adapter)
-
-    case connected_channels(real_channels) do
-      [] ->
-        disconnect_real_channels(real_channels, adapter)
-        {:error, :no_addresses}
-
-      _connected ->
-        {:ok,
-         %__MODULE__{
-           base_state
-           | lb_mod: lb_mod,
-             real_channels: real_channels
-         }}
-    end
-  end
-
-  defp build_direct_state(%__MODULE__{} = base_state, norm_target, norm_opts, adapter) do
-    {host, port} = EndpointResolver.split_host_port(norm_target)
-    vc = base_state.virtual_channel
-
-    # A direct target resolves to a single endpoint, so any LB policy would only
-    # ever have one channel to choose from. PickFirst is the only meaningful choice.
-    lb_mod = GRPC.Client.LoadBalancing.PickFirst
-
-    case connect_real_channel(vc, host, port, norm_opts, adapter) do
-      {:ok, ch} ->
-        {:ok,
-         %__MODULE__{
-           base_state
-           | real_channels: %{build_address_key(host, port) => {:connected, ch}},
-             lb_mod: lb_mod
-         }}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    choose_lb(lb_policy)
   end
 
   defp build_real_channels(addresses, %Channel{} = virtual_channel, norm_opts, adapter) do
     Map.new(addresses, fn %{port: port, address: host} ->
-      case connect_real_channel(
-             %Channel{virtual_channel | host: host, port: port},
-             host,
-             port,
-             norm_opts,
-             adapter
-           ) do
+      case connect_real_channel(virtual_channel, host, port, norm_opts, adapter) do
         {:ok, ch} ->
           {build_address_key(host, port), {:connected, ch}}
 
@@ -677,11 +1104,6 @@ defmodule GRPC.Client.Connection do
 
   defp choose_lb(:round_robin), do: GRPC.Client.LoadBalancing.RoundRobin
   defp choose_lb(_), do: GRPC.Client.LoadBalancing.PickFirst
-
-  defp connect_real_channel(%Channel{scheme: "unix"} = vc, path, port, opts, adapter) do
-    %Channel{vc | host: path, port: port}
-    |> adapter.connect(opts[:adapter_opts])
-  end
 
   defp connect_real_channel(%Channel{} = vc, host, port, opts, adapter) do
     %Channel{vc | host: host, port: port}

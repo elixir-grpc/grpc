@@ -9,6 +9,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       :host,
       :port,
       :connect_opts,
+      :retry_timeout_ms,
       requests: %{},
       request_stream_queue: :queue.new(),
       retry: 0,
@@ -24,6 +25,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
             host: Mint.Types.address() | nil,
             port: :inet.port_number() | nil,
             connect_opts: keyword(),
+            retry_timeout_ms: non_neg_integer() | nil,
             retry: non_neg_integer(),
             retry_attempt: non_neg_integer(),
             ready?: boolean()
@@ -73,6 +75,8 @@ if Code.ensure_loaded?(Mint.HTTP) do
     def stream_response_pid(state, ref) do
       state.requests[ref].stream_response_pid
     end
+
+    defguard has_request_ref(state, ref) when is_map_key(state.requests, ref)
 
     def pop_ref(state, ref) do
       pop_in(state.requests[ref])

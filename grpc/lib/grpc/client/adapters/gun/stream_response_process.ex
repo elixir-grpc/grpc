@@ -22,12 +22,10 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
           done: boolean()
         }
 
-  @spec start_link() :: GenServer.on_start()
   def start_link do
     GenServer.start_link(__MODULE__, [])
   end
 
-  @spec await(pid(), timeout()) :: tuple()
   def await(pid, timeout) do
     GenServer.call(pid, {:await, timeout}, :infinity)
   catch

@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Enhancements
+
+  * Client connections can now be declared in an application's supervision tree as a `GRPC.Client.Connection` child spec. Supervised connections establish asynchronously and retry with exponential backoff when the backend is unreachable, instead of failing supervisor startup. New public API: `GRPC.Client.Connection.get_channel/1`, `get_channel!/1`, and `await_ready/2`.
+  * Connection processes emit telemetry events for lifecycle transitions (`[:grpc, :client, :connection, :connected]`, `[:grpc, :client, :connection, :connect_error]`, `[:grpc, :client, :connection, :disconnected]`) and for callers blocking in `await_ready/2` (`[:grpc, :client, :connection, :await_ready, :start]` and `[:grpc, :client, :connection, :await_ready, :stop]`).
+
+### Behavior Changes
+
+  * `GRPC.Client.Connection.connect/2` now waits at most `:connect_timeout` (default: 15000 ms) for the first establishment attempt instead of blocking indefinitely.
+  * When all resolved addresses fail to dial, `connect/2` returns the first underlying dial error (e.g. `{:error, :connection_refused}`) instead of `{:error, :no_addresses}`.
+  * Calling `connect/2` with a `:name` already registered to a different target now returns `{:error, {:already_started_with_different_target, target}}` instead of silently returning the existing connection's channel.
+
+### Bug Fixes
+
+  * Removed the `GRPC.Channel.t()` typespec. It declared `host`/`port` non-nil and `interceptors` as `[]`, but a virtual channel (built with `host: nil`/`port: nil` and a non-empty `interceptors` list) violated the type. Combined with `pick_channel/2`'s `@spec`, this made Dialyzer infer `connect/2` could only return `{:error, _}`, spuriously flagging `{:ok, channel}` matches in downstream code as unreachable. References to the type are now `struct()`.
+
 ## v1.0.0 (2026-06-15)
 
 ### Enhancements

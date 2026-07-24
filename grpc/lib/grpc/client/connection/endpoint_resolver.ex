@@ -41,8 +41,6 @@ defmodule GRPC.Client.Connection.EndpointResolver do
       {"ipv6:::1:50051", "http", nil}
 
   """
-  @spec normalize(String.t(), GRPC.Credential.t() | nil) ::
-          {String.t(), String.t(), GRPC.Credential.t() | nil}
   def normalize(target, cred)
       when is_binary(target) and (is_nil(cred) or is_struct(cred, GRPC.Credential)) do
     uri = URI.parse(target)
@@ -105,7 +103,6 @@ defmodule GRPC.Client.Connection.EndpointResolver do
       {"myhost", 50051}
 
   """
-  @spec split_host_port(String.t()) :: {String.t(), pos_integer()}
   def split_host_port(target) when is_binary(target) do
     cond do
       String.contains?(target, "[") ->
