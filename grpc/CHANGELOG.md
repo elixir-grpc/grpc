@@ -13,6 +13,10 @@
   * When all resolved addresses fail to dial, `connect/2` returns the first underlying dial error (e.g. `{:error, :connection_refused}`) instead of `{:error, :no_addresses}`.
   * Calling `connect/2` with a `:name` already registered to a different target now returns `{:error, {:already_started_with_different_target, target}}` instead of silently returning the existing connection's channel.
 
+### Bug Fixes
+
+  * Removed the `GRPC.Channel.t()` typespec. It declared `host`/`port` non-nil and `interceptors` as `[]`, but a virtual channel (built with `host: nil`/`port: nil` and a non-empty `interceptors` list) violated the type. Combined with `pick_channel/2`'s `@spec`, this made Dialyzer infer `connect/2` could only return `{:error, _}`, spuriously flagging `{:ok, channel}` matches in downstream code as unreachable. References to the type are now `struct()`.
+
 ## v1.0.0 (2026-06-15)
 
 ### Enhancements

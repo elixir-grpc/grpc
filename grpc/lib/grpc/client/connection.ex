@@ -153,8 +153,8 @@ defmodule GRPC.Client.Connection do
   @await_ready_stop_event [:grpc, :client, :connection, :await_ready, :stop]
 
   @type t :: %__MODULE__{
-          virtual_channel: Channel.t(),
-          real_channels: %{String.t() => {:connected, Channel.t()} | {:failed, any()}},
+          virtual_channel: struct(),
+          real_channels: %{String.t() => {:connected, struct()} | {:failed, any()}},
           lb_mod: module() | nil,
           lb_state: term() | nil,
           resolver: module() | nil,

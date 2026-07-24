@@ -16,7 +16,7 @@ defmodule GRPC.Client.Stream do
 
   @typep stream_payload :: any()
   @type t :: %__MODULE__{
-          channel: GRPC.Channel.t(),
+          channel: struct(),
           service_name: String.t(),
           method_name: String.t(),
           grpc_type: atom(),
