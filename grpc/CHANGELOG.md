@@ -15,7 +15,7 @@
 
 ### Bug Fixes
 
-  * `GRPC.Channel.t()` now types `host`, `port`, `scheme`, `cred`, and `compressor` as nilable and `interceptors` as `list()`, matching the struct's defaults. Previously they were declared non-nil (and `interceptors` as `[]`), so a virtual channel (built with `host: nil`/`port: nil`) violated the type. Combined with `pick_channel/2`'s `@spec`, this made Dialyzer infer `connect/2` could only return `{:error, _}`, spuriously flagging `{:ok, channel}` matches in downstream code as unreachable.
+  * Removed the `GRPC.Channel.t()` typespec. It declared `host`/`port` non-nil and `interceptors` as `[]`, but a virtual channel (built with `host: nil`/`port: nil` and a non-empty `interceptors` list) violated the type. Combined with `pick_channel/2`'s `@spec`, this made Dialyzer infer `connect/2` could only return `{:error, _}`, spuriously flagging `{:ok, channel}` matches in downstream code as unreachable. References to the type are now `struct()`.
 
 ## v1.0.0 (2026-06-15)
 
