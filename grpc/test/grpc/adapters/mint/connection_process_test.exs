@@ -213,6 +213,41 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     end
   end
 
+  describe "handle_info/2 - stream errors" do
+    setup :quiet_connection
+    setup :valid_stream_request
+    setup :valid_stream_response
+
+    test "delivers per-stream errors to the stream response process instead of crashing",
+         %{request_ref: _request_ref, stream_response_pid: response_pid, state: state} do
+      # A server can fail a single stream while the connection stays healthy —
+      # e.g. RST_STREAM(REFUSED_STREAM), or GOAWAY racing requests that were
+      # already in flight. Mint.HTTP2.stream/2 then returns the raced request
+      # as an {:error, ref, %Mint.HTTPError{}} entry in the responses list.
+      # Inject a raw RST_STREAM frame for our in-flight request as if it
+      # arrived on the socket: length 4, type 0x3 (RST_STREAM), flags 0,
+      # the request's stream id; payload: error code 0x7 (REFUSED_STREAM).
+      stream_id = state.conn.next_stream_id - 2
+      rst_stream_frame = <<4::24, 0x03, 0, stream_id::32, 0x07::32>>
+      message = {:tcp, state.conn.socket, rst_stream_frame}
+
+      assert {:noreply, new_state} = ConnectionProcess.handle_info(message, state)
+
+      # the request is dropped, the connection process and connection survive
+      assert %{} == new_state.requests
+      assert Mint.HTTP.open?(new_state.conn)
+
+      # the caller-facing stream response process got the error and was closed
+      response_state = :sys.get_state(response_pid)
+      assert true == response_state.done
+
+      assert [{:error, %Mint.HTTPError{reason: {:server_closed_request, :refused_stream}}}] =
+               :queue.to_list(response_state.responses)
+
+      refute_receive {:elixir_grpc, :connection_down, _pid}
+    end
+  end
+
   describe "handle_continue/2 - :process_stream_queue" do
     setup :valid_connection
     setup :valid_stream_request
@@ -522,6 +557,53 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     end
   end
 
+  # Like valid_connection/2, but against a bare TCP server that only completes
+  # the HTTP/2 preface (server SETTINGS + ack) and then stays silent — so no
+  # real server frames race the ones injected by the test.
+  defp quiet_connection(_ctx) do
+    {:ok, listen_socket} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+    {:ok, port} = :inet.port(listen_socket)
+    test_pid = self()
+
+    spawn_link(fn ->
+      {:ok, socket} = :gen_tcp.accept(listen_socket)
+      :ok = :gen_tcp.send(socket, <<0::24, 0x04, 0, 0::32>>)
+      :ok = :gen_tcp.send(socket, <<0::24, 0x04, 0x01, 0::32>>)
+
+      receive do
+        :close -> :gen_tcp.close(socket)
+      end
+    end)
+
+    on_exit(fn -> :gen_tcp.close(listen_socket) end)
+
+    {:ok, pid} = ConnectionProcess.start_link(:http, "localhost", port, protocols: [:http2])
+
+    # The state snapshot must only be taken once the connection has processed
+    # the server preface: HTTP/2 requires SETTINGS to be the first server
+    # frame, so a snapshot taken earlier would treat the frame injected by the
+    # test as a protocol error.
+    wait_until_open(pid)
+
+    state = :sys.get_state(pid)
+    version = Application.spec(:grpc) |> Keyword.get(:vsn)
+
+    headers = [
+      {"content-type", "application/grpc"},
+      {"user-agent", "grpc-elixir/#{version}"},
+      {"te", "trailers"}
+    ]
+
+    _ = test_pid
+
+    %{
+      process_pid: pid,
+      state: state,
+      port: port,
+      request: {"POST", "/routeguide.RouteGuide/RecordRoute", headers}
+    }
+  end
+
   defp valid_connection(%{port: port}, opts \\ []) do
     {:ok, pid} =
       ConnectionProcess.start_link(
@@ -570,4 +652,15 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   end
 
   defp valid_connection_with_retry(ctx), do: valid_connection(ctx, retry: 3)
+
+  defp wait_until_open(pid, attempts_left \\ 100) do
+    if attempts_left == 0, do: raise("connection did not finish the HTTP/2 handshake")
+
+    if :sys.get_state(pid).conn.state == :open do
+      :ok
+    else
+      Process.sleep(10)
+      wait_until_open(pid, attempts_left - 1)
+    end
+  end
 end
