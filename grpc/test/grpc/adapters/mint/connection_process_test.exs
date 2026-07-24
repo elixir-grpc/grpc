@@ -218,15 +218,10 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     setup :valid_stream_request
     setup :valid_stream_response
 
-    test "delivers per-stream errors to the stream response process instead of crashing",
+    test "delivers RST_STREAM errors to the stream response process instead of crashing",
          %{request_ref: _request_ref, stream_response_pid: response_pid, state: state} do
-      # A server can fail a single stream while the connection stays healthy —
-      # e.g. RST_STREAM(REFUSED_STREAM), or GOAWAY racing requests that were
-      # already in flight. Mint.HTTP2.stream/2 then returns the raced request
-      # as an {:error, ref, %Mint.HTTPError{}} entry in the responses list.
-      # Inject a raw RST_STREAM frame for our in-flight request as if it
-      # arrived on the socket: length 4, type 0x3 (RST_STREAM), flags 0,
-      # the request's stream id; payload: error code 0x7 (REFUSED_STREAM).
+      # Inject RST_STREAM(REFUSED_STREAM) for the in-flight request:
+      # length 4, type 0x3, flags 0, stream id; payload error code 0x7.
       stream_id = state.conn.next_stream_id - 2
       rst_stream_frame = <<4::24, 0x03, 0, stream_id::32, 0x07::32>>
       message = {:tcp, state.conn.socket, rst_stream_frame}
@@ -237,7 +232,6 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert %{} == new_state.requests
       assert Mint.HTTP.open?(new_state.conn)
 
-      # the caller-facing stream response process got the error and was closed
       response_state = :sys.get_state(response_pid)
       assert true == response_state.done
 
@@ -245,6 +239,28 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
                :queue.to_list(response_state.responses)
 
       refute_receive {:elixir_grpc, :connection_down, _pid}
+    end
+
+    test "delivers GOAWAY :unprocessed errors to the stream response process instead of crashing",
+         %{request_ref: _request_ref, stream_response_pid: response_pid, state: state} do
+      # GOAWAY with last_stream_id 0 marks in-flight client streams as
+      # :unprocessed — the race the production fix targets.
+      # length 8, type 0x7, stream 0; payload: last_stream_id 0, NO_ERROR.
+      goaway_frame = <<8::24, 0x07, 0, 0::32, 0::32, 0::32>>
+      message = {:tcp, state.conn.socket, goaway_frame}
+
+      assert {:noreply, new_state} = ConnectionProcess.handle_info(message, state)
+
+      assert %{} == new_state.requests
+
+      response_state = :sys.get_state(response_pid)
+      assert true == response_state.done
+
+      assert [{:error, %Mint.HTTPError{reason: :unprocessed}}] =
+               :queue.to_list(response_state.responses)
+
+      # GOAWAY closes the connection for writes; graceful teardown notifies parent.
+      assert_receive {:elixir_grpc, :connection_down, _pid}
     end
   end
 
