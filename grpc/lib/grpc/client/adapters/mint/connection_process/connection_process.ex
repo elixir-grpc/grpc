@@ -278,6 +278,20 @@ if Code.ensure_loaded?(Mint.HTTP) do
       state
     end
 
+    # A stream-level error, e.g. Mint.HTTPError{reason: :unprocessed} for
+    # requests that were in flight when the server sent GOAWAY. Deliver the
+    # error to the caller and drop the request instead of crashing the whole
+    # connection process with a FunctionClauseError (which also skips the
+    # retry logic and the :connection_down notification).
+    defp process_response({:error, request_ref, error}, state) do
+      pid = State.stream_response_pid(state, request_ref)
+      :ok = StreamResponseProcess.consume(pid, :error, error)
+      :ok = StreamResponseProcess.done(pid)
+
+      {_ref, new_state} = State.pop_ref(state, request_ref)
+      new_state
+    end
+
     defp process_response({:done, request_ref}, state) do
       :ok =
         state
