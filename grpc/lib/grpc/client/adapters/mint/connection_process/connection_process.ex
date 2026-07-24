@@ -201,7 +201,10 @@ if Code.ensure_loaded?(Mint.HTTP) do
           {:noreply, state}
 
         {:ok, conn, responses} ->
-          state = State.update_conn(state, conn)
+          state =
+            state
+            |> State.update_conn(conn)
+            |> maybe_notify_ready()
 
           state =
             case state.requests do
@@ -456,7 +459,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
         {:ok, conn} ->
           Logger.info("Reconnected successfully to #{state.scheme}://#{state.host}:#{state.port}")
 
-          new_state = %{state | conn: conn, retry_attempt: 0}
+          new_state = %{state | conn: conn, retry_attempt: 0, ready?: false}
           {:noreply, new_state}
 
         {:error, reason} ->
@@ -490,5 +493,14 @@ if Code.ensure_loaded?(Mint.HTTP) do
         finish_all_pending_requests(state)
       end
     end
+
+    defp maybe_notify_ready(%{ready?: true} = state), do: state
+
+    defp maybe_notify_ready(%{conn: %Mint.HTTP2{state: :open}, parent: parent} = state) do
+      send(parent, {:elixir_grpc, :connection_ready, self()})
+      %{state | ready?: true}
+    end
+
+    defp maybe_notify_ready(state), do: state
   end
 end

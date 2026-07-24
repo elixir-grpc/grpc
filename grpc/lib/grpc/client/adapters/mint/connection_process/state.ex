@@ -12,7 +12,8 @@ if Code.ensure_loaded?(Mint.HTTP) do
       requests: %{},
       request_stream_queue: :queue.new(),
       retry: 0,
-      retry_attempt: 0
+      retry_attempt: 0,
+      ready?: false
     ]
 
     @type t :: %__MODULE__{
@@ -24,7 +25,8 @@ if Code.ensure_loaded?(Mint.HTTP) do
             port: :inet.port_number() | nil,
             connect_opts: keyword(),
             retry: non_neg_integer(),
-            retry_attempt: non_neg_integer()
+            retry_attempt: non_neg_integer(),
+            ready?: boolean()
           }
 
     def new(conn, opts) do

@@ -110,7 +110,7 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
   defp push_message(%{waiter: {from, timeout_ref}} = state, message, terminal?) do
     cancel_timeout(timeout_ref)
     GenServer.reply(from, message)
-    new_state = %{state | waiter: nil, done: state.done or terminal?}
+    new_state = %{state | waiter: nil, done: terminal?}
 
     if terminal? do
       {:stop, :normal, new_state}
@@ -120,7 +120,7 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
   end
 
   defp push_message(%{messages: messages} = state, message, terminal?) do
-    {:noreply, %{state | messages: :queue.in(message, messages), done: state.done or terminal?}}
+    {:noreply, %{state | messages: :queue.in(message, messages), done: terminal?}}
   end
 
   defp terminal?(:fin), do: true

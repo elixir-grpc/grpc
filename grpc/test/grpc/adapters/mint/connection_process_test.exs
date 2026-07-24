@@ -563,29 +563,28 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   defp quiet_connection(_ctx) do
     {:ok, listen_socket} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
     {:ok, port} = :inet.port(listen_socket)
-    test_pid = self()
 
-    spawn_link(fn ->
-      {:ok, socket} = :gen_tcp.accept(listen_socket)
-      :ok = :gen_tcp.send(socket, <<0::24, 0x04, 0, 0::32>>)
-      :ok = :gen_tcp.send(socket, <<0::24, 0x04, 0x01, 0::32>>)
+    start_supervised!(
+      {Task,
+       fn ->
+         {:ok, socket} = :gen_tcp.accept(listen_socket)
+         :ok = :gen_tcp.send(socket, <<0::24, 0x04, 0, 0::32>>)
+         :ok = :gen_tcp.send(socket, <<0::24, 0x04, 0x01, 0::32>>)
 
-      receive do
-        :close -> :gen_tcp.close(socket)
-      end
-    end)
+         Process.sleep(:infinity)
+       end}
+    )
 
     on_exit(fn -> :gen_tcp.close(listen_socket) end)
 
     {:ok, pid} = ConnectionProcess.start_link(:http, "localhost", port, protocols: [:http2])
 
-    # The state snapshot must only be taken once the connection has processed
-    # the server preface: HTTP/2 requires SETTINGS to be the first server
-    # frame, so a snapshot taken earlier would treat the frame injected by the
-    # test as a protocol error.
-    wait_until_open(pid)
-
+    # Snapshot only after SETTINGS: an earlier inject is a protocol error.
+    assert_receive {:elixir_grpc, :connection_ready, ^pid}, 1_000
     state = :sys.get_state(pid)
+
+    assert state.ready?
+
     version = Application.spec(:grpc) |> Keyword.get(:vsn)
 
     headers = [
@@ -593,8 +592,6 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       {"user-agent", "grpc-elixir/#{version}"},
       {"te", "trailers"}
     ]
-
-    _ = test_pid
 
     %{
       process_pid: pid,
@@ -652,15 +649,4 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   end
 
   defp valid_connection_with_retry(ctx), do: valid_connection(ctx, retry: 3)
-
-  defp wait_until_open(pid, attempts_left \\ 100) do
-    if attempts_left == 0, do: raise("connection did not finish the HTTP/2 handshake")
-
-    if :sys.get_state(pid).conn.state == :open do
-      :ok
-    else
-      Process.sleep(10)
-      wait_until_open(pid, attempts_left - 1)
-    end
-  end
 end
