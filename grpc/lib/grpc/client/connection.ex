@@ -283,7 +283,17 @@ defmodule GRPC.Client.Connection do
       {:ok, pid} ->
         case ready_status(name, validated.resolver_target, timeout) do
           :ok ->
-            finalize_connection(name)
+            case finalize_connection(name) do
+              {:ok, %Channel{}} = result ->
+                result
+
+              {:error, _reason} = error ->
+                # A connection that reported ready but cannot hand out a
+                # channel is unusable; leaving it under the supervisor is the
+                # leak this fixes.
+                _ = DynamicSupervisor.terminate_child(GRPC.Client.Supervisor, pid)
+                error
+            end
 
           {:error, reason} ->
             _ = DynamicSupervisor.terminate_child(GRPC.Client.Supervisor, pid)
