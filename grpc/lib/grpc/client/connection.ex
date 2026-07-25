@@ -291,7 +291,7 @@ defmodule GRPC.Client.Connection do
                 # A connection that reported ready but cannot hand out a
                 # channel is unusable; leaving it under the supervisor is the
                 # leak this fixes.
-                _ = DynamicSupervisor.terminate_child(GRPC.Client.Supervisor, pid)
+                :ok = DynamicSupervisor.terminate_child(GRPC.Client.Supervisor, pid)
                 error
             end
 

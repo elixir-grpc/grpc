@@ -3,13 +3,15 @@ defmodule GRPC.Client.Application do
   use Application
 
   def start(_type, _args) do
+    supervisor_config = Application.get_env(:grpc, __MODULE__, [])
+
     children = [
       {Registry, [keys: :unique, name: GRPC.Client.Registry]},
       {DynamicSupervisor,
        [
          name: GRPC.Client.Supervisor,
-         hibernate_after: 15_000,
-         spawn_opt: [fullsweep_after: 20]
+         hibernate_after: Keyword.get(supervisor_config, :hibernate_after, 15_000),
+         spawn_opt: [fullsweep_after: Keyword.get(supervisor_config, :fullsweep_after, 20)]
        ]}
     ]
 

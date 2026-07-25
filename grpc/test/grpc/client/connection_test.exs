@@ -81,15 +81,13 @@ defmodule GRPC.Client.ConnectionTest do
                )
 
       assert_receive {:connection_started, pid}, 500
-      assert_eventually(fn -> not Process.alive?(pid) end)
+      monitor_ref = Process.monitor(pid)
+      assert_receive {:DOWN, ^monitor_ref, :process, ^pid, _reason}, 500
 
-      assert_eventually(fn ->
-        Registry.lookup(GRPC.Client.Registry, {Connection, ref}) == []
-      end)
+      assert Registry.lookup(GRPC.Client.Registry, {Connection, ref}) == []
 
-      assert_eventually(fn ->
-        DynamicSupervisor.count_children(GRPC.Client.Supervisor).active == supervisor_children
-      end)
+      assert DynamicSupervisor.count_children(GRPC.Client.Supervisor).active ==
+               supervisor_children
     end
   end
 
@@ -154,13 +152,10 @@ defmodule GRPC.Client.ConnectionTest do
       ref_mon = Process.monitor(pid)
       assert_receive {:DOWN, ^ref_mon, :process, ^pid, _reason}, 500
 
-      assert_eventually(fn ->
-        Registry.lookup(GRPC.Client.Registry, {Connection, ref}) == []
-      end)
+      assert Registry.lookup(GRPC.Client.Registry, {Connection, ref}) == []
 
-      assert_eventually(fn ->
-        DynamicSupervisor.count_children(GRPC.Client.Supervisor).active == supervisor_children
-      end)
+      assert DynamicSupervisor.count_children(GRPC.Client.Supervisor).active ==
+               supervisor_children
     end
 
     test "pick_channel returns {:error, :no_connection} after disconnect (persistent_term entry is erased)",
@@ -397,19 +392,6 @@ defmodule GRPC.Client.ConnectionTest do
   defp connection_pt_count do
     Enum.count(:persistent_term.get(), &match?({{Connection, _, _}, _}, &1))
   end
-
-  defp assert_eventually(fun, attempts \\ 50)
-
-  defp assert_eventually(fun, attempts) when attempts > 0 do
-    if fun.() do
-      :ok
-    else
-      Process.sleep(10)
-      assert_eventually(fun, attempts - 1)
-    end
-  end
-
-  defp assert_eventually(fun, 0), do: assert(fun.())
 
   defp lb_tid(ref) do
     pid = whereis_name(ref)
