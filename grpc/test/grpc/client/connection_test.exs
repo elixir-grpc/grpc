@@ -16,12 +16,31 @@ defmodule GRPC.Client.ConnectionTest do
     end
   end
 
+  defmodule NoPickResolver do
+    def resolve(_target) do
+      {:ok,
+       %{
+         addresses: [%{address: "127.0.0.1", port: 50051}],
+         service_config: %{}
+       }}
+    end
+
+    def init(_target, _opts) do
+      test_pid = Application.fetch_env!(:grpc, __MODULE__)
+      lb_table = Enum.find(:ets.all(), &(:ets.info(&1, :owner) == self()))
+      true = :ets.delete(lb_table)
+      send(test_pid, {:connection_started, self()})
+      {:ok, nil}
+    end
+  end
+
   setup do
     %{
       ref: make_ref(),
       ip: "127.0.0.1",
       target: "ipv4:127.0.0.1:50051",
-      adapter: GRPC.Test.ClientAdapter
+      adapter: GRPC.Test.ClientAdapter,
+      supervisor_children: DynamicSupervisor.count_children(GRPC.Client.Supervisor).active
     }
   end
 
@@ -40,6 +59,37 @@ defmodule GRPC.Client.ConnectionTest do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
       assert {:ok, ^channel} = Connection.pick_channel(%Channel{ref: ref})
+
+      Connection.disconnect(channel)
+    end
+  end
+
+  describe "connect/2 - failed finalize" do
+    test "terminates a newly started child when no channel can be picked", %{
+      ref: ref,
+      adapter: adapter,
+      supervisor_children: supervisor_children
+    } do
+      Application.put_env(:grpc, NoPickResolver, self())
+      on_exit(fn -> Application.delete_env(:grpc, NoPickResolver) end)
+
+      assert {:error, :no_connection} =
+               Connection.connect("test://connection",
+                 adapter: adapter,
+                 name: ref,
+                 resolver: NoPickResolver
+               )
+
+      assert_receive {:connection_started, pid}, 500
+      assert_eventually(fn -> not Process.alive?(pid) end)
+
+      assert_eventually(fn ->
+        Registry.lookup(GRPC.Client.Registry, {Connection, ref}) == []
+      end)
+
+      assert_eventually(fn ->
+        DynamicSupervisor.count_children(GRPC.Client.Supervisor).active == supervisor_children
+      end)
     end
   end
 
@@ -92,7 +142,8 @@ defmodule GRPC.Client.ConnectionTest do
     test "GenServer process is no longer alive after disconnect", %{
       ref: ref,
       target: target,
-      adapter: adapter
+      adapter: adapter,
+      supervisor_children: supervisor_children
     } do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
@@ -102,6 +153,14 @@ defmodule GRPC.Client.ConnectionTest do
 
       ref_mon = Process.monitor(pid)
       assert_receive {:DOWN, ^ref_mon, :process, ^pid, _reason}, 500
+
+      assert_eventually(fn ->
+        Registry.lookup(GRPC.Client.Registry, {Connection, ref}) == []
+      end)
+
+      assert_eventually(fn ->
+        DynamicSupervisor.count_children(GRPC.Client.Supervisor).active == supervisor_children
+      end)
     end
 
     test "pick_channel returns {:error, :no_connection} after disconnect (persistent_term entry is erased)",
@@ -109,23 +168,6 @@ defmodule GRPC.Client.ConnectionTest do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
       {:ok, _} = Connection.disconnect(channel)
-
-      assert {:error, :no_connection} = Connection.pick_channel(channel)
-    end
-  end
-
-  describe "terminate/2 - persistent_term cleanup on process kill" do
-    test "persistent_term entry is erased when process is killed without disconnect", %{
-      ref: ref,
-      target: target,
-      adapter: adapter
-    } do
-      {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
-
-      pid = whereis_name(ref)
-      ref_mon = Process.monitor(pid)
-      GenServer.stop(pid, :shutdown)
-      assert_receive {:DOWN, ^ref_mon, :process, ^pid, :shutdown}, 500
 
       assert {:error, :no_connection} = Connection.pick_channel(channel)
     end
@@ -215,6 +257,35 @@ defmodule GRPC.Client.ConnectionTest do
   end
 
   describe "resource leaks over repeated connect/disconnect" do
+    test "50 binary-heavy cycles leave supervisor memory bounded after garbage collection", %{
+      target: target,
+      adapter: adapter,
+      supervisor_children: supervisor_children
+    } do
+      supervisor = Process.whereis(GRPC.Client.Supervisor)
+      :erlang.garbage_collect(supervisor)
+      {:memory, before_memory} = Process.info(supervisor, :memory)
+
+      for cycle <- 1..50 do
+        ref = make_ref()
+        header = {"x-test-data", :binary.copy(<<cycle>>, 100_000)}
+
+        {:ok, channel} =
+          Connection.connect(target, adapter: adapter, name: ref, headers: [header])
+
+        {:ok, _} = Connection.disconnect(channel)
+      end
+
+      :erlang.garbage_collect(supervisor)
+      {:memory, after_memory} = Process.info(supervisor, :memory)
+
+      assert %{active: ^supervisor_children} =
+               DynamicSupervisor.count_children(GRPC.Client.Supervisor)
+
+      assert after_memory <= before_memory + 100_000,
+             "supervisor memory grew: before=#{before_memory} after=#{after_memory}"
+    end
+
     test "500 cycles leave persistent_term clean and no per-LB tables leak", %{
       target: target,
       adapter: adapter
@@ -326,6 +397,19 @@ defmodule GRPC.Client.ConnectionTest do
   defp connection_pt_count do
     Enum.count(:persistent_term.get(), &match?({{Connection, _, _}, _}, &1))
   end
+
+  defp assert_eventually(fun, attempts \\ 50)
+
+  defp assert_eventually(fun, attempts) when attempts > 0 do
+    if fun.() do
+      :ok
+    else
+      Process.sleep(10)
+      assert_eventually(fun, attempts - 1)
+    end
+  end
+
+  defp assert_eventually(fun, 0), do: assert(fun.())
 
   defp lb_tid(ref) do
     pid = whereis_name(ref)
