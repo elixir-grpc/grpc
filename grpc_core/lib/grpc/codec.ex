@@ -19,7 +19,7 @@ defmodule GRPC.Codec do
   This function is invoked before the gRPC payload is transformed into a protobuf message whenever it is defined.
 
   This can be used to apply a transform over the gRPC message before decoding it. For instance grpc-web using the `application/grpc-web-text`
-  content type requires the message to be Base64-encoded, so a server receving messages using grpc-web-text will be required to
+  content type requires the message to be Base64-encoded, so a server receiving messages using grpc-web-text will be required to
   do a Base64 decode on the payload before decoding the gRPC message.
   """
   @callback unpack_from_channel(binary) :: binary
