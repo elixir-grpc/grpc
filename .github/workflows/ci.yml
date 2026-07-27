@@ -61,9 +61,14 @@ jobs:
         run: mix setup 1>/dev/null
       - name: Compile with warnings as errors
         run: MIX_ENV=test mix compile --warnings-as-errors
-      # TEMP: remove after flake hunt (target: 2026-08-10). Amplifies CI cost ×20.
+      # TEMP: --repeat-until-failure needs Elixir ≥1.18; drop the branch after flake hunt (2026-08-10).
       - name: Run Tests
-        run: mix test --warnings-as-errors --repeat-until-failure 20
+        run: |
+          if [[ "${{ matrix.elixir }}" == "1.20.x" ]]; then
+            mix test --warnings-as-errors --repeat-until-failure 20
+          else
+            mix test --warnings-as-errors
+          fi
       - name: Run Warning Tests
         run: mix test --only warning_test
       - name: Run :mint optional dependency test
