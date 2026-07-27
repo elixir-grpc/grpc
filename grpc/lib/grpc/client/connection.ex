@@ -52,6 +52,20 @@ defmodule GRPC.Client.Connection do
   first establishment attempt finishes and returns `{:error, reason}` (tearing
   the process down) if that attempt fails.
 
+  ## Supervisor memory
+
+  Connection start arguments (for example large default headers) can linger in
+  the `GRPC.Client.Supervisor` process heap after children exit. That supervisor
+  therefore hibernates when idle and runs fullsweep GCs more often. Tune via
+  config:
+
+      config :grpc, GRPC.Client.Application,
+        hibernate_after: 15_000,
+        fullsweep_after: 20
+
+  * `:hibernate_after` – idle ms before the supervisor hibernates (default: `15_000`)
+  * `:fullsweep_after` – minor GCs between fullsweeps on the supervisor (default: `20`)
+
   ## Target syntax
 
   The `target` argument to `connect/2` accepts URI-like strings that are resolved
@@ -283,7 +297,16 @@ defmodule GRPC.Client.Connection do
       {:ok, pid} ->
         case ready_status(name, validated.resolver_target, timeout) do
           :ok ->
-            finalize_connection(name)
+            case finalize_connection(name) do
+              {:ok, %Channel{}} = result ->
+                result
+
+              {:error, _reason} = error ->
+                # A connection that reported ready but cannot hand out a
+                # channel is unusable. Keeping it in the supervisor could leak memory.
+                :ok = DynamicSupervisor.terminate_child(GRPC.Client.Supervisor, pid)
+                error
+            end
 
           {:error, reason} ->
             _ = DynamicSupervisor.terminate_child(GRPC.Client.Supervisor, pid)
