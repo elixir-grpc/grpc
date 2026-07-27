@@ -258,8 +258,7 @@ defmodule GRPC.StreamTest do
 
       result =
         GRPC.Stream.from([:hello])
-        # very short timeout
-        |> GRPC.Stream.ask(pid, 10)
+        |> GRPC.Stream.ask(pid, 1)
         |> GRPC.Stream.to_flow()
         |> Enum.to_list()
 
@@ -486,48 +485,50 @@ defmodule GRPC.StreamTest do
   end
 
   describe "join_with/merge streams" do
+    test "merges input stream with a joined enumerable" do
+      result =
+        GRPC.Stream.from([1, 2, 3], join_with: [4, 5, 6])
+        |> GRPC.Stream.map(& &1)
+        |> GRPC.Stream.to_flow()
+        |> Enum.to_list()
+        |> Enum.sort()
+
+      assert result == [1, 2, 3, 4, 5, 6]
+    end
+
     test "merges input stream with joined GenStage producer" do
       defmodule TestProducer do
         use GenStage
 
-        def start_link(items) do
-          GenStage.start_link(__MODULE__, items)
-        end
-
-        def init(items) do
-          {:producer, items}
-        end
+        def start_link(items), do: GenStage.start_link(__MODULE__, items)
+        def init(items), do: {:producer, items}
 
         def handle_demand(demand, state) when demand > 0 do
           {events, remaining} = Enum.split(state, demand)
 
+          # Finite producer: stop after the last batch so Flow can complete.
+          if remaining == [] do
+            Process.send_after(self(), :stop, 0)
+          end
+
           {:noreply, events, remaining}
         end
+
+        def handle_info(:stop, state), do: {:stop, :normal, state}
       end
 
-      elements = Enum.to_list(4..1000)
-      {:ok, producer_pid} = TestProducer.start_link(elements)
-
-      input = [1, 2, 3]
-
-      task =
-        Task.async(fn ->
-          GRPC.Stream.from(input, join_with: producer_pid, max_demand: 500)
-          |> GRPC.Stream.map(fn it -> it end)
-          |> GRPC.Stream.run_with(%GRPC.Server.Stream{}, dry_run: true)
-        end)
+      {:ok, producer_pid} = TestProducer.start_link([4, 5, 6])
+      mon = Process.monitor(producer_pid)
 
       result =
-        case Task.yield(task, 1000) || Task.shutdown(task) do
-          {:ok, _} -> :ok
-          _ -> :ok
-        end
+        GRPC.Stream.from([1, 2, 3], join_with: producer_pid)
+        |> GRPC.Stream.map(& &1)
+        |> GRPC.Stream.to_flow()
+        |> Enum.to_list()
+        |> Enum.sort()
 
-      if Process.alive?(producer_pid) do
-        Process.exit(producer_pid, :normal)
-      end
-
-      assert result == :ok
+      assert result == [1, 2, 3, 4, 5, 6]
+      assert_receive {:DOWN, ^mon, :process, ^producer_pid, :normal}
     end
   end
 

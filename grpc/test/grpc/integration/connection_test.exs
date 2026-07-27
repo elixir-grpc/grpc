@@ -1,11 +1,19 @@
 defmodule GRPC.Integration.ConnectionTest do
   use GRPC.Integration.TestCase
 
+  # Gun's adapter installs its own retry_fun (≈1s base); override for a fast reconnect.
+  def fast_retry_fun(retries, _opts), do: %{retries: retries - 1, timeout: 10}
+
   test "reconnection works" do
     server = FeatureServer
     {:ok, _, port} = GRPC.Server.start(server, 0)
     point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
-    {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", adapter_opts: [retry_timeout: 10])
+
+    {:ok, channel} =
+      GRPC.Stub.connect("localhost:#{port}",
+        adapter_opts: [retry_fun: &__MODULE__.fast_retry_fun/2]
+      )
+
     assert {:ok, _} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
     :ok = GRPC.Server.stop(server)
     {:ok, _, _} = reconnect_server(server, port)
@@ -19,7 +27,9 @@ defmodule GRPC.Integration.ConnectionTest do
     File.rm(socket_path)
 
     {:ok, _, _} = GRPC.Server.start(server, 0, adapter_opts: [ip: {:local, socket_path}])
-    {:ok, channel} = GRPC.Stub.connect(socket_path, adapter_opts: [retry_timeout: 10])
+
+    {:ok, channel} =
+      GRPC.Stub.connect(socket_path, adapter_opts: [retry_fun: &__MODULE__.fast_retry_fun/2])
 
     point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
     assert {:ok, _} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)

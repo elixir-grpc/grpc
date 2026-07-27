@@ -21,7 +21,7 @@ defmodule GRPC.Server.Interceptors.CORSTest.Endpoint.BinaryConcatenation do
 end
 
 defmodule GRPC.Server.Interceptors.CORSTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   alias GRPC.Server.Interceptors.CORS, as: CORSInterceptor
   alias GRPC.Server.Stream

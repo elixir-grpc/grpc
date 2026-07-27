@@ -78,7 +78,7 @@ defmodule GRPC.Integration.TestCase do
         Logger.warning("Got eaddrinuse when reconnecting to #{server}:#{port}. retry: #{retry}")
 
         if retry >= 1 do
-          Process.sleep(500)
+          Process.sleep(50)
           reconnect_server(server, port, retry - 1)
         else
           result
