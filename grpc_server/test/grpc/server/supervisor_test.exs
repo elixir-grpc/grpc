@@ -1,5 +1,5 @@
 defmodule GRPC.Server.SupervisorTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   alias GRPC.Server.Supervisor
 

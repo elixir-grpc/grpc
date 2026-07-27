@@ -1,5 +1,5 @@
 defmodule GRPC.Server.Adapters.CowboyTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   alias GRPC.Server.Adapters.Cowboy
 
