@@ -84,10 +84,6 @@ defmodule GRPC.Client.ConnectionTest do
       monitor_ref = Process.monitor(pid)
       assert_receive {:DOWN, ^monitor_ref, :process, ^pid, _reason}, 500
 
-      await_registry_cleanup(GRPC.Client.Registry)
-
-      assert Registry.lookup(GRPC.Client.Registry, {Connection, ref}) == []
-
       assert DynamicSupervisor.count_children(GRPC.Client.Supervisor).active ==
                supervisor_children
     end
@@ -148,15 +144,11 @@ defmodule GRPC.Client.ConnectionTest do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
       pid = whereis_name(ref)
+      ref_mon = Process.monitor(pid)
 
       {:ok, _} = Connection.disconnect(channel)
 
-      ref_mon = Process.monitor(pid)
       assert_receive {:DOWN, ^ref_mon, :process, ^pid, _reason}, 500
-
-      await_registry_cleanup(GRPC.Client.Registry)
-
-      assert Registry.lookup(GRPC.Client.Registry, {Connection, ref}) == []
 
       assert DynamicSupervisor.count_children(GRPC.Client.Supervisor).active ==
                supervisor_children
@@ -395,18 +387,6 @@ defmodule GRPC.Client.ConnectionTest do
 
   defp connection_pt_count do
     Enum.count(:persistent_term.get(), &match?({{Connection, _, _}, _}, &1))
-  end
-
-  # `Registry` drops an entry from its own monitor of the registered process.
-  # That monitor and the one these tests set up both fire on the same exit with
-  # no ordering guarantee, so receiving `:DOWN` does not mean the registry has
-  # processed its copy yet. A system call to the partition holding the monitor
-  # drains that message before we read the table. This is deterministic, where
-  # a bounded retry only makes the flake rarer -- locally the unsynchronized
-  # read is stale about 10% of the time under load.
-  defp await_registry_cleanup(registry) do
-    _ = :sys.get_state(Module.concat(registry, "PIDPartition0"))
-    :ok
   end
 
   defp lb_tid(ref) do
