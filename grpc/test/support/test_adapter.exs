@@ -13,18 +13,34 @@ end
 
 defmodule GRPC.Test.FailingClientAdapter do
   @moduledoc """
-  A test adapter that fails to connect for hosts listed in the
-  :grpc_test_failing_hosts application env key. All other hosts succeed.
+  A test adapter that refuses to connect to selected hosts. All other hosts
+  succeed.
+
+  The failing set comes from the `:failing_hosts` adapter option: either a
+  list of hosts, or a zero-arity function returning one for tests that flip
+  reachability mid-test. Per-connection options keep tests free of global
+  state, so they can run `async: true`.
+
+      adapter: GRPC.Test.FailingClientAdapter,
+      adapter_opts: [failing_hosts: ["127.0.0.1"]]
+
+      hosts = start_supervised!({Agent, fn -> ["127.0.0.1"] end})
+      adapter_opts: [failing_hosts: fn -> Agent.get(hosts, & &1) end]
   """
   @behaviour GRPC.Client.Adapter
 
-  def connect(%{host: host} = channel, _opts) do
-    failing = Application.get_env(:grpc, :grpc_test_failing_hosts, [])
-
-    if host in failing do
+  def connect(%{host: host} = channel, opts) do
+    if host in failing_hosts(opts) do
       {:error, :connection_refused}
     else
       {:ok, channel}
+    end
+  end
+
+  defp failing_hosts(opts) do
+    case Keyword.get(opts || [], :failing_hosts, []) do
+      fun when is_function(fun, 0) -> fun.()
+      hosts when is_list(hosts) -> hosts
     end
   end
 

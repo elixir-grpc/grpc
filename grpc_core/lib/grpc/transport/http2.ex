@@ -18,7 +18,6 @@ defmodule GRPC.Transport.HTTP2 do
     %{"content-type" => "application/grpc+#{codec_name(codec)}"}
   end
 
-  @spec server_trailers(integer, String.t(), [Google.Protobuf.Any.t()] | nil) :: map
   def server_trailers(status \\ Status.ok(), message \\ "", details \\ nil) do
     %{
       "grpc-status" => Integer.to_string(status),
@@ -44,7 +43,6 @@ defmodule GRPC.Transport.HTTP2 do
   @doc """
   Now we may not need this because gun already handles the pseudo headers.
   """
-  @spec client_headers(GRPC.Client.Stream.t(), keyword()) :: [{String.t(), String.t()}]
   def client_headers(%{channel: channel, path: path} = s, opts \\ []) do
     [
       {":method", "POST"},
@@ -54,9 +52,6 @@ defmodule GRPC.Transport.HTTP2 do
     ] ++ client_headers_without_reserved(s, opts)
   end
 
-  @spec client_headers_without_reserved(GRPC.Client.Stream.t(), keyword()) :: [
-          {String.t(), String.t()}
-        ]
   def client_headers_without_reserved(%{codec: codec} = stream, opts \\ []) do
     [
       # It seems only gRPC implemenations only support "application/grpc", so we support :content_type now.

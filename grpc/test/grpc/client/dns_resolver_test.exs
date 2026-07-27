@@ -30,9 +30,9 @@ defmodule GRPC.Client.ReResolveTest do
   alias GRPC.Channel
   alias GRPC.Client.Connection
 
-  @resolve_interval 200
-  @wait @resolve_interval + 100
-  @wait_after_backoff @resolve_interval * 2 + 150
+  @resolve_interval 50
+  @wait @resolve_interval + 30
+  @wait_after_backoff @resolve_interval * 2 + 50
 
   setup do
     Mox.set_mox_global()
@@ -666,7 +666,7 @@ defmodule GRPC.Client.ReResolveTest do
           resolve_interval: 50
         )
 
-      Process.sleep(200)
+      Process.sleep(@wait)
 
       assert {:ok, _} = Connection.pick_channel(channel)
       assert is_nil(get_state(ctx.ref).resolver_state)
@@ -999,9 +999,12 @@ defmodule GRPC.Client.ReResolveTest do
 
   describe "unhealthy-pick fallback" do
     setup ctx do
-      Application.put_env(:grpc, :grpc_test_failing_hosts, ["10.0.0.99"])
-      on_exit(fn -> Application.delete_env(:grpc, :grpc_test_failing_hosts) end)
-      Map.put(ctx, :failing_adapter, GRPC.Test.FailingClientAdapter)
+      hosts = start_supervised!({Agent, fn -> ["10.0.0.99"] end})
+
+      ctx
+      |> Map.put(:failing_adapter, GRPC.Test.FailingClientAdapter)
+      |> Map.put(:failing_hosts, hosts)
+      |> Map.put(:failing_adapter_opts, failing_hosts: fn -> Agent.get(hosts, & &1) end)
     end
 
     test "falls back to healthy channel when LB picks a failed one", ctx do
@@ -1017,6 +1020,7 @@ defmodule GRPC.Client.ReResolveTest do
         Connection.connect(
           "dns://my-service.local:50051",
           adapter: ctx.failing_adapter,
+          adapter_opts: ctx.failing_adapter_opts,
           name: ctx.ref,
           resolver: ctx.resolver,
           resolve_interval: @resolve_interval,
@@ -1058,6 +1062,7 @@ defmodule GRPC.Client.ReResolveTest do
         Connection.connect(
           "dns://my-service.local:50051",
           adapter: ctx.failing_adapter,
+          adapter_opts: ctx.failing_adapter_opts,
           name: ctx.ref,
           resolver: ctx.resolver,
           resolve_interval: @resolve_interval,
@@ -1067,7 +1072,7 @@ defmodule GRPC.Client.ReResolveTest do
 
       assert {:ok, _} = Connection.pick_channel(channel)
 
-      Application.put_env(:grpc, :grpc_test_failing_hosts, ["10.0.0.98", "10.0.0.99"])
+      Agent.update(ctx.failing_hosts, fn _ -> ["10.0.0.98", "10.0.0.99"] end)
 
       stub(ctx.resolver, :resolve, fn _target ->
         {:ok,
@@ -1090,9 +1095,12 @@ defmodule GRPC.Client.ReResolveTest do
 
   describe "retry previously failed channels" do
     setup ctx do
-      Application.put_env(:grpc, :grpc_test_failing_hosts, ["10.0.0.2"])
-      on_exit(fn -> Application.delete_env(:grpc, :grpc_test_failing_hosts) end)
-      Map.put(ctx, :failing_adapter, GRPC.Test.FailingClientAdapter)
+      hosts = start_supervised!({Agent, fn -> ["10.0.0.2"] end})
+
+      ctx
+      |> Map.put(:failing_adapter, GRPC.Test.FailingClientAdapter)
+      |> Map.put(:failing_hosts, hosts)
+      |> Map.put(:failing_adapter_opts, failing_hosts: fn -> Agent.get(hosts, & &1) end)
     end
 
     test "reconnects a previously failed channel when it becomes reachable", ctx do
@@ -1122,6 +1130,7 @@ defmodule GRPC.Client.ReResolveTest do
         Connection.connect(
           "dns://my-service.local:50051",
           adapter: ctx.failing_adapter,
+          adapter_opts: ctx.failing_adapter_opts,
           name: ctx.ref,
           resolver: ctx.resolver,
           resolve_interval: @resolve_interval,
@@ -1134,7 +1143,7 @@ defmodule GRPC.Client.ReResolveTest do
       assert match?({:failed, _}, Map.get(state.real_channels, "10.0.0.2:50051"))
 
       # Now make 10.0.0.2 reachable
-      Application.put_env(:grpc, :grpc_test_failing_hosts, [])
+      Agent.update(ctx.failing_hosts, fn _ -> [] end)
 
       Process.sleep(@wait)
 
@@ -1160,9 +1169,9 @@ defmodule GRPC.Client.ReResolveTest do
           lb_policy: :round_robin
         )
 
-      # Simulate a resolver that takes a long time
+      # Simulate a resolver that takes long enough to overlap pick_channel
       stub(ctx.resolver, :resolve, fn _target ->
-        Process.sleep(2_000)
+        Process.sleep(200)
         {:ok, %{addresses: [%{address: "10.0.0.1", port: 50051}], service_config: nil}}
       end)
 
@@ -1197,9 +1206,9 @@ defmodule GRPC.Client.ReResolveTest do
 
   describe "refresh handler with failed channels" do
     setup ctx do
-      Application.put_env(:grpc, :grpc_test_failing_hosts, ["10.0.0.2"])
-      on_exit(fn -> Application.delete_env(:grpc, :grpc_test_failing_hosts) end)
-      Map.put(ctx, :failing_adapter, GRPC.Test.FailingClientAdapter)
+      ctx
+      |> Map.put(:failing_adapter, GRPC.Test.FailingClientAdapter)
+      |> Map.put(:failing_adapter_opts, failing_hosts: ["10.0.0.2"])
     end
 
     test "GenServer survives when :refresh picks a failed channel", ctx do
@@ -1230,6 +1239,7 @@ defmodule GRPC.Client.ReResolveTest do
         Connection.connect(
           "dns://my-service.local:50051",
           adapter: ctx.failing_adapter,
+          adapter_opts: ctx.failing_adapter_opts,
           name: ctx.ref,
           resolver: ctx.resolver,
           resolve_interval: 60_000,

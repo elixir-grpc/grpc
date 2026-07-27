@@ -16,20 +16,6 @@ defmodule GRPC.Channel do
     * `:adapter_payload` - payload the adapter uses
   """
 
-  @type t :: %__MODULE__{
-          host: String.t(),
-          port: non_neg_integer(),
-          scheme: String.t(),
-          cred: GRPC.Credential.t(),
-          ref: reference() | nil,
-          adapter: atom(),
-          adapter_payload: any(),
-          codec: module(),
-          interceptors: [],
-          compressor: module(),
-          accepted_compressors: [module()],
-          headers: list()
-        }
   defstruct host: nil,
             port: nil,
             scheme: nil,

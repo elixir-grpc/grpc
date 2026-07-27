@@ -107,7 +107,6 @@ defmodule HelloworldStreams.Server do
   alias Helloworld.HelloRequest
   alias Helloworld.HelloReply
 
-  @spec say_unary_hello(HelloRequest.t(), GRPC.Server.Stream.t()) :: any()
   def say_unary_hello(request, materializer) do
     request
     |> GRPC.Stream.unary(materializer: materializer)
@@ -136,7 +135,6 @@ end
 ### Bidirectional Streaming
 
 ```elixir
-@spec say_bid_stream_hello(Enumerable.t(), GRPC.Server.Stream.t()) :: any()
 def say_bid_stream_hello(request, materializer) do
   output_stream =
     Stream.repeatedly(fn ->

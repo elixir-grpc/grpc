@@ -49,8 +49,6 @@ defmodule GRPC.Server.Supervisor do
 
   Either `:endpoint` or `:servers` must be present, but not both.
   """
-  @spec init(tuple()) :: no_return
-  @spec init(keyword()) :: {:ok, {sup_flags(), [Supervisor.child_spec()]}} | :ignore
   def init(opts)
 
   def init(opts) when is_tuple(opts) do
@@ -126,8 +124,6 @@ defmodule GRPC.Server.Supervisor do
       If present, has more precedence then the `config :gprc, :start_server`
       config value (i.e. `start_server: false` will not start the server in any case).
   """
-  @spec child_spec(endpoint_or_servers :: atom() | [atom()], port :: integer, opts :: keyword()) ::
-          Supervisor.Spec.spec()
   def child_spec(endpoint_or_servers, port, opts \\ [])
 
   def child_spec(endpoint, port, opts) when is_atom(endpoint) do

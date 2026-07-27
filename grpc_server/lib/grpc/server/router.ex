@@ -8,7 +8,6 @@ defmodule GRPC.Server.Router do
 
   @wildcards [:_, :__]
 
-  @spec build_route(binary() | map()) :: route()
   def build_route(path) when is_binary(path), do: build_route(:post, path)
   def build_route(%{pattern: {method, path}}), do: build_route(method, path)
 
@@ -24,7 +23,6 @@ defmodule GRPC.Server.Router do
       {:get, path, match} = GRPC.Server.Router.build_route(:get, "/v1/{book.location=shelves/*}/books/{book.name=*}")
       {true, %{"book.location": "shelves/example-shelf", "book.name": "example-book"}} = GRPC.Server.Router.match("/v1/shelves/example-shelf/books/example-book", match, [])
   """
-  @spec build_route(atom(), binary()) :: route()
   def build_route(method, path) when is_binary(path) do
     match =
       path
@@ -41,7 +39,6 @@ defmodule GRPC.Server.Router do
 
        ["v1", "messages"] = GRPC.Server.Router.split_path("/v1/messages")
   """
-  @spec split_path(String.t()) :: iolist()
   def split_path(bin) do
     for segment <- String.split(bin, "/"), segment != "", do: segment
   end
@@ -63,12 +60,10 @@ defmodule GRPC.Server.Router do
       false = GRPC.Server.Router.match("/v1/shelves/example-shelf/something-els/books/book", match)
 
   """
-  @spec match(String.t() | [String.t()], Template.matchers()) :: {true, map()} | false
   def match(path, match) do
     match(path, match, %{})
   end
 
-  @spec match(String.t() | [String.t()], Template.matchers(), map()) :: {true, map()} | false
   def match(path, match, bindings) when is_binary(path) do
     path
     |> split_path()

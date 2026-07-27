@@ -4,8 +4,6 @@ defmodule GRPC.Protoc.Generator do
   alias Protobuf.Protoc.Context
   alias Protobuf.Protoc.Generator
 
-  @spec generate(Context.t(), %Google.Protobuf.FileDescriptorProto{}) ::
-          [Google.Protobuf.Compiler.CodeGeneratorResponse.File.t()]
   def generate(%Context{} = ctx, %Google.Protobuf.FileDescriptorProto{} = desc) do
     module_definitions =
       ctx

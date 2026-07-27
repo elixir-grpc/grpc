@@ -1,15 +1,32 @@
 defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
-  use GRPC.Client.DataCase
+  use GRPC.Client.DataCase, async: true
   alias GRPC.Client.Adapters.Mint.ConnectionProcess
   alias GRPC.Client.Adapters.Mint.StreamResponseProcess
 
   import ExUnit.CaptureLog
 
-  setup do
-    {:ok, _, port} = GRPC.Server.start(FeatureServer, 0)
+  # Unique Ranch listener names so this module can run async without racing
+  # other suites that still start the shared FeatureServer module directly.
+  defmodule Endpoint do
+    use GRPC.Endpoint
+    run(FeatureServer)
+  end
+
+  defmodule ReconnectExhaustedEndpoint do
+    use GRPC.Endpoint
+    run(FeatureServer)
+  end
+
+  defmodule ReconnectUnavailableEndpoint do
+    use GRPC.Endpoint
+    run(FeatureServer)
+  end
+
+  setup_all do
+    {:ok, _, port} = GRPC.Server.start_endpoint(Endpoint, 0)
 
     on_exit(fn ->
-      :ok = GRPC.Server.stop(FeatureServer)
+      :ok = GRPC.Server.stop_endpoint(Endpoint)
     end)
 
     %{port: port}
@@ -211,6 +228,34 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert :queue.is_empty(response_state.responses)
       assert true == response_state.done
     end
+
+    test "replies :ok and pops the ref when the stream response process is dead",
+         %{
+           request_ref: request_ref,
+           stream_response_pid: response_pid,
+           state: state
+         } do
+      Process.unlink(response_pid)
+      monitor = Process.monitor(response_pid)
+      Process.exit(response_pid, :kill)
+      assert_receive {:DOWN, ^monitor, :process, ^response_pid, :killed}
+
+      response = ConnectionProcess.handle_call({:cancel_request, request_ref}, nil, state)
+      assert {:reply, :ok, new_state} = response
+      assert %{} == new_state.requests
+    end
+
+    test "is a no-op on state.requests when the ref was already popped",
+         %{request_ref: request_ref, state: state} do
+      {_ref, state_without_ref} = pop_in(state.requests[request_ref])
+      assert %{} == state_without_ref.requests
+
+      response =
+        ConnectionProcess.handle_call({:cancel_request, request_ref}, nil, state_without_ref)
+
+      assert {:reply, _reply, new_state} = response
+      assert %{} == new_state.requests
+    end
   end
 
   describe "handle_continue/2 - :process_stream_queue" do
@@ -379,6 +424,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
   describe "handle_info - connection_closed - with retry" do
     setup :valid_connection_with_retry
+    setup :attach_reconnect_telemetry
 
     test "attempts reconnect when retry > 0 and connection drops", %{
       state: state
@@ -391,24 +437,34 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert new_state.retry_attempt == 0
       refute_receive {:elixir_grpc, :connection_down, _pid}, 200
     end
+  end
+
+  describe "handle_info - connection_closed - with retry - exhausted" do
+    @describetag private_endpoint: ReconnectExhaustedEndpoint
+    setup :start_private_endpoint
+    setup :valid_connection_with_retry
+    setup :attach_reconnect_telemetry
 
     test "notifies parent when all retry attempts are exhausted", %{
       state: state,
-      port: port
+      port: port,
+      process_pid: pid
     } do
-      :ok = GRPC.Server.stop(FeatureServer)
+      # Close the live client first so Cowboy shutdown does not wait on drain.
+      :ok = ConnectionProcess.disconnect(pid)
+      :ok = GRPC.Server.stop_endpoint(ReconnectExhaustedEndpoint)
 
-      logs =
-        capture_log(fn ->
-          exhausted_state = %{state | retry: 1, retry_attempt: 1}
-          result = ConnectionProcess.handle_info(:reconnect, exhausted_state)
-          assert {:noreply, _} = result
-          assert_receive {:elixir_grpc, :connection_down, _pid}, 500
-        end)
+      exhausted_state = %{state | retry: 1, retry_attempt: 1}
+      result = ConnectionProcess.handle_info(:reconnect, exhausted_state)
+      assert {:noreply, _} = result
+      assert_receive {:elixir_grpc, :connection_down, _pid}, 500
 
-      assert logs =~ "Connection retry exhausted"
-
-      {:ok, _, _} = GRPC.Server.start(FeatureServer, port)
+      assert_receive {:telemetry, [:grpc, :client, :mint, :reconnect, :exhausted], %{}, metadata}
+      assert metadata.attempt == 1
+      assert metadata.max == 1
+      assert metadata.host == "127.0.0.1"
+      assert metadata.port == port
+      assert metadata.scheme == :http
     end
   end
 
@@ -464,6 +520,111 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     end
   end
 
+  describe "handle_info - connection_closed - with dead stream response process" do
+    setup :valid_connection
+    setup :valid_stream_request
+    setup :valid_stream_response
+
+    test "does not crash when ending the stream response process fails",
+         %{
+           state: state,
+           stream_response_pid: response_pid
+         } do
+      Process.unlink(response_pid)
+      monitor = Process.monitor(response_pid)
+      Process.exit(response_pid, :kill)
+      assert_receive {:DOWN, ^monitor, :process, ^response_pid, :killed}
+
+      socket = state.conn.socket
+      tcp_message = {:tcp_closed, socket}
+
+      assert {:noreply, new_state} = ConnectionProcess.handle_info(tcp_message, state)
+      assert new_state.conn.state == :closed
+      assert_receive {:elixir_grpc, :connection_down, _pid}, 500
+    end
+  end
+
+  describe "handle_info - response frames for a dead stream response process" do
+    setup :valid_connection
+
+    setup do
+      test_pid = self()
+      handler_id = "test-stream-response-dead-#{inspect(test_pid)}"
+
+      :telemetry.attach(
+        handler_id,
+        [:grpc, :client, :mint, :stream_response, :dead],
+        fn name, measurements, metadata, [] ->
+          send(test_pid, {:telemetry, name, measurements, metadata})
+        end,
+        []
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+      :ok
+    end
+
+    test "cancels the affected request and keeps the connection alive", %{
+      process_pid: pid,
+      request: {method, path, headers}
+    } do
+      dead_pid = spawn(fn -> :ok end)
+      monitor = Process.monitor(dead_pid)
+      assert_receive {:DOWN, ^monitor, :process, ^dead_pid, _reason}
+
+      {:ok, %{request_ref: request_ref}} =
+        ConnectionProcess.request(pid, method, path, headers, :stream,
+          stream_response_pid: dead_pid
+        )
+
+      :ok = ConnectionProcess.stream_request_body(pid, request_ref, :eof)
+
+      assert_receive {:telemetry, [:grpc, :client, :mint, :stream_response, :dead], %{},
+                      metadata},
+                     500
+
+      assert metadata.request_ref == request_ref
+      assert metadata.stream_response_pid == dead_pid
+      assert metadata.reason != nil
+      assert Process.alive?(pid)
+    end
+  end
+
+  describe "handle_info - incoming stream errors" do
+    setup :quiet_connection
+    setup :valid_stream_request
+    setup :valid_stream_response
+
+    test "delivers per-stream errors to the stream response process instead of crashing",
+         %{stream_response_pid: response_pid, state: state} do
+      # A server can fail a single stream while the connection stays healthy —
+      # e.g. RST_STREAM(REFUSED_STREAM), or GOAWAY racing requests that were
+      # already in flight. Mint.HTTP2.stream/2 then returns the raced request
+      # as an {:error, ref, %Mint.HTTPError{}} entry in the responses list.
+      # Inject a raw RST_STREAM frame for our in-flight request as if it
+      # arrived on the socket: length 4, type 0x3 (RST_STREAM), flags 0,
+      # the request's stream id; payload: error code 0x7 (REFUSED_STREAM).
+      stream_id = state.conn.next_stream_id - 2
+      rst_stream_frame = <<4::24, 0x03, 0, stream_id::32, 0x07::32>>
+      message = {:tcp, state.conn.socket, rst_stream_frame}
+
+      assert {:noreply, new_state} = ConnectionProcess.handle_info(message, state)
+
+      # the request is dropped, the connection process and connection survive
+      assert %{} == new_state.requests
+      assert Mint.HTTP.open?(new_state.conn)
+
+      # the caller-facing stream response process got the error and was closed
+      response_state = :sys.get_state(response_pid)
+      assert true == response_state.done
+
+      assert [{:error, %Mint.HTTPError{reason: {:server_closed_request, :refused_stream}}}] =
+               :queue.to_list(response_state.responses)
+
+      refute_receive {:elixir_grpc, :connection_down, _pid}
+    end
+  end
+
   describe "retry_timeout/1" do
     test "returns exponentially increasing timeouts" do
       t1 = ConnectionProcess.retry_timeout(1)
@@ -486,47 +647,80 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
   describe "handle_info :reconnect" do
     setup :valid_connection_with_retry
+    setup :attach_reconnect_telemetry
 
     test "successfully reconnects when server is available", %{
-      state: state
-    } do
-      failed_state = %{state | retry_attempt: 1}
-
-      logs =
-        capture_log(fn ->
-          assert {:noreply, new_state} = ConnectionProcess.handle_info(:reconnect, failed_state)
-          assert Mint.HTTP.open?(new_state.conn)
-          assert new_state.retry_attempt == 0
-        end)
-
-      assert logs =~ "Reconnected successfully"
-    end
-
-    test "schedules another reconnect when server is unavailable", %{
       state: state,
       port: port
     } do
-      :ok = GRPC.Server.stop(FeatureServer)
+      failed_state = %{state | retry_attempt: 1}
 
-      logs =
-        capture_log(fn ->
-          failed_state = %{state | retry_attempt: 0}
-          assert {:noreply, new_state} = ConnectionProcess.handle_info(:reconnect, failed_state)
-          assert new_state.retry_attempt == 1
-          assert_receive :reconnect, 5_000
-        end)
+      assert {:noreply, new_state} = ConnectionProcess.handle_info(:reconnect, failed_state)
+      assert Mint.HTTP.open?(new_state.conn)
+      assert new_state.retry_attempt == 0
 
-      assert logs =~ "Reconnection attempt 1/"
+      assert_receive {:telemetry, [:grpc, :client, :mint, :reconnect, :stop], measurements,
+                      metadata}
 
-      {:ok, _, _} = GRPC.Server.start(FeatureServer, port)
+      assert is_integer(measurements.duration)
+      assert measurements.duration >= 0
+      assert metadata.attempt == 2
+      assert metadata.max == 3
+      assert metadata.host == "127.0.0.1"
+      assert metadata.port == port
+      assert metadata.scheme == :http
     end
+  end
+
+  describe "handle_info :reconnect - unavailable" do
+    @describetag private_endpoint: ReconnectUnavailableEndpoint
+    setup :start_private_endpoint
+    setup :valid_connection_with_retry
+    setup :attach_reconnect_telemetry
+
+    test "schedules another reconnect when server is unavailable", %{
+      state: state,
+      port: port,
+      process_pid: pid
+    } do
+      # Close the live client first so Cowboy shutdown does not wait on drain.
+      :ok = ConnectionProcess.disconnect(pid)
+      :ok = GRPC.Server.stop_endpoint(ReconnectUnavailableEndpoint)
+
+      failed_state = %{state | retry_attempt: 0, retry_timeout_ms: 10}
+      assert {:noreply, new_state} = ConnectionProcess.handle_info(:reconnect, failed_state)
+      assert new_state.retry_attempt == 1
+      assert_receive :reconnect, 5_000
+
+      assert_receive {:telemetry, [:grpc, :client, :mint, :reconnect, :error], measurements,
+                      metadata}
+
+      assert is_integer(measurements.duration)
+      assert measurements.duration >= 0
+      assert metadata.attempt == 1
+      assert metadata.max == 3
+      assert metadata.host == "127.0.0.1"
+      assert metadata.port == port
+      assert metadata.scheme == :http
+      assert metadata.reason != nil
+    end
+  end
+
+  defp start_private_endpoint(%{private_endpoint: endpoint}) do
+    {:ok, _, port} = GRPC.Server.start_endpoint(endpoint, 0)
+
+    on_exit(fn ->
+      _ = GRPC.Server.stop_endpoint(endpoint)
+    end)
+
+    %{port: port}
   end
 
   defp valid_connection(%{port: port}, opts \\ []) do
     {:ok, pid} =
       ConnectionProcess.start_link(
         :http,
-        "localhost",
+        "127.0.0.1",
         port,
         Keyword.merge([protocols: [:http2]], opts)
       )
@@ -549,11 +743,24 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   end
 
   defp valid_stream_request(%{request: {method, path, headers}, process_pid: pid}) do
+    # Must not use self() here: a fast server response makes ConnectionProcess
+    # GenServer.call the stream response pid while this setup is blocked in
+    # :sys.get_state/1, which deadlocks the test process.
+    stream = build(:client_stream)
+    {:ok, stream_response_pid} = StreamResponseProcess.start_link(stream, true)
+
     {:ok, %{request_ref: request_ref}} =
-      ConnectionProcess.request(pid, method, path, headers, :stream, stream_response_pid: self())
+      ConnectionProcess.request(pid, method, path, headers, :stream,
+        stream_response_pid: stream_response_pid
+      )
 
     state = :sys.get_state(pid)
-    %{request_ref: request_ref, state: state}
+
+    %{
+      request_ref: request_ref,
+      state: state,
+      stream_response_pid: stream_response_pid
+    }
   end
 
   defp valid_stream_response(%{request_ref: request_ref, state: state} = ctx) do
@@ -569,5 +776,81 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     %{state | requests: %{request_ref => %{request_ref_state | stream_response_pid: test_pid}}}
   end
 
+  # Like valid_connection/2, but against a bare TCP server that only completes
+  # the HTTP/2 preface (server SETTINGS + ack) and then stays silent — so no
+  # real server frames race the ones injected by the test.
+  defp quiet_connection(_ctx) do
+    {:ok, listen_socket} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+    {:ok, port} = :inet.port(listen_socket)
+
+    spawn_link(fn ->
+      {:ok, socket} = :gen_tcp.accept(listen_socket)
+      :ok = :gen_tcp.send(socket, <<0::24, 0x04, 0, 0::32>>)
+      :ok = :gen_tcp.send(socket, <<0::24, 0x04, 0x01, 0::32>>)
+
+      receive do
+        :close -> :gen_tcp.close(socket)
+      end
+    end)
+
+    on_exit(fn -> :gen_tcp.close(listen_socket) end)
+
+    {:ok, pid} = ConnectionProcess.start_link(:http, "localhost", port, protocols: [:http2])
+
+    # The state snapshot must only be taken once the connection has processed
+    # the server preface: HTTP/2 requires SETTINGS to be the first server
+    # frame, so a snapshot taken earlier would treat the frame injected by the
+    # test as a protocol error.
+    wait_until_open(pid)
+
+    state = :sys.get_state(pid)
+    version = Application.spec(:grpc) |> Keyword.get(:vsn)
+
+    headers = [
+      {"content-type", "application/grpc"},
+      {"user-agent", "grpc-elixir/#{version}"},
+      {"te", "trailers"}
+    ]
+
+    %{
+      process_pid: pid,
+      state: state,
+      port: port,
+      request: {"POST", "/routeguide.RouteGuide/RecordRoute", headers}
+    }
+  end
+
+  defp wait_until_open(pid, attempts_left \\ 100) do
+    if attempts_left == 0, do: raise("connection did not finish the HTTP/2 handshake")
+
+    if :sys.get_state(pid).conn.state == :open do
+      :ok
+    else
+      Process.sleep(10)
+      wait_until_open(pid, attempts_left - 1)
+    end
+  end
+
   defp valid_connection_with_retry(ctx), do: valid_connection(ctx, retry: 3)
+
+  defp attach_reconnect_telemetry(_ctx) do
+    test_pid = self()
+    handler_id = "test-reconnect-telemetry-#{inspect(test_pid)}"
+
+    :telemetry.attach_many(
+      handler_id,
+      [
+        [:grpc, :client, :mint, :reconnect, :stop],
+        [:grpc, :client, :mint, :reconnect, :error],
+        [:grpc, :client, :mint, :reconnect, :exhausted]
+      ],
+      fn name, measurements, metadata, [] ->
+        send(test_pid, {:telemetry, name, measurements, metadata})
+      end,
+      []
+    )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
+    :ok
+  end
 end

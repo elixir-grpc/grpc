@@ -63,12 +63,10 @@ defmodule GRPC.RPCError do
 
   alias GRPC.Status
 
-  @spec new(status :: atom()) :: t()
   def new(status) when is_atom(status) do
     exception(status: status)
   end
 
-  @spec exception(args :: list()) :: t()
   def exception(args) when is_list(args) do
     error = parse_args(args, %__MODULE__{})
 
@@ -101,7 +99,6 @@ defmodule GRPC.RPCError do
     parse_args(t, acc)
   end
 
-  @spec exception(status :: Status.t() | atom(), message :: String.t()) :: t()
   def exception(status, message) when is_atom(status) do
     %GRPC.RPCError{status: apply(GRPC.Status, status, []), message: message}
   end

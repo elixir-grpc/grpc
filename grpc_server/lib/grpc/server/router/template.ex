@@ -10,7 +10,6 @@ defmodule GRPC.Server.Router.Template do
   @type segment_match :: String.t() | {atom(), [segment_match]}
   @type matchers :: [segment_match]
 
-  @spec tokenize(binary(), [tuple()]) :: [tuple()]
   def tokenize(path, tokens \\ [])
 
   def tokenize(<<>>, tokens) do
@@ -40,7 +39,6 @@ defmodule GRPC.Server.Router.Template do
     {{:identifier, acc, []}, <<>>}
   end
 
-  @spec parse(tokens :: [tuple()], matchers()) :: matchers() | {matchers, tokens :: [tuple()]}
   def parse([], matchers) do
     Enum.reverse(matchers)
   end

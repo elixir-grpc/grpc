@@ -215,6 +215,13 @@ defmodule GRPC.Stub do
       without `:accepted_compressors`.
     * `:accepted_compressors` - tell servers accepted compressors, this can be used without `:compressor`
     * `:headers` - headers to attach to each request
+    * `:lb_policy` - load-balancing policy (`:pick_first`, `:round_robin`)
+    * `:name` - a stable identity for the connection; connecting again with
+      the same name reuses the running connection
+
+  For long-running clients, prefer declaring the connection in your
+  supervision tree with `GRPC.Client.Connection` instead of calling
+  `connect/2` at runtime.
 
   ## Examples
 
@@ -240,17 +247,11 @@ defmodule GRPC.Stub do
 
   * When using DNS or xDS targets, the connection layer periodically refreshes endpoints.
   """
-  @spec connect(String.t(), keyword()) :: {:ok, Channel.t()} | {:error, any()}
   def connect(addr, opts \\ []) when is_binary(addr) and is_list(opts) do
     Connection.connect(addr, opts)
   end
 
   @deprecated "Use connect/2 instead"
-  @spec connect(
-          String.t() | {:local, String.t()},
-          binary() | non_neg_integer(),
-          keyword()
-        ) :: {:ok, Channel.t()} | {:error, any()}
   def connect(host, port, opts) when is_binary(port) do
     connect(host, String.to_integer(port), opts)
   end
@@ -275,7 +276,6 @@ defmodule GRPC.Stub do
   @doc """
   Disconnects the adapter and frees any resources the adapter is consuming
   """
-  @spec disconnect(Channel.t()) :: {:ok, Channel.t()} | {:error, any()}
   def disconnect(%Channel{} = channel) do
     Connection.disconnect(channel)
   end
@@ -404,7 +404,6 @@ defmodule GRPC.Stub do
     * `:end_stream` - indicates it's the last one request, then the stream will be in
       half_closed state. Default is false.
   """
-  @spec send_request(GRPC.Client.Stream.t(), struct, keyword()) :: GRPC.Client.Stream.t()
   def send_request(%{__interface__: interface} = stream, request, opts \\ []) do
     interface[:send_request].(stream, request, opts)
   end
@@ -419,7 +418,6 @@ defmodule GRPC.Stub do
       iex> stream = GRPC.Stub.send_request(stream, request)
       iex> GRPC.Stub.end_stream(stream)
   """
-  @spec end_stream(GRPC.Client.Stream.t()) :: GRPC.Client.Stream.t()
   def end_stream(%{channel: channel} = stream) do
     channel.adapter.end_stream(stream)
   end
@@ -479,12 +477,6 @@ defmodule GRPC.Stub do
       iex> ex_stream |> Enum.to_list()
       []
   """
-  @spec recv(GRPC.Client.Stream.t(), keyword()) ::
-          {:ok, struct()}
-          | {:ok, struct(), map()}
-          | {:ok, Enumerable.t()}
-          | {:ok, Enumerable.t(), map()}
-          | {:error, any()}
   def recv(stream, opts \\ [])
 
   def recv(%{canceled: true}, _) do

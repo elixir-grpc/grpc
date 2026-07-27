@@ -3,15 +3,14 @@ defmodule GRPC.Client.Adapter do
   HTTP client adapter for GRPC.
   """
   alias GRPC.Client.Stream
-  alias GRPC.Channel
 
   @typedoc "Determines if the headers have finished being read."
   @type fin :: :fin | :nofin
 
-  @callback connect(channel :: Channel.t(), opts :: keyword()) ::
-              {:ok, Channel.t()} | {:error, any()}
+  @callback connect(channel :: struct(), opts :: keyword()) ::
+              {:ok, struct()} | {:error, any()}
 
-  @callback disconnect(channel :: Channel.t()) :: {:ok, Channel.t()} | {:error, any()}
+  @callback disconnect(channel :: struct()) :: {:ok, struct()} | {:error, any()}
 
   @callback send_request(stream :: Stream.t(), contents :: iodata(), opts :: keyword()) ::
               Stream.t()

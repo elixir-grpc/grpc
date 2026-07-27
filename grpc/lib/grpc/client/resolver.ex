@@ -113,34 +113,84 @@ defmodule GRPC.Client.Resolver do
 
   This function abstracts the resolution mechanism, allowing the gRPC client to obtain endpoints and service configuration regardless of the underlying target type.
   """
-  @spec resolve(String.t()) ::
-          {:ok, %{addresses: list(map()), service_config: GRPC.Client.ServiceConfig.t()}}
-          | {:error, term()}
   def resolve(target) do
     uri = URI.parse(target)
-    scheme = uri.scheme || "dns"
 
-    case scheme do
-      "dns" ->
-        DNS.resolve(target)
-
-      "ipv4" ->
-        IPv4.resolve(target)
-
-      "ipv6" ->
-        IPv6.resolve(target)
-
-      "unix" ->
-        Unix.resolve(target)
-
-      "xds" ->
-        XDS.resolve(target)
-
+    case uri.scheme do
       "localhost" ->
         IPv4.resolve("ipv4:#{target}")
 
       _ ->
-        {:error, {:unknown_scheme, scheme}}
+        case resolver_for(target) do
+          {:ok, mod} -> mod.resolve(target)
+          {:error, reason} -> {:error, reason}
+        end
+    end
+  end
+
+  @doc """
+  Initializes background re-resolution for `target`, delegating to the
+  scheme-specific resolver when it implements the optional `c:init/2`
+  callback (e.g. `GRPC.Client.Resolver.DNS` for periodic DNS refresh).
+
+  Returns `{:ok, state}` where `state` is `nil` when the scheme has no
+  background resolution. The state must be passed back to `update/2` and
+  `shutdown/1`.
+  """
+  def init(target, opts) do
+    case resolver_for(target) do
+      {:ok, mod} ->
+        if Code.ensure_loaded?(mod) and function_exported?(mod, :init, 2) do
+          case apply(mod, :init, [target, opts]) do
+            {:ok, nil} -> {:ok, nil}
+            {:ok, inner_state} -> {:ok, {mod, inner_state}}
+            {:error, reason} -> {:error, reason}
+          end
+        else
+          {:ok, nil}
+        end
+
+      {:error, _reason} ->
+        {:ok, nil}
+    end
+  end
+
+  @doc """
+  Forwards an event (e.g. `:resolve_now`) to the underlying resolver's
+  `c:update/2` callback.
+  """
+  def update({mod, inner_state}, event) do
+    {:ok, new_inner_state} = mod.update(inner_state, event)
+    {:ok, {mod, new_inner_state}}
+  end
+
+  def update(state, _event), do: {:ok, state}
+
+  @doc """
+  Shuts down background re-resolution started by `init/2`.
+  """
+  def shutdown({mod, inner_state}) do
+    if Code.ensure_loaded?(mod) and function_exported?(mod, :shutdown, 1) do
+      apply(mod, :shutdown, [inner_state])
+    else
+      :ok
+    end
+  end
+
+  def shutdown(_state), do: :ok
+
+  defp resolver_for(target) do
+    uri = URI.parse(target)
+    scheme = uri.scheme || "dns"
+
+    case scheme do
+      "dns" -> {:ok, DNS}
+      "ipv4" -> {:ok, IPv4}
+      "ipv6" -> {:ok, IPv6}
+      "unix" -> {:ok, Unix}
+      "xds" -> {:ok, XDS}
+      "localhost" -> {:ok, IPv4}
+      _ -> {:error, {:unknown_scheme, scheme}}
     end
   end
 end

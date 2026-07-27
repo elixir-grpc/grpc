@@ -11,8 +11,6 @@ defmodule GRPC.Server.Transcode do
   # 3. All other fields are passed via the URL query parameters, and the parameter name is the field path in the request message. A repeated field can be represented as multiple query parameters under the same name.
   # If HttpRule.body is "*", there is no URL query parameter, all fields are passed via URL path and HTTP request body.
   # If HttpRule.body is omitted, there is no HTTP request body, all fields are passed via URL path and URL query parameters.
-  @spec map_request(t(), map(), map(), String.t(), module()) ::
-          {:ok, struct()} | {:error, term()}
   def map_request(
         %{body: ""},
         _body_request,
@@ -65,7 +63,6 @@ defmodule GRPC.Server.Transcode do
   defp map_request_body(%{body: field}, request_body),
     do: %{field => request_body}
 
-  @spec map_response_body(t() | map(), map()) :: map()
   def map_response_body(%{response_body: ""}, response_body), do: response_body
 
   def map_response_body(%{response_body: field}, response_body) do
@@ -73,7 +70,6 @@ defmodule GRPC.Server.Transcode do
     Map.get(response_body, key)
   end
 
-  @spec map_path_bindings(map()) :: map()
   def map_path_bindings(bindings) when bindings == %{}, do: bindings
 
   def map_path_bindings(bindings) do

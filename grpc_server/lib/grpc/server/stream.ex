@@ -118,7 +118,6 @@ defmodule GRPC.Server.Stream do
   Milliseconds left before the inbound deadline, or `:infinity` if the caller set none.
   Clamped at 0 so an already-expired deadline never returns a negative value.
   """
-  @spec remaining_ms(t()) :: non_neg_integer() | :infinity
   def remaining_ms(%__MODULE__{deadline: nil}), do: :infinity
 
   def remaining_ms(%__MODULE__{deadline: deadline}),

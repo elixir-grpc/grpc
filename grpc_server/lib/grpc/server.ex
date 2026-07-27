@@ -232,8 +232,6 @@ defmodule GRPC.Server do
   end
 
   @doc false
-  @spec call(atom(), GRPC.Server.Stream.t(), tuple(), atom()) ::
-          {:ok, GRPC.Server.Stream.t(), struct()} | {:ok, struct()}
   def call(
         _service_mod,
         stream,
@@ -420,8 +418,6 @@ defmodule GRPC.Server do
   #     * `:status_handler` - adds a status handler that could be listening on HTTP/1, if necessary.
   #                           It should follow the format defined by cowboy_router:compile/3
   @doc false
-  @spec start(module() | [module()], non_neg_integer(), Keyword.t()) ::
-          {atom(), any(), non_neg_integer()} | {:error, any()}
   def start(servers, port, opts \\ []) do
     adapter = Keyword.get(opts, :adapter) || GRPC.Server.Adapters.Cowboy
     servers = GRPC.Server.servers_to_map(servers)
@@ -429,8 +425,6 @@ defmodule GRPC.Server do
   end
 
   @doc false
-  @spec start_endpoint(atom(), non_neg_integer(), Keyword.t()) ::
-          {atom(), any(), non_neg_integer()}
   def start_endpoint(endpoint, port, opts \\ []) do
     opts =
       Keyword.validate!(opts,
@@ -456,7 +450,6 @@ defmodule GRPC.Server do
   #
   #   * `:adapter` - use a custom adapter instead of default `GRPC.Server.Adapters.Cowboy`
   @doc false
-  @spec stop(module() | [module()], Keyword.t()) :: any()
   def stop(servers, opts \\ []) do
     opts = Keyword.validate!(opts, adapter: GRPC.Server.Adapters.Cowboy)
     adapter = opts[:adapter]
@@ -465,7 +458,6 @@ defmodule GRPC.Server do
   end
 
   @doc false
-  @spec stop_endpoint(atom(), Keyword.t()) :: any()
   def stop_endpoint(endpoint, opts \\ []) do
     opts = Keyword.validate!(opts, adapter: GRPC.Server.Adapters.Cowboy)
     adapter = opts[:adapter]
@@ -481,7 +473,6 @@ defmodule GRPC.Server do
 
       iex> GRPC.Server.send_reply(stream, reply)
   """
-  @spec send_reply(GRPC.Server.Stream.t(), struct()) :: GRPC.Server.Stream.t()
   def send_reply(
         %{__interface__: interface} = stream,
         reply,
@@ -495,7 +486,6 @@ defmodule GRPC.Server do
 
   You can send headers only once, before that you can set headers using `set_headers/2`.
   """
-  @spec send_headers(GRPC.Server.Stream.t(), map()) :: GRPC.Server.Stream.t()
   def send_headers(%{adapter: adapter} = stream, headers) do
     adapter.send_headers(stream.payload, headers)
     stream
@@ -506,7 +496,6 @@ defmodule GRPC.Server do
 
   You can set headers more than once.
   """
-  @spec set_headers(GRPC.Server.Stream.t(), map()) :: GRPC.Server.Stream.t()
   def set_headers(%{adapter: adapter} = stream, headers) do
     adapter.set_headers(stream.payload, headers)
     stream
@@ -515,7 +504,6 @@ defmodule GRPC.Server do
   @doc """
   Set custom trailers, which will be sent in the end.
   """
-  @spec set_trailers(GRPC.Server.Stream.t(), map()) :: GRPC.Server.Stream.t()
   def set_trailers(%{adapter: adapter} = stream, trailers) do
     adapter.set_resp_trailers(stream.payload, trailers)
     stream
@@ -525,7 +513,6 @@ defmodule GRPC.Server do
   Set compressor to compress responses. An accepted compressor will be set if clients use one,
   even if `set_compressor` is not called. But this can be called to override the chosen.
   """
-  @spec set_compressor(GRPC.Server.Stream.t(), module()) :: GRPC.Server.Stream.t()
   def set_compressor(%{adapter: adapter} = stream, compressor) do
     adapter.set_compressor(stream.payload, compressor)
     stream
@@ -538,7 +525,6 @@ defmodule GRPC.Server do
   end
 
   @doc false
-  @spec servers_to_map(module() | [module()]) :: %{String.t() => [module()]}
   def servers_to_map(servers) do
     Enum.reduce(List.wrap(servers), %{}, fn s, acc ->
       Map.put(acc, s.__meta__(:service).__meta__(:name), s)

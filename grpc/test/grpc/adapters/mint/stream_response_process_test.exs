@@ -341,6 +341,17 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
     end
   end
 
+  describe "consume/3 and done/1 - process no longer alive" do
+    test "return an error instead of exiting the caller" do
+      pid = spawn(fn -> :ok end)
+      Process.exit(pid, :kill)
+      refute Process.alive?(pid)
+
+      assert {:error, :noproc} == StreamResponseProcess.consume(pid, :data, <<0>>)
+      assert {:error, :noproc} == StreamResponseProcess.done(pid)
+    end
+  end
+
   describe "build_stream/1" do
     setup do
       {:ok, pid} = StreamResponseProcess.start_link(build(:client_stream), true)

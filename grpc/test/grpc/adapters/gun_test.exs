@@ -3,14 +3,19 @@ defmodule GRPC.Client.Adapters.GunTest do
 
   alias GRPC.Client.Adapters.Gun
 
+  defmodule Endpoint do
+    use GRPC.Endpoint
+    run(FeatureServer)
+  end
+
   setup do
     server_credential = build(:credential)
 
     {:ok, _, port} =
-      GRPC.Server.start(FeatureServer, 0, adapter_opts: [cred: server_credential])
+      GRPC.Server.start_endpoint(Endpoint, 0, adapter_opts: [cred: server_credential])
 
     on_exit(fn ->
-      :ok = GRPC.Server.stop(FeatureServer)
+      :ok = GRPC.Server.stop_endpoint(Endpoint)
     end)
 
     %{
@@ -84,6 +89,7 @@ defmodule GRPC.Client.Adapters.GunTest do
       # Ensure that changing one of the options breaks things
       assert {:error, :timeout} ==
                Gun.connect(channel,
+                 await_timeout: 100,
                  transport_opts: [
                    certfile: credential.ssl[:certfile] <> "invalidsuffix",
                    verify: :verify_peer,

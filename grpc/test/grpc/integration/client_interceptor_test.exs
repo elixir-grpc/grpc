@@ -101,7 +101,7 @@ defmodule GRPC.Integration.ClientInterceptorTest do
       ])
 
       run_endpoint(HelloEndpoint, fn port ->
-        delay = floor(:rand.uniform() * 500) + 500
+        delay = 10
 
         {:ok, channel} =
           GRPC.Stub.connect("localhost:#{port}",
@@ -125,7 +125,9 @@ defmodule GRPC.Integration.ClientInterceptorTest do
 
         assert_received {^exception_client_name, measurements, metadata}
         assert %{duration: duration} = measurements
-        assert duration > delay
+
+        assert System.convert_time_unit(duration, :native, :millisecond) >= delay
+
         assert is_map(metadata)
         assert is_list(Map.get(metadata, :stacktrace, []))
       end)

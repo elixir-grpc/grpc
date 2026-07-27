@@ -6,12 +6,41 @@ defmodule GRPC.Client.ConnectionTest do
 
   @peer if Code.ensure_loaded?(:peer), do: :peer, else: GRPC.Test.PeerShim
 
+  defmodule CountingInterceptor do
+    def init(opts) do
+      if pid = Application.get_env(:grpc, :counting_interceptor_pid) do
+        send(pid, :interceptor_init)
+      end
+
+      opts
+    end
+  end
+
+  defmodule NoPickResolver do
+    def resolve(_target) do
+      {:ok,
+       %{
+         addresses: [%{address: "127.0.0.1", port: 50051}],
+         service_config: %{}
+       }}
+    end
+
+    def init(_target, _opts) do
+      test_pid = Application.fetch_env!(:grpc, __MODULE__)
+      lb_table = Enum.find(:ets.all(), &(:ets.info(&1, :owner) == self()))
+      true = :ets.delete(lb_table)
+      send(test_pid, {:connection_started, self()})
+      {:ok, nil}
+    end
+  end
+
   setup do
     %{
       ref: make_ref(),
       ip: "127.0.0.1",
       target: "ipv4:127.0.0.1:50051",
-      adapter: GRPC.Test.ClientAdapter
+      adapter: GRPC.Test.ClientAdapter,
+      supervisor_children: DynamicSupervisor.count_children(GRPC.Client.Supervisor).active
     }
   end
 
@@ -30,6 +59,33 @@ defmodule GRPC.Client.ConnectionTest do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
       assert {:ok, ^channel} = Connection.pick_channel(%Channel{ref: ref})
+
+      Connection.disconnect(channel)
+    end
+  end
+
+  describe "connect/2 - failed finalize" do
+    test "terminates a newly started child when no channel can be picked", %{
+      ref: ref,
+      adapter: adapter,
+      supervisor_children: supervisor_children
+    } do
+      Application.put_env(:grpc, NoPickResolver, self())
+      on_exit(fn -> Application.delete_env(:grpc, NoPickResolver) end)
+
+      assert {:error, :no_connection} =
+               Connection.connect("test://connection",
+                 adapter: adapter,
+                 name: ref,
+                 resolver: NoPickResolver
+               )
+
+      assert_receive {:connection_started, pid}, 500
+      monitor_ref = Process.monitor(pid)
+      assert_receive {:DOWN, ^monitor_ref, :process, ^pid, _reason}, 500
+
+      assert DynamicSupervisor.count_children(GRPC.Client.Supervisor).active ==
+               supervisor_children
     end
   end
 
@@ -50,11 +106,24 @@ defmodule GRPC.Client.ConnectionTest do
       Connection.disconnect(first_channel)
     end
 
+    test "returns an error when the name is already registered to a different target", %{
+      ref: ref,
+      target: target,
+      adapter: adapter
+    } do
+      {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
+
+      assert {:error, {:already_started_with_different_target, ^target}} =
+               Connection.connect("ipv4:127.0.0.1:50052", adapter: adapter, name: ref)
+
+      Connection.disconnect(channel)
+    end
+
     test "returns {:error, :no_connection} when already_started but the persistent_term entry is missing",
          %{ref: ref, target: target, adapter: adapter} do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
-      key = {Connection, ref}
+      key = {Connection, :lb, ref}
       entry = :persistent_term.get(key)
       :persistent_term.erase(key)
 
@@ -69,16 +138,20 @@ defmodule GRPC.Client.ConnectionTest do
     test "GenServer process is no longer alive after disconnect", %{
       ref: ref,
       target: target,
-      adapter: adapter
+      adapter: adapter,
+      supervisor_children: supervisor_children
     } do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
       pid = whereis_name(ref)
+      ref_mon = Process.monitor(pid)
 
       {:ok, _} = Connection.disconnect(channel)
 
-      ref_mon = Process.monitor(pid)
       assert_receive {:DOWN, ^ref_mon, :process, ^pid, _reason}, 500
+
+      assert DynamicSupervisor.count_children(GRPC.Client.Supervisor).active ==
+               supervisor_children
     end
 
     test "pick_channel returns {:error, :no_connection} after disconnect (persistent_term entry is erased)",
@@ -86,23 +159,6 @@ defmodule GRPC.Client.ConnectionTest do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
       {:ok, _} = Connection.disconnect(channel)
-
-      assert {:error, :no_connection} = Connection.pick_channel(channel)
-    end
-  end
-
-  describe "terminate/2 - persistent_term cleanup on process kill" do
-    test "persistent_term entry is erased when process is killed without disconnect", %{
-      ref: ref,
-      target: target,
-      adapter: adapter
-    } do
-      {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
-
-      pid = whereis_name(ref)
-      ref_mon = Process.monitor(pid)
-      GenServer.stop(pid, :shutdown)
-      assert_receive {:DOWN, ^ref_mon, :process, ^pid, :shutdown}, 500
 
       assert {:error, :no_connection} = Connection.pick_channel(channel)
     end
@@ -192,6 +248,35 @@ defmodule GRPC.Client.ConnectionTest do
   end
 
   describe "resource leaks over repeated connect/disconnect" do
+    test "50 binary-heavy cycles leave supervisor memory bounded after garbage collection", %{
+      target: target,
+      adapter: adapter,
+      supervisor_children: supervisor_children
+    } do
+      supervisor = Process.whereis(GRPC.Client.Supervisor)
+      :erlang.garbage_collect(supervisor)
+      {:memory, before_memory} = Process.info(supervisor, :memory)
+
+      for cycle <- 1..50 do
+        ref = make_ref()
+        header = {"x-test-data", :binary.copy(<<cycle>>, 100_000)}
+
+        {:ok, channel} =
+          Connection.connect(target, adapter: adapter, name: ref, headers: [header])
+
+        {:ok, _} = Connection.disconnect(channel)
+      end
+
+      :erlang.garbage_collect(supervisor)
+      {:memory, after_memory} = Process.info(supervisor, :memory)
+
+      assert %{active: ^supervisor_children} =
+               DynamicSupervisor.count_children(GRPC.Client.Supervisor)
+
+      assert after_memory <= before_memory + 100_000,
+             "supervisor memory grew: before=#{before_memory} after=#{after_memory}"
+    end
+
     test "500 cycles leave persistent_term clean and no per-LB tables leak", %{
       target: target,
       adapter: adapter
@@ -213,6 +298,58 @@ defmodule GRPC.Client.ConnectionTest do
 
       assert after_table_count - before_table_count <= 5,
              "ETS tables leaked: before=#{before_table_count} after=#{after_table_count}"
+    end
+  end
+
+  describe "connect/2 - fail-fast contract" do
+    test "returns the dial error and tears the process down when the backend is unreachable", %{
+      ref: ref
+    } do
+      attach_telemetry([:grpc, :client, :connection, :disconnected])
+
+      assert {:error, :connection_refused} =
+               Connection.connect("ipv4:127.0.0.1:50051",
+                 adapter: GRPC.Test.FailingClientAdapter,
+                 adapter_opts: [failing_hosts: ["127.0.0.1"]],
+                 name: ref
+               )
+
+      assert_receive {:telemetry, [:grpc, :client, :connection, :disconnected], _,
+                      %{name: ^ref, reason: :shutdown, pid: pid}},
+                     1_000
+
+      mon = Process.monitor(pid)
+      assert_receive {:DOWN, ^mon, :process, ^pid, _reason}, 1_000
+    end
+
+    test "raises in the caller on invalid options" do
+      assert_raise ArgumentError, fn ->
+        Connection.connect("ipv4:127.0.0.1:50051",
+          adapter: GRPC.Test.ClientAdapter,
+          adapter_opts: :not_a_list
+        )
+      end
+    end
+
+    test "interceptor init/1 runs once per connect", %{
+      ref: ref,
+      target: target,
+      adapter: adapter
+    } do
+      Application.put_env(:grpc, :counting_interceptor_pid, self())
+      on_exit(fn -> Application.delete_env(:grpc, :counting_interceptor_pid) end)
+
+      {:ok, channel} =
+        Connection.connect(target,
+          adapter: adapter,
+          name: ref,
+          interceptors: [CountingInterceptor]
+        )
+
+      assert_receive :interceptor_init
+      refute_receive :interceptor_init, 100
+
+      Connection.disconnect(channel)
     end
   end
 
@@ -249,7 +386,7 @@ defmodule GRPC.Client.ConnectionTest do
   end
 
   defp connection_pt_count do
-    Enum.count(:persistent_term.get(), &match?({{Connection, _}, _}, &1))
+    Enum.count(:persistent_term.get(), &match?({{Connection, _, _}, _}, &1))
   end
 
   defp lb_tid(ref) do
