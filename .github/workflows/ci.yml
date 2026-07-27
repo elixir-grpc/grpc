@@ -61,8 +61,9 @@ jobs:
         run: mix setup 1>/dev/null
       - name: Compile with warnings as errors
         run: MIX_ENV=test mix compile --warnings-as-errors
+      # TEMP: remove after flake hunt (target: 2026-08-10). Amplifies CI cost ×20.
       - name: Run Tests
-        run: mix test --warnings-as-errors
+        run: mix test --warnings-as-errors --repeat-until-failure 20
       - name: Run Warning Tests
         run: mix test --only warning_test
       - name: Run :mint optional dependency test
