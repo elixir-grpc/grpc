@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.0.3 (2026-07-27)
 
 ### Enhancements
 
@@ -15,6 +15,9 @@
 
 ### Bug Fixes
 
+  * Fixed a client supervisor child leak on failed and closed connections in `GRPC.Client.Connection`.
+  * Fixed Mint adapter connection stability when a stream response process exits unexpectedly, preventing the whole connection process from crashing.
+  * Fixed a Mint adapter `BadMapError` in `State.stream_response_pid/2`.
   * Removed the `GRPC.Channel.t()` typespec. It declared `host`/`port` non-nil and `interceptors` as `[]`, but a virtual channel (built with `host: nil`/`port: nil` and a non-empty `interceptors` list) violated the type. Combined with `pick_channel/2`'s `@spec`, this made Dialyzer infer `connect/2` could only return `{:error, _}`, spuriously flagging `{:ok, channel}` matches in downstream code as unreachable. References to the type are now `struct()`.
 
 ## v1.0.0 (2026-06-15)
