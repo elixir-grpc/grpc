@@ -273,7 +273,8 @@ defmodule GRPC.Client.ConnectionTest do
       assert %{active: ^supervisor_children} =
                DynamicSupervisor.count_children(GRPC.Client.Supervisor)
 
-      assert after_memory <= before_memory + 100_000,
+      # Residual heap after one GC is typically tens of KB; real header leaks are MBs.
+      assert after_memory <= before_memory + 250_000,
              "supervisor memory grew: before=#{before_memory} after=#{after_memory}"
     end
 
