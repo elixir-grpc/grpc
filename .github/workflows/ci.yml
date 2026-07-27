@@ -21,12 +21,10 @@ jobs:
           elixir-version: 1.20.x
       - name: Retrieve dependencies cache
         uses: actions/cache@v4
-        id: mix-cache  # id to use in retrieve action
+        id: mix-deps-cache
         with:
           path: deps
-          key: >-
-            v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{
-            hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
+          key: v2-28.x-1.20.x-deps-${{ hashFiles('mix.lock') }}
       - name: Install Dependencies
         run: mix deps.get 1>/dev/null
       - name: Check format
@@ -51,31 +49,55 @@ jobs:
           elixir-version: ${{matrix.elixir}}
       - name: Retrieve dependencies cache
         uses: actions/cache@v4
-        id: mix-cache  # id to use in retrieve action
+        id: mix-deps-cache
         with:
-          path: deps
+          path: |
+            grpc/deps
+            grpc_core/deps
+            grpc_server/deps
           key: >-
-            v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{
-            hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
+            v2-${{ matrix.otp }}-${{ matrix.elixir }}-deps-${{
+            hashFiles('grpc/mix.lock', 'grpc_core/mix.lock', 'grpc_server/mix.lock') }}
+      - name: Retrieve build cache
+        uses: actions/cache@v4
+        id: mix-build-cache
+        with:
+          path: |
+            grpc/_build
+            grpc_core/_build
+            grpc_server/_build
+          key: >-
+            v2-${{ matrix.otp }}-${{ matrix.elixir }}-build-${{
+            hashFiles('grpc/mix.lock', 'grpc_core/mix.lock', 'grpc_server/mix.lock') }}
       - name: Install Dependencies
         run: mix setup 1>/dev/null
       - name: Compile with warnings as errors
         run: MIX_ENV=test mix compile --warnings-as-errors
-      # TEMP: --repeat-until-failure needs Elixir ≥1.18; drop the branch after flake hunt (2026-08-10).
       - name: Run Tests
-        run: |
-          if [[ "${{ matrix.elixir }}" == "1.20.x" ]]; then
-            mix test --warnings-as-errors --repeat-until-failure 20
-          else
-            mix test --warnings-as-errors
-          fi
+        run: mix test --warnings-as-errors
       - name: Run Warning Tests
         run: mix test --only warning_test
+      - name: Retrieve mint install cache
+        uses: actions/cache@v4
+        id: mix-mint-cache
+        with:
+          path: ${{ runner.temp }}/mix-install-mint
+          key: >-
+            v2-${{ matrix.otp }}-${{ matrix.elixir }}-adapter-mint-${{
+            hashFiles('grpc/mix.lock', 'grpc_core/mix.lock', 'grpc_server/mix.lock') }}
       - name: Run :mint optional dependency test
-        run: elixir script/adapter_test.exs mint
+        run: MIX_INSTALL_DIR="${{ runner.temp }}/mix-install-mint" elixir script/adapter_test.exs mint
         working-directory: ./grpc
+      - name: Retrieve gun install cache
+        uses: actions/cache@v4
+        id: mix-gun-cache
+        with:
+          path: ${{ runner.temp }}/mix-install-gun
+          key: >-
+            v2-${{ matrix.otp }}-${{ matrix.elixir }}-adapter-gun-${{
+            hashFiles('grpc/mix.lock', 'grpc_core/mix.lock', 'grpc_server/mix.lock') }}
       - name: Run :gun optional dependency test
-        run: elixir script/adapter_test.exs gun
+        run: MIX_INSTALL_DIR="${{ runner.temp }}/mix-install-gun" elixir script/adapter_test.exs gun
         working-directory: ./grpc
   interop-tests:
     runs-on: ubuntu-latest
@@ -90,12 +112,16 @@ jobs:
           elixir-version: 1.20.x
       - name: Retrieve dependencies cache
         uses: actions/cache@v4
-        id: mix-cache  # id to use in retrieve action
+        id: mix-deps-cache
         with:
-          path: deps
-          key: >-
-            v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{
-            hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
+          path: interop/deps
+          key: v2-28.x-1.20.x-interop-deps-${{ hashFiles('interop/mix.lock') }}
+      - name: Retrieve build cache
+        uses: actions/cache@v4
+        id: mix-build-cache
+        with:
+          path: interop/_build
+          key: v2-28.x-1.20.x-interop-build-${{ hashFiles('interop/mix.lock') }}
       - name: Install Dependencies
         run: mix deps.get 1>/dev/null
         working-directory: ./interop
@@ -124,12 +150,20 @@ jobs:
           elixir-version: ${{ matrix.elixir }}
       - name: Retrieve dependencies cache
         uses: actions/cache@v4
-        id: mix-cache  # id to use in retrieve action
+        id: mix-deps-cache
         with:
-          path: deps
+          path: interop/deps
           key: >-
-            v1-${{ matrix.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-mix-${{
-            hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
+            v2-${{ matrix.otp }}-${{ matrix.elixir }}-interop-deps-${{
+            hashFiles('interop/mix.lock') }}
+      - name: Retrieve build cache
+        uses: actions/cache@v4
+        id: mix-build-cache
+        with:
+          path: interop/_build
+          key: >-
+            v2-${{ matrix.otp }}-${{ matrix.elixir }}-interop-build-${{
+            hashFiles('interop/mix.lock') }}
       - name: Install Dependencies
         run: mix deps.get 1>/dev/null
         working-directory: ./interop
