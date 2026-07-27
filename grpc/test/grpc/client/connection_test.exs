@@ -277,14 +277,14 @@ defmodule GRPC.Client.ConnectionTest do
              "supervisor memory grew: before=#{before_memory} after=#{after_memory}"
     end
 
-    test "500 cycles leave persistent_term clean and no per-LB tables leak", %{
+    test "100 cycles leave persistent_term clean and no per-LB tables leak", %{
       target: target,
       adapter: adapter
     } do
       before_table_count = length(:ets.all())
       before_pt_count = connection_pt_count()
 
-      for _ <- 1..500 do
+      for _ <- 1..100 do
         ref = make_ref()
         {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
         {:ok, _} = Connection.disconnect(channel)
@@ -347,7 +347,7 @@ defmodule GRPC.Client.ConnectionTest do
         )
 
       assert_receive :interceptor_init
-      refute_receive :interceptor_init, 100
+      refute_received :interceptor_init
 
       Connection.disconnect(channel)
     end

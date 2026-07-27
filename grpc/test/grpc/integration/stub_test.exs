@@ -13,7 +13,7 @@ defmodule GRPC.Integration.StubTest do
     use GRPC.Server, service: Helloworld.Greeter.Service
 
     def say_hello(_req, _stream) do
-      Process.sleep(1000)
+      Process.sleep(80)
     end
   end
 
@@ -77,6 +77,8 @@ defmodule GRPC.Integration.StubTest do
   end
 
   test "use a channel name to send a message" do
+    on_exit(fn -> GRPC.Client.Connection.disconnect(:my_channel) end)
+
     run_server(HelloServer, fn port ->
       {:ok, _channel} =
         GRPC.Client.Connection.connect("localhost:#{port}",
@@ -147,7 +149,7 @@ defmodule GRPC.Integration.StubTest do
               %GRPC.RPCError{
                 message: "Deadline expired",
                 status: GRPC.Status.deadline_exceeded()
-              }} == channel |> Helloworld.Greeter.Stub.say_hello(req, timeout: 500)
+              }} == channel |> Helloworld.Greeter.Stub.say_hello(req, timeout: 50)
     end)
   end
 end

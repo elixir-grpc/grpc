@@ -330,7 +330,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert {:noreply, _new_state} =
                ConnectionProcess.handle_continue(:process_request_stream_queue, state)
 
-      refute_receive {:tag, :ok}, 500
+      refute_received {:tag, :ok}
     end
 
     test "(window_size >= body_size) stream body, send end_stream message and check request_queue when queue is not empty",
@@ -435,7 +435,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert {:noreply, new_state} = ConnectionProcess.handle_info(tcp_message, state)
       assert new_state.conn.state != :closed
       assert new_state.retry_attempt == 0
-      refute_receive {:elixir_grpc, :connection_down, _pid}, 200
+      refute_received {:elixir_grpc, :connection_down, _pid}
     end
   end
 

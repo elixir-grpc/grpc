@@ -52,12 +52,16 @@ defmodule GRPC.Client.Adapters.MintTest do
       channel = build(:channel, adapter: Mint, port: port, host: "localhost")
 
       assert {:ok, result} = Mint.connect(channel, [])
-      # wait for settings to be pushed
-      Process.sleep(50)
       state = :sys.get_state(result.adapter_payload.conn_pid)
 
+      # Mint mirrors advertised client_settings onto conn at connect time.
+      assert state.connect_opts[:client_settings] == [
+               initial_window_size: 8_000_000,
+               max_frame_size: 8_000_000
+             ]
+
       assert %{initial_window_size: 8_000_000, max_frame_size: 8_000_000} =
-               Map.get(state.conn, :client_settings)
+               Map.take(state.conn.client_settings, [:initial_window_size, :max_frame_size])
     end
 
     test "allow client settings to be passed", %{port: port} do
@@ -71,12 +75,15 @@ defmodule GRPC.Client.Adapters.MintTest do
                  ]
                )
 
-      # wait for settings to be pushed
-      Process.sleep(50)
       state = :sys.get_state(result.adapter_payload.conn_pid)
 
+      assert state.connect_opts[:client_settings] == [
+               initial_window_size: 50_000,
+               max_frame_size: 50_000
+             ]
+
       assert %{initial_window_size: 50_000, max_frame_size: 50_000} =
-               Map.get(state.conn, :client_settings)
+               Map.take(state.conn.client_settings, [:initial_window_size, :max_frame_size])
     end
   end
 
