@@ -162,6 +162,7 @@ defmodule GRPC.Client.Connection do
   @default_max_resolve_interval 300_000
   @default_min_resolve_interval 5_000
   @default_connect_timeout 15_000
+  @default_flap_window 10_000
   @backoff_initial 100
   @backoff_multiplier 1.6
   @backoff_max 120_000
@@ -262,6 +263,9 @@ defmodule GRPC.Client.Connection do
     * `:headers` – default metadata headers
     * `:connect_timeout` – how long `connect/2` waits for the first
       establishment attempt in ms (default: 15000)
+    * `:flap_window` – a connection that dies within this many ms of
+      establishing counts as a flap, and consecutive flaps back the redial
+      off exponentially instead of redialing immediately (default: 10000)
     * `:resolve_interval` – DNS re-resolution interval in ms (default: 30000)
     * `:max_resolve_interval` – backoff cap in ms (default: 300000)
     * `:min_resolve_interval` – rate-limit floor in ms (default: 5000)
@@ -658,10 +662,6 @@ defmodule GRPC.Client.Connection do
     {:noreply, state}
   end
 
-  # A connection that dies within this window of establishing counts as a
-  # flap, and each consecutive flap backs the redial off further.
-  @flap_window 10_000
-
   defp handle_channel_down(key, pid, reason, state) do
     # Adapters that link their transport (Mint) deliver both an :EXIT and a
     # monitor :DOWN for the same death; both are enqueued at exit time, so
@@ -681,7 +681,10 @@ defmodule GRPC.Client.Connection do
       # boot retry loop instead of dialing here, so this handler stays
       # non-blocking. A stable connection redials immediately; a flapping one
       # backs off.
-      flaps = if uptime_ms(state) < @flap_window, do: state.flaps + 1, else: 0
+      # A connection that dies within this window of establishing counts as a
+      # flap, and each consecutive flap backs the redial off further.
+      flap_window = Keyword.get(state.connect_opts, :flap_window, @default_flap_window)
+      flaps = if uptime_ms(state) < flap_window, do: state.flaps + 1, else: 0
       delay = if flaps == 0, do: 0, else: backoff_delay(flaps)
       Process.send_after(self(), :retry_establish, delay)
 
@@ -1193,6 +1196,7 @@ defmodule GRPC.Client.Connection do
         headers: [],
         lb_policy: nil,
         connect_timeout: @default_connect_timeout,
+        flap_window: @default_flap_window,
         resolver: GRPC.Client.Resolver,
         resolve_interval: @default_resolve_interval,
         max_resolve_interval: @default_max_resolve_interval,
