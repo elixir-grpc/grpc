@@ -278,6 +278,13 @@ defmodule GRPC.Stub do
   #    * Client streaming. A `GRPC.Client.Stream`
   #    * Server streaming. `{:ok, Enumerable.t} | {:ok, Enumerable.t, trailers_map} | {:error, error}`
   #
+  #  Any call made through a named connection's virtual channel fails with
+  #  UNAVAILABLE while the connection has no healthy underlying channel to
+  #  resolve to: `{:error, %GRPC.RPCError{status: 14}}` for unary and
+  #  server-streaming calls, raised as `GRPC.RPCError` for request-streaming
+  #  calls (their return value is a stream). Both flow through the channel's
+  #  interceptors and client telemetry.
+  #
   #  Options
   #
   #    * `:timeout` - request timeout. Default is 10s for unary calls and `:infinity` for
@@ -290,59 +297,116 @@ defmodule GRPC.Stub do
   def call(_service_mod, rpc, %{channel: channel} = stream, request, opts) do
     {_, {req_mod, req_stream}, {res_mod, response_stream}, _rpc_options} = rpc
 
-    ch =
-      case Connection.pick_channel(channel, opts) do
-        {:ok, %Channel{adapter_payload: adapter_payload} = ch} when is_map(adapter_payload) ->
-          conn_pid = Map.get(adapter_payload, :conn_pid)
+    case resolve_channel(channel, opts) do
+      {:error, %GRPC.RPCError{} = error} ->
+        unavailable_result(error, stream, request, req_mod, res_mod, req_stream)
 
-          if is_pid(conn_pid) and Process.alive?(conn_pid) do
-            ch
+      {:ok, ch} ->
+        stream = %{stream | channel: ch, request_mod: req_mod, response_mod: res_mod}
+
+        opts =
+          if req_stream || response_stream do
+            parse_req_opts([{:timeout, :infinity} | opts])
           else
-            Logger.warning(
-              "The connection process #{inspect(conn_pid)} is not alive, " <>
-                "please create a new channel via GRPC.Stub.connect/2"
-            )
-
-            channel
+            parse_req_opts([{:timeout, @default_timeout} | opts])
           end
 
-        _ ->
-          # fallback to the channel in the stream
-          channel
-      end
+        compressor = Keyword.get(opts, :compressor, ch.compressor)
+        accepted_compressors = Keyword.get(opts, :accepted_compressors, ch.accepted_compressors)
 
-    stream = %{stream | channel: ch, request_mod: req_mod, response_mod: res_mod}
+        if not is_list(accepted_compressors) do
+          raise ArgumentError, "accepted_compressors is not a list"
+        end
 
-    opts =
-      if req_stream || response_stream do
-        parse_req_opts([{:timeout, :infinity} | opts])
-      else
-        parse_req_opts([{:timeout, @default_timeout} | opts])
-      end
+        accepted_compressors =
+          if compressor do
+            Enum.uniq([compressor | accepted_compressors])
+          else
+            accepted_compressors
+          end
 
-    compressor = Keyword.get(opts, :compressor, ch.compressor)
-    accepted_compressors = Keyword.get(opts, :accepted_compressors, ch.accepted_compressors)
+        stream = %{
+          stream
+          | codec: Keyword.get(opts, :codec, ch.codec),
+            compressor: compressor,
+            accepted_compressors: accepted_compressors
+        }
 
-    if not is_list(accepted_compressors) do
-      raise ArgumentError, "accepted_compressors is not a list"
+        GRPC.Telemetry.client_span(stream, request, fn ->
+          do_call(req_stream, stream, request, opts)
+        end)
     end
+  end
 
-    accepted_compressors =
-      if compressor do
-        Enum.uniq([compressor | accepted_compressors])
-      else
-        accepted_compressors
-      end
+  # Bounded re-picks let rotating policies advance past a dead entry during
+  # the window before the connection process rebalances it away.
+  @resolve_attempts 3
 
-    stream = %{
-      stream
-      | codec: Keyword.get(opts, :codec, ch.codec),
-        compressor: compressor,
-        accepted_compressors: accepted_compressors
-    }
+  defp resolve_channel(channel, opts), do: resolve_channel(channel, opts, @resolve_attempts)
+
+  defp resolve_channel(channel, _opts, 0), do: fallback_channel(channel)
+
+  defp resolve_channel(channel, opts, attempts) do
+    case Connection.pick_channel(channel, opts) do
+      {:ok, %Channel{adapter_payload: adapter_payload} = ch} when is_map(adapter_payload) ->
+        conn_pid = Map.get(adapter_payload, :conn_pid)
+
+        if is_pid(conn_pid) and Process.alive?(conn_pid) do
+          {:ok, ch}
+        else
+          Logger.warning(
+            "The connection process #{inspect(conn_pid)} is not alive, picking another channel"
+          )
+
+          resolve_channel(channel, opts, attempts - 1)
+        end
+
+      _ ->
+        fallback_channel(channel)
+    end
+  end
+
+  # A channel built by connect/2 carries its own adapter_payload and can serve
+  # the RPC directly. The virtual handle of a named connection has none: with
+  # no healthy underlying connection to resolve to, fail with UNAVAILABLE
+  # instead of handing the adapter a channel it cannot use.
+  defp fallback_channel(%Channel{adapter_payload: payload} = channel) when is_map(payload) do
+    {:ok, channel}
+  end
+
+  defp fallback_channel(%Channel{ref: ref}) do
+    {:error,
+     GRPC.RPCError.exception(
+       GRPC.Status.unavailable(),
+       "no healthy connection available for #{inspect(ref)}"
+     )}
+  end
+
+  # Fail without a usable channel while preserving the calling contract: the
+  # failure still flows through the interceptor chain and client_span
+  # telemetry, and request-streaming calls raise — their return value is a
+  # `GRPC.Client.Stream`, so an error tuple cannot express failure to them.
+  defp unavailable_result(
+         error,
+         %{channel: channel} = stream,
+         request,
+         req_mod,
+         res_mod,
+         req_stream
+       ) do
+    stream = %{stream | request_mod: req_mod, response_mod: res_mod}
 
     GRPC.Telemetry.client_span(stream, request, fn ->
-      do_call(req_stream, stream, request, opts)
+      last = fn _stream, _request -> {:error, error} end
+
+      next =
+        Enum.reduce(channel.interceptors, last, fn {interceptor, opts}, acc ->
+          fn s, r -> interceptor.call(s, r, acc, opts) end
+        end)
+
+      result = next.(stream, request)
+
+      if req_stream, do: raise(error), else: result
     end)
   end
 
