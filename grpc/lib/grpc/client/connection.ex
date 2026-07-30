@@ -580,7 +580,7 @@ defmodule GRPC.Client.Connection do
     # is processed, so they never match.
     case down_channel_key(state.real_channels, pid) do
       nil -> handle_unrelated_exit(pid, reason, state)
-      key -> handle_channel_down(key, reason, state)
+      key -> handle_channel_down(key, pid, reason, state)
     end
   end
 
@@ -600,7 +600,7 @@ defmodule GRPC.Client.Connection do
             {:noreply, state}
 
           key ->
-            handle_channel_down(key, reason, state)
+            handle_channel_down(key, pid, reason, state)
         end
 
       {dropped, remaining} ->
@@ -662,7 +662,13 @@ defmodule GRPC.Client.Connection do
   # flap, and each consecutive flap backs the redial off further.
   @flap_window 10_000
 
-  defp handle_channel_down(key, reason, state) do
+  defp handle_channel_down(key, pid, reason, state) do
+    # Adapters that link their transport (Mint) deliver both an :EXIT and a
+    # monitor :DOWN for the same death; both are enqueued at exit time, so
+    # drop the sibling now — once the channel is marked {:failed, _} the
+    # second signal would be logged as an unrelated message.
+    flush_sibling_death_signal(pid)
+
     Logger.warning(
       "gRPC connection #{key} for #{state.resolver_target} went down: #{inspect(reason)}"
     )
@@ -685,6 +691,19 @@ defmodule GRPC.Client.Connection do
       # re-resolution and start the repair loop so the dead endpoint is
       # redialed even without a background resolver.
       {:noreply, state |> request_reresolve() |> schedule_repair()}
+    end
+  end
+
+  defp flush_sibling_death_signal(pid) do
+    receive do
+      {:DOWN, _mon, :process, ^pid, _} -> :ok
+    after
+      0 ->
+        receive do
+          {:EXIT, ^pid, _} -> :ok
+        after
+          0 -> :ok
+        end
     end
   end
 
@@ -730,7 +749,7 @@ defmodule GRPC.Client.Connection do
 
     reply_waiters(state, state.waiters, :ok, :ok)
 
-    %{
+    state = %{
       state
       | established?: true,
         established_at: System.monotonic_time(:millisecond),
@@ -738,6 +757,15 @@ defmodule GRPC.Client.Connection do
         retry_attempt: 0,
         last_error: nil
     }
+
+    # A partially successful establish (some addresses failed to dial) still
+    # needs the repair loop; without a background resolver nothing else would
+    # ever redial the failed endpoints.
+    if any_failed?(state.real_channels) do
+      schedule_repair(state)
+    else
+      state
+    end
   end
 
   @impl GenServer
@@ -833,11 +861,21 @@ defmodule GRPC.Client.Connection do
           {addresses, choose_lb_mod(config, norm_opts[:lb_policy])}
 
         {:error, _reason} ->
-          # Fall back to treating the target as a single direct endpoint. Any
-          # LB policy would only have one address to choose from, so PickFirst
-          # is the only meaningful choice.
-          {host, port} = EndpointResolver.split_host_port(state.resolver_target)
-          {[%{address: host, port: port}], GRPC.Client.LoadBalancing.PickFirst}
+          case state do
+            %__MODULE__{desired_addresses: [_ | _] = addresses, lb_mod: lb_mod}
+            when not is_nil(lb_mod) ->
+              # A transient resolve failure during re-establishment must not
+              # downgrade the policy: redial the last known address set under
+              # the existing LB instead of collapsing to a single endpoint.
+              {addresses, lb_mod}
+
+            _ ->
+              # Fall back to treating the target as a single direct endpoint.
+              # Any LB policy would only have one address to choose from, so
+              # PickFirst is the only meaningful choice.
+              {host, port} = EndpointResolver.split_host_port(state.resolver_target)
+              {[%{address: host, port: port}], GRPC.Client.LoadBalancing.PickFirst}
+          end
       end
 
     real_channels = build_real_channels(addresses, state.virtual_channel, norm_opts, adapter)
@@ -873,28 +911,22 @@ defmodule GRPC.Client.Connection do
          %__MODULE__{lb_mod: lb_mod, lb_state: lb_state}
        )
        when not is_nil(lb_state) do
-    case connected_channels(real_channels) do
-      [] ->
-        disconnect_real_channels(real_channels, adapter)
-        {:error, first_failure(real_channels) || :no_addresses}
-
-      connected ->
-        case lb_mod.update(lb_state, connected) do
-          {:ok, new_lb_state} ->
-            {:ok, new_lb_state}
-
-          {:error, reason} ->
-            disconnect_real_channels(real_channels, adapter)
-            {:error, reason}
-        end
-    end
+    run_lb(real_channels, adapter, &lb_mod.update(lb_state, &1))
   end
 
   defp init_or_update_lb(lb_mod, real_channels, adapter, state) do
-    # A policy flip discards the previous LB; drop its ETS-backed state so
-    # repeated re-establishments can't leak one table per flip.
-    maybe_terminate_lb(state.lb_mod, state.lb_state)
-    init_lb(lb_mod, real_channels, adapter)
+    case init_lb(lb_mod, real_channels, adapter) do
+      {:ok, lb_state} ->
+        # A policy flip discards the previous LB; drop its ETS-backed state so
+        # repeated re-establishments can't leak one table per flip. Terminate
+        # only after the new LB is up: on failure state.lb_state must stay
+        # usable for later update calls.
+        maybe_terminate_lb(state.lb_mod, state.lb_state)
+        {:ok, lb_state}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp maybe_terminate_lb(lb_mod, lb_state)
@@ -908,13 +940,17 @@ defmodule GRPC.Client.Connection do
   end
 
   defp init_lb(lb_mod, real_channels, adapter) do
+    run_lb(real_channels, adapter, &lb_mod.init(channels: &1))
+  end
+
+  defp run_lb(real_channels, adapter, lb_call) do
     case connected_channels(real_channels) do
       [] ->
         disconnect_real_channels(real_channels, adapter)
         {:error, first_failure(real_channels) || :no_addresses}
 
       connected ->
-        case lb_mod.init(channels: connected) do
+        case lb_call.(connected) do
           {:ok, lb_state} ->
             {:ok, lb_state}
 

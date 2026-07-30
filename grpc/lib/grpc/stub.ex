@@ -297,37 +297,45 @@ defmodule GRPC.Stub do
   def call(_service_mod, rpc, %{channel: channel} = stream, request, opts) do
     {_, {req_mod, req_stream}, {res_mod, response_stream}, _rpc_options} = rpc
 
+    # Options are validated before the channel is resolved so a configuration
+    # error raises the same ArgumentError whether or not the connection is
+    # healthy, instead of being masked as a retriable UNAVAILABLE. Real
+    # channels inherit codec/compressor fields from the virtual channel, so
+    # defaults can be read from `channel` here.
+    opts =
+      if req_stream || response_stream do
+        parse_req_opts([{:timeout, :infinity} | opts])
+      else
+        parse_req_opts([{:timeout, @default_timeout} | opts])
+      end
+
+    compressor = Keyword.get(opts, :compressor, channel.compressor)
+
+    accepted_compressors =
+      Keyword.get(opts, :accepted_compressors, channel.accepted_compressors)
+
+    if not is_list(accepted_compressors) do
+      raise ArgumentError, "accepted_compressors is not a list"
+    end
+
+    accepted_compressors =
+      if compressor do
+        Enum.uniq([compressor | accepted_compressors])
+      else
+        accepted_compressors
+      end
+
     case resolve_channel(channel, opts) do
       {:error, %GRPC.RPCError{} = error} ->
         unavailable_result(error, stream, request, req_mod, res_mod, req_stream)
 
       {:ok, ch} ->
-        stream = %{stream | channel: ch, request_mod: req_mod, response_mod: res_mod}
-
-        opts =
-          if req_stream || response_stream do
-            parse_req_opts([{:timeout, :infinity} | opts])
-          else
-            parse_req_opts([{:timeout, @default_timeout} | opts])
-          end
-
-        compressor = Keyword.get(opts, :compressor, ch.compressor)
-        accepted_compressors = Keyword.get(opts, :accepted_compressors, ch.accepted_compressors)
-
-        if not is_list(accepted_compressors) do
-          raise ArgumentError, "accepted_compressors is not a list"
-        end
-
-        accepted_compressors =
-          if compressor do
-            Enum.uniq([compressor | accepted_compressors])
-          else
-            accepted_compressors
-          end
-
         stream = %{
           stream
-          | codec: Keyword.get(opts, :codec, ch.codec),
+          | channel: ch,
+            request_mod: req_mod,
+            response_mod: res_mod,
+            codec: Keyword.get(opts, :codec, ch.codec),
             compressor: compressor,
             accepted_compressors: accepted_compressors
         }
@@ -367,14 +375,27 @@ defmodule GRPC.Stub do
   end
 
   # A channel built by connect/2 carries its own adapter_payload and can serve
-  # the RPC directly. The virtual handle of a named connection has none: with
-  # no healthy underlying connection to resolve to, fail with UNAVAILABLE
-  # instead of handing the adapter a channel it cannot use.
+  # the RPC directly — but only while its transport process is alive; a stale
+  # snapshot of a re-establishing connection must fail with UNAVAILABLE
+  # instead of handing the adapter a dead conn_pid. The virtual handle of a
+  # named connection has no payload at all and always fails here.
   defp fallback_channel(%Channel{adapter_payload: payload} = channel) when is_map(payload) do
-    {:ok, channel}
+    case payload do
+      %{conn_pid: pid} when is_pid(pid) ->
+        if Process.alive?(pid) do
+          {:ok, channel}
+        else
+          unavailable_error(channel.ref)
+        end
+
+      _ ->
+        {:ok, channel}
+    end
   end
 
-  defp fallback_channel(%Channel{ref: ref}) do
+  defp fallback_channel(%Channel{ref: ref}), do: unavailable_error(ref)
+
+  defp unavailable_error(ref) do
     {:error,
      GRPC.RPCError.exception(
        GRPC.Status.unavailable(),
@@ -398,15 +419,23 @@ defmodule GRPC.Stub do
 
     GRPC.Telemetry.client_span(stream, request, fn ->
       last = fn _stream, _request -> {:error, error} end
+      result = run_interceptors(channel, last).(stream, request)
 
-      next =
-        Enum.reduce(channel.interceptors, last, fn {interceptor, opts}, acc ->
-          fn s, r -> interceptor.call(s, r, acc, opts) end
-        end)
+      # Request-streaming calls return a stream, so an error tuple cannot
+      # express failure to them and errors raise instead. An interceptor may
+      # have rescued the failure into a usable result; honor it the same way
+      # do_call honors the chain's return value.
+      case {req_stream, result} do
+        {true, {:error, %GRPC.RPCError{} = transformed}} -> raise transformed
+        {true, {:error, _other}} -> raise error
+        _ -> result
+      end
+    end)
+  end
 
-      result = next.(stream, request)
-
-      if req_stream, do: raise(error), else: result
+  defp run_interceptors(channel, last) do
+    Enum.reduce(channel.interceptors, last, fn {interceptor, opts}, acc ->
+      fn s, r -> interceptor.call(s, r, acc, opts) end
     end)
   end
 
@@ -425,12 +454,7 @@ defmodule GRPC.Stub do
       |> recv(opts)
     end
 
-    next =
-      Enum.reduce(channel.interceptors, last, fn {interceptor, opts}, acc ->
-        fn s, r -> interceptor.call(s, r, acc, opts) end
-      end)
-
-    next.(stream, request)
+    run_interceptors(channel, last).(stream, request)
   end
 
   defp do_call(true, %{channel: channel} = stream, req, opts) do
@@ -438,12 +462,7 @@ defmodule GRPC.Stub do
       channel.adapter.send_headers(s, opts)
     end
 
-    next =
-      Enum.reduce(channel.interceptors, last, fn {interceptor, opts}, acc ->
-        fn s, r -> interceptor.call(s, r, acc, opts) end
-      end)
-
-    next.(stream, req)
+    run_interceptors(channel, last).(stream, req)
   end
 
   @doc """
