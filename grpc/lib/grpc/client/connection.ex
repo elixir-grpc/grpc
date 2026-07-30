@@ -191,6 +191,7 @@ defmodule GRPC.Client.Connection do
             desired_addresses: [],
             repair_attempt: 0,
             repair_scheduled?: false,
+            retry_scheduled?: false,
             waiters: []
 
   @doc """
@@ -478,13 +479,7 @@ defmodule GRPC.Client.Connection do
   end
 
   @impl GenServer
-  def handle_cast(:resolve_now, %{resolver: resolver, resolver_state: rs} = state)
-      when not is_nil(rs) do
-    {:ok, new_rs} = resolver.update(rs, :resolve_now)
-    {:noreply, %{state | resolver_state: new_rs}}
-  end
-
-  def handle_cast(:resolve_now, state), do: {:noreply, state}
+  def handle_cast(:resolve_now, state), do: {:noreply, request_reresolve(state)}
 
   @impl GenServer
   def handle_call({:ready_status, expected_target}, _from, state) do
@@ -538,16 +533,21 @@ defmodule GRPC.Client.Connection do
 
   @impl GenServer
   def handle_info(:retry_establish, %__MODULE__{established?: true} = state) do
-    {:noreply, state}
+    {:noreply, %{state | retry_scheduled?: false}}
   end
 
   def handle_info(:retry_establish, state) do
+    state = %{state | retry_scheduled?: false}
+
     # A background resolver update may have reconnected channels while this
     # retry was pending; adopt them instead of dialing a duplicate set that
-    # would orphan the live ones.
-    case connected_channels(state.real_channels) do
-      [] -> attempt_establish(state)
-      _connected -> {:noreply, adopt_established(state)}
+    # would orphan the live ones. Liveness is checked because a reconnected
+    # channel may already be dead with its death signal still queued behind
+    # this message.
+    if Enum.any?(state.real_channels, fn {_key, entry} -> channel_alive?(entry) end) do
+      {:noreply, adopt_established(state)}
+    else
+      attempt_establish(state)
     end
   end
 
@@ -686,7 +686,7 @@ defmodule GRPC.Client.Connection do
       flap_window = Keyword.get(state.connect_opts, :flap_window, @default_flap_window)
       flaps = if uptime_ms(state) < flap_window, do: state.flaps + 1, else: 0
       delay = if flaps == 0, do: 0, else: backoff_delay(flaps)
-      Process.send_after(self(), :retry_establish, delay)
+      state = schedule_retry(state, delay)
 
       {:noreply, %{state | established?: false, last_error: reason, flaps: flaps}}
     else
@@ -724,9 +724,14 @@ defmodule GRPC.Client.Connection do
 
   defp request_reresolve(%__MODULE__{resolver: resolver, resolver_state: rs} = state)
        when not is_nil(rs) do
-    case resolver.update(rs, :resolve_now) do
-      {:ok, new_rs} -> %{state | resolver_state: new_rs}
-      _ -> state
+    # update/2 is an optional callback of GRPC.Client.Resolver.
+    if function_exported?(resolver, :update, 2) do
+      case resolver.update(rs, :resolve_now) do
+        {:ok, new_rs} -> %{state | resolver_state: new_rs}
+        _ -> state
+      end
+    else
+      state
     end
   end
 
@@ -734,9 +739,20 @@ defmodule GRPC.Client.Connection do
 
   defp schedule_repair(%__MODULE__{repair_scheduled?: true} = state), do: state
 
+  # A background resolver already redials failed endpoints on its resolve
+  # ticks; the repair loop exists for connections without one.
+  defp schedule_repair(%__MODULE__{resolver_state: rs} = state) when not is_nil(rs), do: state
+
   defp schedule_repair(state) do
     Process.send_after(self(), :repair_channels, backoff_delay(state.repair_attempt))
     %{state | repair_scheduled?: true}
+  end
+
+  defp schedule_retry(%__MODULE__{retry_scheduled?: true} = state, _delay), do: state
+
+  defp schedule_retry(state, delay) do
+    Process.send_after(self(), :retry_establish, delay)
+    %{state | retry_scheduled?: true}
   end
 
   defp any_failed?(real_channels) do
@@ -849,7 +865,7 @@ defmodule GRPC.Client.Connection do
             "#{inspect(reason)}, retrying in #{delay}ms"
         )
 
-        Process.send_after(self(), :retry_establish, delay)
+        state = schedule_retry(state, delay)
         {:noreply, %{state | last_error: reason, retry_attempt: state.retry_attempt + 1}}
     end
   end
@@ -1138,7 +1154,16 @@ defmodule GRPC.Client.Connection do
       Logger.warning("No healthy channels available for #{state.resolver_target}")
     end
 
-    %{state | real_channels: real_channels, lb_state: new_lb_state}
+    state = %{state | real_channels: real_channels, lb_state: new_lb_state}
+
+    # A resolver update can reconnect channels while a delayed retry is still
+    # pending; adopt immediately so await_ready and connect/2 track actual
+    # recovery instead of the retry backoff.
+    if connected != [] and not state.established? do
+      adopt_established(state)
+    else
+      state
+    end
   end
 
   defp reconcile_lb(lb_mod, lb_state, new_channels) do

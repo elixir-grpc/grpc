@@ -299,9 +299,7 @@ defmodule GRPC.Stub do
 
     # Options are validated before the channel is resolved so a configuration
     # error raises the same ArgumentError whether or not the connection is
-    # healthy, instead of being masked as a retriable UNAVAILABLE. Real
-    # channels inherit codec/compressor fields from the virtual channel, so
-    # defaults can be read from `channel` here.
+    # healthy, instead of being masked as a retriable UNAVAILABLE.
     opts =
       if req_stream || response_stream do
         parse_req_opts([{:timeout, :infinity} | opts])
@@ -309,27 +307,30 @@ defmodule GRPC.Stub do
         parse_req_opts([{:timeout, @default_timeout} | opts])
       end
 
-    compressor = Keyword.get(opts, :compressor, channel.compressor)
-
-    accepted_compressors =
-      Keyword.get(opts, :accepted_compressors, channel.accepted_compressors)
-
-    if not is_list(accepted_compressors) do
+    if not is_list(Keyword.get(opts, :accepted_compressors, [])) do
       raise ArgumentError, "accepted_compressors is not a list"
     end
-
-    accepted_compressors =
-      if compressor do
-        Enum.uniq([compressor | accepted_compressors])
-      else
-        accepted_compressors
-      end
 
     case resolve_channel(channel, opts) do
       {:error, %GRPC.RPCError{} = error} ->
         unavailable_result(error, stream, request, req_mod, res_mod, req_stream)
 
       {:ok, ch} ->
+        # Codec/compression defaults come from the picked channel: a caller
+        # may hold a bare %Channel{ref: name} handle that carries none of the
+        # connection's configuration.
+        compressor = Keyword.get(opts, :compressor, ch.compressor)
+
+        accepted_compressors =
+          Keyword.get(opts, :accepted_compressors, ch.accepted_compressors)
+
+        accepted_compressors =
+          if compressor do
+            Enum.uniq([compressor | accepted_compressors])
+          else
+            accepted_compressors
+          end
+
         stream = %{
           stream
           | channel: ch,
@@ -352,7 +353,13 @@ defmodule GRPC.Stub do
 
   defp resolve_channel(channel, opts), do: resolve_channel(channel, opts, @resolve_attempts)
 
-  defp resolve_channel(channel, _opts, 0), do: fallback_channel(channel)
+  defp resolve_channel(channel, _opts, 0) do
+    Logger.warning(
+      "no live connection process after #{@resolve_attempts} picks for #{inspect(channel.ref)}"
+    )
+
+    fallback_channel(channel)
+  end
 
   defp resolve_channel(channel, opts, attempts) do
     case Connection.pick_channel(channel, opts) do
@@ -362,10 +369,6 @@ defmodule GRPC.Stub do
         if is_pid(conn_pid) and Process.alive?(conn_pid) do
           {:ok, ch}
         else
-          Logger.warning(
-            "The connection process #{inspect(conn_pid)} is not alive, picking another channel"
-          )
-
           resolve_channel(channel, opts, attempts - 1)
         end
 
