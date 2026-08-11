@@ -11,6 +11,43 @@ defmodule GRPC.Test.ClientAdapter do
   def cancel(stream), do: stream
 end
 
+defmodule GRPC.Test.ProcessClientAdapter do
+  @moduledoc """
+  A test adapter that backs each channel with a real linked process recorded
+  as `conn_pid`, the way the Gun and Mint adapters do.
+
+  `GRPC.Test.ClientAdapter` returns the channel untouched, so its channels have
+  no `conn_pid` and there is no process to kill. This adapter exists so tests
+  can kill the process behind a channel and assert on what the connection does
+  about it.
+  """
+  @behaviour GRPC.Client.Adapter
+
+  def connect(channel, _opts) do
+    {:ok, %{channel | adapter_payload: %{conn_pid: spawn_link(&idle/0)}}}
+  end
+
+  def disconnect(%{adapter_payload: %{conn_pid: pid}} = channel) when is_pid(pid) do
+    send(pid, :stop)
+    {:ok, %{channel | adapter_payload: %{conn_pid: nil}}}
+  end
+
+  def disconnect(channel), do: {:ok, channel}
+
+  defp idle do
+    receive do
+      :stop -> :ok
+    end
+  end
+
+  def send_request(stream, _message, _opts), do: stream
+  def receive_data(_stream, _opts), do: {:ok, nil}
+  def send_data(stream, _message, _opts), do: stream
+  def send_headers(stream, _opts), do: stream
+  def end_stream(stream), do: stream
+  def cancel(stream), do: stream
+end
+
 defmodule GRPC.Test.FailingClientAdapter do
   @moduledoc """
   A test adapter that refuses to connect to selected hosts. All other hosts

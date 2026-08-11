@@ -145,6 +145,96 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
     end
   end
 
+  describe "adapter connection process exits" do
+    @tag capture_log: true
+    test "stops picking a channel whose adapter process died" do
+      name = unique_name("dead_channel")
+      attach_telemetry([:grpc, :client, :connection, :channel_pruned])
+
+      start_supervised!(
+        {Connection,
+         name: name,
+         target: "ipv4:127.0.0.1:50051,127.0.0.1:50052",
+         adapter: GRPC.Test.ProcessClientAdapter}
+      )
+
+      assert :ok = Connection.await_ready(name, 2_000)
+
+      assert {:ok, %GRPC.Channel{adapter_payload: %{conn_pid: dead_pid}}} =
+               Connection.pick_channel(%GRPC.Channel{ref: name})
+
+      Process.exit(dead_pid, :kill)
+
+      # The exit signal comes from the dying process, so it is not ordered
+      # against anything this process sends. Sync on the prune itself.
+      assert_receive {:telemetry, [:grpc, :client, :connection, :channel_pruned], %{remaining: 1},
+                      %{name: ^name, reason: :killed}},
+                     1_000
+
+      refute Process.alive?(dead_pid)
+
+      assert {:ok, %GRPC.Channel{adapter_payload: %{conn_pid: live_pid}}} =
+               Connection.pick_channel(%GRPC.Channel{ref: name})
+
+      assert live_pid != dead_pid
+      assert Process.alive?(live_pid)
+    end
+
+    @tag capture_log: true
+    test "re-establishes when the last remaining channel's adapter process dies" do
+      name = unique_name("last_channel")
+      attach_telemetry([:grpc, :client, :connection, :connected])
+
+      start_supervised!(
+        {Connection,
+         name: name, target: "ipv4:127.0.0.1:50051", adapter: GRPC.Test.ProcessClientAdapter}
+      )
+
+      assert :ok = Connection.await_ready(name, 2_000)
+      assert_receive {:telemetry, [:grpc, :client, :connection, :connected], _, %{name: ^name}}
+
+      assert {:ok, %GRPC.Channel{adapter_payload: %{conn_pid: dead_pid}}} =
+               Connection.pick_channel(%GRPC.Channel{ref: name})
+
+      Process.exit(dead_pid, :kill)
+
+      # The only channel is gone, so the establish loop has to run again. A
+      # second :connected event can only come from that.
+      assert_receive {:telemetry, [:grpc, :client, :connection, :connected], _, %{name: ^name}},
+                     2_000
+
+      assert {:ok, %GRPC.Channel{adapter_payload: %{conn_pid: live_pid}}} =
+               Connection.pick_channel(%GRPC.Channel{ref: name})
+
+      assert live_pid != dead_pid
+      assert Process.alive?(live_pid)
+    end
+
+    @tag capture_log: true
+    test "an unrelated linked exit leaves the channels alone" do
+      name = unique_name("unrelated_exit")
+
+      start_supervised!(
+        {Connection,
+         name: name, target: "ipv4:127.0.0.1:50051", adapter: GRPC.Test.ProcessClientAdapter}
+      )
+
+      assert :ok = Connection.await_ready(name, 2_000)
+
+      assert {:ok, %GRPC.Channel{adapter_payload: %{conn_pid: pid}}} =
+               Connection.pick_channel(%GRPC.Channel{ref: name})
+
+      conn = whereis_connection(name)
+      send(conn, {:EXIT, spawn(fn -> :ok end), :some_crash})
+      :sys.get_state(conn)
+
+      assert {:ok, %GRPC.Channel{adapter_payload: %{conn_pid: ^pid}}} =
+               Connection.pick_channel(%GRPC.Channel{ref: name})
+
+      assert Process.alive?(pid)
+    end
+  end
+
   describe "await_ready/2 waiter lifecycle" do
     setup do
       %{
