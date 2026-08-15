@@ -55,12 +55,6 @@ defmodule GRPC.RPCError do
 
   defguard is_rpc_error(e, status) when is_struct(e, __MODULE__) and e.status == status
 
-  @type t :: %__MODULE__{
-          status: GRPC.Status.t(),
-          message: String.t(),
-          details: [Google.Protobuf.Any.t()] | nil
-        }
-
   alias GRPC.Status
 
   def new(status) when is_atom(status) do

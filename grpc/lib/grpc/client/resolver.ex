@@ -66,19 +66,18 @@ defmodule GRPC.Client.Resolver do
   alias GRPC.Client.Resolver.Unix
   alias GRPC.Client.Resolver.XDS
 
-  @type service_config :: GRPC.Client.ServiceConfig.t() | nil
-
-  @callback resolve(String.t()) ::
-              {:ok, %{addresses: list(map()), service_config: service_config()}}
+  @callback resolve(target :: String.t()) ::
+              {:ok,
+               %{addresses: list(map()), service_config: GRPC.Client.ServiceConfig.t() | nil}}
               | {:error, term()}
 
   @callback init(target :: String.t(), opts :: keyword()) ::
-              {:ok, state :: term()} | {:error, term()}
+              {:ok, state :: any()} | {:error, term()}
 
-  @callback update(state :: term(), event :: term()) ::
-              {:ok, state :: term()}
+  @callback update(state :: any(), event :: any()) ::
+              {:ok, state :: any()}
 
-  @callback shutdown(state :: term()) :: :ok
+  @callback shutdown(state :: any()) :: :ok
 
   @optional_callbacks [init: 2, update: 2, shutdown: 1]
 

@@ -18,36 +18,6 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   # Override per-server with the :max_body_size option (bytes).
   @default_max_body_size 4 * 1024 * 1024
 
-  @type init_state :: {
-          endpoint :: atom(),
-          server :: {name :: String.t(), module()},
-          route :: String.t(),
-          opts :: keyword()
-        }
-
-  @type pending_reader :: {
-          cowboy_read_ref :: reference,
-          server_rpc_pid :: pid,
-          server_rpc_reader_reference :: reference
-        }
-  @type stream_state :: %{
-          pid: server_rpc_pid :: pid,
-          handling_timer: timeout_timer_ref :: reference,
-          pending_reader: nil | pending_reader,
-          access_mode: GRPC.Server.Stream.access_mode(),
-          exception_log_filter: exception_log_filter()
-        }
-  @type init_result ::
-          {:cowboy_loop, :cowboy_req.req(), stream_state} | {:ok, :cowboy_req.req(), init_state}
-
-  @type is_fin :: :fin | :nofin
-
-  @type stream_body_opts :: {:code, module()} | {:compress, boolean()}
-
-  @type headers :: %{binary() => binary()}
-
-  @type exception_log_filter :: {module(), atom()} | nil
-
   @doc """
   This function is meant to be called whenever a new request arrives to an existing connection.
   This handler works mainly with two linked processes.

@@ -4,10 +4,6 @@ defmodule GRPC.Stream.Operators do
   """
   alias GRPC.Stream, as: GRPCStream
 
-  @type item :: any()
-
-  @type reason :: any()
-
   def ask(%GRPCStream{flow: flow} = stream, target, timeout \\ 5000) do
     mapper = fn item -> safe_invoke(&do_ask(&1, target, timeout, raise_on_error: false), item) end
     %GRPCStream{stream | flow: Flow.map(flow, mapper)}

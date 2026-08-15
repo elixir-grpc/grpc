@@ -25,8 +25,6 @@ defmodule GRPC.Status do
   For more details, please refer to the [official gRPC docs](https://github.com/grpc/grpc/blob/master/doc/statuscodes.md)
   """
 
-  @type t :: non_neg_integer
-
   @doc """
   Not an error; returned on success.
   """

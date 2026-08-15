@@ -2,7 +2,7 @@ defmodule GRPC.Core.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/elixir-grpc/grpc_core"
-  @version "1.0.3"
+  @version "1.0.4"
 
   def project do
     [

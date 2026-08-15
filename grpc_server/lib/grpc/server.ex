@@ -115,10 +115,6 @@ defmodule GRPC.Server do
   alias GRPC.Server.Router
   alias GRPC.Server.Transcode
 
-  @type rpc_req :: struct | Enumerable.t()
-  @type rpc_return :: struct | any
-  @type rpc :: (GRPC.Server.rpc_req(), GRPC.Server.Stream.t() -> rpc_return)
-
   defmacro __using__(opts) do
     quote bind_quoted: [opts: opts], location: :keep do
       opts =
