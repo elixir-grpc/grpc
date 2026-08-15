@@ -16,12 +16,6 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
 
   @terminated_stream_error {:error, {:connection_error, :closed}}
 
-  @type state :: %{
-          messages: :queue.queue(),
-          waiter: {GenServer.from(), reference() | nil} | nil,
-          done: boolean()
-        }
-
   def start_link do
     GenServer.start_link(__MODULE__, [])
   end

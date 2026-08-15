@@ -14,26 +14,6 @@ defmodule GRPC.Client.Stream do
     * `:res_stream`        - indicates if reply is streaming
   """
 
-  @typep stream_payload :: any()
-  @type t :: %__MODULE__{
-          channel: struct(),
-          service_name: String.t(),
-          method_name: String.t(),
-          grpc_type: atom(),
-          rpc: tuple(),
-          payload: stream_payload,
-          path: String.t(),
-          request_mod: atom(),
-          response_mod: atom(),
-          codec: atom(),
-          server_stream: boolean(),
-          canceled: boolean(),
-          compressor: module(),
-          accepted_compressors: [module()],
-          headers: map(),
-          __interface__: map()
-        }
-
   defstruct channel: nil,
             service_name: nil,
             method_name: nil,

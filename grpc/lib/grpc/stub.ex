@@ -46,17 +46,6 @@ defmodule GRPC.Stub do
 
   @canceled_error GRPC.RPCError.exception(GRPC.Status.cancelled(), "The operation was cancelled")
 
-  @type receive_data_return ::
-          {:ok, struct()}
-          | {:ok, struct(), map()}
-          | {:ok, Enumerable.t()}
-          | {:ok, Enumerable.t(), map()}
-
-  @type rpc_return ::
-          GRPC.Client.Stream.t()
-          | {:error, GRPC.RPCError.t()}
-          | receive_data_return
-
   defmacro __using__(opts) do
     opts = Keyword.validate!(opts, [:service, warn_on_collision: true])
 

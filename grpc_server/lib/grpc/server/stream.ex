@@ -18,37 +18,6 @@ defmodule GRPC.Server.Stream do
     * `:deadline`          - absolute monotonic-time (ms) by which the inbound request
       must complete, or `nil` when the caller set no deadline
   """
-  @type access_mode :: :grpc | :grpcweb | :http_transcoding
-
-  @type t :: %__MODULE__{
-          server: atom(),
-          service_name: String.t(),
-          method_name: String.t(),
-          grpc_type: atom(),
-          endpoint: atom(),
-          rpc: tuple(),
-          request_mod: atom(),
-          request_id: String.t() | nil,
-          response_mod: atom(),
-          codec: atom(),
-          payload: any(),
-          adapter: atom(),
-          local: any(),
-          access_mode: access_mode,
-          # Absolute monotonic-time (ms) by which the inbound request must complete,
-          # derived from the inbound `grpc-timeout` header. `nil` when the caller set no deadline.
-          deadline: integer() | nil,
-          # compressor mainly is used in client decompressing, responses compressing should be set by
-          # `GRPC.Server.set_compressor`
-          compressor: module() | nil,
-          # notes that this is a preflight request, and not an actual request for data (e.g. in grpcweb)
-          is_preflight?: boolean(),
-          # For http transcoding
-          http_method: GRPC.Server.Router.http_method(),
-          http_request_headers: map(),
-          http_transcode: boolean(),
-          __interface__: map()
-        }
 
   defstruct server: nil,
             service_name: nil,

@@ -16,19 +16,6 @@ if Code.ensure_loaded?(Mint.HTTP) do
       retry_attempt: 0
     ]
 
-    @type t :: %__MODULE__{
-            conn: Mint.HTTP.t(),
-            requests: map(),
-            parent: pid(),
-            scheme: Mint.Types.scheme() | nil,
-            host: Mint.Types.address() | nil,
-            port: :inet.port_number() | nil,
-            connect_opts: keyword(),
-            retry_timeout_ms: non_neg_integer() | nil,
-            retry: non_neg_integer(),
-            retry_attempt: non_neg_integer()
-          }
-
     def new(conn, opts) do
       %__MODULE__{
         conn: conn,

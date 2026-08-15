@@ -52,12 +52,6 @@ defmodule GRPC.Stream do
 
   defstruct flow: nil, options: [], metadata: %{}
 
-  @type t :: %__MODULE__{flow: Flow.t(), options: Keyword.t(), metadata: map()}
-
-  @type item :: any()
-
-  @type reason :: any()
-
   @doc """
   Converts a gRPC input into a `Flow` pipeline with backpressure support.
 
