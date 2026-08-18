@@ -29,25 +29,47 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
 
   @doc """
   Given a pid from this process, build an Elixir.Stream that will consume the accumulated
-  data inside this process
+  data inside this process.
+
+  `timeout` bounds how long the stream waits for each response. When it elapses
+  the stream emits `{:error, :deadline_exceeded}` and halts, rather than waiting
+  for a response that may never arrive — the connection process notifies this
+  process, so anything that stops it from doing so (a connection that goes down
+  without cleaning up, for instance) would otherwise block the caller forever.
+  Defaults to `:infinity` to keep the previous behaviour for callers that do not
+  ask for a deadline.
   """
-  def build_stream(pid, produce_trailers? \\ true) do
-    Stream.unfold(pid, fn pid ->
-      pid
-      |> GenServer.call(:get_response, :infinity)
-      |> process_response(produce_trailers?, pid)
+  def build_stream(pid, produce_trailers? \\ true, timeout \\ :infinity) do
+    Stream.unfold(pid, fn
+      :halt ->
+        nil
+
+      pid ->
+        pid
+        |> get_response(timeout)
+        |> process_response(produce_trailers?, pid, timeout)
     end)
   end
 
-  defp process_response(nil = _response, _produce_trailers, _pid), do: nil
-
-  defp process_response({:trailers, _trailers}, false = produce_trailers?, pid) do
-    pid
-    |> GenServer.call(:get_response, :infinity)
-    |> process_response(produce_trailers?, pid)
+  defp get_response(pid, timeout) do
+    GenServer.call(pid, :get_response, timeout)
+  catch
+    :exit, {:timeout, {GenServer, :call, _args}} -> :deadline_exceeded
   end
 
-  defp process_response(response, _produce_trailers, pid) do
+  defp process_response(nil = _response, _produce_trailers, _pid, _timeout), do: nil
+
+  defp process_response(:deadline_exceeded, _produce_trailers, _pid, _timeout) do
+    {{:error, :deadline_exceeded}, :halt}
+  end
+
+  defp process_response({:trailers, _trailers}, false = produce_trailers?, pid, timeout) do
+    pid
+    |> get_response(timeout)
+    |> process_response(produce_trailers?, pid, timeout)
+  end
+
+  defp process_response(response, _produce_trailers, pid, _timeout) do
     {response, pid}
   end
 

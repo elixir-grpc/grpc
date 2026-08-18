@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Behavior Changes
+
+  * The Mint adapter now enforces the requested `:timeout`/`:deadline` on unary receives. A unary call that never receives a response fails with `DEADLINE_EXCEEDED` after the documented 10s default instead of blocking indefinitely, and an explicit `:deadline` now takes precedence over `:timeout`.
 ## v1.0.4 (2026-0-15)
 
 ### Bug Fixes
