@@ -7,13 +7,13 @@ defmodule GRPC.ServerInterceptor do
 
   alias GRPC.Server.Stream
 
-  @type options :: any()
-  @type rpc_return ::
-          {:ok, Stream.t(), struct()} | {:ok, Stream.t()} | {:error, GRPC.RPCError.t()}
-  @type next :: (GRPC.Server.rpc_req(), Stream.t() -> rpc_return())
-
-  @callback init(options) :: options
-  @callback call(GRPC.Server.rpc_req(), stream :: Stream.t(), next, options) :: rpc_return
+  @callback init(options :: any()) :: options :: any()
+  @callback call(
+              req :: struct() | nil,
+              stream :: Stream.t(),
+              next :: (req :: struct() | nil, Stream.t() -> GRPC.Server.rpc_return()),
+              options :: any()
+            ) :: GRPC.Server.rpc_return()
 end
 
 defmodule GRPC.Server.Interceptor do
@@ -22,11 +22,11 @@ defmodule GRPC.Server.Interceptor do
   """
   alias GRPC.Server.Stream
 
-  @type options :: any()
-  @type rpc_return ::
-          {:ok, Stream.t(), struct()} | {:ok, Stream.t()} | {:error, GRPC.RPCError.t()}
-  @type next :: (GRPC.Server.rpc_req(), Stream.t() -> rpc_return())
-
-  @callback init(options) :: options
-  @callback call(GRPC.Server.rpc_req(), stream :: Stream.t(), next, options) :: rpc_return
+  @callback init(options :: any()) :: options :: any()
+  @callback call(
+              req :: struct() | nil,
+              stream :: Stream.t(),
+              next :: (req :: struct() | nil, Stream.t() -> GRPC.Server.rpc_return()),
+              options :: any()
+            ) :: GRPC.Server.rpc_return()
 end

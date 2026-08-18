@@ -7,12 +7,13 @@ defmodule GRPC.ClientInterceptor do
 
   alias GRPC.Client.Stream
 
-  @type options :: any()
-  @type req :: struct() | nil
-  @type next :: (Stream.t(), req -> GRPC.Stub.rpc_return())
-
-  @callback init(options) :: options
-  @callback call(stream :: Stream.t(), req, next, options) :: GRPC.Stub.rpc_return()
+  @callback init(options :: any()) :: options :: any()
+  @callback call(
+              stream :: Stream.t(),
+              req :: struct() | nil,
+              next :: (Stream.t(), req :: struct() | nil -> GRPC.Stub.rpc_return()),
+              options :: any()
+            ) :: GRPC.Stub.rpc_return()
 end
 
 defmodule GRPC.Client.Interceptor do
@@ -21,10 +22,11 @@ defmodule GRPC.Client.Interceptor do
   """
   alias GRPC.Client.Stream
 
-  @type options :: any()
-  @type req :: struct() | nil
-  @type next :: (Stream.t(), req -> GRPC.Stub.rpc_return())
-
-  @callback init(options) :: options
-  @callback call(stream :: Stream.t(), req, next, options) :: GRPC.Stub.rpc_return()
+  @callback init(options :: any()) :: options :: any()
+  @callback call(
+              stream :: Stream.t(),
+              req :: struct() | nil,
+              next :: (Stream.t(), req :: struct() | nil -> GRPC.Stub.rpc_return()),
+              options :: any()
+            ) :: GRPC.Stub.rpc_return()
 end

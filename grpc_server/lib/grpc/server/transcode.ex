@@ -3,7 +3,6 @@ defmodule GRPC.Server.Transcode do
   alias GRPC.Server.Router.Query
   alias GRPC.Server.Router.FieldPath
 
-  @type t :: map()
   # The request mapping follow the following rules:
   #
   # 1. Fields referred by the path template. They are passed via the URL path.

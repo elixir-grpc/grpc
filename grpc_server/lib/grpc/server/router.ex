@@ -3,9 +3,6 @@ defmodule GRPC.Server.Router do
   """
   alias __MODULE__.Template
 
-  @type http_method :: :get | :put | :post | :patch | :delete
-  @type route :: {http_method(), String.t(), Template.matchers()}
-
   @wildcards [:_, :__]
 
   def build_route(path) when is_binary(path), do: build_route(:post, path)
