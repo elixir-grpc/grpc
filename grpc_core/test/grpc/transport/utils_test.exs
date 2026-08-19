@@ -7,7 +7,7 @@ defmodule GRPC.Transport.UtilsTest do
   @ns_ceiling 1000
   @us_ceiling 1000_000
 
-  # unit: ms, must track GRPC.Transport.Utils.
+  # unit: ms
   @ms_ceiling 100_000_000
   @second_ceiling @ms_ceiling * 1000
   @minute_ceiling @second_ceiling * 60
@@ -54,7 +54,6 @@ defmodule GRPC.Transport.UtilsTest do
 
   describe "encode_timeout/1 fidelity" do
     test "millisecond values survive a round-trip exactly" do
-      # Regression guard: with a 1000 ms ceiling, 2500 ms encoded as "2S" and decoded as 2000.
       for ms <- [1, 999, 1000, 1500, 2000, 2500, 3847, 5000, 59_999, 60_000, 3_600_000] do
         assert decode_timeout(encode_timeout(ms)) == ms,
                "#{ms} ms did not survive encode/decode: " <>
@@ -63,7 +62,6 @@ defmodule GRPC.Transport.UtilsTest do
     end
 
     test "values above the millisecond ceiling lose less than one second" do
-      # Past 8 digits of ms a coarser unit is forced, so bound the loss instead.
       ms = @ms_ceiling + 1
       decoded = decode_timeout(encode_timeout(ms))
 
@@ -72,7 +70,6 @@ defmodule GRPC.Transport.UtilsTest do
     end
 
     test "the encoded value stays within the 8-digit wire limit" do
-      # TimeoutValue is "a positive integer as ASCII string of at most 8 digits".
       for ms <- [
             1,
             @ms_ceiling - 1,

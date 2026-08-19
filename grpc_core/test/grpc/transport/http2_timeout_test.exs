@@ -3,7 +3,6 @@ defmodule GRPC.Transport.HTTP2TimeoutTest do
 
   alias GRPC.Transport.HTTP2
 
-  # A bare map suffices: GRPC.Client.Stream lives in the grpc package, unreachable from here.
   @stream %{
     codec: GRPC.Codec.Proto,
     compressor: nil,

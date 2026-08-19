@@ -4,8 +4,7 @@ defmodule GRPC.TimeUtilsTest do
   doctest GRPC.TimeUtils
 
   describe "to_relative/2" do
-    test "returns an integer" do
-      # A float is dropped by append_timeout/2 rather than sent.
+    test "returns an integer, because append_timeout/2 drops a float rather than sending it" do
       from = DateTime.utc_now()
 
       for offset_us <- [1_000, 5_005, 2_000_000, 999] do
