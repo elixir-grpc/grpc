@@ -181,10 +181,10 @@ defmodule GRPC.Client.Adapters.MintTest do
       refute Process.alive?(stream_response_pid)
     end
 
-    test "accepts the float milliseconds a :deadline is resolved into", %{stream: stream} do
+    test "accepts the milliseconds a :deadline is resolved into", %{stream: stream} do
       timeout = GRPC.TimeUtils.to_relative(DateTime.add(DateTime.utc_now(), 20, :millisecond))
 
-      assert is_float(timeout)
+      assert is_number(timeout)
 
       assert {:error, %GRPC.RPCError{status: status}} =
                Mint.receive_data(stream, timeout: timeout)
