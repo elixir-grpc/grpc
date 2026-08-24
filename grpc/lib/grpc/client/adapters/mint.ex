@@ -53,6 +53,12 @@ if Code.ensure_loaded?(Mint.HTTP) do
         |> merge_opts(module_opts)
         |> Keyword.put(:retry, retry)
 
+      # A dns:// target resolves to an address (the host we dial) while the
+      # hostname it resolved from must still reach TLS for SNI and certificate
+      # verification.
+      opts =
+        if hostname = channel.hostname, do: Keyword.put(opts, :hostname, hostname), else: opts
+
       Process.flag(:trap_exit, true)
 
       channel

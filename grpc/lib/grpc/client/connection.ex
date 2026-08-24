@@ -882,7 +882,8 @@ defmodule GRPC.Client.Connection do
   end
 
   defp connect_new_channels(new_addresses, added, adapter, opts, state, real_channels) do
-    Enum.reduce(new_addresses, real_channels, fn %{address: host, port: port}, channels ->
+    Enum.reduce(new_addresses, real_channels, fn %{address: host, port: port} = address,
+                                                 channels ->
       key = build_address_key(host, port)
       existing = Map.get(channels, key)
 
@@ -897,7 +898,14 @@ defmodule GRPC.Client.Connection do
           _ -> :ok
         end
 
-        case connect_real_channel(state.virtual_channel, host, port, opts, adapter) do
+        case connect_real_channel(
+               state.virtual_channel,
+               host,
+               port,
+               opts,
+               adapter,
+               address[:hostname]
+             ) do
           {:ok, ch} -> Map.put(channels, key, {:connected, ch})
           {:error, reason} -> Map.put(channels, key, {:failed, reason})
         end
@@ -1056,8 +1064,15 @@ defmodule GRPC.Client.Connection do
   end
 
   defp build_real_channels(addresses, %Channel{} = virtual_channel, norm_opts, adapter) do
-    Map.new(addresses, fn %{port: port, address: host} ->
-      case connect_real_channel(virtual_channel, host, port, norm_opts, adapter) do
+    Map.new(addresses, fn %{port: port, address: host} = address ->
+      case connect_real_channel(
+             virtual_channel,
+             host,
+             port,
+             norm_opts,
+             adapter,
+             address[:hostname]
+           ) do
         {:ok, ch} ->
           {build_address_key(host, port), {:connected, ch}}
 
@@ -1112,8 +1127,8 @@ defmodule GRPC.Client.Connection do
   defp choose_lb(:round_robin), do: GRPC.Client.LoadBalancing.RoundRobin
   defp choose_lb(_), do: GRPC.Client.LoadBalancing.PickFirst
 
-  defp connect_real_channel(%Channel{} = vc, host, port, opts, adapter) do
-    %Channel{vc | host: host, port: port}
+  defp connect_real_channel(%Channel{} = vc, host, port, opts, adapter, hostname) do
+    %Channel{vc | host: host, port: port, hostname: hostname}
     |> adapter.connect(opts[:adapter_opts])
   end
 
