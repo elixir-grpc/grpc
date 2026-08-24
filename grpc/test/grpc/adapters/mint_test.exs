@@ -137,6 +137,96 @@ defmodule GRPC.Client.Adapters.MintTest do
     end
   end
 
+  describe "receive_data/2 - deadline" do
+    setup do
+      {:ok, stream_response_pid} =
+        GRPC.Client.Adapters.Mint.StreamResponseProcess.start_link(build(:client_stream), true)
+
+      # A connection process that is already gone: nothing will ever notify the
+      # stream response process, which is what used to block the caller forever.
+      dead_conn_pid = spawn(fn -> :ok end)
+      ref = Process.monitor(dead_conn_pid)
+      assert_receive {:DOWN, ^ref, :process, ^dead_conn_pid, _reason}
+
+      stream =
+        build(:client_stream,
+          channel: build(:channel, adapter: Mint, adapter_payload: %{conn_pid: dead_conn_pid}),
+          payload: %{
+            stream_response_pid: stream_response_pid,
+            response: {:ok, %{request_ref: make_ref()}}
+          }
+        )
+
+      %{stream: stream, stream_response_pid: stream_response_pid}
+    end
+
+    # Without a deadline these would block until the ExUnit timeout, so keep that
+    # wait short enough to read as a failure rather than as a stuck suite.
+    @describetag timeout: 5_000
+
+    test "returns DEADLINE_EXCEEDED when no response arrives in time", %{stream: stream} do
+      assert {:error, %GRPC.RPCError{status: status, message: message}} =
+               Mint.receive_data(stream, timeout: 10)
+
+      assert status == GRPC.Status.deadline_exceeded()
+      assert message == "deadline exceeded"
+    end
+
+    test "stops the stream response process it gave up on", %{
+      stream: stream,
+      stream_response_pid: stream_response_pid
+    } do
+      assert {:error, %GRPC.RPCError{}} = Mint.receive_data(stream, timeout: 10)
+
+      refute Process.alive?(stream_response_pid)
+    end
+
+    test "accepts the milliseconds a :deadline is resolved into", %{stream: stream} do
+      timeout = GRPC.TimeUtils.to_relative(DateTime.add(DateTime.utc_now(), 20, :millisecond))
+
+      assert is_number(timeout)
+
+      assert {:error, %GRPC.RPCError{status: status}} =
+               Mint.receive_data(stream, timeout: timeout)
+
+      assert status == GRPC.Status.deadline_exceeded()
+    end
+
+    test "treats a deadline that has already passed as an immediate one", %{stream: stream} do
+      timeout = GRPC.TimeUtils.to_relative(DateTime.add(DateTime.utc_now(), -5, :second))
+
+      assert timeout < 0
+
+      assert {:error, %GRPC.RPCError{status: status}} =
+               Mint.receive_data(stream, timeout: timeout)
+
+      assert status == GRPC.Status.deadline_exceeded()
+    end
+
+    test "lets an explicit :deadline override the timeout GRPC.Stub fills in", %{stream: stream} do
+      assert {:error, %GRPC.RPCError{status: status}} =
+               Mint.receive_data(stream, timeout: :timer.minutes(1), deadline: 10)
+
+      assert status == GRPC.Status.deadline_exceeded()
+    end
+  end
+
+  describe "receive_data/2 - deadline through GRPC.Stub" do
+    test "a :deadline on a unary call reaches the server instead of raising", %{port: port} do
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", adapter: Mint)
+      on_exit(fn -> GRPC.Stub.disconnect(channel) end)
+
+      point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
+
+      assert {:ok, feature} =
+               Routeguide.RouteGuide.Stub.get_feature(channel, point,
+                 deadline: DateTime.add(DateTime.utc_now(), 30, :second)
+               )
+
+      assert feature == %Routeguide.Feature{location: point, name: "409146138,-746188906"}
+    end
+  end
+
   describe "connect/2 with retry option" do
     test "passes retry option to ConnectionProcess state", %{port: port} do
       channel = build(:channel, adapter: Mint, port: port, host: "localhost")

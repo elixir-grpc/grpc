@@ -451,4 +451,28 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
       do: [{:headers}, {:trailers}]
     )
   end
+
+  describe "build_stream/3 - deadline" do
+    setup do
+      {:ok, pid} = StreamResponseProcess.start_link(build(:client_stream), true)
+
+      %{pid: pid}
+    end
+
+    test "emits an error and halts when no response arrives in time", %{pid: pid} do
+      stream = StreamResponseProcess.build_stream(pid, true, 10)
+
+      assert Enum.to_list(stream) == [error: :deadline_exceeded]
+    end
+
+    test "does not emit an error when the response arrives within the deadline", %{pid: pid} do
+      data = <<0, 0, 0, 0, 12, 10, 10, 72, 101, 108, 108, 111, 32, 76, 117, 105, 115>>
+      stream = StreamResponseProcess.build_stream(pid, true, :timer.seconds(5))
+
+      StreamResponseProcess.consume(pid, :data, data)
+      StreamResponseProcess.done(pid)
+
+      assert Enum.to_list(stream) == [ok: build(:hello_reply_rpc)]
+    end
+  end
 end
