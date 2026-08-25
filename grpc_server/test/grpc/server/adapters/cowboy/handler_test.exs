@@ -235,18 +235,26 @@ defmodule GRPC.Server.Adapters.Cowboy.HandlerTest do
   # read_full_body/5 is private; :local makes trace_pattern instrument it anyway.
   defp start_tracing_read_full_body do
     Code.ensure_loaded!(GRPC.Server.Adapters.Cowboy.Handler)
-    :erlang.trace_pattern({GRPC.Server.Adapters.Cowboy.Handler, :read_full_body, :_}, true, [:local])
+
+    :erlang.trace_pattern({GRPC.Server.Adapters.Cowboy.Handler, :read_full_body, :_}, true, [
+      :local
+    ])
+
     :erlang.trace(:all, true, [:call])
   end
 
   defp stop_tracing_read_full_body do
     :erlang.trace(:all, false, [:call])
-    :erlang.trace_pattern({GRPC.Server.Adapters.Cowboy.Handler, :read_full_body, :_}, false, [:local])
+
+    :erlang.trace_pattern({GRPC.Server.Adapters.Cowboy.Handler, :read_full_body, :_}, false, [
+      :local
+    ])
   end
 
   defp await_read_full_body_call do
-    assert_receive {:trace, _pid, :call, {GRPC.Server.Adapters.Cowboy.Handler, :read_full_body, _args}},
-                    2_000
+    assert_receive {:trace, _pid, :call,
+                    {GRPC.Server.Adapters.Cowboy.Handler, :read_full_body, _args}},
+                   2_000
   end
 
   # --------------------------------------------------------------------------
