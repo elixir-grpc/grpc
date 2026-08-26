@@ -1175,7 +1175,7 @@ defmodule GRPC.Client.Connection do
   end
 
   defp channel_alive?({:connected, %{adapter_payload: %{conn_pid: pid}}}) when is_pid(pid) do
-    Process.alive?(pid)
+    node(pid) == node() and Process.alive?(pid)
   end
 
   defp channel_alive?({:connected, _}), do: true

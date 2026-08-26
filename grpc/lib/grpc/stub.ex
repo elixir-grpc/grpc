@@ -366,7 +366,7 @@ defmodule GRPC.Stub do
       {:ok, %Channel{adapter_payload: adapter_payload} = ch} when is_map(adapter_payload) ->
         conn_pid = Map.get(adapter_payload, :conn_pid)
 
-        if is_pid(conn_pid) and Process.alive?(conn_pid) do
+        if local_process_alive?(conn_pid) do
           {:ok, ch}
         else
           resolve_channel(channel, opts, attempts - 1)
@@ -377,6 +377,12 @@ defmodule GRPC.Stub do
     end
   end
 
+  defp local_process_alive?(pid) when is_pid(pid) do
+    node(pid) == node() and Process.alive?(pid)
+  end
+
+  defp local_process_alive?(_pid), do: false
+
   # A channel built by connect/2 carries its own adapter_payload and can serve
   # the RPC directly — but only while its transport process is alive; a stale
   # snapshot of a re-establishing connection must fail with UNAVAILABLE
@@ -385,7 +391,7 @@ defmodule GRPC.Stub do
   defp fallback_channel(%Channel{adapter_payload: payload} = channel) when is_map(payload) do
     case payload do
       %{conn_pid: pid} when is_pid(pid) ->
-        if Process.alive?(pid) do
+        if local_process_alive?(pid) do
           {:ok, channel}
         else
           unavailable_error(channel.ref)

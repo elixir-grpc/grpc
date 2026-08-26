@@ -177,7 +177,7 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   end
 
   defp via(channel) do
-    {:global, {__MODULE__, owner_key(channel)}}
+    {:via, Registry, {GRPC.Client.Registry, {__MODULE__, owner_key(channel)}}}
   end
 
   defp start_response_process do

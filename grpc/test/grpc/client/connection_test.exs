@@ -355,7 +355,7 @@ defmodule GRPC.Client.ConnectionTest do
   end
 
   describe "connect/2 - distributed named channels" do
-    test "named channels do not conflict across connected nodes" do
+    test "named Gun channels own independent local transports across connected nodes" do
       {:ok, _, port} = GRPC.Server.start(FeatureServer, 0)
 
       on_exit(fn ->
@@ -378,11 +378,42 @@ defmodule GRPC.Client.ConnectionTest do
       target = "ipv4:127.0.0.1:#{port}"
       ref = :shared_channel
 
-      assert {:ok, %Channel{ref: ^ref}} =
+      assert {:ok, %Channel{ref: ^ref} = channel1} =
                @peer.call(peer1, Connection, :connect, [target, [name: ref]])
 
-      assert {:ok, %Channel{ref: ^ref}} =
+      assert {:ok, %Channel{ref: ^ref} = channel2} =
                @peer.call(peer2, Connection, :connect, [target, [name: ref]])
+
+      assert {:ok, %Channel{adapter_payload: %{conn_pid: pid1}}} =
+               @peer.call(peer1, Connection, :pick_channel, [channel1])
+
+      assert {:ok, %Channel{adapter_payload: %{conn_pid: pid2}}} =
+               @peer.call(peer2, Connection, :pick_channel, [channel2])
+
+      assert node(pid1) == node1
+      assert node(pid2) == node2
+      refute pid1 == pid2
+
+      point = %Routeguide.Point{latitude: 1, longitude: 2}
+      expected = %Routeguide.Feature{location: point, name: "1,2"}
+
+      assert {:ok, ^expected} =
+               @peer.call(peer1, Routeguide.RouteGuide.Stub, :get_feature, [channel1, point])
+
+      assert {:ok, ^expected} =
+               @peer.call(peer2, Routeguide.RouteGuide.Stub, :get_feature, [channel2, point])
+
+      remote_channel = %Channel{ref: make_ref(), adapter_payload: %{conn_pid: pid1}}
+
+      assert {:error, %GRPC.RPCError{status: status}} =
+               Routeguide.RouteGuide.Stub.get_feature(remote_channel, point)
+
+      assert status == GRPC.Status.unavailable()
+
+      assert {:ok, %Channel{}} = @peer.call(peer1, Connection, :disconnect, [channel1])
+
+      assert {:ok, ^expected} =
+               @peer.call(peer2, Routeguide.RouteGuide.Stub, :get_feature, [channel2, point])
     end
   end
 
