@@ -2,6 +2,7 @@ defmodule GRPC.Client.Adapters.GunTest do
   use GRPC.Client.DataCase, async: true
 
   alias GRPC.Client.Adapters.Gun
+  alias GRPC.Client.Adapters.Gun.ConnectionProcess
 
   defmodule Endpoint do
     use GRPC.Endpoint
@@ -96,6 +97,46 @@ defmodule GRPC.Client.Adapters.GunTest do
                    ip: :loopback
                  ]
                )
+    end
+
+    test "reuses the connection process for a named channel", %{
+      port: port,
+      credential: credential
+    } do
+      channel =
+        build(:channel, port: port, host: "localhost", cred: credential, ref: make_ref())
+
+      assert {:ok, %{adapter_payload: %{conn_pid: conn_pid}} = connected} =
+               Gun.connect(channel, [])
+
+      on_exit(fn -> Gun.disconnect(connected) end)
+
+      assert {:ok, %{adapter_payload: %{conn_pid: ^conn_pid}}} = Gun.connect(channel, [])
+
+      assert [{^conn_pid, _}] =
+               Registry.lookup(
+                 GRPC.Client.Registry,
+                 {ConnectionProcess, {channel.ref, channel.host, channel.port}}
+               )
+    end
+
+    test "does not reuse the connection process for an unnamed channel", %{
+      port: port,
+      credential: credential
+    } do
+      channel = build(:channel, port: port, host: "localhost", cred: credential)
+
+      assert {:ok, %{adapter_payload: %{conn_pid: first_pid}} = first} = Gun.connect(channel, [])
+
+      assert {:ok, %{adapter_payload: %{conn_pid: second_pid}} = second} =
+               Gun.connect(channel, [])
+
+      on_exit(fn ->
+        Gun.disconnect(first)
+        Gun.disconnect(second)
+      end)
+
+      refute first_pid == second_pid
     end
   end
 
