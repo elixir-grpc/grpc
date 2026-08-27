@@ -1,6 +1,8 @@
 defmodule GRPC.Client.Adapters.MintTest do
   use GRPC.Client.DataCase, async: false
 
+  alias Elixir.Mint.HTTPError
+  alias Elixir.Mint.TransportError
   alias GRPC.Client.Adapters.Mint
 
   setup do
@@ -125,8 +127,51 @@ defmodule GRPC.Client.Adapters.MintTest do
   end
 
   describe "handle_errors_receive_data/2" do
-    test "returns a GRPC.RPCError with unknown status" do
-      response = {:error, :closed}
+    test "returns UNAVAILABLE when the connection is gone" do
+      stream = build(:client_stream, payload: %{response: {:error, :closed}})
+
+      assert {:error, %GRPC.RPCError{status: status, message: message}} =
+               Mint.handle_errors_receive_data(stream, [])
+
+      assert status == GRPC.Status.unavailable()
+      assert message == "the connection is closed"
+    end
+
+    test "returns UNAVAILABLE for a transport error" do
+      error = %TransportError{reason: :econnrefused}
+      stream = build(:client_stream, payload: %{response: {:error, error}})
+
+      assert {:error, %GRPC.RPCError{status: status, message: message}} =
+               Mint.handle_errors_receive_data(stream, [])
+
+      assert status == GRPC.Status.unavailable()
+      assert message == Exception.message(error)
+    end
+
+    test "returns UNAVAILABLE when the server closed the connection" do
+      error = %HTTPError{
+        module: Elixir.Mint.HTTP2,
+        reason: {:server_closed_connection, :no_error, "shutting down"}
+      }
+
+      stream = build(:client_stream, payload: %{response: {:error, error}})
+
+      assert {:error, %GRPC.RPCError{status: status, message: message}} =
+               Mint.handle_errors_receive_data(stream, [])
+
+      assert status == GRPC.Status.unavailable()
+      assert message == Exception.message(error)
+    end
+
+    test "passes an existing GRPC.RPCError through untouched" do
+      error = GRPC.RPCError.exception(GRPC.Status.unavailable(), "the connection is closed")
+      stream = build(:client_stream, payload: %{response: {:error, error}})
+
+      assert {:error, ^error} = Mint.handle_errors_receive_data(stream, [])
+    end
+
+    test "returns UNKNOWN for a reason it cannot classify" do
+      response = {:error, :something_else}
       stream = build(:client_stream, payload: %{response: response})
 
       assert {:error, %GRPC.RPCError{status: status, message: message}} =
@@ -134,6 +179,53 @@ defmodule GRPC.Client.Adapters.MintTest do
 
       assert status == GRPC.Status.unknown()
       assert message == "error occurred while receiving data: #{inspect(response)}"
+    end
+  end
+
+  describe "receive_data/2 - request ended by the connection mid-request" do
+    @describetag timeout: 5_000
+
+    setup do
+      {:ok, stream_response_pid} =
+        GRPC.Client.Adapters.Mint.StreamResponseProcess.start_link(build(:client_stream), true)
+
+      stream =
+        build(:client_stream,
+          payload: %{
+            stream_response_pid: stream_response_pid,
+            response: {:ok, %{request_ref: make_ref()}}
+          }
+        )
+
+      %{stream: stream, stream_response_pid: stream_response_pid}
+    end
+
+    test "returns the UNAVAILABLE error the connection process produced", %{
+      stream: stream,
+      stream_response_pid: pid
+    } do
+      error = GRPC.RPCError.exception(GRPC.Status.unavailable(), "the connection is closed")
+
+      :ok = GRPC.Client.Adapters.Mint.StreamResponseProcess.consume(pid, :error, error)
+      :ok = GRPC.Client.Adapters.Mint.StreamResponseProcess.done(pid)
+
+      assert {:error, ^error} = Mint.receive_data(stream, [])
+    end
+
+    test "normalises a raw transport error into an UNAVAILABLE GRPC.RPCError", %{
+      stream: stream,
+      stream_response_pid: pid
+    } do
+      error = %TransportError{reason: :closed}
+
+      :ok = GRPC.Client.Adapters.Mint.StreamResponseProcess.consume(pid, :error, error)
+      :ok = GRPC.Client.Adapters.Mint.StreamResponseProcess.done(pid)
+
+      assert {:error, %GRPC.RPCError{status: status, message: message}} =
+               Mint.receive_data(stream, [])
+
+      assert status == GRPC.Status.unavailable()
+      assert message == Exception.message(error)
     end
   end
 
