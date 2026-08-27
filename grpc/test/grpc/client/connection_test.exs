@@ -408,11 +408,28 @@ defmodule GRPC.Client.ConnectionTest do
       target = "ipv4:127.0.0.1:#{port}"
       ref = :shared_channel
 
-      assert {:ok, %Channel{ref: ^ref}} =
+      assert {:ok, %Channel{ref: ^ref} = channel1} =
                @peer.call(peer1, Connection, :connect, [target, [name: ref]])
 
-      assert {:ok, %Channel{ref: ^ref}} =
+      assert {:ok, %Channel{ref: ^ref} = channel2} =
                @peer.call(peer2, Connection, :connect, [target, [name: ref]])
+
+      # Each node must own its own adapter connection. Adopting another node's
+      # connection process leaves the channel unusable: `GRPC.Stub.call/5`
+      # checks `Process.alive?(conn_pid)` on every RPC, and `Process.alive?/1`
+      # raises ArgumentError on a remote pid.
+      %{adapter_payload: %{conn_pid: conn_pid1}} = channel1
+      %{adapter_payload: %{conn_pid: conn_pid2}} = channel2
+
+      assert node(conn_pid1) == node1
+      assert node(conn_pid2) == node2
+
+      point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
+
+      for {peer, channel} <- [{peer1, channel1}, {peer2, channel2}] do
+        assert {:ok, %Routeguide.Feature{}} =
+                 @peer.call(peer, Routeguide.RouteGuide.Stub, :get_feature, [channel, point])
+      end
     end
   end
 
