@@ -29,6 +29,9 @@ if Code.ensure_loaded?(Mint.HTTP) do
       }
     end
 
+    defguard retries_exhausted?(state)
+             when state.retry != :infinity and state.retry_attempt >= state.retry
+
     def update_conn(state, conn) do
       %{state | conn: conn}
     end

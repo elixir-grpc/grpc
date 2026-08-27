@@ -249,5 +249,44 @@ defmodule GRPC.Client.Adapters.MintTest do
 
       assert state.retry == 0
     end
+
+    test "accepts :infinity as the retry budget", %{port: port} do
+      channel = build(:channel, adapter: Mint, port: port, host: "localhost")
+
+      {:ok, connected} = Mint.connect(channel, retry: :infinity)
+      state = :sys.get_state(connected.adapter_payload.conn_pid)
+
+      assert state.retry == :infinity
+    end
+
+    test "rejects a retry budget that is neither a non-negative integer nor :infinity", %{
+      port: port
+    } do
+      channel = build(:channel, adapter: Mint, port: port, host: "localhost")
+
+      assert {:error, message} = Mint.connect(channel, retry: -1)
+      assert message =~ ":retry must be a non-negative integer or :infinity"
+
+      assert {:error, message} = Mint.connect(channel, retry: :forever)
+      assert message =~ ":retry must be a non-negative integer or :infinity"
+    end
+  end
+
+  describe "validate_opts/1" do
+    test "accepts an unset retry, a non-negative integer or :infinity" do
+      assert :ok == Mint.validate_opts([])
+      assert :ok == Mint.validate_opts(retry: nil)
+      assert :ok == Mint.validate_opts(retry: 0)
+      assert :ok == Mint.validate_opts(retry: 3)
+      assert :ok == Mint.validate_opts(retry: :infinity)
+    end
+
+    test "returns an error for anything else" do
+      assert {:error, message} = Mint.validate_opts(retry: -1)
+      assert message =~ ":retry must be a non-negative integer or :infinity"
+
+      assert {:error, message} = Mint.validate_opts(retry: :forever)
+      assert message =~ ":retry must be a non-negative integer or :infinity"
+    end
   end
 end

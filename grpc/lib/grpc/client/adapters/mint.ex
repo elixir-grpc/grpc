@@ -38,37 +38,25 @@ if Code.ensure_loaded?(Mint.HTTP) do
         window size ensures that the number of packages exchanges is smaller, thus speeding up the requests by reducing the
         amount of networks round trip, with the cost of having larger packages reaching the server per connection.
         Check [Mint.HTTP2.setting() type](https://hexdocs.pm/mint/Mint.HTTP2.html#t:setting/0) for additional configs.
-      * `:retry`: Number of reconnection attempts when the connection drops. Defaults to `0` (no retries).
+      * `:retry`: Number of reconnection attempts when the connection drops, or `:infinity`
+        to keep reconnecting for as long as the process lives. Defaults to `0` (no retries).
         Uses exponential backoff with jitter between attempts.
     """
     @impl true
-    def connect(%{host: host, port: port} = channel, opts \\ []) do
-      {config_opts, opts} = Keyword.pop(opts, :config_options, [])
+    def connect(%Channel{} = channel, opts \\ []) do
       {retry, opts} = Keyword.pop(opts, :retry, 0)
-      module_opts = Application.get_env(:grpc, __MODULE__, config_opts)
 
-      opts =
-        channel
-        |> connect_opts(opts)
-        |> merge_opts(module_opts)
-        |> Keyword.put(:retry, retry)
-
-      Process.flag(:trap_exit, true)
-
-      channel
-      |> mint_scheme()
-      |> ConnectionProcess.start_link(host, port, opts)
-      |> case do
-        {:ok, pid} ->
-          {:ok, %{channel | adapter_payload: %{conn_pid: pid}}}
-
-        error ->
-          {:error, "Error while opening connection: #{inspect(error)}"}
+      with :ok <- validate_retry(retry),
+           {:ok, pid} <- start_connection_process(channel, opts, retry) do
+        {:ok, %{channel | adapter_payload: %{conn_pid: pid}}}
       end
     catch
       :exit, reason ->
         {:error, "Error while opening connection: #{inspect(reason)}"}
     end
+
+    @impl true
+    def validate_opts(opts), do: validate_retry(opts[:retry])
 
     @impl true
     def disconnect(%{adapter_payload: %{conn_pid: pid}} = channel)
@@ -143,6 +131,13 @@ if Code.ensure_loaded?(Mint.HTTP) do
       ConnectionProcess.cancel(conn_pid, request_ref)
     end
 
+    defp validate_retry(nil), do: :ok
+    defp validate_retry(:infinity), do: :ok
+    defp validate_retry(retry) when is_integer(retry) and retry >= 0, do: :ok
+
+    defp validate_retry(retry),
+      do: {:error, ":retry must be a non-negative integer or :infinity, got: #{inspect(retry)}"}
+
     defp connect_opts(%Channel{scheme: "https"} = channel, opts) do
       %Credential{ssl: ssl} = Map.get(channel, :cred) || %Credential{}
 
@@ -176,6 +171,27 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
     defp mint_scheme(%Channel{scheme: "https"} = _channel), do: :https
     defp mint_scheme(_channel), do: :http
+
+    defp start_connection_process(channel, opts, retry) do
+      {config_opts, opts} = Keyword.pop(opts, :config_options, [])
+      module_opts = Application.get_env(:grpc, __MODULE__, config_opts)
+
+      opts =
+        channel
+        |> connect_opts(opts)
+        |> merge_opts(module_opts)
+        |> Keyword.put(:retry, retry)
+
+      Process.flag(:trap_exit, true)
+
+      channel
+      |> mint_scheme()
+      |> ConnectionProcess.start_link(channel.host, channel.port, opts)
+      |> case do
+        {:ok, _} = ok -> ok
+        error -> {:error, "Error while opening connection: #{inspect(error)}"}
+      end
+    end
 
     defp do_receive_data(%{payload: %{stream_response_pid: pid}}, request_type, opts)
          when request_type in [:bidirectional_stream, :server_stream] do

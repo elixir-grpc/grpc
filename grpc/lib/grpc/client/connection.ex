@@ -1231,7 +1231,7 @@ defmodule GRPC.Client.Connection do
     resolver = Keyword.get(opts, :resolver, GRPC.Client.Resolver)
     adapter = Keyword.get(opts, :adapter, GRPC.Client.Adapters.Gun)
 
-    validate_adapter_opts!(opts[:adapter_opts])
+    validate_adapter_opts!(adapter, opts[:adapter_opts])
 
     {norm_target, norm_opts, scheme} = normalize_target_and_opts(target, opts)
     cred = resolve_credential(norm_opts[:cred], scheme)
@@ -1268,9 +1268,18 @@ defmodule GRPC.Client.Connection do
   defp resolve_credential(nil, _scheme), do: nil
   defp resolve_credential(other, _scheme), do: other
 
-  defp validate_adapter_opts!(opts) when is_list(opts), do: :ok
+  defp validate_adapter_opts!(adapter, opts) when is_list(opts) do
+    if Code.ensure_loaded?(adapter) and function_exported?(adapter, :validate_opts, 1) do
+      case adapter.validate_opts(opts) do
+        :ok -> :ok
+        {:error, message} -> raise ArgumentError, message
+      end
+    end
 
-  defp validate_adapter_opts!(_),
+    :ok
+  end
+
+  defp validate_adapter_opts!(_adapter, _),
     do: raise(ArgumentError, ":adapter_opts must be a keyword list if present")
 
   defp build_compressor_list(compressor, accepted) when is_list(accepted) do

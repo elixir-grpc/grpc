@@ -218,7 +218,7 @@ iex> {:ok, channel} = GRPC.Stub.connect("localhost:50051",
 
 When the connection drops, the adapter will attempt to reconnect up to `retry` times using **exponential backoff with jitter**. The delay starts at ~1 second and grows up to a maximum of 120 seconds. If all attempts are exhausted, the parent process receives a `{:elixir_grpc, :connection_down, pid}` message.
 
-By default, `:retry` is `0` (no reconnection attempts).
+By default, `:retry` is `0` (no reconnection attempts). It accepts any non-negative integer or `:infinity`.
 
 > **Note:** Any in-flight requests at the time of the drop will fail immediately. Reconnection only re-establishes the transport connection — it does not replay requests.
 
