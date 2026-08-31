@@ -17,7 +17,7 @@ Add `grpc_core` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:grpc_core, "~> 0.12"}
+    {:grpc_core, "~> 1.0.5"}
   ]
 end
 ```
@@ -26,8 +26,8 @@ end
 
 Most users shouldn't depend on `grpc_core` directly. Instead, use:
 
-- `{:grpc, "~> 0.12"}` for client-only applications
-- `{:grpc_server, "~> 0.12"}` for server-only applications  
+- `{:grpc, "~> 1.0.5"}` for client-only applications
+- `{:grpc_server, "~> 1.0.5"}` for server-only applications  
 
 ## Documentation
 

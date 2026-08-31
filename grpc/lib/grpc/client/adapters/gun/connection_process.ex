@@ -13,6 +13,9 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   Request-specific Gun messages are routed to per-stream response processes, so
   this process only needs to manage connection-level lifecycle and stream
   bookkeeping.
+
+  Named channels are registered in the node-local `GRPC.Client.Registry` under
+  `{ref, host, port}`, so a connection is reused by every caller on the node.
   """
 
   use GenServer
