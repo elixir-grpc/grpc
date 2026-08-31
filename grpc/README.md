@@ -32,7 +32,7 @@ The package can be installed as:
 ```elixir
 def deps do
   [
-    {:grpc, "~> 0.11"},
+    {:grpc, "~> 1.0.5"},
     {:protobuf, "~> 0.14"}, # optional for import wellknown google types
   ]
 end
