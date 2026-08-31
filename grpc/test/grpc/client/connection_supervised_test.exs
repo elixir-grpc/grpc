@@ -30,6 +30,70 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
     defp test_pid, do: Application.get_env(:grpc, :tracking_resolver_test_pid)
   end
 
+  defmodule TransportProcessAdapter do
+    @moduledoc false
+    # Mirrors the Gun adapter's process shape: the "transport" process is NOT
+    # linked to the connection process (Gun's ConnectionProcess lives under
+    # the adapter's DynamicSupervisor), so its death is only observable via
+    # the monitor the connection sets in connect_real_channel/5. Its pid is
+    # exposed as adapter_payload.conn_pid; killing it simulates the transport
+    # dying mid-flight (e.g. gun giving up after internal retries). Accepts
+    # FailingClientAdapter-style :failing_hosts adapter options so tests can
+    # flip reachability while a connection is down.
+    @behaviour GRPC.Client.Adapter
+
+    def connect(%{host: host} = channel, opts) do
+      if host in failing_hosts(opts) do
+        {:error, :connection_refused}
+      else
+        pid =
+          spawn(fn ->
+            receive do
+              :stop -> :ok
+            end
+          end)
+
+        {:ok, %{channel | adapter_payload: %{conn_pid: pid}}}
+      end
+    end
+
+    def disconnect(%{adapter_payload: %{conn_pid: pid}} = channel) when is_pid(pid) do
+      if Process.alive?(pid), do: send(pid, :stop)
+
+      {:ok, %{channel | adapter_payload: %{conn_pid: nil}}}
+    end
+
+    def disconnect(channel), do: {:ok, channel}
+
+    def send_request(stream, _message, _opts), do: stream
+    def receive_data(_stream, _opts), do: {:ok, nil}
+    def send_data(stream, _message, _opts), do: stream
+    def send_headers(stream, _opts), do: stream
+    def end_stream(stream), do: stream
+    def cancel(stream), do: stream
+
+    defp failing_hosts(opts) do
+      case Keyword.get(opts || [], :failing_hosts, []) do
+        fun when is_function(fun, 0) -> fun.()
+        hosts when is_list(hosts) -> hosts
+      end
+    end
+  end
+
+  defmodule TwoAddressResolver do
+    @moduledoc false
+    def resolve(_target) do
+      {:ok,
+       %{
+         addresses: [
+           %{address: "127.0.0.1", port: 50051},
+           %{address: "127.0.0.2", port: 50052}
+         ],
+         service_config: nil
+       }}
+    end
+  end
+
   describe "child_spec/1 and start_link/1" do
     test "starts a named connection from an inline child spec" do
       name = unique_name("inline")
@@ -142,6 +206,173 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
       assert whereis_connection(name) != pid
       assert :ok = Connection.await_ready(name, 2_000)
       assert {:ok, %GRPC.Channel{}} = Connection.pick_channel(%GRPC.Channel{ref: name})
+    end
+  end
+
+  describe "underlying connection process death" do
+    @tag capture_log: true
+    test "re-establishes in place when the last connection process dies" do
+      name = unique_name("conn_death")
+      attach_telemetry([:grpc, :client, :connection, :connected])
+
+      start_supervised!(
+        {Connection, name: name, target: "ipv4:127.0.0.1:50051", adapter: TransportProcessAdapter}
+      )
+
+      assert :ok = Connection.await_ready(name, 2_000)
+      assert_receive {:telemetry, [:grpc, :client, :connection, :connected], _, %{name: ^name}}
+
+      conn = whereis_connection(name)
+
+      assert {:ok, %GRPC.Channel{adapter_payload: %{conn_pid: pid1}}} =
+               Connection.pick_channel(%GRPC.Channel{ref: name})
+
+      Process.exit(pid1, :kill)
+
+      # Recovery must come from the same orchestrator process reconnecting,
+      # not from a supervisor restart.
+      assert_receive {:telemetry, [:grpc, :client, :connection, :connected], _, %{name: ^name}},
+                     2_000
+
+      assert whereis_connection(name) == conn
+      assert :ok = Connection.await_ready(name, 2_000)
+
+      assert {:ok, %GRPC.Channel{adapter_payload: %{conn_pid: pid2}}} =
+               Connection.pick_channel(%GRPC.Channel{ref: name})
+
+      assert pid2 != pid1
+      assert Process.alive?(pid2)
+    end
+
+    @tag capture_log: true
+    test "RPCs fail with UNAVAILABLE while down and succeed after recovery" do
+      name = unique_name("conn_death_rpc")
+      hosts = start_supervised!({Agent, fn -> [] end})
+
+      start_supervised!(
+        {Connection,
+         name: name,
+         target: "ipv4:127.0.0.1:50051",
+         adapter: TransportProcessAdapter,
+         adapter_opts: [failing_hosts: fn -> Agent.get(hosts, & &1) end]}
+      )
+
+      assert :ok = Connection.await_ready(name, 2_000)
+      conn = whereis_connection(name)
+      {:ok, handle} = Connection.get_channel(name)
+      request = %Helloworld.HelloRequest{name: "ping"}
+
+      assert {:ok, _} = Helloworld.Greeter.Stub.say_hello(handle, request)
+
+      assert {:ok, %GRPC.Channel{adapter_payload: %{conn_pid: pid1}}} =
+               Connection.pick_channel(handle)
+
+      # Make redials fail, then kill the transport: the connection enters the
+      # retry loop and RPCs must fail clean instead of crashing in the adapter
+      # (previously a FunctionClauseError on the payload-less virtual handle).
+      Agent.update(hosts, fn _ -> ["127.0.0.1"] end)
+      kill_and_await(pid1)
+      wait_until(fn -> not :sys.get_state(conn).established? end)
+
+      unavailable = GRPC.Status.unavailable()
+
+      assert {:error, %GRPC.RPCError{status: ^unavailable}} =
+               Helloworld.Greeter.Stub.say_hello(handle, request)
+
+      Agent.update(hosts, fn _ -> [] end)
+      send(conn, :retry_establish)
+
+      assert :ok = Connection.await_ready(name, 2_000)
+      assert {:ok, _} = Helloworld.Greeter.Stub.say_hello(handle, request)
+    end
+
+    @tag capture_log: true
+    test "request-streaming calls raise UNAVAILABLE instead of returning an error tuple" do
+      name = unique_name("conn_death_stream")
+      hosts = start_supervised!({Agent, fn -> ["127.0.0.1"] end})
+
+      start_supervised!(
+        {Connection,
+         name: name,
+         target: "ipv4:127.0.0.1:50051",
+         adapter: TransportProcessAdapter,
+         adapter_opts: [failing_hosts: fn -> Agent.get(hosts, & &1) end]}
+      )
+
+      {:ok, handle} = Connection.get_channel(name)
+
+      # A stream return value cannot express failure, so the stub must raise
+      # rather than hand back an error tuple that send_request/3 would crash on.
+      assert_raise GRPC.RPCError, ~r/no healthy connection/, fn ->
+        Routeguide.RouteGuide.Stub.record_route(handle)
+      end
+    end
+
+    @tag capture_log: true
+    test "keeps serving from the remaining channels and redials the dead one" do
+      name = unique_name("partial_death")
+
+      start_supervised!(
+        {Connection,
+         name: name,
+         target: "dns://multi.test:50051",
+         resolver: TwoAddressResolver,
+         lb_policy: :round_robin,
+         adapter: TransportProcessAdapter}
+      )
+
+      assert :ok = Connection.await_ready(name, 2_000)
+      conn = whereis_connection(name)
+      handle = %GRPC.Channel{ref: name}
+
+      pids =
+        for _ <- 1..4, uniq: true do
+          {:ok, %GRPC.Channel{adapter_payload: %{conn_pid: pid}}} =
+            Connection.pick_channel(handle)
+
+          pid
+        end
+
+      assert length(pids) == 2
+      [dead, _survivor] = pids
+
+      kill_and_await(dead)
+      wait_until(fn -> is_nil(connected_key_for(conn, dead)) end)
+
+      # Still established and no full re-establish: picks never see the dead
+      # channel again.
+      assert :ok = Connection.await_ready(name, 100)
+      assert whereis_connection(name) == conn
+
+      for _ <- 1..4 do
+        assert {:ok, %GRPC.Channel{adapter_payload: %{conn_pid: pid}}} =
+                 Connection.pick_channel(handle)
+
+        assert pid != dead
+        assert Process.alive?(pid)
+      end
+
+      # The repair loop redials the dead endpoint even though this resolver
+      # has no background worker to trigger a re-resolution.
+      wait_until(fn ->
+        pids =
+          for _ <- 1..4, uniq: true do
+            {:ok, %GRPC.Channel{adapter_payload: %{conn_pid: pid}}} =
+              Connection.pick_channel(handle)
+
+            pid
+          end
+
+        length(pids) == 2 and Enum.all?(pids, &Process.alive?/1)
+      end)
+    end
+
+    test "stub calls through an unresolvable virtual handle return UNAVAILABLE" do
+      handle = %GRPC.Channel{ref: :no_such_connection_name}
+      unavailable = GRPC.Status.unavailable()
+
+      assert {:error, %GRPC.RPCError{status: ^unavailable}} =
+               Helloworld.Greeter.Stub.say_hello(handle, %Helloworld.HelloRequest{name: "x"})
     end
   end
 
@@ -314,6 +545,35 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
   end
 
   defp unique_name(prefix), do: :"#{prefix}_#{System.unique_integer([:positive])}"
+
+  # Kills a transport and blocks until it is actually gone, so its monitor
+  # signal to the connection process has been dispatched.
+  defp kill_and_await(pid) do
+    ref = Process.monitor(pid)
+    Process.exit(pid, :kill)
+    assert_receive {:DOWN, ^ref, :process, ^pid, _}, 1_000
+  end
+
+  defp wait_until(fun, tries \\ 200) do
+    cond do
+      fun.() ->
+        :ok
+
+      tries == 0 ->
+        flunk("condition not met within the wait budget")
+
+      true ->
+        Process.sleep(10)
+        wait_until(fun, tries - 1)
+    end
+  end
+
+  defp connected_key_for(conn, pid) do
+    Enum.find_value(:sys.get_state(conn).real_channels, fn
+      {key, {:connected, %{adapter_payload: %{conn_pid: ^pid}}}} -> key
+      _ -> nil
+    end)
+  end
 
   defp whereis_connection(name) do
     case Registry.lookup(GRPC.Client.Registry, {Connection, name}) do
