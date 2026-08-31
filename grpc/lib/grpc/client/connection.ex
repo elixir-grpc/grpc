@@ -46,7 +46,14 @@ defmodule GRPC.Client.Connection do
 
   The channel handle returned by `get_channel/1` is valid as soon as the
   process is running, even while the connection is still being established;
-  RPCs return `{:error, :no_connection}` style errors until then.
+  RPCs fail with an `UNAVAILABLE` `GRPC.RPCError` until then.
+
+  If an established underlying connection later goes down, its channel is
+  removed from the load-balancing rotation as soon as the connection process
+  exits. When it was the last healthy channel, the process re-enters the
+  establishment loop and retries with the same exponential backoff as at
+  boot; RPCs fail with `UNAVAILABLE` in the meantime instead of being routed
+  to a dead connection.
 
   `connect/2` keeps its historical fail-fast contract: it blocks until the
   first establishment attempt finishes and returns `{:error, reason}` (tearing
@@ -155,6 +162,7 @@ defmodule GRPC.Client.Connection do
   @default_max_resolve_interval 300_000
   @default_min_resolve_interval 5_000
   @default_connect_timeout 15_000
+  @default_flap_window 10_000
   @backoff_initial 100
   @backoff_multiplier 1.6
   @backoff_max 120_000
@@ -176,8 +184,14 @@ defmodule GRPC.Client.Connection do
             connect_opts: [],
             resolver_state: nil,
             established?: false,
+            established_at: nil,
             last_error: nil,
             retry_attempt: 0,
+            flaps: 0,
+            desired_addresses: [],
+            repair_attempt: 0,
+            repair_scheduled?: false,
+            retry_scheduled?: false,
             waiters: []
 
   @doc """
@@ -250,6 +264,9 @@ defmodule GRPC.Client.Connection do
     * `:headers` – default metadata headers
     * `:connect_timeout` – how long `connect/2` waits for the first
       establishment attempt in ms (default: 15000)
+    * `:flap_window` – a connection that dies within this many ms of
+      establishing counts as a flap, and consecutive flaps back the redial
+      off exponentially instead of redialing immediately (default: 10000)
     * `:resolve_interval` – DNS re-resolution interval in ms (default: 30000)
     * `:max_resolve_interval` – backoff cap in ms (default: 300000)
     * `:min_resolve_interval` – rate-limit floor in ms (default: 5000)
@@ -462,13 +479,7 @@ defmodule GRPC.Client.Connection do
   end
 
   @impl GenServer
-  def handle_cast(:resolve_now, %{resolver: resolver, resolver_state: rs} = state)
-      when not is_nil(rs) do
-    {:ok, new_rs} = resolver.update(rs, :resolve_now)
-    {:noreply, %{state | resolver_state: new_rs}}
-  end
-
-  def handle_cast(:resolve_now, state), do: {:noreply, state}
+  def handle_cast(:resolve_now, state), do: {:noreply, request_reresolve(state)}
 
   @impl GenServer
   def handle_call({:ready_status, expected_target}, _from, state) do
@@ -522,23 +533,101 @@ defmodule GRPC.Client.Connection do
 
   @impl GenServer
   def handle_info(:retry_establish, %__MODULE__{established?: true} = state) do
-    {:noreply, state}
+    {:noreply, %{state | retry_scheduled?: false}}
   end
 
-  def handle_info(:retry_establish, state), do: attempt_establish(state)
+  def handle_info(:retry_establish, state) do
+    state = %{state | retry_scheduled?: false}
+
+    # A background resolver update may have reconnected channels while this
+    # retry was pending; adopt them instead of dialing a duplicate set that
+    # would orphan the live ones. Liveness is checked because a reconnected
+    # channel may already be dead with its death signal still queued behind
+    # this message.
+    if Enum.any?(state.real_channels, fn {_key, entry} -> channel_alive?(entry) end) do
+      {:noreply, adopt_established(state)}
+    else
+      attempt_establish(state)
+    end
+  end
 
   def handle_info({:resolver_update, result}, state) do
     state = handle_resolve_result(result, state)
     {:noreply, state}
   end
 
-  def handle_info({:EXIT, _pid, :normal}, state), do: {:noreply, state}
+  def handle_info(:repair_channels, state) do
+    state = %{state | repair_scheduled?: false}
 
-  def handle_info({:EXIT, pid, reason}, %{resolver: resolver, resolver_state: rs} = state)
-      when not is_nil(rs) do
-    # Adapter connection processes are linked too, so re-init must be gated
-    # on the resolver worker's own pid: re-initializing on any linked exit
-    # would spawn a duplicate worker and orphan the live one.
+    if state.established? and any_failed?(state.real_channels) do
+      state =
+        reconcile_channels(state.desired_addresses, state.adapter, state.connect_opts, state)
+
+      if any_failed?(state.real_channels) do
+        {:noreply, schedule_repair(%{state | repair_attempt: state.repair_attempt + 1})}
+      else
+        {:noreply, %{state | repair_attempt: 0}}
+      end
+    else
+      # Either everything healed or a full re-establish owns recovery now.
+      {:noreply, %{state | repair_attempt: 0}}
+    end
+  end
+
+  def handle_info({:EXIT, pid, reason}, state) do
+    # Transport death is primarily detected via the monitor set in
+    # connect_real_channel/5, but adapters that link their transport to this
+    # process (e.g. Mint's start_link) deliver an :EXIT too — route it through
+    # the same death handling. A tracked channel whose process exited — for
+    # any reason, including :normal — is unusable and must leave the rotation;
+    # deliberate disconnects remove the channel from state before the signal
+    # is processed, so they never match.
+    case down_channel_key(state.real_channels, pid) do
+      nil -> handle_unrelated_exit(pid, reason, state)
+      key -> handle_channel_down(key, pid, reason, state)
+    end
+  end
+
+  def handle_info({:DOWN, mon, :process, pid, reason}, state) do
+    case Enum.split_with(state.waiters, fn {_pid, _from, m, _started_at} -> m == mon end) do
+      {[], _} ->
+        case down_channel_key(state.real_channels, pid) do
+          nil ->
+            # Deliberately disconnected transports still deliver a monitor
+            # :DOWN after their channel left the state; stay quiet for those.
+            unless reason == :normal do
+              Logger.warning(
+                "#{inspect(__MODULE__)} received :DOWN from #{inspect(pid)} with reason: #{inspect(reason)}"
+              )
+            end
+
+            {:noreply, state}
+
+          key ->
+            handle_channel_down(key, pid, reason, state)
+        end
+
+      {dropped, remaining} ->
+        Enum.each(dropped, fn {caller_pid, _from, _mon, started_at} ->
+          emit_await_ready_stop(state, caller_pid, started_at, :abandoned)
+        end)
+
+        {:noreply, %{state | waiters: remaining}}
+    end
+  end
+
+  def handle_info(msg, state) do
+    Logger.warning("#{inspect(__MODULE__)} received unexpected message: #{inspect(msg)}")
+
+    {:noreply, state}
+  end
+
+  defp handle_unrelated_exit(_pid, :normal, state), do: {:noreply, state}
+
+  defp handle_unrelated_exit(pid, reason, %{resolver: resolver, resolver_state: rs} = state)
+       when not is_nil(rs) do
+    # Re-init must be gated on the resolver worker's own pid: re-initializing
+    # on any linked exit would spawn a duplicate worker and orphan the live one.
     if pid == resolver_worker_pid(rs) do
       Logger.warning("Resolver worker exited: #{inspect(reason)}, re-initializing")
 
@@ -565,7 +654,7 @@ defmodule GRPC.Client.Connection do
     end
   end
 
-  def handle_info({:EXIT, pid, reason}, state) do
+  defp handle_unrelated_exit(pid, reason, state) do
     Logger.warning(
       "#{inspect(__MODULE__)} received :EXIT from #{inspect(pid)} reason: #{inspect(reason)}"
     )
@@ -573,28 +662,129 @@ defmodule GRPC.Client.Connection do
     {:noreply, state}
   end
 
-  def handle_info({:DOWN, mon, :process, pid, reason}, state) do
-    case Enum.split_with(state.waiters, fn {_pid, _from, m, _started_at} -> m == mon end) do
-      {[], _} ->
-        Logger.warning(
-          "#{inspect(__MODULE__)} received :DOWN from #{inspect(pid)} with reason: #{inspect(reason)}"
-        )
+  defp handle_channel_down(key, pid, reason, state) do
+    # Adapters that link their transport (Mint) deliver both an :EXIT and a
+    # monitor :DOWN for the same death; both are enqueued at exit time, so
+    # drop the sibling now — once the channel is marked {:failed, _} the
+    # second signal would be logged as an unrelated message.
+    flush_sibling_death_signal(pid)
 
-        {:noreply, state}
+    Logger.warning(
+      "gRPC connection #{key} for #{state.resolver_target} went down: #{inspect(reason)}"
+    )
 
-      {dropped, remaining} ->
-        Enum.each(dropped, fn {caller_pid, _from, _mon, started_at} ->
-          emit_await_ready_stop(state, caller_pid, started_at, :abandoned)
-        end)
+    real_channels = Map.put(state.real_channels, key, {:failed, reason})
+    state = rebalance_after_reconcile(real_channels, state)
 
-        {:noreply, %{state | waiters: remaining}}
+    if connected_channels(real_channels) == [] do
+      # Last healthy channel gone: flip back to establishing and schedule the
+      # boot retry loop instead of dialing here, so this handler stays
+      # non-blocking. A stable connection redials immediately; a flapping one
+      # backs off.
+      # A connection that dies within this window of establishing counts as a
+      # flap, and each consecutive flap backs the redial off further.
+      flap_window = Keyword.get(state.connect_opts, :flap_window, @default_flap_window)
+      flaps = if uptime_ms(state) < flap_window, do: state.flaps + 1, else: 0
+      delay = if flaps == 0, do: 0, else: backoff_delay(flaps)
+      state = schedule_retry(state, delay)
+
+      {:noreply, %{state | established?: false, last_error: reason, flaps: flaps}}
+    else
+      # Other channels keep serving; ask the resolver for an early
+      # re-resolution and start the repair loop so the dead endpoint is
+      # redialed even without a background resolver.
+      {:noreply, state |> request_reresolve() |> schedule_repair()}
     end
   end
 
-  def handle_info(msg, state) do
-    Logger.warning("#{inspect(__MODULE__)} received unexpected message: #{inspect(msg)}")
+  defp flush_sibling_death_signal(pid) do
+    receive do
+      {:DOWN, _mon, :process, ^pid, _} -> :ok
+    after
+      0 ->
+        receive do
+          {:EXIT, ^pid, _} -> :ok
+        after
+          0 -> :ok
+        end
+    end
+  end
 
-    {:noreply, state}
+  defp down_channel_key(real_channels, pid) do
+    Enum.find_value(real_channels, fn
+      {key, {:connected, %{adapter_payload: %{conn_pid: ^pid}}}} -> key
+      _ -> nil
+    end)
+  end
+
+  defp uptime_ms(%__MODULE__{established_at: nil}), do: 0
+
+  defp uptime_ms(%__MODULE__{established_at: at}),
+    do: System.monotonic_time(:millisecond) - at
+
+  defp request_reresolve(%__MODULE__{resolver: resolver, resolver_state: rs} = state)
+       when not is_nil(rs) do
+    # update/2 is an optional callback of GRPC.Client.Resolver.
+    if function_exported?(resolver, :update, 2) do
+      case resolver.update(rs, :resolve_now) do
+        {:ok, new_rs} -> %{state | resolver_state: new_rs}
+        _ -> state
+      end
+    else
+      state
+    end
+  end
+
+  defp request_reresolve(state), do: state
+
+  defp schedule_repair(%__MODULE__{repair_scheduled?: true} = state), do: state
+
+  # A background resolver already redials failed endpoints on its resolve
+  # ticks; the repair loop exists for connections without one.
+  defp schedule_repair(%__MODULE__{resolver_state: rs} = state) when not is_nil(rs), do: state
+
+  defp schedule_repair(state) do
+    Process.send_after(self(), :repair_channels, backoff_delay(state.repair_attempt))
+    %{state | repair_scheduled?: true}
+  end
+
+  defp schedule_retry(%__MODULE__{retry_scheduled?: true} = state, _delay), do: state
+
+  defp schedule_retry(state, delay) do
+    Process.send_after(self(), :retry_establish, delay)
+    %{state | retry_scheduled?: true}
+  end
+
+  defp any_failed?(real_channels) do
+    Enum.any?(real_channels, &match?({_key, {:failed, _}}, &1))
+  end
+
+  defp adopt_established(state) do
+    :telemetry.execute(
+      @connected_event,
+      %{retry_attempt: state.retry_attempt},
+      lifecycle_metadata(state)
+    )
+
+    reply_waiters(state, state.waiters, :ok, :ok)
+
+    state = %{
+      state
+      | established?: true,
+        established_at: System.monotonic_time(:millisecond),
+        waiters: [],
+        retry_attempt: 0,
+        last_error: nil
+    }
+
+    # A partially successful establish (some addresses failed to dial) still
+    # needs the repair loop; without a background resolver nothing else would
+    # ever redial the failed endpoints.
+    if any_failed?(state.real_channels) do
+      schedule_repair(state)
+    else
+      state
+    end
   end
 
   @impl GenServer
@@ -657,22 +847,7 @@ defmodule GRPC.Client.Connection do
   defp attempt_establish(state) do
     case establish(state) do
       {:ok, established_state} ->
-        :telemetry.execute(
-          @connected_event,
-          %{retry_attempt: state.retry_attempt},
-          lifecycle_metadata(state)
-        )
-
-        reply_waiters(established_state, established_state.waiters, :ok, :ok)
-
-        {:noreply,
-         %{
-           established_state
-           | established?: true,
-             waiters: [],
-             retry_attempt: 0,
-             last_error: nil
-         }}
+        {:noreply, adopt_established(established_state)}
 
       {:error, reason} ->
         delay = backoff_delay(state.retry_attempt)
@@ -690,7 +865,7 @@ defmodule GRPC.Client.Connection do
             "#{inspect(reason)}, retrying in #{delay}ms"
         )
 
-        Process.send_after(self(), :retry_establish, delay)
+        state = schedule_retry(state, delay)
         {:noreply, %{state | last_error: reason, retry_attempt: state.retry_attempt + 1}}
     end
   end
@@ -705,16 +880,26 @@ defmodule GRPC.Client.Connection do
           {addresses, choose_lb_mod(config, norm_opts[:lb_policy])}
 
         {:error, _reason} ->
-          # Fall back to treating the target as a single direct endpoint. Any
-          # LB policy would only have one address to choose from, so PickFirst
-          # is the only meaningful choice.
-          {host, port} = EndpointResolver.split_host_port(state.resolver_target)
-          {[%{address: host, port: port}], GRPC.Client.LoadBalancing.PickFirst}
+          case state do
+            %__MODULE__{desired_addresses: [_ | _] = addresses, lb_mod: lb_mod}
+            when not is_nil(lb_mod) ->
+              # A transient resolve failure during re-establishment must not
+              # downgrade the policy: redial the last known address set under
+              # the existing LB instead of collapsing to a single endpoint.
+              {addresses, lb_mod}
+
+            _ ->
+              # Fall back to treating the target as a single direct endpoint.
+              # Any LB policy would only have one address to choose from, so
+              # PickFirst is the only meaningful choice.
+              {host, port} = EndpointResolver.split_host_port(state.resolver_target)
+              {[%{address: host, port: port}], GRPC.Client.LoadBalancing.PickFirst}
+          end
       end
 
     real_channels = build_real_channels(addresses, state.virtual_channel, norm_opts, adapter)
 
-    case init_lb(lb_mod, real_channels, adapter) do
+    case init_or_update_lb(lb_mod, real_channels, adapter, state) do
       {:ok, lb_state} ->
         resolver_state = maybe_init_resolver(state)
         :persistent_term.put(lb_key(state.virtual_channel.ref), {lb_mod, lb_state})
@@ -723,6 +908,7 @@ defmodule GRPC.Client.Connection do
          %__MODULE__{
            state
            | real_channels: real_channels,
+             desired_addresses: addresses,
              lb_mod: lb_mod,
              lb_state: lb_state,
              resolver_state: resolver_state
@@ -733,14 +919,57 @@ defmodule GRPC.Client.Connection do
     end
   end
 
+  # Re-establishment after a connection loss reuses the existing LB state
+  # (its ETS table is what pickers read through :persistent_term), both so
+  # in-flight pickers see the swap immediately and so repeated reconnects
+  # don't leak one table per cycle.
+  defp init_or_update_lb(
+         lb_mod,
+         real_channels,
+         adapter,
+         %__MODULE__{lb_mod: lb_mod, lb_state: lb_state}
+       )
+       when not is_nil(lb_state) do
+    run_lb(real_channels, adapter, &lb_mod.update(lb_state, &1))
+  end
+
+  defp init_or_update_lb(lb_mod, real_channels, adapter, state) do
+    case init_lb(lb_mod, real_channels, adapter) do
+      {:ok, lb_state} ->
+        # A policy flip discards the previous LB; drop its ETS-backed state so
+        # repeated re-establishments can't leak one table per flip. Terminate
+        # only after the new LB is up: on failure state.lb_state must stay
+        # usable for later update calls.
+        maybe_terminate_lb(state.lb_mod, state.lb_state)
+        {:ok, lb_state}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp maybe_terminate_lb(lb_mod, lb_state)
+       when is_nil(lb_mod)
+       when is_nil(lb_state),
+       do: :ok
+
+  defp maybe_terminate_lb(lb_mod, lb_state) do
+    if function_exported?(lb_mod, :terminate, 1), do: lb_mod.terminate(lb_state)
+    :ok
+  end
+
   defp init_lb(lb_mod, real_channels, adapter) do
+    run_lb(real_channels, adapter, &lb_mod.init(channels: &1))
+  end
+
+  defp run_lb(real_channels, adapter, lb_call) do
     case connected_channels(real_channels) do
       [] ->
         disconnect_real_channels(real_channels, adapter)
         {:error, first_failure(real_channels) || :no_addresses}
 
       connected ->
-        case lb_mod.init(channels: connected) do
+        case lb_call.(connected) do
           {:ok, lb_state} ->
             {:ok, lb_state}
 
@@ -850,6 +1079,7 @@ defmodule GRPC.Client.Connection do
   defp handle_resolve_result({:ok, %{addresses: []}}, state), do: state
 
   defp handle_resolve_result({:ok, %{addresses: new_addresses}}, state) do
+    state = %{state | desired_addresses: new_addresses}
     reconcile_channels(new_addresses, state.adapter, state.connect_opts, state)
   end
 
@@ -921,10 +1151,19 @@ defmodule GRPC.Client.Connection do
       end
 
     if connected == [] do
-      Logger.warning("No healthy channels available after re-resolution")
+      Logger.warning("No healthy channels available for #{state.resolver_target}")
     end
 
-    %{state | real_channels: real_channels, lb_state: new_lb_state}
+    state = %{state | real_channels: real_channels, lb_state: new_lb_state}
+
+    # A resolver update can reconnect channels while a delayed retry is still
+    # pending; adopt immediately so await_ready and connect/2 track actual
+    # recovery instead of the retry backoff.
+    if connected != [] and not state.established? do
+      adopt_established(state)
+    else
+      state
+    end
   end
 
   defp reconcile_lb(lb_mod, lb_state, new_channels) do
@@ -936,7 +1175,7 @@ defmodule GRPC.Client.Connection do
   end
 
   defp channel_alive?({:connected, %{adapter_payload: %{conn_pid: pid}}}) when is_pid(pid) do
-    Process.alive?(pid)
+    node(pid) == node() and Process.alive?(pid)
   end
 
   defp channel_alive?({:connected, _}), do: true
@@ -982,6 +1221,7 @@ defmodule GRPC.Client.Connection do
         headers: [],
         lb_policy: nil,
         connect_timeout: @default_connect_timeout,
+        flap_window: @default_flap_window,
         resolver: GRPC.Client.Resolver,
         resolve_interval: @default_resolve_interval,
         max_resolve_interval: @default_max_resolve_interval,
@@ -1113,8 +1353,17 @@ defmodule GRPC.Client.Connection do
   defp choose_lb(_), do: GRPC.Client.LoadBalancing.PickFirst
 
   defp connect_real_channel(%Channel{} = vc, host, port, opts, adapter) do
-    %Channel{vc | host: host, port: port}
-    |> adapter.connect(opts[:adapter_opts])
+    result =
+      %Channel{vc | host: host, port: port}
+      |> adapter.connect(opts[:adapter_opts])
+
+    with {:ok, %Channel{adapter_payload: %{conn_pid: pid}}} when is_pid(pid) <- result do
+      # The transport may be linked to this process (Mint) or owned by the
+      # adapter's supervisor (Gun); a monitor is the only death signal that
+      # covers both.
+      Process.monitor(pid)
+      result
+    end
   end
 
   defp init_interceptors(interceptors) do
