@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Behavior Changes
+
+  * The Mint adapter now enforces the requested `:timeout`/`:deadline` on unary receives. A unary call that never receives a response fails with `DEADLINE_EXCEEDED` after the documented 10s default instead of blocking indefinitely, and an explicit `:deadline` now takes precedence over `:timeout`.
+
+### Bug Fixes
+
+  * The Gun adapter no longer shares a named channel's connection process across Erlang nodes. It was registered in `:global`, so a node connecting with a `:name` already used on another node adopted the remote connection process; `connect/2` returned `{:ok, channel}`, but every RPC on it then raised `ArgumentError` because `GRPC.Stub.call/5` calls `Process.alive?/1` on the connection pid and that raises for remote pids. Connection processes are now registered in the node-local `GRPC.Client.Registry`, so reuse is per node.
+
+## v1.0.4 (2026-0-15)
+
+### Bug Fixes
+
+  * Remove dangling typespecs
+
 ## v1.0.3 (2026-07-27)
 
 ### Enhancements
@@ -63,7 +79,7 @@
 ### Enhancements
 
   * Feat add `exception_log_filter` option to server
-  
+
 ### Bug fixes
 
   * Fix ensure thers is only one `GRPC.Client.Supervisor`.
@@ -76,9 +92,9 @@
   * Feat added new function to handle side-effects.
   * Feat added error handler for unary and stream pipelines.
   * Docs adds a better explanation of the different types of input.
-  * Docs improvements to module documentation. 
+  * Docs improvements to module documentation.
   * Docs livebooks added directly to the documentation.
-  
+
 ### Bug fixes
 
   * Fix refresh error spam on direct_state (no lb).

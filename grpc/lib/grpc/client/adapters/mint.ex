@@ -27,6 +27,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       max_frame_size: 8_000_000
     ]
     @default_transport_opts [timeout: :infinity]
+    @cleanup_timeout 1_000
 
     @doc """
     Connects using Mint based on the provided configs. Options
@@ -192,22 +193,78 @@ if Code.ensure_loaded?(Mint.HTTP) do
     end
 
     defp do_receive_data(
-           %{payload: %{stream_response_pid: pid}},
+           %{payload: %{stream_response_pid: pid}} = stream,
            request_type,
            opts
          )
          when request_type in [:client_stream, :unary] do
-      responses = pid |> StreamResponseProcess.build_stream() |> Enum.to_list()
+      responses =
+        pid
+        |> StreamResponseProcess.build_stream(true, recv_timeout(request_type, opts))
+        |> Enum.to_list()
 
-      with :ok <- check_for_error(responses) do
-        data = Keyword.fetch!(responses, :ok)
+      case check_for_error(responses) do
+        :ok ->
+          data = Keyword.fetch!(responses, :ok)
 
-        if opts[:return_headers] do
-          {:ok, data, get_headers_and_trailers(responses)}
-        else
-          {:ok, data}
-        end
+          if opts[:return_headers] do
+            {:ok, data, get_headers_and_trailers(responses)}
+          else
+            {:ok, data}
+          end
+
+        {:error, :deadline_exceeded} ->
+          give_up_on_request(stream, pid)
+
+          {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "deadline exceeded")}
+
+        {:error, error} ->
+          {:error, error}
       end
+    end
+
+    # Only unary receives are bounded. Server and bidirectional streams are
+    # consumed lazily by the caller, where a gap between messages is expected
+    # rather than a failure, and a client stream awaits its response through a
+    # separate `GRPC.Stub.recv/2` call, which `GRPC.Stub` documents as unbounded
+    # even though it fills in the same 10s default.
+    defp recv_timeout(:unary, opts) do
+      # An explicit `:deadline` wins: `GRPC.Stub` always fills in a `:timeout`,
+      # so a deadline could never take effect otherwise. Both arrive here as a
+      # float number of milliseconds, already negative for a deadline in the
+      # past, while a receive timeout has to be a non-negative integer.
+      case opts[:deadline] || opts[:timeout] do
+        nil -> :infinity
+        :infinity -> :infinity
+        milliseconds when is_number(milliseconds) -> max(0, round(milliseconds))
+      end
+    end
+
+    defp recv_timeout(_request_type, _opts), do: :infinity
+
+    # The caller stopped waiting on a request that is still open. Reset it so the
+    # server stops working on it, and stop the process that buffers the response:
+    # it is linked to the caller rather than to the connection, so nothing else
+    # shuts it down — least of all when the connection process is the very thing
+    # that went away.
+    defp give_up_on_request(stream, stream_response_pid) do
+      %{
+        channel: %{adapter_payload: %{conn_pid: conn_pid}},
+        payload: %{response: {:ok, %{request_ref: request_ref}}}
+      } = stream
+
+      quietly(fn -> ConnectionProcess.cancel(conn_pid, request_ref, @cleanup_timeout) end)
+      quietly(fn -> GenServer.stop(stream_response_pid, :normal, @cleanup_timeout) end)
+    end
+
+    # Cleanup runs after the deadline already elapsed, against processes that may
+    # be gone or wedged — which is what the deadline exists for. Failing to tidy
+    # up must neither replace the error the caller is about to get nor keep it
+    # waiting much longer.
+    defp quietly(cleanup) do
+      cleanup.()
+    catch
+      :exit, _reason -> :ok
     end
 
     def handle_errors_receive_data(%GRPC.Client.Stream{payload: %{response: response}}, _opts) do

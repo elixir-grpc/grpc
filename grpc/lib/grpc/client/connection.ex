@@ -166,22 +166,6 @@ defmodule GRPC.Client.Connection do
   @await_ready_start_event [:grpc, :client, :connection, :await_ready, :start]
   @await_ready_stop_event [:grpc, :client, :connection, :await_ready, :stop]
 
-  @type t :: %__MODULE__{
-          virtual_channel: struct(),
-          real_channels: %{String.t() => {:connected, struct()} | {:failed, any()}},
-          lb_mod: module() | nil,
-          lb_state: term() | nil,
-          resolver: module() | nil,
-          adapter: module(),
-          resolver_target: String.t() | nil,
-          connect_opts: keyword(),
-          resolver_state: term() | nil,
-          established?: boolean(),
-          last_error: term() | nil,
-          retry_attempt: non_neg_integer(),
-          waiters: [{pid(), GenServer.from(), reference(), integer()}]
-        }
-
   defstruct virtual_channel: nil,
             real_channels: %{},
             lb_mod: nil,

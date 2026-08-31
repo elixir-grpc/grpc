@@ -7,8 +7,9 @@ defmodule GRPC.Transport.Utils do
   # @ms_ceiling @us_ceiling * 1000
 
   # unit: ms
-  @ms_ceiling 1000
-  @second_ceiling @ms_ceiling * 60
+  # TimeoutValue is capped at 8 digits, so anything below @ms_ceiling encodes exactly.
+  @ms_ceiling 100_000_000
+  @second_ceiling @ms_ceiling * 1000
   @minute_ceiling @second_ceiling * 60
 
   @doc """

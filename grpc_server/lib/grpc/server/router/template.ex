@@ -7,8 +7,6 @@ defmodule GRPC.Server.Router.Template do
   # Variable = "{" FieldPath [ "=" Segments ] "}" ;
   # FieldPath = IDENT { "." IDENT } ;
   # Verb     = ":" LITERAL ;
-  @type segment_match :: String.t() | {atom(), [segment_match]}
-  @type matchers :: [segment_match]
 
   def tokenize(path, tokens \\ [])
 

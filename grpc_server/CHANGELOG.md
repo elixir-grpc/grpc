@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.4 (2026-0-15)
+
+### Bug Fixes
+
+  * Remove dangling typespecs
+
 ## v1.0.0 (2026-06-15)
 
 ### Enhancements
@@ -43,7 +49,7 @@
 ### Enhancements
 
   * Feat add `exception_log_filter` option to server
-  
+
 ### Bug fixes
 
   * Fix ensure thers is only one `GRPC.Client.Supervisor`.
@@ -56,9 +62,9 @@
   * Feat added new function to handle side-effects.
   * Feat added error handler for unary and stream pipelines.
   * Docs adds a better explanation of the different types of input.
-  * Docs improvements to module documentation. 
+  * Docs improvements to module documentation.
   * Docs livebooks added directly to the documentation.
-  
+
 ### Bug fixes
 
   * Fix refresh error spam on direct_state (no lb).

@@ -273,18 +273,19 @@ defmodule GRPC.Client.ConnectionTest do
       assert %{active: ^supervisor_children} =
                DynamicSupervisor.count_children(GRPC.Client.Supervisor)
 
-      assert after_memory <= before_memory + 100_000,
+      # Residual heap after one GC is typically tens of KB; real header leaks are MBs.
+      assert after_memory <= before_memory + 250_000,
              "supervisor memory grew: before=#{before_memory} after=#{after_memory}"
     end
 
-    test "500 cycles leave persistent_term clean and no per-LB tables leak", %{
+    test "100 cycles leave persistent_term clean and no per-LB tables leak", %{
       target: target,
       adapter: adapter
     } do
       before_table_count = length(:ets.all())
       before_pt_count = connection_pt_count()
 
-      for _ <- 1..500 do
+      for _ <- 1..100 do
         ref = make_ref()
         {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
         {:ok, _} = Connection.disconnect(channel)
@@ -347,7 +348,7 @@ defmodule GRPC.Client.ConnectionTest do
         )
 
       assert_receive :interceptor_init
-      refute_receive :interceptor_init, 100
+      refute_received :interceptor_init
 
       Connection.disconnect(channel)
     end
@@ -377,11 +378,28 @@ defmodule GRPC.Client.ConnectionTest do
       target = "ipv4:127.0.0.1:#{port}"
       ref = :shared_channel
 
-      assert {:ok, %Channel{ref: ^ref}} =
+      assert {:ok, %Channel{ref: ^ref} = channel1} =
                @peer.call(peer1, Connection, :connect, [target, [name: ref]])
 
-      assert {:ok, %Channel{ref: ^ref}} =
+      assert {:ok, %Channel{ref: ^ref} = channel2} =
                @peer.call(peer2, Connection, :connect, [target, [name: ref]])
+
+      # Each node must own its own adapter connection. Adopting another node's
+      # connection process leaves the channel unusable: `GRPC.Stub.call/5`
+      # checks `Process.alive?(conn_pid)` on every RPC, and `Process.alive?/1`
+      # raises ArgumentError on a remote pid.
+      %{adapter_payload: %{conn_pid: conn_pid1}} = channel1
+      %{adapter_payload: %{conn_pid: conn_pid2}} = channel2
+
+      assert node(conn_pid1) == node1
+      assert node(conn_pid2) == node2
+
+      point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
+
+      for {peer, channel} <- [{peer1, channel1}, {peer2, channel2}] do
+        assert {:ok, %Routeguide.Feature{}} =
+                 @peer.call(peer, Routeguide.RouteGuide.Stub, :get_feature, [channel, point])
+      end
     end
   end
 

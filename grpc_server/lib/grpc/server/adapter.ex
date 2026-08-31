@@ -3,14 +3,6 @@ defmodule GRPC.Server.Adapter do
   HTTP server adapter for GRPC.
   """
 
-  @type state :: %{
-          pid: pid,
-          handling_timer: reference | nil,
-          resp_trailers: map,
-          compressor: atom | nil,
-          pending_reader: nil
-        }
-
   @callback start(
               atom(),
               %{String.t() => [module()]},
@@ -21,7 +13,7 @@ defmodule GRPC.Server.Adapter do
 
   @callback stop(atom(), %{String.t() => [module()]}) :: :ok | {:error, :not_found}
 
-  @callback send_reply(state, content :: binary(), opts :: keyword()) :: any()
+  @callback send_reply(state :: map(), content :: binary(), opts :: keyword()) :: any()
 
-  @callback send_headers(state, headers :: map()) :: any()
+  @callback send_headers(state :: map(), headers :: map()) :: any()
 end

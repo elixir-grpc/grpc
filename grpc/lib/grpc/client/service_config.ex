@@ -68,12 +68,6 @@ defmodule GRPC.Client.ServiceConfig do
             method_configs: [],
             raw: %{}
 
-  @type t :: %__MODULE__{
-          load_balancing_policy: atom(),
-          method_configs: list(),
-          raw: map()
-        }
-
   def parse(nil), do: {:ok, %__MODULE__{}}
 
   def parse(json) when is_binary(json) do

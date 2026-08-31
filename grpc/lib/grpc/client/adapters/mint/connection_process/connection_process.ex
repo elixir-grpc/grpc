@@ -56,9 +56,12 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
     @doc """
     cancels an open request request
+
+    `timeout` bounds the wait for the connection process to acknowledge the
+    cancellation, for callers that are already past a deadline of their own.
     """
-    def cancel(pid, request_ref) do
-      GenServer.call(pid, {:cancel_request, request_ref})
+    def cancel(pid, request_ref, timeout \\ 5_000) do
+      GenServer.call(pid, {:cancel_request, request_ref}, timeout)
     end
 
     ## Callbacks
