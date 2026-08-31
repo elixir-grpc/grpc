@@ -3,6 +3,11 @@ defmodule GRPC.Client.Adapters.MintTest do
 
   alias GRPC.Client.Adapters.Mint
 
+  defmodule TLSEndpoint do
+    use GRPC.Endpoint
+    run(FeatureServer)
+  end
+
   setup do
     {:ok, _, port} = GRPC.Server.start(FeatureServer, 0)
 
@@ -248,6 +253,36 @@ defmodule GRPC.Client.Adapters.MintTest do
       state = :sys.get_state(connected.adapter_payload.conn_pid)
 
       assert state.retry == 0
+    end
+  end
+
+  describe "connect/2 with hostname" do
+    setup do
+      server_credential = build(:credential)
+
+      {:ok, _, port} =
+        GRPC.Server.start_endpoint(TLSEndpoint, 0, adapter_opts: [cred: server_credential])
+
+      on_exit(fn -> :ok = GRPC.Server.stop_endpoint(TLSEndpoint) end)
+
+      %{port: port}
+    end
+
+    test "dials the resolved address but hands the hostname to Mint for TLS", %{port: port} do
+      channel =
+        build(:channel,
+          adapter: Mint,
+          port: port,
+          host: "127.0.0.1",
+          hostname: "my-service.local",
+          scheme: "https"
+        )
+
+      {:ok, connected} = Mint.connect(channel, [])
+      state = :sys.get_state(connected.adapter_payload.conn_pid)
+
+      assert state.host == "127.0.0.1"
+      assert state.connect_opts[:hostname] == "my-service.local"
     end
   end
 end
