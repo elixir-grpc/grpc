@@ -97,6 +97,12 @@ defmodule GRPC.Client.Connection do
       shut down, after its resources were released.
       * Measurements: none
       * Metadata: `:name`, `:target`, `:pid`, `:reason`
+    * `[:grpc, :client, :connection, :channel_pruned]` – a channel's adapter
+      connection process died and the channel was removed from the load
+      balancer, so it is no longer picked.
+      * Measurements: `:remaining` – channels still connected afterwards
+      * Metadata: `:name`, `:target`, `:pid`, `:reason`, `:address` – the
+        address key of the pruned channel
     * `[:grpc, :client, :connection, :await_ready, :start]` – a caller started
       waiting in `await_ready/2`.
       * Measurements: `:system_time`
@@ -163,6 +169,7 @@ defmodule GRPC.Client.Connection do
   @connected_event [:grpc, :client, :connection, :connected]
   @connect_error_event [:grpc, :client, :connection, :connect_error]
   @disconnected_event [:grpc, :client, :connection, :disconnected]
+  @channel_pruned_event [:grpc, :client, :connection, :channel_pruned]
   @await_ready_start_event [:grpc, :client, :connection, :await_ready, :start]
   @await_ready_stop_event [:grpc, :client, :connection, :await_ready, :stop]
 
@@ -557,20 +564,12 @@ defmodule GRPC.Client.Connection do
 
       {:noreply, state}
     else
-      Logger.warning(
-        "#{inspect(__MODULE__)} received :EXIT from #{inspect(pid)} reason: #{inspect(reason)}"
-      )
-
-      {:noreply, state}
+      {:noreply, handle_adapter_exit(pid, reason, state)}
     end
   end
 
   def handle_info({:EXIT, pid, reason}, state) do
-    Logger.warning(
-      "#{inspect(__MODULE__)} received :EXIT from #{inspect(pid)} reason: #{inspect(reason)}"
-    )
-
-    {:noreply, state}
+    {:noreply, handle_adapter_exit(pid, reason, state)}
   end
 
   def handle_info({:DOWN, mon, :process, pid, reason}, state) do
@@ -921,7 +920,7 @@ defmodule GRPC.Client.Connection do
       end
 
     if connected == [] do
-      Logger.warning("No healthy channels available after re-resolution")
+      Logger.warning("No healthy channels available")
     end
 
     %{state | real_channels: real_channels, lb_state: new_lb_state}
@@ -941,6 +940,65 @@ defmodule GRPC.Client.Connection do
 
   defp channel_alive?({:connected, _}), do: true
   defp channel_alive?(_), do: false
+
+  # An adapter connection process died. It is linked to us, so we are the only
+  # one told: the channel it backs is still `{:connected, ch}` in
+  # `real_channels` and still in the load balancer's list, so `pick_channel/2`
+  # would keep handing out a channel whose `conn_pid` is dead until the next
+  # re-resolution reconciles it. Literal-address targets (`ipv4:`, `ipv6:`,
+  # `unix:`) have no background re-resolution at all, so for those no tick is
+  # ever coming and the dead channel would be served forever.
+  defp handle_adapter_exit(pid, reason, state) do
+    case channel_key_for_conn_pid(state.real_channels, pid) do
+      nil ->
+        Logger.warning(
+          "#{inspect(__MODULE__)} received :EXIT from #{inspect(pid)} reason: #{inspect(reason)}"
+        )
+
+        state
+
+      key ->
+        Logger.warning(
+          "#{inspect(__MODULE__)} adapter connection #{inspect(pid)} exited: " <>
+            "#{inspect(reason)}, pruning its channel from the load balancer"
+        )
+
+        new_state =
+          state.real_channels
+          |> Map.put(key, {:failed, reason})
+          |> rebalance_after_reconcile(state)
+
+        :telemetry.execute(
+          @channel_pruned_event,
+          %{remaining: length(connected_channels(new_state.real_channels))},
+          state
+          |> lifecycle_metadata()
+          |> Map.merge(%{reason: reason, address: key})
+        )
+
+        maybe_reestablish(new_state)
+    end
+  end
+
+  defp channel_key_for_conn_pid(real_channels, pid) do
+    Enum.find_value(real_channels, fn
+      {key, {:connected, %{adapter_payload: %{conn_pid: ^pid}}}} -> key
+      _ -> nil
+    end)
+  end
+
+  # With channels left we simply serve them and let the next reconcile retry
+  # the failed address. With none left there is nothing to pick, so restart the
+  # establish loop from scratch -- `:retry_establish` is a no-op while
+  # `established?` is true, so that has to be cleared for the retry to run.
+  defp maybe_reestablish(state) do
+    if connected_channels(state.real_channels) == [] do
+      Process.send_after(self(), :retry_establish, backoff_delay(0))
+      %{state | established?: false, retry_attempt: 0}
+    else
+      state
+    end
+  end
 
   defp via(ref) do
     {:via, Registry, {GRPC.Client.Registry, {__MODULE__, ref}}}
