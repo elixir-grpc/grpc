@@ -278,13 +278,6 @@ defmodule GRPC.Stub do
   #    * Client streaming. A `GRPC.Client.Stream`
   #    * Server streaming. `{:ok, Enumerable.t} | {:ok, Enumerable.t, trailers_map} | {:error, error}`
   #
-  #  Any call made through a named connection's virtual channel fails with
-  #  UNAVAILABLE while the connection has no healthy underlying channel to
-  #  resolve to: `{:error, %GRPC.RPCError{status: 14}}` for unary and
-  #  server-streaming calls, raised as `GRPC.RPCError` for request-streaming
-  #  calls (their return value is a stream). Both flow through the channel's
-  #  interceptors and client telemetry.
-  #
   #  Options
   #
   #    * `:timeout` - request timeout. Default is 10s for unary calls and `:infinity` for
@@ -313,12 +306,9 @@ defmodule GRPC.Stub do
 
     case resolve_channel(channel, opts) do
       {:error, %GRPC.RPCError{} = error} ->
-        unavailable_result(error, stream, request, req_mod, res_mod, req_stream)
+        unavailable_result(error, stream, request, req_mod, res_mod, req_stream, opts)
 
       {:ok, ch} ->
-        # Codec/compression defaults come from the picked channel: a caller
-        # may hold a bare %Channel{ref: name} handle that carries none of the
-        # connection's configuration.
         compressor = Keyword.get(opts, :compressor, ch.compressor)
 
         accepted_compressors =
@@ -351,9 +341,9 @@ defmodule GRPC.Stub do
   # the window before the connection process rebalances it away.
   @resolve_attempts 3
 
-  defp resolve_channel(channel, opts), do: resolve_channel(channel, opts, @resolve_attempts)
+  defp resolve_channel(channel, opts), do: resolve_channel(channel, opts, @resolve_attempts, nil)
 
-  defp resolve_channel(channel, _opts, 0) do
+  defp resolve_channel(channel, _opts, 0, _last_pid) do
     Logger.warning(
       "no live connection process after #{@resolve_attempts} picks for #{inspect(channel.ref)}"
     )
@@ -361,16 +351,26 @@ defmodule GRPC.Stub do
     fallback_channel(channel)
   end
 
-  defp resolve_channel(channel, opts, attempts) do
+  defp resolve_channel(channel, opts, attempts, last_pid) do
     case Connection.pick_channel(channel, opts) do
-      {:ok, %Channel{adapter_payload: adapter_payload} = ch} when is_map(adapter_payload) ->
-        conn_pid = Map.get(adapter_payload, :conn_pid)
+      {:ok, %Channel{adapter_payload: %{conn_pid: pid}} = ch} ->
+        cond do
+          local_process_alive?(pid) ->
+            {:ok, ch}
 
-        if local_process_alive?(conn_pid) do
-          {:ok, ch}
-        else
-          resolve_channel(channel, opts, attempts - 1)
+          # A repeated pick means the policy is not rotating (e.g. PickFirst);
+          # further picks would return the same dead entry.
+          pid == last_pid ->
+            fallback_channel(channel)
+
+          true ->
+            resolve_channel(channel, opts, attempts - 1, pid)
         end
+
+      {:ok, %Channel{adapter_payload: payload} = ch} when is_map(payload) ->
+        # An adapter that exposes no transport pid cannot be liveness-checked;
+        # treat it as usable, matching channel_alive?/1 on the connection side.
+        {:ok, ch}
 
       _ ->
         fallback_channel(channel)
@@ -388,19 +388,16 @@ defmodule GRPC.Stub do
   # snapshot of a re-establishing connection must fail with UNAVAILABLE
   # instead of handing the adapter a dead conn_pid. The virtual handle of a
   # named connection has no payload at all and always fails here.
-  defp fallback_channel(%Channel{adapter_payload: payload} = channel) when is_map(payload) do
-    case payload do
-      %{conn_pid: pid} when is_pid(pid) ->
-        if local_process_alive?(pid) do
-          {:ok, channel}
-        else
-          unavailable_error(channel.ref)
-        end
-
-      _ ->
-        {:ok, channel}
+  defp fallback_channel(%Channel{adapter_payload: %{conn_pid: pid}} = channel) do
+    if local_process_alive?(pid) do
+      {:ok, channel}
+    else
+      unavailable_error(channel.ref)
     end
   end
+
+  defp fallback_channel(%Channel{adapter_payload: payload} = channel) when is_map(payload),
+    do: {:ok, channel}
 
   defp fallback_channel(%Channel{ref: ref}), do: unavailable_error(ref)
 
@@ -412,23 +409,36 @@ defmodule GRPC.Stub do
      )}
   end
 
-  # Fail without a usable channel while preserving the calling contract: the
-  # failure still flows through the interceptor chain and client_span
-  # telemetry, and request-streaming calls raise — their return value is a
-  # `GRPC.Client.Stream`, so an error tuple cannot express failure to them.
   defp unavailable_result(
          error,
          %{channel: channel} = stream,
          request,
          req_mod,
          res_mod,
-         req_stream
+         req_stream,
+         opts
        ) do
-    stream = %{stream | request_mod: req_mod, response_mod: res_mod}
+    config_ch =
+      case Connection.get_channel(channel.ref) do
+        {:ok, %Channel{} = virtual_channel} -> virtual_channel
+        _ -> channel
+      end
+
+    compressor = Keyword.get(opts, :compressor, config_ch.compressor)
+
+    stream = %{
+      stream
+      | request_mod: req_mod,
+        response_mod: res_mod,
+        codec: Keyword.get(opts, :codec, config_ch.codec),
+        compressor: compressor,
+        accepted_compressors:
+          Keyword.get(opts, :accepted_compressors, config_ch.accepted_compressors)
+    }
 
     GRPC.Telemetry.client_span(stream, request, fn ->
       last = fn _stream, _request -> {:error, error} end
-      result = run_interceptors(channel, last).(stream, request)
+      result = run_interceptors(config_ch, last).(stream, request)
 
       # Request-streaming calls return a stream, so an error tuple cannot
       # express failure to them and errors raise instead. An interceptor may
