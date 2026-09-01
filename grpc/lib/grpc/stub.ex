@@ -434,10 +434,6 @@ defmodule GRPC.Stub do
          req_stream,
          opts
        ) do
-    # A bare %Channel{ref: name} handle carries none of the connection's
-    # configuration, so interceptors/codec/compressor are resolved through the
-    # stored virtual channel — the same config a picked real channel inherits —
-    # keeping the failure path consistent with the healthy one.
     config_ch =
       case Connection.get_channel(channel.ref) do
         {:ok, %Channel{} = virtual_channel} -> virtual_channel
