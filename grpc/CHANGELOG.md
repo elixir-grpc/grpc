@@ -5,6 +5,7 @@
 ### Behavior Changes
 
   * The Mint adapter now enforces the requested `:timeout`/`:deadline` on unary receives. A unary call that never receives a response fails with `DEADLINE_EXCEEDED` after the documented 10s default instead of blocking indefinitely, and an explicit `:deadline` now takes precedence over `:timeout`.
+  * Connection errors under the Mint adapter now uniformly surface errors with gRPC status `UNAVAILABLE` instead of `UNKNOWN`. 
 
 ### Bug Fixes
 

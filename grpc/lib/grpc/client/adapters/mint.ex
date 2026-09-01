@@ -218,8 +218,8 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
           {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "deadline exceeded")}
 
-        {:error, error} ->
-          {:error, error}
+        {:error, _reason} = error ->
+          {:error, rpc_error(error)}
       end
     end
 
@@ -268,11 +268,46 @@ if Code.ensure_loaded?(Mint.HTTP) do
     end
 
     def handle_errors_receive_data(%GRPC.Client.Stream{payload: %{response: response}}, _opts) do
-      {:error,
-       GRPC.RPCError.exception(
-         GRPC.Status.unknown(),
-         "error occurred while receiving data: #{inspect(response)}"
-       )}
+      {:error, rpc_error(response)}
+    end
+
+    # A connection that has dropped, or was never there, is a transient condition
+    # that should map to the gRPC UNAVAILABLE error status.
+    defp rpc_error({:error, %GRPC.RPCError{} = error}), do: error
+
+    defp rpc_error({:error, %Mint.TransportError{} = error}) do
+      unavailable(error)
+    end
+
+    defp rpc_error({:error, %Mint.HTTPError{reason: :closed} = error}) do
+      unavailable(error)
+    end
+
+    defp rpc_error({:error, %Mint.HTTPError{reason: :closed_for_writing} = error}) do
+      unavailable(error)
+    end
+
+    defp rpc_error({:error, %Mint.HTTPError{reason: :unprocessed} = error}) do
+      unavailable(error)
+    end
+
+    defp rpc_error({:error, %Mint.HTTPError{reason: {:server_closed_connection, _, _}} = error}) do
+      unavailable(error)
+    end
+
+    defp rpc_error({:error, :closed}) do
+      GRPC.RPCError.exception(GRPC.Status.unavailable(), "the connection is closed")
+    end
+
+    defp rpc_error(response) do
+      GRPC.RPCError.exception(
+        GRPC.Status.unknown(),
+        "error occurred while receiving data: #{inspect(response)}"
+      )
+    end
+
+    defp unavailable(error) do
+      GRPC.RPCError.exception(GRPC.Status.unavailable(), Exception.message(error))
     end
 
     defp success_response?(%GRPC.Client.Stream{

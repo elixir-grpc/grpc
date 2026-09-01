@@ -101,7 +101,11 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
       assert {:reply, {:error, error}, new_state} = response
       assert state.conn != new_state.conn
-      assert "the connection is closed" == error
+
+      assert %GRPC.RPCError{
+               status: GRPC.Status.unavailable(),
+               message: "the connection is closed"
+             } == error
     end
 
     test "returns error response when mint returns an error when starting stream request", %{
@@ -157,7 +161,11 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
       assert {:reply, {:error, error}, new_state} = response
       assert state.conn != new_state.conn
-      assert "the connection is closed" == error
+
+      assert %GRPC.RPCError{
+               status: GRPC.Status.unavailable(),
+               message: "the connection is closed"
+             } == error
     end
 
     test "returns error response when mint returns an error when starting stream request", %{
@@ -486,7 +494,14 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert new_state.conn.state == :closed
       assert_receive {:elixir_grpc, :connection_down, pid}, 500
       response_state = :sys.get_state(response_pid)
-      assert :queue.to_list(response_state.responses) == [error: "the connection is closed"]
+
+      assert :queue.to_list(response_state.responses) == [
+               error: %GRPC.RPCError{
+                 status: GRPC.Status.unavailable(),
+                 message: "the connection is closed"
+               }
+             ]
+
       assert true == response_state.done
       assert pid == self()
     end
@@ -514,7 +529,14 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert new_state.conn.state == :closed
       assert_receive {:elixir_grpc, :connection_down, pid}, 500
       response_state = :sys.get_state(response_pid)
-      assert :queue.to_list(response_state.responses) == [error: "the connection is closed"]
+
+      assert :queue.to_list(response_state.responses) == [
+               error: %GRPC.RPCError{
+                 status: GRPC.Status.unavailable(),
+                 message: "the connection is closed"
+               }
+             ]
+
       assert true == response_state.done
       assert pid == self()
     end
