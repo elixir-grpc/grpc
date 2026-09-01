@@ -569,7 +569,6 @@ defmodule GRPC.Client.Connection do
         {:noreply, %{state | repair_attempt: 0}}
       end
     else
-      # Either everything healed or a full re-establish owns recovery now.
       {:noreply, %{state | repair_attempt: 0}}
     end
   end
@@ -728,7 +727,6 @@ defmodule GRPC.Client.Connection do
 
   defp request_reresolve(%__MODULE__{resolver: resolver, resolver_state: rs} = state)
        when not is_nil(rs) do
-    # update/2 is an optional callback of GRPC.Client.Resolver.
     if function_exported?(resolver, :update, 2) do
       case resolver.update(rs, :resolve_now) do
         {:ok, new_rs} ->
@@ -773,8 +771,6 @@ defmodule GRPC.Client.Connection do
 
   defp cancel_retry_timer(%__MODULE__{retry_timer: ref} = state) do
     unless Process.cancel_timer(ref) do
-      # The timer already fired; drop its queued message so the retry loop
-      # cannot run twice.
       receive do
         :retry_establish -> :ok
       after

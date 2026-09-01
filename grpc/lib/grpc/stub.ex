@@ -278,13 +278,6 @@ defmodule GRPC.Stub do
   #    * Client streaming. A `GRPC.Client.Stream`
   #    * Server streaming. `{:ok, Enumerable.t} | {:ok, Enumerable.t, trailers_map} | {:error, error}`
   #
-  #  Any call made through a named connection's virtual channel fails with
-  #  UNAVAILABLE while the connection has no healthy underlying channel to
-  #  resolve to: `{:error, %GRPC.RPCError{status: 14}}` for unary and
-  #  server-streaming calls, raised as `GRPC.RPCError` for request-streaming
-  #  calls (their return value is a stream). Both flow through the channel's
-  #  interceptors and client telemetry.
-  #
   #  Options
   #
   #    * `:timeout` - request timeout. Default is 10s for unary calls and `:infinity` for
@@ -316,9 +309,6 @@ defmodule GRPC.Stub do
         unavailable_result(error, stream, request, req_mod, res_mod, req_stream, opts)
 
       {:ok, ch} ->
-        # Codec/compression defaults come from the picked channel: a caller
-        # may hold a bare %Channel{ref: name} handle that carries none of the
-        # connection's configuration.
         compressor = Keyword.get(opts, :compressor, ch.compressor)
 
         accepted_compressors =
@@ -402,8 +392,6 @@ defmodule GRPC.Stub do
     if local_process_alive?(pid) do
       {:ok, channel}
     else
-      # Covers dead and remote pids as well as the `conn_pid: nil` payload
-      # that Connection.disconnect/1 returns.
       unavailable_error(channel.ref)
     end
   end
@@ -421,10 +409,6 @@ defmodule GRPC.Stub do
      )}
   end
 
-  # Fail without a usable channel while preserving the calling contract: the
-  # failure still flows through the interceptor chain and client_span
-  # telemetry, and request-streaming calls raise — their return value is a
-  # `GRPC.Client.Stream`, so an error tuple cannot express failure to them.
   defp unavailable_result(
          error,
          %{channel: channel} = stream,
