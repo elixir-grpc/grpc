@@ -14,6 +14,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   @default_trailers HTTP2.server_trailers()
   @trailers_flag 0b1000_0000
 
+  @abort_published :"$grpc_abort_published"
+
   # 4 MB – matches gRPC-Go's default max receive message size.
   # Override per-server with the :max_body_size option (bytes).
   @default_max_body_size 4 * 1024 * 1024
@@ -35,6 +37,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
          {:ok, codec} <- find_codec(sub_type, content_type, server),
          {:ok, compressor} <- find_compressor(req, server) do
       stream_pid = self()
+      started_at = System.monotonic_time()
       http_transcode = access_mode == :http_transcoding
       request_headers = :cowboy_req.headers(req)
 
@@ -81,6 +84,10 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         req,
         %{
           pid: server_rpc_pid,
+          stream: stream,
+          endpoint: endpoint,
+          route: route,
+          started_at: started_at,
           handling_timer: timer_ref,
           pending_reader: nil,
           access_mode: access_mode,
@@ -525,8 +532,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     {:stop, req, state}
   end
 
-  def terminate(reason, _req, %{pid: pid}) do
-    exit_handler(pid, reason)
+  def terminate(reason, _req, state = %{pid: _pid}) do
+    abort_rpc(state, reason)
     :ok
   end
 
@@ -644,6 +651,51 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
+  # Stops an RPC that is still running, and publishes it. The exit signal does
+  # not unwind the RPC process, so `:telemetry.span/3` around the call publishes
+  # neither `:stop` nor `:exception`; this process outlives it and publishes
+  # `:abort` before signalling.
+  #
+  # Both abort paths can run for one call — `send_error/4` signals the RPC
+  # process and cowboy then calls `terminate/3` — and the signal is
+  # asynchronous, so the process may still be alive for the second. The flag
+  # keeps the event to one per call; it lives in the cowboy request process,
+  # which handles this call only.
+  defp abort_rpc(state, reason) do
+    case Map.get(state, :pid) do
+      pid when is_pid(pid) ->
+        if Process.alive?(pid) do
+          unless Process.put(@abort_published, true) do
+            publish_abort(state, pid, reason)
+          end
+
+          exit_handler(pid, reason)
+        end
+
+      _no_rpc_process ->
+        :ok
+    end
+
+    :ok
+  end
+
+  defp publish_abort(state, pid, reason) do
+    %{stream: stream, endpoint: endpoint, route: route, started_at: started_at} = state
+
+    :telemetry.execute(
+      GRPC.Telemetry.server_rpc_prefix() ++ [:abort],
+      %{duration: System.monotonic_time() - started_at},
+      %{
+        stream: stream,
+        server: stream.server,
+        endpoint: endpoint,
+        path: route,
+        pid: pid,
+        reason: reason
+      }
+    )
+  end
+
   defp timeout_left_opt(timer, opts \\ %{}) do
     case timer do
       nil ->
@@ -709,9 +761,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         do: GRPC.Status.http_code(error.status),
         else: 200
 
-    if pid = Map.get(state, :pid) do
-      exit_handler(pid, reason)
-    end
+    abort_rpc(state, reason)
 
     send_error_trailers(req, status, trailers, state)
   end

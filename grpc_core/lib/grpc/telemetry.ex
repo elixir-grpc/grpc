@@ -47,12 +47,19 @@ defmodule GRPC.Telemetry do
     * `[:grpc, :server, :rpc, :exception]` - Published if any exception occurs while receiving a message.
       * `:duration` - the duration as measured through `System.monotonic_time()`
         for the execution since the start of the pipeline until the exception happened.
+    * `[:grpc, :server, :rpc, :abort]` - Published when the adapter stops an in-flight
+      RPC: expired deadline, client cancellation or a dropped connection. The exit
+      signal doesn't unwind the RPC process, so `:stop` and `:exception` are not
+      published for such a call; this event comes from the adapter's process.
+      * `:duration` - the duration as measured through `System.monotonic_time()`
+        from the arrival of the request until the abort.
 
   | event        | measurements | metadata |
   |--------------|--------------|----------|
   | `[:rpc, :start]`  | `:count`     | `:stream`, `:server`, `:endpoint`, `:function_name` |
   | `[:rpc, :stop]`  | `:duration`  | `:stream`, `:server`, `:endpoint`, `:function_name` , `:result` |
   | `[:rpc, :exception]` | `:duration`  | `:stream`, `:server`, `:endpoint`, `:function_name`, `:kind`, `:reason`, `:stacktrace` |
+  | `[:rpc, :abort]` | `:duration`  | `:stream`, `:server`, `:endpoint`, `:path`, `:pid`, `:reason` |
 
   ### Metadata
 
@@ -61,6 +68,12 @@ defmodule GRPC.Telemetry do
     * `:server` - the server module name.
     * `:endpoint` - the endpoint module name.
     * `:result` - the result returned from the interceptor pipeline.
+
+  `:abort` events also include `:path` (the request path), `:pid` (the RPC
+  process being stopped) and `:reason` (the exit reason, e.g. `:timeout`).
+  They carry no `:function_name`, which is resolved in the RPC process; for
+  the same reason `:stream` holds only what the adapter built on arrival, so
+  read `:server` and `:endpoint` from the metadata rather than from it.
 
   `:exception` events also include some error metadata:
 
