@@ -2,6 +2,7 @@ defmodule GRPC.Server.Adapters.Cowboy.HandlerTest do
   use ExUnit.Case, async: false
 
   import ExUnit.CaptureLog
+  import GRPC.DataCase, only: [attach_telemetry: 1]
 
   # --------------------------------------------------------------------------
   # Minimal server used across all tests
@@ -11,6 +12,25 @@ defmodule GRPC.Server.Adapters.Cowboy.HandlerTest do
     use GRPC.Server, service: Helloworld.Greeter.Service
 
     def say_hello(req, _stream) do
+      %Helloworld.HelloReply{message: "Hello, #{req.name}"}
+    end
+  end
+
+  defmodule SlowServer do
+    use GRPC.Server, service: Helloworld.Greeter.Service
+
+    def say_hello(req, _stream) do
+      Process.sleep(5_000)
+      %Helloworld.HelloReply{message: "Hello, #{req.name}"}
+    end
+  end
+
+  defmodule TrappingServer do
+    use GRPC.Server, service: Helloworld.Greeter.Service
+
+    def say_hello(req, _stream) do
+      Process.flag(:trap_exit, true)
+      Process.sleep(3_000)
       %Helloworld.HelloReply{message: "Hello, #{req.name}"}
     end
   end
@@ -152,6 +172,111 @@ defmodule GRPC.Server.Adapters.Cowboy.HandlerTest do
 
         :gun.close(conn)
       end)
+    end
+  end
+
+  # --------------------------------------------------------------------------
+  # Tests: telemetry for RPCs the adapter stops before they return
+  # --------------------------------------------------------------------------
+
+  describe "aborted RPCs" do
+    test "an expired deadline publishes :abort and no :stop" do
+      attach_telemetry([:grpc, :server, :rpc, :abort])
+      attach_telemetry([:grpc, :server, :rpc, :stop])
+      attach_telemetry([:grpc, :server, :rpc, :exception])
+
+      capture_log(fn ->
+        run_server_with_opts([SlowServer], [], fn port ->
+          headers = [{"grpc-timeout", "50m"} | grpc_request_headers()]
+          body = grpc_frame(Protobuf.encode(%Helloworld.HelloRequest{name: "slow"}))
+
+          conn = open_h2(port)
+          ref = :gun.post(conn, "/helloworld.Greeter/SayHello", headers, body)
+
+          assert collect_grpc_status(conn, ref) == "4"
+
+          :gun.close(conn)
+        end)
+      end)
+
+      assert_receive {:telemetry, [:grpc, :server, :rpc, :abort], measurements, metadata}
+      assert metadata.reason == :timeout
+      assert metadata.path == "/helloworld.Greeter/SayHello"
+      assert metadata.server == SlowServer
+      assert metadata.endpoint == nil
+      assert is_pid(metadata.pid)
+      assert metadata.stream.http_request_headers["grpc-timeout"] == "50m"
+      assert metadata.stream.deadline
+      assert measurements.duration > 0
+
+      # The RPC process is stopped by a signal it cannot unwind, so the span
+      # around the call publishes nothing: without `:abort` the call would be
+      # absent from telemetry entirely.
+      refute_receive {:telemetry, [:grpc, :server, :rpc, :stop], _, _}, 200
+      refute_receive {:telemetry, [:grpc, :server, :rpc, :exception], _, _}, 10
+    end
+
+    test "publishes :abort once when both abort paths run for one call" do
+      attach_telemetry([:grpc, :server, :rpc, :abort])
+
+      capture_log(fn ->
+        run_server_with_opts([TrappingServer], [], fn port ->
+          headers = [{"grpc-timeout", "50m"} | grpc_request_headers()]
+          body = grpc_frame(Protobuf.encode(%Helloworld.HelloRequest{name: "trap"}))
+
+          conn = open_h2(port)
+          ref = :gun.post(conn, "/helloworld.Greeter/SayHello", headers, body)
+
+          assert collect_grpc_status(conn, ref) == "4"
+
+          :gun.close(conn)
+        end)
+      end)
+
+      # `send_error/4` publishes and signals; cowboy then calls `terminate/3`,
+      # by which point this RPC process has not died.
+      assert_receive {:telemetry, [:grpc, :server, :rpc, :abort], _, %{reason: :timeout}}
+      refute_receive {:telemetry, [:grpc, :server, :rpc, :abort], _, _}, 500
+    end
+
+    test "a dropped connection publishes :abort" do
+      attach_telemetry([:grpc, :server, :rpc, :abort])
+
+      capture_log(fn ->
+        run_server_with_opts([SlowServer], [], fn port ->
+          body = grpc_frame(Protobuf.encode(%Helloworld.HelloRequest{name: "slow"}))
+
+          conn = open_h2(port)
+          _ref = :gun.post(conn, "/helloworld.Greeter/SayHello", grpc_request_headers(), body)
+
+          # No deadline: the RPC is still running when the client goes away.
+          Process.sleep(100)
+          :gun.close(conn)
+
+          assert_receive {:telemetry, [:grpc, :server, :rpc, :abort], _, metadata}, 1_000
+          assert metadata.path == "/helloworld.Greeter/SayHello"
+          refute metadata.reason == :timeout
+        end)
+      end)
+    end
+
+    test "a call that returns publishes :stop and no :abort" do
+      attach_telemetry([:grpc, :server, :rpc, :abort])
+      attach_telemetry([:grpc, :server, :rpc, :stop])
+
+      run_server_with_opts([HelloServer], [], fn port ->
+        body = grpc_frame(Protobuf.encode(%Helloworld.HelloRequest{name: "hi"}))
+
+        conn = open_h2(port)
+        ref = :gun.post(conn, "/helloworld.Greeter/SayHello", grpc_request_headers(), body)
+
+        assert collect_grpc_status(conn, ref) == "0"
+
+        :gun.close(conn)
+      end)
+
+      assert_receive {:telemetry, [:grpc, :server, :rpc, :stop], _measurements, _metadata}
+      refute_receive {:telemetry, [:grpc, :server, :rpc, :abort], _, _}, 200
     end
   end
 
