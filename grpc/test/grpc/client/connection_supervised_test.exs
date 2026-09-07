@@ -245,6 +245,38 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
     end
 
     @tag capture_log: true
+    test "re-establishes when an adapter emits connection_down" do
+      name = unique_name("conn_down_msg")
+      attach_telemetry([:grpc, :client, :connection, :connected])
+
+      start_supervised!(
+        {Connection, name: name, target: "ipv4:127.0.0.1:50051", adapter: TransportProcessAdapter}
+      )
+
+      assert :ok = Connection.await_ready(name, 2_000)
+      assert_receive {:telemetry, [:grpc, :client, :connection, :connected], _, %{name: ^name}}
+
+      conn = whereis_connection(name)
+
+      assert {:ok, %GRPC.Channel{adapter_payload: %{conn_pid: pid1}}} =
+               Connection.pick_channel(%GRPC.Channel{ref: name})
+
+      send(conn, {:elixir_grpc, :connection_down, pid1})
+
+      assert_receive {:telemetry, [:grpc, :client, :connection, :connected], _, %{name: ^name}},
+                     2_000
+
+      assert whereis_connection(name) == conn
+      assert :ok = Connection.await_ready(name, 2_000)
+
+      assert {:ok, %GRPC.Channel{adapter_payload: %{conn_pid: pid2}}} =
+               Connection.pick_channel(%GRPC.Channel{ref: name})
+
+      assert pid2 != pid1
+      assert Process.alive?(pid2)
+    end
+
+    @tag capture_log: true
     test "RPCs fail with UNAVAILABLE while down and succeed after recovery" do
       name = unique_name("conn_death_rpc")
       hosts = start_supervised!({Agent, fn -> [] end})

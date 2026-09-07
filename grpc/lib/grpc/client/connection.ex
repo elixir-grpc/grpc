@@ -615,6 +615,16 @@ defmodule GRPC.Client.Connection do
     end
   end
 
+  def handle_info({:elixir_grpc, :connection_down, pid}, state) do
+    case down_channel_key(state.real_channels, pid) do
+      nil ->
+        {:noreply, state}
+
+      key ->
+        handle_channel_down(key, pid, :connection_down, state)
+    end
+  end
+
   def handle_info(msg, state) do
     Logger.warning("#{inspect(__MODULE__)} received unexpected message: #{inspect(msg)}")
 
