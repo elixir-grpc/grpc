@@ -42,4 +42,12 @@ defmodule GRPC.Client.LoadBalancing.RoundRobin do
     :atomics.put(aref, 1, 0)
     {:ok, state}
   end
+
+  @impl true
+  def terminate(%{tid: tid}) do
+    :ets.delete(tid)
+    :ok
+  rescue
+    ArgumentError -> :ok
+  end
 end
