@@ -201,8 +201,7 @@ defmodule GRPC.Client.Pool.Implementation do
     old_leases = Map.get(leases, channel.id, [])
     old_lease = Enum.find(old_leases, fn %State.Lease{caller_pid: pid} -> pid == caller_pid end)
 
-    new_leases =
-      Enum.reject(old_leases, fn %State.Lease{caller_pid: pid} -> pid == caller_pid end)
+    new_leases = List.delete(old_leases, old_lease)
 
     {put_in(state, [:leases_by_channel_id, channel.id], new_leases),
      old_lease && old_lease.monitor_ref}
