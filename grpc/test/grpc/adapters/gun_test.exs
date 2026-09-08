@@ -190,7 +190,16 @@ defmodule GRPC.Client.Adapters.GunTest do
       end
 
       logical_ref = make_ref()
-      channel = build(:channel, ref: logical_ref, port: port, host: "localhost", cred: credential)
+
+      channel =
+        build(:channel,
+          ref: logical_ref,
+          port: port,
+          host: "localhost",
+          scheme: "https",
+          cred: credential
+        )
+
       assert {:ok, connected} = Gun.connect(channel, [])
       conn_pid = connected.adapter_payload.conn_pid
 
@@ -202,6 +211,8 @@ defmodule GRPC.Client.Adapters.GunTest do
                       %{reconnect: false}}
 
       gun_pid = :sys.get_state(conn_pid).gun_pid
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :settings], %{}, _}
       send(conn_pid, {:gun_notify, gun_pid, :settings_changed, %{max_concurrent_streams: 1}})
 
       assert_receive {:telemetry, [:grpc, :client, :transport, :settings], %{},
@@ -246,21 +257,6 @@ defmodule GRPC.Client.Adapters.GunTest do
 
       assert_receive {:telemetry, [:grpc, :client, :transport, :stopped],
                       %{streams_terminated: 0}, _}
-    end
-
-    test "does not infer GOAWAY from a generic connection-down signal", %{
-      port: port,
-      credential: credential
-    } do
-      attach_telemetry([:grpc, :client, :transport, :goaway])
-      channel = build(:channel, ref: make_ref(), port: port, host: "localhost", cred: credential)
-      assert {:ok, connected} = Gun.connect(channel, [])
-      conn_pid = connected.adapter_payload.conn_pid
-      gun_pid = :sys.get_state(conn_pid).gun_pid
-
-      send(conn_pid, {:gun_down, gun_pid, :http2, {:goaway, :no_error}, []})
-      refute_receive {:telemetry, [:grpc, :client, :transport, :goaway], _, _}, 100
-      assert {:ok, _} = Gun.disconnect(connected)
     end
   end
 

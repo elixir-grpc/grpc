@@ -14,7 +14,6 @@ defmodule GRPC.Client.Telemetry do
   | `:down` | `streams_terminated` | common metadata plus diagnostic `reason` |
   | `:stopped` | `streams_terminated` | common metadata plus diagnostic `reason` |
   | `:reset` | `streams_terminated` | common metadata plus diagnostic `reason` |
-  | `:goaway` | `streams_terminated` | common metadata plus `error_code` and diagnostic `reason` |
   | `:settings` | none | common metadata plus `max_concurrent_streams` |
   | `:streams` | `active` | common metadata |
   | `:stream_rejected` | `count: 1` | common metadata plus `reason: :max_concurrent_streams` |
@@ -26,17 +25,12 @@ defmodule GRPC.Client.Telemetry do
   double-counting.
 
   `:connect_error` is emitted only when the adapter can assign `:resolve`,
-  `:tcp`, `:tls`, or `:http2` from a public transport signal. `:goaway` is
-  emitted only when the adapter supplies a distinct GOAWAY signal.
+  `:tcp`, `:tls`, or `:http2` from a public transport signal.
 
-  Gun 2.4 exposes connection up/down and settings changes through public owner
-  messages, but does not expose a distinct connection-owner GOAWAY signal.
-  Mint 1.9 exposes connection results, read availability, and settings
-  snapshots. It does not expose GOAWAY details or whether the peer explicitly
-  sent `SETTINGS_MAX_CONCURRENT_STREAMS`; its ambiguous default value is
-  reported as `:unknown`. Consequently neither built-in adapter currently
-  emits `:goaway`, and Mint cannot report an explicit peer limit of 100 without
-  a small upstream Mint hook exposing setting presence.
+  Mint 1.9 does not expose whether the peer explicitly sent
+  `SETTINGS_MAX_CONCURRENT_STREAMS`; its ambiguous default value is reported as
+  `:unknown`. A small upstream Mint hook exposing setting presence would allow
+  an explicit peer limit of 100 to be reported safely.
 
   Existing `[:grpc, :client, :rpc, ...]` events are unchanged. Stop and
   exception metadata may additionally contain `:failure_stage` and
