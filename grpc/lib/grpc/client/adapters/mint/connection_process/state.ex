@@ -12,7 +12,6 @@ if Code.ensure_loaded?(Mint.HTTP) do
       :retry_timeout_ms,
       :telemetry_metadata,
       requests: %{},
-      request_monitors: %{},
       request_stream_queue: :queue.new(),
       retry: 0,
       retry_attempt: 0,
@@ -44,15 +43,11 @@ if Code.ensure_loaded?(Mint.HTTP) do
     end
 
     def put_empty_ref_state(state, ref, response_pid) do
-      monitor_ref = Process.monitor(response_pid)
-
-      state
-      |> put_in([Access.key(:requests), ref], %{
+      put_in(state.requests[ref], %{
         stream_response_pid: response_pid,
         done: false,
         response: %{}
       })
-      |> put_in([Access.key(:request_monitors), monitor_ref], ref)
     end
 
     def update_response_status(state, ref, status) do
@@ -74,22 +69,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
     defguard has_request_ref(state, ref) when is_map_key(state.requests, ref)
 
     def pop_ref(state, ref) do
-      {request, state} = pop_in(state.requests[ref])
-
-      case Enum.find(state.request_monitors, fn {_monitor_ref, request_ref} ->
-             request_ref == ref
-           end) do
-        {monitor_ref, ^ref} ->
-          Process.demonitor(monitor_ref, [:flush])
-          {request, %{state | request_monitors: Map.delete(state.request_monitors, monitor_ref)}}
-
-        nil ->
-          {request, state}
-      end
-    end
-
-    def request_ref_by_monitor(state, monitor_ref) do
-      Map.get(state.request_monitors, monitor_ref)
+      pop_in(state.requests[ref])
     end
 
     def append_response_data(state, ref, new_data) do

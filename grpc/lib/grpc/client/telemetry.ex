@@ -16,7 +16,6 @@ defmodule GRPC.Client.Telemetry do
   | `:reset` | `streams_terminated` | common metadata plus diagnostic `reason` |
   | `:settings` | none | common metadata plus `max_concurrent_streams` |
   | `:streams` | `active` | common metadata |
-  | `:stream_rejected` | `count: 1` | common metadata plus `reason: :max_concurrent_streams` |
 
   Generations start at one on the first successful establishment and increment
   after recovery. Stream occupancy is an authoritative snapshot after each

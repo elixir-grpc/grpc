@@ -306,17 +306,9 @@ if Code.ensure_loaded?(Mint.HTTP) do
           stream_response_pid: stream_response_pid
         )
 
-      case response do
-        {:error, %GRPC.RPCError{} = error} ->
-          GenServer.stop(stream_response_pid, :normal)
-          GRPC.Client.Telemetry.mark_rpc_failure(:local_pre_send, :capacity)
-          {:error, error}
-
-        _ ->
-          stream
-          |> GRPC.Client.Stream.put_payload(:response, response)
-          |> GRPC.Client.Stream.put_payload(:stream_response_pid, stream_response_pid)
-      end
+      stream
+      |> GRPC.Client.Stream.put_payload(:response, response)
+      |> GRPC.Client.Stream.put_payload(:stream_response_pid, stream_response_pid)
     end
 
     defp get_headers_and_trailers(responses) do

@@ -102,15 +102,11 @@ if Code.ensure_loaded?(:gun) do
 
     @impl true
     def send_request(stream, message, opts) do
-      case do_send_request(stream, message, opts) do
-        {:error, _reason} = error ->
-          error
+      {stream_ref, response_pid} = do_send_request(stream, message, opts)
 
-        {stream_ref, response_pid} ->
-          stream
-          |> GRPC.Client.Stream.put_payload(:stream_ref, stream_ref)
-          |> GRPC.Client.Stream.put_payload(:response_pid, response_pid)
-      end
+      stream
+      |> GRPC.Client.Stream.put_payload(:stream_ref, stream_ref)
+      |> GRPC.Client.Stream.put_payload(:response_pid, response_pid)
     end
 
     defp do_send_request(
@@ -121,14 +117,10 @@ if Code.ensure_loaded?(:gun) do
       headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
       {:ok, data, _} = GRPC.Message.to_data(message, opts)
 
-      case ConnectionProcess.request(conn_pid, path, headers, data) do
-        {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} ->
-          {stream_ref, response_pid}
+      {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} =
+        ConnectionProcess.request(conn_pid, path, headers, data)
 
-        {:error, %GRPC.RPCError{} = error} ->
-          GRPC.Client.Telemetry.mark_rpc_failure(:local_pre_send, :capacity)
-          {:error, error}
-      end
+      {stream_ref, response_pid}
     end
 
     @impl true
@@ -138,16 +130,12 @@ if Code.ensure_loaded?(:gun) do
         ) do
       headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
 
-      case ConnectionProcess.open_stream(conn_pid, path, headers) do
-        {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} ->
-          stream
-          |> GRPC.Client.Stream.put_payload(:stream_ref, stream_ref)
-          |> GRPC.Client.Stream.put_payload(:response_pid, response_pid)
+      {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} =
+        ConnectionProcess.open_stream(conn_pid, path, headers)
 
-        {:error, %GRPC.RPCError{} = error} ->
-          GRPC.Client.Telemetry.mark_rpc_failure(:local_pre_send, :capacity)
-          {:error, error}
-      end
+      stream
+      |> GRPC.Client.Stream.put_payload(:stream_ref, stream_ref)
+      |> GRPC.Client.Stream.put_payload(:response_pid, response_pid)
     end
 
     @impl true

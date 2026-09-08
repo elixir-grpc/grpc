@@ -472,10 +472,9 @@ defmodule GRPC.Stub do
       message = codec.encode(request)
       opts = Keyword.put(opts, :compressor, compressor)
 
-      case channel.adapter.send_request(s, message, opts) do
-        {:error, _reason} = error -> error
-        sent_stream -> recv(sent_stream, opts)
-      end
+      s
+      |> channel.adapter.send_request(message, opts)
+      |> recv(opts)
     end
 
     run_interceptors(channel, last).(stream, request)

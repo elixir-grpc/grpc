@@ -138,24 +138,8 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
     {:stop, :normal, :ok, state}
   end
 
-  def handle_call(
-        request,
-        _from,
-        %{max_concurrent_streams: max, response_processes: processes} = state
-      )
-      when is_tuple(request) and elem(request, 0) in [:request, :open_stream] and is_integer(max) and
-             map_size(processes) >= max do
-    Telemetry.execute(
-      :stream_rejected,
-      %{count: 1},
-      Map.put(metadata(state), :reason, :max_concurrent_streams)
-    )
-
-    {:reply, {:error, capacity_error()}, state}
-  end
-
   def handle_call({:request, path, headers, body}, _from, %{gun_pid: gun_pid} = state) do
-    with {:ok, response_pid} <- start_response_process(self()),
+    with {:ok, response_pid} <- start_response_process(),
          stream_ref <- :gun.post(gun_pid, path, headers, body, %{reply_to: response_pid}) do
       {:reply, {:ok, %{stream_ref: stream_ref, response_pid: response_pid}},
        put_response_pid(state, stream_ref, response_pid)}
@@ -165,7 +149,7 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   end
 
   def handle_call({:open_stream, path, headers}, _from, %{gun_pid: gun_pid} = state) do
-    with {:ok, response_pid} <- start_response_process(self()),
+    with {:ok, response_pid} <- start_response_process(),
          stream_ref <- :gun.post(gun_pid, path, headers, %{reply_to: response_pid}) do
       {:reply, {:ok, %{stream_ref: stream_ref, response_pid: response_pid}},
        put_response_pid(state, stream_ref, response_pid)}
@@ -231,21 +215,6 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
     {:noreply, %{state | max_concurrent_streams: max}}
   end
 
-  def handle_info({:stream_terminated, response_pid}, state) do
-    {:noreply, drop_response_pid_by_pid(state, response_pid)}
-  end
-
-  def handle_info({:stream_timeout, response_pid}, state) do
-    case response_entry_by_pid(state, response_pid) do
-      {stream_ref, _entry} ->
-        _ = :gun.cancel(state.gun_pid, stream_ref)
-        {:noreply, drop_response_pid(state, stream_ref)}
-
-      nil ->
-        {:noreply, state}
-    end
-  end
-
   # Gun is gone for good (reconnect retries exhausted or a crash). Fail all
   # in-flight streams and stop
   def handle_info({:DOWN, _monitor_ref, :process, gun_pid, reason}, %{gun_pid: gun_pid} = state) do
@@ -267,18 +236,9 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
 
   @impl GenServer
   def terminate(reason, %{response_processes: processes} = state) do
-    count = map_size(processes)
-
-    Enum.each(processes, fn {_stream_ref, {response_pid, monitor_ref}} ->
-      Process.demonitor(monitor_ref, [:flush])
-      if Process.alive?(response_pid), do: GenServer.stop(response_pid, :normal)
-    end)
-
-    if count > 0, do: emit_streams(state, 0)
-
     Telemetry.execute(
       :stopped,
-      %{streams_terminated: count},
+      %{streams_terminated: map_size(processes)},
       Map.put(metadata(state), :reason, reason)
     )
 
@@ -301,8 +261,8 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
     {:via, Registry, {GRPC.Client.Registry, {__MODULE__, owner_key(channel)}}}
   end
 
-  defp start_response_process(owner) do
-    StreamResponseProcess.start_link(owner)
+  defp start_response_process do
+    StreamResponseProcess.start_link()
   end
 
   defp put_response_pid(%{response_processes: processes} = state, stream_ref, response_pid) do
@@ -332,20 +292,14 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
 
   defp drop_response_pid_by_monitor(%{response_processes: processes} = state, monitor_ref) do
     case Enum.find(processes, fn {_stream_ref, {_response_pid, ref}} -> ref == monitor_ref end) do
-      {stream_ref, _entry} -> drop_response_pid(state, stream_ref)
-      nil -> state
-    end
-  end
+      {stream_ref, _entry} ->
+        new_state = %{state | response_processes: Map.delete(processes, stream_ref)}
+        emit_streams(new_state, map_size(new_state.response_processes))
+        new_state
 
-  defp drop_response_pid_by_pid(%{response_processes: processes} = state, response_pid) do
-    case Enum.find(processes, fn {_stream_ref, {pid, _monitor_ref}} -> pid == response_pid end) do
-      {stream_ref, _entry} -> drop_response_pid(state, stream_ref)
-      nil -> state
+      nil ->
+        state
     end
-  end
-
-  defp response_entry_by_pid(%{response_processes: processes}, response_pid) do
-    Enum.find(processes, fn {_stream_ref, {pid, _monitor_ref}} -> pid == response_pid end)
   end
 
   defp response_pid(%{response_processes: processes}, stream_ref) do
@@ -357,13 +311,6 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
 
   defp emit_streams(state, active_streams) do
     Telemetry.execute(:streams, %{active: active_streams}, metadata(state))
-  end
-
-  defp capacity_error do
-    GRPC.RPCError.exception(
-      GRPC.Status.resource_exhausted(),
-      "peer maximum concurrent streams exhausted"
-    )
   end
 
   defp normalize_max_streams(:infinity), do: :infinity

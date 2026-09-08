@@ -120,21 +120,6 @@ if Code.ensure_loaded?(Mint.HTTP) do
     end
 
     def handle_call(
-          {:request, _method, _path, _headers, _body, _opts},
-          _from,
-          %{settings_known?: true, max_concurrent_streams: max, requests: requests} = state
-        )
-        when is_integer(max) and map_size(requests) >= max do
-      Telemetry.execute(
-        :stream_rejected,
-        %{count: 1},
-        Map.put(state.telemetry_metadata, :reason, :max_concurrent_streams)
-      )
-
-      {:reply, {:error, capacity_error()}, state}
-    end
-
-    def handle_call(
           {:request, method, path, headers, :stream, opts},
           _from,
           state
@@ -187,9 +172,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
           {:reply, :ok, State.update_conn(state, conn)}
 
         {:error, conn, error} ->
-          state = State.update_conn(state, conn)
-          state = process_response({:error, request_ref, error}, state)
-          {:reply, {:error, error}, drop_queued_request_chunks(state, request_ref)}
+          {:reply, {:error, error}, State.update_conn(state, conn)}
       end
     end
 
@@ -219,17 +202,6 @@ if Code.ensure_loaded?(Mint.HTTP) do
       attempt_reconnect(state)
     end
 
-    def handle_info({:DOWN, monitor_ref, :process, _pid, reason}, state) do
-      case State.request_ref_by_monitor(state, monitor_ref) do
-        nil ->
-          {:noreply, state}
-
-        request_ref ->
-          response_pid = State.stream_response_pid(state, request_ref)
-          {:noreply, cancel_dead_stream(state, request_ref, response_pid, reason)}
-      end
-    end
-
     def handle_info(message, state) do
       case Mint.HTTP.stream(state.conn, message) do
         :unknown ->
@@ -248,22 +220,11 @@ if Code.ensure_loaded?(Mint.HTTP) do
                 Enum.reduce(responses, state, &process_response/2)
             end
 
-          state = observe_settings(state, true)
+          state = observe_settings(state)
           check_connection_status(state, nil)
 
-        {:error, conn, error, responses} ->
+        {:error, conn, error, _responses} ->
           state = State.update_conn(state, conn)
-
-          state =
-            case state.requests do
-              requests when map_size(requests) == 0 ->
-                state
-
-              _ ->
-                Enum.reduce(responses, state, &process_response/2)
-            end
-
-          state = observe_settings(state, false)
           check_connection_status(state, error)
       end
     end
@@ -290,21 +251,9 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
     @impl true
     def terminate(reason, state) do
-      count = map_size(state.requests)
-
-      Enum.each(state.request_monitors, fn {monitor_ref, _request_ref} ->
-        Process.demonitor(monitor_ref, [:flush])
-      end)
-
-      Enum.each(state.requests, fn {_request_ref, request} ->
-        end_stream_response(request.stream_response_pid, "the transport stopped")
-      end)
-
-      if count > 0, do: Telemetry.execute(:streams, %{active: 0}, state.telemetry_metadata)
-
       Telemetry.execute(
         :stopped,
-        %{streams_terminated: count},
+        %{streams_terminated: map_size(state.requests)},
         Map.put(state.telemetry_metadata, :reason, reason)
       )
 
@@ -418,11 +367,13 @@ if Code.ensure_loaded?(Mint.HTTP) do
             # We need an explicit reply here because the process that called this GenServer
             # isn't the same one that's expecting the reply.
             GenServer.reply(from, {:error, error})
+          else
+            state
+            |> State.stream_response_pid(request_ref)
+            |> StreamResponseProcess.consume(:error, error)
           end
 
-          new_state = State.update_conn(state, conn)
-          new_state = process_response({:error, request_ref, error}, new_state)
-          {:noreply, drop_queued_request_chunks(new_state, request_ref)}
+          {:noreply, State.update_conn(state, conn)}
       end
     end
 
@@ -440,11 +391,13 @@ if Code.ensure_loaded?(Mint.HTTP) do
         {:error, conn, error} ->
           if not send_eof? do
             GenServer.reply(from, {:error, error})
+          else
+            state
+            |> State.stream_response_pid(request_ref)
+            |> StreamResponseProcess.consume(:error, error)
           end
 
-          new_state = State.update_conn(state, conn)
-          new_state = process_response({:error, request_ref, error}, new_state)
-          check_request_stream_queue(drop_queued_request_chunks(new_state, request_ref))
+          check_request_stream_queue(State.update_conn(state, conn))
       end
     end
 
@@ -516,15 +469,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
         |> end_stream_response(@connection_closed_error)
       end)
 
-      Enum.each(new_state.request_monitors, fn {monitor_ref, _request_ref} ->
-        Process.demonitor(monitor_ref, [:flush])
-      end)
-
-      clean_state =
-        State.update_request_stream_queue(
-          %{new_state | requests: %{}, request_monitors: %{}},
-          :queue.new()
-        )
+      clean_state = State.update_request_stream_queue(%{new_state | requests: %{}}, :queue.new())
 
       if count > 0, do: emit_streams(clean_state)
 
@@ -637,43 +582,30 @@ if Code.ensure_loaded?(Mint.HTTP) do
     end
 
     defp check_connection_status(state, reason) do
-      if Mint.HTTP.open?(state.conn, :read) do
+      if Mint.HTTP.open?(state.conn) do
         check_request_stream_queue(state)
       else
         finish_all_pending_requests(state, reason || @connection_closed_error)
       end
     end
 
-    defp observe_settings(state, allow_initial?) do
-      if state.settings_known? or allow_initial? do
-        max =
-          normalize_max_streams(
-            Mint.HTTP2.get_server_setting(state.conn, :max_concurrent_streams)
-          )
+    defp observe_settings(state) do
+      max =
+        normalize_max_streams(Mint.HTTP2.get_server_setting(state.conn, :max_concurrent_streams))
 
-        if not state.settings_known? or max != state.max_concurrent_streams do
-          Telemetry.execute(
-            :settings,
-            %{},
-            Map.put(state.telemetry_metadata, :max_concurrent_streams, max)
-          )
-        end
-
-        %{state | settings_known?: true, max_concurrent_streams: max}
-      else
-        state
+      if not state.settings_known? or max != state.max_concurrent_streams do
+        Telemetry.execute(
+          :settings,
+          %{},
+          Map.put(state.telemetry_metadata, :max_concurrent_streams, max)
+        )
       end
+
+      %{state | settings_known?: true, max_concurrent_streams: max}
     end
 
     defp emit_streams(state) do
       Telemetry.execute(:streams, %{active: map_size(state.requests)}, state.telemetry_metadata)
-    end
-
-    defp capacity_error do
-      GRPC.RPCError.exception(
-        GRPC.Status.resource_exhausted(),
-        "peer maximum concurrent streams exhausted"
-      )
     end
 
     # Mint 1.x reports 100 both before an explicit peer value and when the peer

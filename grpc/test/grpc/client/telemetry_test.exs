@@ -5,11 +5,11 @@ defmodule GRPC.Client.TelemetryTest do
 
   test "adds bounded local failure classification without changing the RPC result" do
     attach_telemetry([:grpc, :client, :rpc, :stop])
-    error = GRPC.RPCError.exception(GRPC.Status.resource_exhausted(), "at capacity")
+    error = GRPC.RPCError.exception(GRPC.Status.unavailable(), "connection unavailable")
 
     assert {:error, ^error} =
              Telemetry.client_span(%GRPC.Client.Stream{}, :request, fn ->
-               Telemetry.mark_rpc_failure(:local_pre_send, :capacity)
+               Telemetry.mark_rpc_failure(:local_pre_send, :connection_unavailable)
                {:error, error}
              end)
 
@@ -17,7 +17,7 @@ defmodule GRPC.Client.TelemetryTest do
                     %{
                       result: {:error, ^error},
                       failure_stage: :local_pre_send,
-                      failure_reason: :capacity
+                      failure_reason: :connection_unavailable
                     }}
   end
 

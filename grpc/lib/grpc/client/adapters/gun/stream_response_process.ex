@@ -16,8 +16,8 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
 
   @terminated_stream_error {:error, {:connection_error, :closed}}
 
-  def start_link(owner \\ nil) do
-    GenServer.start_link(__MODULE__, owner)
+  def start_link do
+    GenServer.start_link(__MODULE__, [])
   end
 
   def await(pid, timeout) do
@@ -28,8 +28,8 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
   end
 
   @impl GenServer
-  def init(owner) do
-    {:ok, %{messages: :queue.new(), waiter: nil, done: false, owner: owner}}
+  def init([]) do
+    {:ok, %{messages: :queue.new(), waiter: nil, done: false}}
   end
 
   @impl GenServer
@@ -56,8 +56,7 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
   @impl GenServer
   def handle_info({:await_timeout, timeout_ref}, %{waiter: {from, timeout_ref}} = state) do
     GenServer.reply(from, {:error, :timeout})
-    notify_owner(state, :stream_timeout)
-    {:stop, :normal, %{state | waiter: nil}}
+    {:noreply, %{state | waiter: nil}}
   end
 
   def handle_info({:await_timeout, _timeout_ref}, state), do: {:noreply, state}
@@ -104,7 +103,6 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
     cancel_timeout(timeout_ref)
     GenServer.reply(from, message)
     new_state = %{state | waiter: nil, done: terminal?}
-    if terminal?, do: notify_owner(state, :stream_terminated)
 
     if terminal? do
       {:stop, :normal, new_state}
@@ -114,14 +112,8 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
   end
 
   defp push_message(%{messages: messages} = state, message, terminal?) do
-    if terminal?, do: notify_owner(state, :stream_terminated)
     {:noreply, %{state | messages: :queue.in(message, messages), done: terminal?}}
   end
-
-  defp notify_owner(%{owner: owner}, message) when is_pid(owner),
-    do: send(owner, {message, self()})
-
-  defp notify_owner(_state, _message), do: :ok
 
   defp terminal?(:fin), do: true
   defp terminal?(:nofin), do: false

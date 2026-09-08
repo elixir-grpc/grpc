@@ -180,7 +180,6 @@ defmodule GRPC.Client.Adapters.GunTest do
             :connected,
             :settings,
             :streams,
-            :stream_rejected,
             :reset,
             :down,
             :stopped
@@ -221,14 +220,6 @@ defmodule GRPC.Client.Adapters.GunTest do
                ConnectionProcess.open_stream(conn_pid, "/pending", [])
 
       assert_receive {:telemetry, [:grpc, :client, :transport, :streams], %{active: 1}, _}
-
-      assert {:error, %GRPC.RPCError{status: status}} =
-               ConnectionProcess.open_stream(conn_pid, "/rejected", [])
-
-      assert status == GRPC.Status.resource_exhausted()
-
-      assert_receive {:telemetry, [:grpc, :client, :transport, :stream_rejected], %{count: 1},
-                      %{reason: :max_concurrent_streams}}
 
       send(conn_pid, {:gun_down, gun_pid, :http2, :econnreset, [stream_ref]})
 
