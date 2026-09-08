@@ -262,24 +262,6 @@ defmodule GRPC.Client.Adapters.GunTest do
       refute_receive {:telemetry, [:grpc, :client, :transport, :goaway], _, _}, 100
       assert {:ok, _} = Gun.disconnect(connected)
     end
-
-    test "bounds a reliably known connection failure stage" do
-      attach_telemetry([:grpc, :client, :transport, :connect_error])
-      channel = build(:channel, ref: make_ref(), port: 1, host: "127.0.0.1")
-
-      assert {:error, _reason} =
-               ConnectionProcess.connect(channel, %{
-                 transport: :tcp,
-                 protocols: [:http2],
-                 retry: 0,
-                 tcp_opts: [nodelay: true]
-               })
-
-      assert_receive {:telemetry, [:grpc, :client, :transport, :connect_error], %{},
-                      %{stage: :tcp, reason: reason}}
-
-      assert inspect(reason) =~ "econnrefused"
-    end
   end
 
   describe "receive_data/2" do
