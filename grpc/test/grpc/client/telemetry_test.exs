@@ -21,14 +21,15 @@ defmodule GRPC.Client.TelemetryTest do
                     }}
   end
 
-  test "classifies an unmarked RPC error as a remote response" do
+  test "does not classify an unmarked RPC error" do
     attach_telemetry([:grpc, :client, :rpc, :stop])
     error = GRPC.RPCError.exception(GRPC.Status.internal(), "remote error")
 
     assert {:error, ^error} =
              Telemetry.client_span(%GRPC.Client.Stream{}, :request, fn -> {:error, error} end)
 
-    assert_receive {:telemetry, [:grpc, :client, :rpc, :stop], _measurements,
-                    %{failure_stage: :remote, failure_reason: nil}}
+    assert_receive {:telemetry, [:grpc, :client, :rpc, :stop], _measurements, metadata}
+    refute Map.has_key?(metadata, :failure_stage)
+    refute Map.has_key?(metadata, :failure_reason)
   end
 end

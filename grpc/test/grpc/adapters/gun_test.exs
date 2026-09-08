@@ -251,6 +251,29 @@ defmodule GRPC.Client.Adapters.GunTest do
   end
 
   describe "receive_data/2" do
+    test "classifies a remote RPC error without changing it" do
+      attach_telemetry([:grpc, :client, :rpc, :stop])
+      {:ok, response_pid} = GRPC.Client.Adapters.Gun.StreamResponseProcess.start_link()
+
+      send(
+        response_pid,
+        {:gun_response, self(), make_ref(), :fin, 200,
+         [{"grpc-status", "13"}, {"grpc-message", "remote error"}]}
+      )
+
+      stream = %GRPC.Client.Stream{payload: %{response_pid: response_pid}, server_stream: false}
+
+      assert {:error, %GRPC.RPCError{} = error} =
+               GRPC.Client.Telemetry.client_span(stream, :request, fn ->
+                 Gun.receive_data(stream, timeout: 100)
+               end)
+
+      assert error.status == GRPC.Status.internal()
+
+      assert_receive {:telemetry, [:grpc, :client, :rpc, :stop], _measurements,
+                      %{failure_stage: :remote, failure_reason: nil}}
+    end
+
     test "maps connection-level gun errors to unavailable RPC errors" do
       {:ok, response_pid} = GRPC.Client.Adapters.Gun.StreamResponseProcess.start_link()
 

@@ -226,6 +226,10 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
           {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "deadline exceeded")}
 
+        {:error, %GRPC.RPCError{} = error} ->
+          GRPC.Client.Telemetry.mark_rpc_failure(:remote, nil)
+          {:error, error}
+
         {:error, error} ->
           mark_transport_failure(error)
           {:error, error}

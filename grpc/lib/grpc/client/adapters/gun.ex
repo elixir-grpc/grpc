@@ -521,6 +521,7 @@ if Code.ensure_loaded?(:gun) do
             encoded_details_bin: trailers["grpc-status-details-bin"]
           })
 
+        GRPC.Client.Telemetry.mark_rpc_failure(:remote, nil)
         {:error, rpc_error}
       end
     end

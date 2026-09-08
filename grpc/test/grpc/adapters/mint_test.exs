@@ -136,6 +136,33 @@ defmodule GRPC.Client.Adapters.MintTest do
       assert message == "error occurred while receiving data: #{inspect(response)}"
     end
 
+    test "classifies a remote RPC error without changing it" do
+      attach_telemetry([:grpc, :client, :rpc, :stop])
+      error = GRPC.RPCError.exception(GRPC.Status.internal(), "remote error")
+
+      {:ok, response_pid} =
+        GRPC.Client.Adapters.Mint.StreamResponseProcess.start_link(build(:client_stream), true)
+
+      :ok = GRPC.Client.Adapters.Mint.StreamResponseProcess.consume(response_pid, :error, error)
+      :ok = GRPC.Client.Adapters.Mint.StreamResponseProcess.done(response_pid)
+
+      stream =
+        build(:client_stream,
+          payload: %{
+            response: {:ok, %{request_ref: make_ref()}},
+            stream_response_pid: response_pid
+          }
+        )
+
+      assert {:error, ^error} =
+               GRPC.Client.Telemetry.client_span(stream, :request, fn ->
+                 Mint.receive_data(stream, [])
+               end)
+
+      assert_receive {:telemetry, [:grpc, :client, :rpc, :stop], _measurements,
+                      %{failure_stage: :remote, failure_reason: nil}}
+    end
+
     test "classifies a closed connection without changing the error" do
       attach_telemetry([:grpc, :client, :rpc, :stop])
 

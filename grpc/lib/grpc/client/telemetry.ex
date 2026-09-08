@@ -61,7 +61,7 @@ defmodule GRPC.Client.Telemetry do
     :telemetry.span(@rpc_prefix, start_metadata, fn ->
       try do
         result = span_fn.()
-        failure = Process.delete(@failure_key) || classify_remote(result)
+        failure = Process.delete(@failure_key)
         metadata = Map.put(start_metadata, :result, result)
         {result, put_failure(metadata, failure)}
       rescue
@@ -76,9 +76,6 @@ defmodule GRPC.Client.Telemetry do
       Logger.error(Exception.format(kind, reason, stacktrace))
       :erlang.raise(kind, reason, stacktrace)
   end
-
-  defp classify_remote({:error, %GRPC.RPCError{}}), do: {:remote, nil}
-  defp classify_remote(_result), do: nil
 
   defp put_failure(metadata, {stage, reason}) do
     metadata
