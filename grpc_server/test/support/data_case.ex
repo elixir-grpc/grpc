@@ -6,4 +6,25 @@ defmodule GRPC.DataCase do
       import GRPC.Factory
     end
   end
+
+  @doc """
+  Attaches a telemetry handler for `event` that forwards emissions to the
+  test process as `{:telemetry, event, measurements, metadata}` messages,
+  for use with `assert_receive`. The handler is detached on test exit.
+  """
+  def attach_telemetry(event) do
+    handler_id = {__MODULE__, self(), System.unique_integer()}
+    test_pid = self()
+
+    :telemetry.attach(
+      handler_id,
+      event,
+      fn event, measurements, metadata, _config ->
+        send(test_pid, {:telemetry, event, measurements, metadata})
+      end,
+      nil
+    )
+
+    ExUnit.Callbacks.on_exit(fn -> :telemetry.detach(handler_id) end)
+  end
 end
