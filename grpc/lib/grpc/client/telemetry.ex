@@ -60,10 +60,15 @@ defmodule GRPC.Client.Telemetry do
     start_metadata = %{stream: stream, request: request}
 
     :telemetry.span(@rpc_prefix, start_metadata, fn ->
-      result = span_fn.()
-      failure = Process.delete(@failure_key) || classify_remote(result)
-      metadata = Map.put(start_metadata, :result, result)
-      {result, put_failure(metadata, failure)}
+      try do
+        result = span_fn.()
+        failure = Process.delete(@failure_key) || classify_remote(result)
+        metadata = Map.put(start_metadata, :result, result)
+        {result, put_failure(metadata, failure)}
+      rescue
+        e ->
+          :erlang.error(Exception.normalize(:error, e, __STACKTRACE__))
+      end
     end)
   catch
     kind, reason ->

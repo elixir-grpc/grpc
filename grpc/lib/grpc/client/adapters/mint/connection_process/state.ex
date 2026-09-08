@@ -18,8 +18,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       retry_attempt: 0,
       generation: 1,
       max_concurrent_streams: :unknown,
-      settings_known?: false,
-      down?: false
+      settings_known?: false
     ]
 
     def new(conn, opts) do
@@ -89,8 +88,9 @@ if Code.ensure_loaded?(Mint.HTTP) do
       end
     end
 
-    def request_ref_by_monitor(state, monitor_ref),
-      do: Map.get(state.request_monitors, monitor_ref)
+    def request_ref_by_monitor(state, monitor_ref) do
+      Map.get(state.request_monitors, monitor_ref)
+    end
 
     def append_response_data(state, ref, new_data) do
       update_in(state.requests[ref].response[:data], fn data -> (data || "") <> new_data end)

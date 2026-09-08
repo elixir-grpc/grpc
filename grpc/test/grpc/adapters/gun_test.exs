@@ -3,7 +3,6 @@ defmodule GRPC.Client.Adapters.GunTest do
 
   alias GRPC.Client.Adapters.Gun
   alias GRPC.Client.Adapters.Gun.ConnectionProcess
-  alias GRPC.Client.Adapters.Gun.ConnectionProcess
 
   defmodule Endpoint do
     use GRPC.Endpoint

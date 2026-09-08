@@ -339,7 +339,8 @@ if Code.ensure_loaded?(:gun) do
            )}
 
         # Connection-level failures are UNAVAILABLE per the gRPC status spec:
-        # the RPC never completed on a live connection, so callers can safely retry.
+        # the RPC never completed on a live connection, so callers can safely
+        # retry (deadline errors above stay DEADLINE_EXCEEDED).
         {:error, {:connection_error, msg}} ->
           GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :connection_unavailable)
 

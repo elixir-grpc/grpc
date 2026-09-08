@@ -49,7 +49,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
       transport_metadata = %{
         logical_connection_ref: channel.ref,
-        target: {channel.host, channel.port},
+        target: {host, port},
         adapter: __MODULE__
       }
 
@@ -311,13 +311,6 @@ if Code.ensure_loaded?(Mint.HTTP) do
           GenServer.stop(stream_response_pid, :normal)
           GRPC.Client.Telemetry.mark_rpc_failure(:local_pre_send, :capacity)
           {:error, error}
-
-        {:error, _reason} ->
-          GenServer.stop(stream_response_pid, :normal)
-
-          stream
-          |> GRPC.Client.Stream.put_payload(:response, response)
-          |> GRPC.Client.Stream.put_payload(:stream_response_pid, stream_response_pid)
 
         _ ->
           stream
