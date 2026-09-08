@@ -339,6 +339,10 @@ if Code.ensure_loaded?(Mint.HTTP) do
       GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :stream_error)
     end
 
+    defp mark_transport_failure("the connection is closed") do
+      GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :connection_unavailable)
+    end
+
     defp mark_transport_failure(_error), do: :ok
   end
 end
