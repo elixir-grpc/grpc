@@ -47,11 +47,18 @@ if Code.ensure_loaded?(Mint.HTTP) do
       {retry, opts} = Keyword.pop(opts, :retry, 0)
       module_opts = Application.get_env(:grpc, __MODULE__, config_opts)
 
+      transport_metadata = %{
+        logical_connection_ref: channel.ref,
+        target: {channel.host, channel.port},
+        adapter: __MODULE__
+      }
+
       opts =
         channel
         |> connect_opts(opts)
         |> merge_opts(module_opts)
         |> Keyword.put(:retry, retry)
+        |> Keyword.put(:grpc_transport_metadata, transport_metadata)
 
       Process.flag(:trap_exit, true)
 
@@ -215,10 +222,12 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
         {:error, :deadline_exceeded} ->
           give_up_on_request(stream, pid)
+          GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :deadline)
 
           {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "deadline exceeded")}
 
         {:error, error} ->
+          mark_transport_failure(error)
           {:error, error}
       end
     end
@@ -297,9 +306,24 @@ if Code.ensure_loaded?(Mint.HTTP) do
           stream_response_pid: stream_response_pid
         )
 
-      stream
-      |> GRPC.Client.Stream.put_payload(:response, response)
-      |> GRPC.Client.Stream.put_payload(:stream_response_pid, stream_response_pid)
+      case response do
+        {:error, %GRPC.RPCError{} = error} ->
+          GenServer.stop(stream_response_pid, :normal)
+          GRPC.Client.Telemetry.mark_rpc_failure(:local_pre_send, :capacity)
+          {:error, error}
+
+        {:error, _reason} ->
+          GenServer.stop(stream_response_pid, :normal)
+
+          stream
+          |> GRPC.Client.Stream.put_payload(:response, response)
+          |> GRPC.Client.Stream.put_payload(:stream_response_pid, stream_response_pid)
+
+        _ ->
+          stream
+          |> GRPC.Client.Stream.put_payload(:response, response)
+          |> GRPC.Client.Stream.put_payload(:stream_response_pid, stream_response_pid)
+      end
     end
 
     defp get_headers_and_trailers(responses) do
@@ -321,5 +345,15 @@ if Code.ensure_loaded?(Mint.HTTP) do
       # Explicitly check for true to ensure the boolean type here
       opts[:return_headers] == true
     end
+
+    defp mark_transport_failure(%Mint.TransportError{}) do
+      GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :connection_unavailable)
+    end
+
+    defp mark_transport_failure(%Mint.HTTPError{reason: {:server_closed_request, _code}}) do
+      GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :stream_error)
+    end
+
+    defp mark_transport_failure(_error), do: :ok
   end
 end

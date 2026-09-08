@@ -67,6 +67,7 @@ defmodule GRPC.MixProject do
           GRPC.Stub,
           GRPC.Channel,
           GRPC.Client.Stream,
+          GRPC.Client.Telemetry,
           GRPC.Client.Supervisor,
           GRPC.Client.Connection
         ],

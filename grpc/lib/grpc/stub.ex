@@ -331,7 +331,7 @@ defmodule GRPC.Stub do
             accepted_compressors: accepted_compressors
         }
 
-        GRPC.Telemetry.client_span(stream, request, fn ->
+        GRPC.Client.Telemetry.client_span(stream, request, fn ->
           do_call(req_stream, stream, request, opts)
         end)
     end
@@ -436,9 +436,13 @@ defmodule GRPC.Stub do
           Keyword.get(opts, :accepted_compressors, config_ch.accepted_compressors)
     }
 
-    GRPC.Telemetry.client_span(stream, request, fn ->
+    GRPC.Client.Telemetry.client_span(stream, request, fn ->
       last = fn _stream, _request -> {:error, error} end
       result = run_interceptors(config_ch, last).(stream, request)
+
+      if result == {:error, error} do
+        GRPC.Client.Telemetry.mark_rpc_failure(:local_pre_send, :connection_unavailable)
+      end
 
       # Request-streaming calls return a stream, so an error tuple cannot
       # express failure to them and errors raise instead. An interceptor may
@@ -468,9 +472,10 @@ defmodule GRPC.Stub do
       message = codec.encode(request)
       opts = Keyword.put(opts, :compressor, compressor)
 
-      s
-      |> channel.adapter.send_request(message, opts)
-      |> recv(opts)
+      case channel.adapter.send_request(s, message, opts) do
+        {:error, _reason} = error -> error
+        sent_stream -> recv(sent_stream, opts)
+      end
     end
 
     run_interceptors(channel, last).(stream, request)

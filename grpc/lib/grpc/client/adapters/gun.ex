@@ -73,7 +73,12 @@ if Code.ensure_loaded?(:gun) do
     end
 
     defp do_connect(channel, open_opts) do
-      open_opts = Map.merge(%{retry: @max_retries, retry_fun: &__MODULE__.retry_fun/2}, open_opts)
+      open_opts =
+        open_opts
+        |> Map.merge(%{retry: @max_retries, retry_fun: &__MODULE__.retry_fun/2})
+        |> Map.update(:http2_opts, %{notify_settings_changed: true}, fn opts ->
+          Map.put(opts, :notify_settings_changed, true)
+        end)
 
       case ConnectionProcess.connect(channel, open_opts) do
         {:ok, adapter_payload} ->
@@ -97,11 +102,15 @@ if Code.ensure_loaded?(:gun) do
 
     @impl true
     def send_request(stream, message, opts) do
-      {stream_ref, response_pid} = do_send_request(stream, message, opts)
+      case do_send_request(stream, message, opts) do
+        {:error, _reason} = error ->
+          error
 
-      stream
-      |> GRPC.Client.Stream.put_payload(:stream_ref, stream_ref)
-      |> GRPC.Client.Stream.put_payload(:response_pid, response_pid)
+        {stream_ref, response_pid} ->
+          stream
+          |> GRPC.Client.Stream.put_payload(:stream_ref, stream_ref)
+          |> GRPC.Client.Stream.put_payload(:response_pid, response_pid)
+      end
     end
 
     defp do_send_request(
@@ -112,10 +121,14 @@ if Code.ensure_loaded?(:gun) do
       headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
       {:ok, data, _} = GRPC.Message.to_data(message, opts)
 
-      {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} =
-        ConnectionProcess.request(conn_pid, path, headers, data)
+      case ConnectionProcess.request(conn_pid, path, headers, data) do
+        {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} ->
+          {stream_ref, response_pid}
 
-      {stream_ref, response_pid}
+        {:error, %GRPC.RPCError{} = error} ->
+          GRPC.Client.Telemetry.mark_rpc_failure(:local_pre_send, :capacity)
+          {:error, error}
+      end
     end
 
     @impl true
@@ -125,12 +138,16 @@ if Code.ensure_loaded?(:gun) do
         ) do
       headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
 
-      {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} =
-        ConnectionProcess.open_stream(conn_pid, path, headers)
+      case ConnectionProcess.open_stream(conn_pid, path, headers) do
+        {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} ->
+          stream
+          |> GRPC.Client.Stream.put_payload(:stream_ref, stream_ref)
+          |> GRPC.Client.Stream.put_payload(:response_pid, response_pid)
 
-      stream
-      |> GRPC.Client.Stream.put_payload(:stream_ref, stream_ref)
-      |> GRPC.Client.Stream.put_payload(:response_pid, response_pid)
+        {:error, %GRPC.RPCError{} = error} ->
+          GRPC.Client.Telemetry.mark_rpc_failure(:local_pre_send, :capacity)
+          {:error, error}
+      end
     end
 
     @impl true
@@ -313,6 +330,8 @@ if Code.ensure_loaded?(:gun) do
           trailers
 
         {:error, :timeout} ->
+          GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :deadline)
+
           {:error,
            GRPC.RPCError.exception(
              GRPC.Status.deadline_exceeded(),
@@ -320,9 +339,10 @@ if Code.ensure_loaded?(:gun) do
            )}
 
         # Connection-level failures are UNAVAILABLE per the gRPC status spec:
-        # the RPC never completed on a live connection, so callers can safely
-        # retry (deadline errors above stay DEADLINE_EXCEEDED).
+        # the RPC never completed on a live connection, so callers can safely retry.
         {:error, {:connection_error, msg}} ->
+          GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :connection_unavailable)
+
           {:error,
            GRPC.RPCError.exception(
              GRPC.Status.unavailable(),
@@ -330,6 +350,8 @@ if Code.ensure_loaded?(:gun) do
            )}
 
         {:error, {:stream_error, msg}} ->
+          GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :stream_error)
+
           {:error,
            GRPC.RPCError.exception(GRPC.Status.internal(), "stream_error: #{inspect(msg)}")}
 

@@ -3,6 +3,7 @@ defmodule GRPC.Client.Adapters.GunTest do
 
   alias GRPC.Client.Adapters.Gun
   alias GRPC.Client.Adapters.Gun.ConnectionProcess
+  alias GRPC.Client.Adapters.Gun.ConnectionProcess
 
   defmodule Endpoint do
     use GRPC.Endpoint
@@ -167,6 +168,117 @@ defmodule GRPC.Client.Adapters.GunTest do
       {:ok, disconnected_again} = Gun.disconnect(disconnected)
 
       assert %{conn_pid: nil} = disconnected_again.adapter_payload
+    end
+  end
+
+  describe "transport telemetry" do
+    test "reports lifecycle, settings, occupancy, loss, recovery, and stop", %{
+      port: port,
+      credential: credential
+    } do
+      for event <- [
+            :started,
+            :connected,
+            :settings,
+            :streams,
+            :stream_rejected,
+            :reset,
+            :down,
+            :stopped
+          ] do
+        attach_telemetry([:grpc, :client, :transport, event])
+      end
+
+      logical_ref = make_ref()
+      channel = build(:channel, ref: logical_ref, port: port, host: "localhost", cred: credential)
+      assert {:ok, connected} = Gun.connect(channel, [])
+      conn_pid = connected.adapter_payload.conn_pid
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :started],
+                      %{generation: 0, active_streams: 0},
+                      %{logical_connection_ref: ^logical_ref, transport_ref: ^conn_pid}}
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :connected], %{generation: 1},
+                      %{reconnect: false}}
+
+      gun_pid = :sys.get_state(conn_pid).gun_pid
+      send(conn_pid, {:gun_notify, gun_pid, :settings_changed, %{max_concurrent_streams: 1}})
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :settings], %{},
+                      %{max_concurrent_streams: 1}}
+
+      assert {:ok, %{stream_ref: stream_ref}} =
+               ConnectionProcess.open_stream(conn_pid, "/pending", [])
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :streams], %{active: 1}, _}
+
+      assert {:error, %GRPC.RPCError{status: status}} =
+               ConnectionProcess.open_stream(conn_pid, "/rejected", [])
+
+      assert status == GRPC.Status.resource_exhausted()
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :stream_rejected], %{count: 1},
+                      %{reason: :max_concurrent_streams}}
+
+      send(conn_pid, {:gun_down, gun_pid, :http2, :econnreset, [stream_ref]})
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :streams], %{active: 0}, _}
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :reset], %{streams_terminated: 0},
+                      _}
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :down], %{streams_terminated: 1},
+                      _}
+
+      send(conn_pid, {:gun_up, gun_pid, :http2})
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :connected], %{generation: 2},
+                      %{reconnect: true}}
+
+      assert {:ok, %{stream_ref: recovered_stream_ref}} =
+               ConnectionProcess.open_stream(conn_pid, "/pending", [])
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :streams], %{active: 1}, _}
+      assert :ok = ConnectionProcess.cancel(conn_pid, recovered_stream_ref)
+      assert_receive {:telemetry, [:grpc, :client, :transport, :streams], %{active: 0}, _}
+
+      assert {:ok, _} = Gun.disconnect(connected)
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :stopped],
+                      %{streams_terminated: 0}, _}
+    end
+
+    test "does not infer GOAWAY from a generic connection-down signal", %{
+      port: port,
+      credential: credential
+    } do
+      attach_telemetry([:grpc, :client, :transport, :goaway])
+      channel = build(:channel, ref: make_ref(), port: port, host: "localhost", cred: credential)
+      assert {:ok, connected} = Gun.connect(channel, [])
+      conn_pid = connected.adapter_payload.conn_pid
+      gun_pid = :sys.get_state(conn_pid).gun_pid
+
+      send(conn_pid, {:gun_down, gun_pid, :http2, {:goaway, :no_error}, []})
+      refute_receive {:telemetry, [:grpc, :client, :transport, :goaway], _, _}, 100
+      assert {:ok, _} = Gun.disconnect(connected)
+    end
+
+    test "bounds a reliably known connection failure stage" do
+      attach_telemetry([:grpc, :client, :transport, :connect_error])
+      channel = build(:channel, ref: make_ref(), port: 1, host: "127.0.0.1")
+
+      assert {:error, _reason} =
+               ConnectionProcess.connect(channel, %{
+                 transport: :tcp,
+                 protocols: [:http2],
+                 retry: 0,
+                 tcp_opts: [nodelay: true]
+               })
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :connect_error], %{},
+                      %{stage: :tcp, reason: reason}}
+
+      assert inspect(reason) =~ "econnrefused"
     end
   end
 

@@ -10,7 +10,7 @@ defmodule GRPC.Client.Adapter do
   @callback disconnect(channel :: struct()) :: {:ok, struct()} | {:error, any()}
 
   @callback send_request(stream :: Stream.t(), contents :: iodata(), opts :: keyword()) ::
-              Stream.t()
+              Stream.t() | {:error, any()}
 
   @doc """
   Check `GRPC.Stub.recv/2` for more context about the return types
@@ -23,7 +23,8 @@ defmodule GRPC.Client.Adapter do
   Mostly used when the payload for this request is streamed.
   To send data using the open stream request, you should use `send_data/3`
   """
-  @callback send_headers(stream :: Stream.t(), opts :: keyword()) :: Stream.t()
+  @callback send_headers(stream :: Stream.t(), opts :: keyword()) ::
+              Stream.t() | {:error, any()}
 
   @doc """
   This callback will be responsible to send data to the server on a stream
