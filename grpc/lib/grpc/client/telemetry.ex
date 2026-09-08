@@ -57,24 +57,56 @@ defmodule GRPC.Client.Telemetry do
   def client_span(stream, request, span_fn) do
     Process.delete(@failure_key)
     start_metadata = %{stream: stream, request: request}
+    start_time = System.monotonic_time()
+    span_context = make_ref()
 
-    :telemetry.span(@rpc_prefix, start_metadata, fn ->
-      try do
-        result = span_fn.()
-        failure = Process.delete(@failure_key)
-        metadata = Map.put(start_metadata, :result, result)
-        {result, put_failure(metadata, failure)}
-      rescue
-        e ->
-          :erlang.error(Exception.normalize(:error, e, __STACKTRACE__))
-      end
-    end)
-  catch
-    kind, reason ->
-      Process.delete(@failure_key)
-      stacktrace = __STACKTRACE__
-      Logger.error(Exception.format(kind, reason, stacktrace))
-      :erlang.raise(kind, reason, stacktrace)
+    :telemetry.execute(
+      @rpc_prefix ++ [:start],
+      %{monotonic_time: start_time, system_time: System.system_time()},
+      Map.put(start_metadata, :telemetry_span_context, span_context)
+    )
+
+    try do
+      result =
+        try do
+          span_fn.()
+        rescue
+          e -> :erlang.error(Exception.normalize(:error, e, __STACKTRACE__))
+        end
+
+      stop_time = System.monotonic_time()
+      failure = Process.delete(@failure_key)
+
+      :telemetry.execute(
+        @rpc_prefix ++ [:stop],
+        %{duration: stop_time - start_time, monotonic_time: stop_time},
+        start_metadata
+        |> Map.put(:result, result)
+        |> put_failure(failure)
+        |> Map.put(:telemetry_span_context, span_context)
+      )
+
+      result
+    catch
+      kind, reason ->
+        stop_time = System.monotonic_time()
+        stacktrace = __STACKTRACE__
+
+        metadata =
+          start_metadata
+          |> Map.merge(%{kind: kind, reason: reason, stacktrace: stacktrace})
+          |> put_failure(Process.delete(@failure_key))
+          |> Map.put(:telemetry_span_context, span_context)
+
+        :telemetry.execute(
+          @rpc_prefix ++ [:exception],
+          %{duration: stop_time - start_time, monotonic_time: stop_time},
+          metadata
+        )
+
+        Logger.error(Exception.format(kind, reason, stacktrace))
+        :erlang.raise(kind, reason, stacktrace)
+    end
   end
 
   defp put_failure(metadata, {stage, reason}) do
