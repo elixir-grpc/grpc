@@ -303,7 +303,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   # APIs end
 
   def info({:read_full_body, ref, pid}, req, state) do
-    {s, body, req} = read_full_body(req, <<>>, state[:handling_timer], state.max_body_size)
+    {s, body, req} = read_full_body(req, [], 0, state[:handling_timer], state.max_body_size)
     send(pid, {ref, {s, body}})
     {:ok, req, state}
   catch
@@ -585,26 +585,26 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  defp read_full_body(req, body, timer, max_bytes) do
+  defp read_full_body(req, chunks, size, timer, max_bytes) do
     result = :cowboy_req.read_body(req, timeout_left_opt(timer))
 
     case result do
       {:ok, data, req} ->
-        total = body <> data
+        size = size + byte_size(data)
 
-        if byte_size(total) > max_bytes do
-          throw({:body_too_large, byte_size(total)})
+        if size > max_bytes do
+          throw({:body_too_large, size})
         else
-          {:ok, total, req}
+          {:ok, [data | chunks] |> Enum.reverse() |> IO.iodata_to_binary(), req}
         end
 
       {:more, data, req} ->
-        total = body <> data
+        size = size + byte_size(data)
 
-        if byte_size(total) > max_bytes do
-          throw({:body_too_large, byte_size(total)})
+        if size > max_bytes do
+          throw({:body_too_large, size})
         else
-          read_full_body(req, total, timer, max_bytes)
+          read_full_body(req, [data | chunks], size, timer, max_bytes)
         end
     end
   end

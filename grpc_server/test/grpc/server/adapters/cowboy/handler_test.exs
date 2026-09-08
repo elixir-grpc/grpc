@@ -73,6 +73,39 @@ defmodule GRPC.Server.Adapters.Cowboy.HandlerTest do
     end
   end
 
+  # Like collect_grpc_status/2, but also decodes the accumulated body as a HelloReply.
+  defp collect_grpc_response(conn, stream_ref) do
+    collect_grpc_response(conn, stream_ref, nil, <<>>)
+  end
+
+  defp collect_grpc_response(conn, stream_ref, last_status, body) do
+    case :gun.await(conn, stream_ref, 5_000) do
+      {:response, :fin, _http_status, headers} ->
+        {find_grpc_status(headers) || last_status, decode_hello_reply(body)}
+
+      {:response, :nofin, _http_status, headers} ->
+        collect_grpc_response(conn, stream_ref, find_grpc_status(headers), body)
+
+      {:data, :fin, data} ->
+        {last_status, decode_hello_reply(body <> data)}
+
+      {:data, :nofin, data} ->
+        collect_grpc_response(conn, stream_ref, last_status, body <> data)
+
+      {:trailers, trailers} ->
+        {find_grpc_status(trailers) || last_status, decode_hello_reply(body)}
+
+      {:error, reason} ->
+        flunk("gun error: #{inspect(reason)}")
+    end
+  end
+
+  defp decode_hello_reply(<<_flag::8, length::32, message::bytes-size(length), _rest::binary>>) do
+    Protobuf.decode(message, Helloworld.HelloReply)
+  end
+
+  defp decode_hello_reply(_incomplete), do: nil
+
   # --------------------------------------------------------------------------
   # Tests: max_body_size enforcement
   # --------------------------------------------------------------------------
@@ -153,6 +186,75 @@ defmodule GRPC.Server.Adapters.Cowboy.HandlerTest do
         :gun.close(conn)
       end)
     end
+  end
+
+  # --------------------------------------------------------------------------
+  # Tests: request body delivered across multiple HTTP/2 DATA frames
+  # --------------------------------------------------------------------------
+
+  describe "streamed request body" do
+    # read_full_body/5 recurses once per :more read; every other test in this
+    # file sends a body small enough to complete in a single :ok read, so
+    # this is the only test that exercises that recursive accumulation path.
+    test "reassembles a request body sent as several separate DATA frames, in order" do
+      run_server_with_opts([HelloServer], [], fn port ->
+        # Distinct segments so a dropped, duplicated, or reordered chunk changes the decoded name.
+        chunk_a = String.duplicate("a", 20_000)
+        chunk_b = String.duplicate("b", 20_000)
+        chunk_c = String.duplicate("c", 20_000)
+        name = chunk_a <> chunk_b <> chunk_c
+
+        body = grpc_frame(Protobuf.encode(%Helloworld.HelloRequest{name: name}))
+        <<part1::bytes-size(20_005), part2::bytes-size(20_000), part3::binary>> = body
+
+        conn = open_h2(port)
+
+        start_tracing_read_full_body()
+
+        stream_ref =
+          :gun.headers(conn, "POST", "/helloworld.Greeter/SayHello", grpc_request_headers())
+
+        # Waiting for read_full_body to recurse before each send proves the
+        # chunk just sent already landed in its own read_body call.
+        await_read_full_body_call()
+        :gun.data(conn, stream_ref, :nofin, part1)
+        await_read_full_body_call()
+        :gun.data(conn, stream_ref, :nofin, part2)
+        await_read_full_body_call()
+        :gun.data(conn, stream_ref, :fin, part3)
+
+        assert {"0", reply} = collect_grpc_response(conn, stream_ref)
+        assert reply.message == "Hello, #{name}"
+
+        stop_tracing_read_full_body()
+        :gun.close(conn)
+      end)
+    end
+  end
+
+  # read_full_body/5 is private; :local makes trace_pattern instrument it anyway.
+  defp start_tracing_read_full_body do
+    Code.ensure_loaded!(GRPC.Server.Adapters.Cowboy.Handler)
+
+    :erlang.trace_pattern({GRPC.Server.Adapters.Cowboy.Handler, :read_full_body, :_}, true, [
+      :local
+    ])
+
+    :erlang.trace(:all, true, [:call])
+  end
+
+  defp stop_tracing_read_full_body do
+    :erlang.trace(:all, false, [:call])
+
+    :erlang.trace_pattern({GRPC.Server.Adapters.Cowboy.Handler, :read_full_body, :_}, false, [
+      :local
+    ])
+  end
+
+  defp await_read_full_body_call do
+    assert_receive {:trace, _pid, :call,
+                    {GRPC.Server.Adapters.Cowboy.Handler, :read_full_body, _args}},
+                   2_000
   end
 
   # --------------------------------------------------------------------------
