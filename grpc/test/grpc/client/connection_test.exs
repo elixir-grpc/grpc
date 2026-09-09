@@ -332,6 +332,15 @@ defmodule GRPC.Client.ConnectionTest do
       end
     end
 
+    test "raises in the caller on invalid adapter-specific options" do
+      assert_raise ArgumentError, ~r/:retry must be a non-negative integer or :infinity/, fn ->
+        Connection.connect("ipv4:127.0.0.1:50051",
+          adapter: GRPC.Client.Adapters.Mint,
+          adapter_opts: [retry: -1]
+        )
+      end
+    end
+
     test "interceptor init/1 runs once per connect", %{
       ref: ref,
       target: target,

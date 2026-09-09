@@ -7,6 +7,8 @@ defmodule GRPC.Client.Adapter do
   @callback connect(channel :: struct(), opts :: keyword()) ::
               {:ok, struct()} | {:error, any()}
 
+  @callback validate_opts(opts :: keyword()) :: :ok | {:error, String.t()}
+
   @callback disconnect(channel :: struct()) :: {:ok, struct()} | {:error, any()}
 
   @callback send_request(stream :: Stream.t(), contents :: iodata(), opts :: keyword()) ::
@@ -43,4 +45,6 @@ defmodule GRPC.Client.Adapter do
   Cancel a stream in a streaming client.
   """
   @callback cancel(stream :: Stream.t()) :: :ok | {:error, any()}
+
+  @optional_callbacks validate_opts: 1
 end
