@@ -69,6 +69,71 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     end
   end
 
+  describe "transport telemetry" do
+    test "reports initial lifecycle, occupancy, and explicit stop", %{port: port} do
+      for event <- [:started, :connected, :settings, :streams, :stopped] do
+        attach_telemetry([:grpc, :client, :transport, event])
+      end
+
+      logical_ref = make_ref()
+
+      metadata = %{
+        logical_connection_ref: logical_ref,
+        target: {"127.0.0.1", port},
+        adapter: GRPC.Client.Adapters.Mint
+      }
+
+      {:ok, pid} =
+        ConnectionProcess.start_link(:http, "127.0.0.1", port,
+          protocols: [:http2],
+          grpc_transport_metadata: metadata
+        )
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :started],
+                      %{generation: 0, active_streams: 0},
+                      %{logical_connection_ref: ^logical_ref, transport_ref: ^pid}}
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :connected], %{generation: 1},
+                      %{reconnect: false}}
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :settings], %{},
+                      %{max_concurrent_streams: :unknown}}
+
+      {:ok, response_pid} = StreamResponseProcess.start_link(build(:client_stream), false)
+
+      {:ok, %{request_ref: request_ref}} =
+        ConnectionProcess.request(pid, "POST", "/pending", [], :stream,
+          stream_response_pid: response_pid
+        )
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :streams], %{active: 1}, _}
+      assert :ok = ConnectionProcess.cancel(pid, request_ref)
+      assert_receive {:telemetry, [:grpc, :client, :transport, :streams], %{active: 0}, _}
+
+      assert :ok = ConnectionProcess.disconnect(pid)
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :stopped],
+                      %{streams_terminated: 0}, _}
+    end
+
+    test "bounds a reliably known connection failure stage" do
+      Process.flag(:trap_exit, true)
+      attach_telemetry([:grpc, :client, :transport, :connect_error])
+
+      assert {:error, %Mint.TransportError{reason: :econnrefused}} =
+               ConnectionProcess.start_link(:http, "127.0.0.1", 1,
+                 grpc_transport_metadata: %{
+                   logical_connection_ref: make_ref(),
+                   target: {"127.0.0.1", 1},
+                   adapter: GRPC.Client.Adapters.Mint
+                 }
+               )
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :connect_error], %{},
+                      %{stage: :tcp, reason: %Mint.TransportError{reason: :econnrefused}}}
+    end
+  end
+
   describe "handle_call/2 - request - :stream" do
     setup :valid_connection
 
@@ -478,6 +543,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
            state: state,
            stream_response_pid: response_pid
          } do
+      attach_telemetry([:grpc, :client, :transport, :down])
       socket = state.conn.socket
       # this is a mocked message to inform the connection is closed
       tcp_message = {:tcp_closed, socket}
@@ -489,6 +555,9 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert :queue.to_list(response_state.responses) == [error: "the connection is closed"]
       assert true == response_state.done
       assert pid == self()
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :down], %{streams_terminated: 1},
+                      _}
     end
 
     test "send a message to parent process to inform the connection is down and reply pending process",
@@ -653,6 +722,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       state: state,
       port: port
     } do
+      attach_telemetry([:grpc, :client, :transport, :connected])
       failed_state = %{state | retry_attempt: 1}
 
       assert {:noreply, new_state} = ConnectionProcess.handle_info(:reconnect, failed_state)
@@ -669,6 +739,9 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert metadata.host == "127.0.0.1"
       assert metadata.port == port
       assert metadata.scheme == :http
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :connected], %{generation: 2},
+                      %{reconnect: true}}
     end
   end
 

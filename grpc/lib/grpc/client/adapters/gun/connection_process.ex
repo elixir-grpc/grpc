@@ -22,6 +22,7 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
 
   require Logger
   alias GRPC.Client.Adapters.Gun.StreamResponseProcess
+  alias GRPC.Client.Telemetry
 
   def connect(channel, open_opts) when is_map(open_opts) do
     case DynamicSupervisor.start_child(GRPC.Client.Supervisor, child_spec(channel, open_opts)) do
@@ -78,7 +79,9 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   end
 
   @impl GenServer
-  def init({%{host: host, port: port}, open_opts}) do
+  def init({%{host: host, port: port} = channel, open_opts}) do
+    metadata = metadata(channel)
+    Telemetry.execute(:started, %{generation: 0, active_streams: 0}, metadata)
     {await_timeout, open_opts} = Map.pop(open_opts, :await_timeout, 5_000)
 
     case open(host, port, open_opts) do
@@ -88,18 +91,43 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
             # Monitor Gun so we don't keep casting into a dead pid if Gun
             # exhausts its reconnect retries (or crashes)
             Process.monitor(gun_pid)
-            {:ok, %{gun_pid: gun_pid, response_processes: %{}}}
+            Telemetry.execute(:connected, %{generation: 1}, Map.put(metadata, :reconnect, false))
+
+            {:ok,
+             %{
+               channel: channel,
+               gun_pid: gun_pid,
+               response_processes: %{},
+               generation: 1,
+               max_concurrent_streams: :unknown
+             }}
 
           {:ok, proto} ->
             :gun.shutdown(gun_pid)
-            {:stop, "Error when opening connection: protocol #{proto} is not http2"}
+            reason = "Error when opening connection: protocol #{proto} is not http2"
+
+            Telemetry.execute(
+              :connect_error,
+              %{},
+              Map.merge(metadata, %{stage: :http2, reason: reason})
+            )
+
+            Telemetry.execute(
+              :stopped,
+              %{streams_terminated: 0},
+              Map.put(metadata, :reason, reason)
+            )
+
+            {:stop, reason}
 
           {:error, reason} ->
             :gun.shutdown(gun_pid)
+            connect_failed(metadata, reason)
             {:stop, reason}
         end
 
       {:error, reason} ->
+        connect_failed(metadata, reason)
         {:stop, reason}
     end
   end
@@ -146,19 +174,44 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   end
 
   @impl GenServer
+  def handle_info({:gun_up, _gun_pid, :http2}, state) do
+    generation = state.generation + 1
+
+    Telemetry.execute(
+      :connected,
+      %{generation: generation},
+      state |> metadata() |> Map.put(:reconnect, true)
+    )
+
+    {:noreply, %{state | generation: generation, max_concurrent_streams: :unknown}}
+  end
+
   def handle_info({:gun_up, _gun_pid, _protocol}, state), do: {:noreply, state}
 
   def handle_info({:gun_down, _gun_pid, _protocol, reason, killed_streams}, state) do
-    new_state =
-      Enum.reduce(killed_streams, state, fn stream_ref, acc ->
+    {new_state, killed_count} =
+      Enum.reduce(killed_streams, {state, 0}, fn stream_ref, {acc, count} ->
         if response_pid = response_pid(acc, stream_ref) do
           send(response_pid, {:connection_down, reason})
+          {drop_response_pid(acc, stream_ref), count + 1}
+        else
+          {acc, count}
         end
-
-        drop_response_pid(acc, stream_ref)
       end)
 
-    {:noreply, new_state}
+    metadata = Map.put(metadata(state), :reason, reason)
+    Telemetry.execute(:down, %{streams_terminated: killed_count}, metadata)
+    {:noreply, %{new_state | max_concurrent_streams: :unknown}}
+  end
+
+  def handle_info({:gun_notify, _gun_pid, :settings_changed, settings}, state) do
+    max = normalize_max_streams(Map.get(settings, :max_concurrent_streams, :unknown))
+
+    if max != state.max_concurrent_streams do
+      Telemetry.execute(:settings, %{}, Map.put(metadata(state), :max_concurrent_streams, max))
+    end
+
+    {:noreply, %{state | max_concurrent_streams: max}}
   end
 
   # Gun is gone for good (reconnect retries exhausted or a crash). Fail all
@@ -178,6 +231,17 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   def handle_info(msg, state) do
     Logger.warning("#{inspect(__MODULE__)} received unexpected message: #{inspect(msg)}")
     {:noreply, state}
+  end
+
+  @impl GenServer
+  def terminate(reason, %{response_processes: processes} = state) do
+    Telemetry.execute(
+      :stopped,
+      %{streams_terminated: map_size(processes)},
+      Map.put(metadata(state), :reason, reason)
+    )
+
+    :ok
   end
 
   defp open({:local, socket_path}, _port, open_opts), do: :gun.open_unix(socket_path, open_opts)
@@ -202,14 +266,23 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
 
   defp put_response_pid(%{response_processes: processes} = state, stream_ref, response_pid) do
     monitor_ref = Process.monitor(response_pid)
-    %{state | response_processes: Map.put(processes, stream_ref, {response_pid, monitor_ref})}
+
+    new_state = %{
+      state
+      | response_processes: Map.put(processes, stream_ref, {response_pid, monitor_ref})
+    }
+
+    emit_streams(new_state, map_size(new_state.response_processes))
+    new_state
   end
 
   defp drop_response_pid(%{response_processes: processes} = state, stream_ref) do
     case Map.pop(processes, stream_ref) do
       {{_response_pid, monitor_ref}, remaining} ->
         Process.demonitor(monitor_ref, [:flush])
-        %{state | response_processes: remaining}
+        new_state = %{state | response_processes: remaining}
+        emit_streams(new_state, map_size(remaining))
+        new_state
 
       {nil, _remaining} ->
         state
@@ -218,8 +291,13 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
 
   defp drop_response_pid_by_monitor(%{response_processes: processes} = state, monitor_ref) do
     case Enum.find(processes, fn {_stream_ref, {_response_pid, ref}} -> ref == monitor_ref end) do
-      {stream_ref, _entry} -> %{state | response_processes: Map.delete(processes, stream_ref)}
-      nil -> state
+      {stream_ref, _entry} ->
+        new_state = %{state | response_processes: Map.delete(processes, stream_ref)}
+        emit_streams(new_state, map_size(new_state.response_processes))
+        new_state
+
+      nil ->
+        state
     end
   end
 
@@ -228,6 +306,43 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
       {response_pid, _monitor_ref} -> response_pid
       nil -> nil
     end
+  end
+
+  defp emit_streams(state, active_streams) do
+    Telemetry.execute(:streams, %{active: active_streams}, metadata(state))
+  end
+
+  defp normalize_max_streams(:infinity), do: :infinity
+  defp normalize_max_streams(value) when is_integer(value) and value > 0, do: value
+  defp normalize_max_streams(_value), do: :unknown
+
+  defp connect_failed(metadata, reason) do
+    maybe_connect_error(metadata, reason)
+    Telemetry.execute(:stopped, %{streams_terminated: 0}, Map.put(metadata, :reason, reason))
+  end
+
+  defp maybe_connect_error(metadata, reason) do
+    if stage = connect_stage(reason) do
+      Telemetry.execute(:connect_error, %{}, Map.merge(metadata, %{stage: stage, reason: reason}))
+    end
+  end
+
+  defp connect_stage(reason) when reason in [:nxdomain, :host_not_found], do: :resolve
+  defp connect_stage(reason) when reason in [:econnrefused, :enetunreach, :ehostunreach], do: :tcp
+  defp connect_stage({:tls_alert, _detail}), do: :tls
+  defp connect_stage({:down, reason}), do: connect_stage(reason)
+  defp connect_stage({_tag, reason}), do: connect_stage(reason)
+  defp connect_stage(_reason), do: nil
+
+  defp metadata(%{channel: channel}), do: metadata(channel)
+
+  defp metadata(channel) do
+    %{
+      logical_connection_ref: channel.ref,
+      transport_ref: self(),
+      target: {channel.host, channel.port},
+      adapter: GRPC.Client.Adapters.Gun
+    }
   end
 
   defp owner_key(%{ref: ref, host: host, port: port}), do: {ref, host, port}
