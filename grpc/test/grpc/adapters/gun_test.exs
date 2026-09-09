@@ -171,14 +171,27 @@ defmodule GRPC.Client.Adapters.GunTest do
   end
 
   describe "receive_data/2" do
-    test "cancels and cleans up a stream when response headers time out", %{
-      port: port,
-      credential: credential
-    } do
-      channel = build(:channel, port: port, host: "localhost", cred: credential)
-      assert {:ok, connected} = Gun.connect(channel, [])
-      on_exit(fn -> Gun.disconnect(connected) end)
+    test "a unary call cancels and cleans up when the peer never returns headers" do
+      connected = connect_quiet()
+      conn_pid = connected.adapter_payload.conn_pid
+      request = %Helloworld.HelloRequest{name: "timeout"}
 
+      task =
+        Task.async(fn ->
+          Helloworld.Greeter.Stub.say_hello(connected, request, timeout: 500)
+        end)
+
+      {stream_ref, response_pid} = wait_for_response_process(conn_pid)
+      monitor_ref = Process.monitor(response_pid)
+
+      assert {:error, %GRPC.RPCError{status: status}} = Task.await(task, 1_000)
+      assert status == GRPC.Status.deadline_exceeded()
+      assert_receive {:DOWN, ^monitor_ref, :process, ^response_pid, :normal}
+      refute Map.has_key?(:sys.get_state(conn_pid).response_processes, stream_ref)
+    end
+
+    test "cancels and cleans up a stream when response headers time out" do
+      connected = connect_quiet()
       conn_pid = connected.adapter_payload.conn_pid
 
       assert {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} =
@@ -198,6 +211,82 @@ defmodule GRPC.Client.Adapters.GunTest do
       refute Map.has_key?(:sys.get_state(conn_pid).response_processes, stream_ref)
     end
 
+    test "a finite call deadline cleans up before receive is called" do
+      connected = connect_quiet()
+
+      %{stream_ref: stream_ref, response_pid: response_pid} =
+        open_pending_stream(connected, System.monotonic_time(:millisecond))
+
+      monitor_ref = Process.monitor(response_pid)
+
+      assert_receive {:DOWN, ^monitor_ref, :process, ^response_pid, :normal}
+
+      refute Map.has_key?(
+               :sys.get_state(connected.adapter_payload.conn_pid).response_processes,
+               stream_ref
+             )
+    end
+
+    test "cancels and cleans up a stream when the response stalls after headers" do
+      connected = connect_quiet()
+
+      %{stream: stream, stream_ref: stream_ref, response_pid: response_pid} =
+        open_pending_stream(connected)
+
+      monitor_ref = Process.monitor(response_pid)
+      send(response_pid, {:gun_response, self(), stream_ref, :nofin, 200, []})
+
+      assert {:error, %GRPC.RPCError{status: status}} = Gun.receive_data(stream, timeout: 0)
+      assert status == GRPC.Status.deadline_exceeded()
+      assert_receive {:DOWN, ^monitor_ref, :process, ^response_pid, :normal}
+
+      refute Map.has_key?(
+               :sys.get_state(stream.channel.adapter_payload.conn_pid).response_processes,
+               stream_ref
+             )
+    end
+
+    test "repeated timeouts leave no response processes or bookkeeping" do
+      connected = connect_quiet()
+      conn_pid = connected.adapter_payload.conn_pid
+
+      for _ <- 1..3 do
+        %{stream_ref: stream_ref, response_pid: response_pid} =
+          open_pending_stream(connected, System.monotonic_time(:millisecond))
+
+        monitor_ref = Process.monitor(response_pid)
+
+        assert_receive {:DOWN, ^monitor_ref, :process, ^response_pid, :normal}
+        refute Map.has_key?(:sys.get_state(conn_pid).response_processes, stream_ref)
+      end
+
+      assert :sys.get_state(conn_pid).response_processes == %{}
+      assert Process.alive?(conn_pid)
+    end
+
+    test "explicit cancellation keeps its existing cleanup behavior" do
+      connected = connect_quiet()
+
+      %{stream: stream, stream_ref: stream_ref, response_pid: response_pid} =
+        open_pending_stream(connected)
+
+      monitor_ref = Process.monitor(response_pid)
+      canceled = GRPC.Stub.cancel(stream)
+
+      assert canceled.canceled
+      assert :ok = ConnectionProcess.cancel(connected.adapter_payload.conn_pid, stream_ref)
+      assert Process.alive?(connected.adapter_payload.conn_pid)
+      assert_receive {:DOWN, ^monitor_ref, :process, ^response_pid, :normal}
+
+      refute Map.has_key?(
+               :sys.get_state(connected.adapter_payload.conn_pid).response_processes,
+               stream_ref
+             )
+
+      assert {:error, %GRPC.RPCError{status: status}} = GRPC.Stub.recv(canceled)
+      assert status == GRPC.Status.cancelled()
+    end
+
     test "maps connection-level gun errors to unavailable RPC errors" do
       {:ok, response_pid} = GRPC.Client.Adapters.Gun.StreamResponseProcess.start_link()
 
@@ -213,5 +302,70 @@ defmodule GRPC.Client.Adapters.GunTest do
       assert message =~ "connection_error"
       assert message =~ "preface"
     end
+  end
+
+  defp connect_quiet do
+    {:ok, listen_socket} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+    {:ok, port} = :inet.port(listen_socket)
+    test_pid = self()
+
+    peer =
+      spawn_link(fn ->
+        {:ok, socket} = :gen_tcp.accept(listen_socket)
+        :ok = :gen_tcp.send(socket, <<0::24, 0x04, 0, 0::32>>)
+        :ok = :gen_tcp.send(socket, <<0::24, 0x04, 0x01, 0::32>>)
+        send(test_pid, {:peer_ready, self()})
+
+        receive do
+          :close -> :gen_tcp.close(socket)
+        end
+      end)
+
+    channel = build(:channel, port: port, host: "localhost")
+    assert {:ok, connected} = Gun.connect(channel, [])
+    assert_receive {:peer_ready, ^peer}
+
+    on_exit(fn ->
+      Gun.disconnect(connected)
+      send(peer, :close)
+      :gen_tcp.close(listen_socket)
+    end)
+
+    connected
+  end
+
+  defp wait_for_response_process(conn_pid, attempts \\ 100)
+
+  defp wait_for_response_process(_conn_pid, 0), do: flunk("request was not dispatched")
+
+  defp wait_for_response_process(conn_pid, attempts) do
+    case :sys.get_state(conn_pid).response_processes do
+      processes when map_size(processes) == 0 ->
+        Process.sleep(1)
+        wait_for_response_process(conn_pid, attempts - 1)
+
+      processes ->
+        [{stream_ref, {response_pid, _monitor_ref}}] = Map.to_list(processes)
+        {stream_ref, response_pid}
+    end
+  end
+
+  defp open_pending_stream(connected, deadline \\ :infinity) do
+    conn_pid = connected.adapter_payload.conn_pid
+    stream = build(:client_stream, channel: connected)
+    headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, timeout: :infinity)
+
+    assert {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} =
+             ConnectionProcess.open_stream(conn_pid, stream.path, headers, deadline)
+
+    %{
+      stream: %GRPC.Client.Stream{
+        channel: connected,
+        payload: %{stream_ref: stream_ref, response_pid: response_pid, deadline: deadline},
+        server_stream: false
+      },
+      stream_ref: stream_ref,
+      response_pid: response_pid
+    }
   end
 end
