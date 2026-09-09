@@ -171,6 +171,33 @@ defmodule GRPC.Client.Adapters.GunTest do
   end
 
   describe "receive_data/2" do
+    test "cancels and cleans up a stream when response headers time out", %{
+      port: port,
+      credential: credential
+    } do
+      channel = build(:channel, port: port, host: "localhost", cred: credential)
+      assert {:ok, connected} = Gun.connect(channel, [])
+      on_exit(fn -> Gun.disconnect(connected) end)
+
+      conn_pid = connected.adapter_payload.conn_pid
+
+      assert {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} =
+               ConnectionProcess.open_stream(conn_pid, "/pending", [])
+
+      monitor_ref = Process.monitor(response_pid)
+
+      stream = %GRPC.Client.Stream{
+        channel: connected,
+        payload: %{stream_ref: stream_ref, response_pid: response_pid},
+        server_stream: false
+      }
+
+      assert {:error, %GRPC.RPCError{status: status}} = Gun.receive_data(stream, timeout: 0)
+      assert status == GRPC.Status.deadline_exceeded()
+      assert_receive {:DOWN, ^monitor_ref, :process, ^response_pid, :normal}
+      refute Map.has_key?(:sys.get_state(conn_pid).response_processes, stream_ref)
+    end
+
     test "maps connection-level gun errors to unavailable RPC errors" do
       {:ok, response_pid} = GRPC.Client.Adapters.Gun.StreamResponseProcess.start_link()
 
