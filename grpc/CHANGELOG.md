@@ -5,6 +5,7 @@
 ### Behavior Changes
 
   * The Mint adapter now enforces the requested `:timeout`/`:deadline` on unary receives. A unary call that never receives a response fails with `DEADLINE_EXCEEDED` after the documented 10s default instead of blocking indefinitely, and an explicit `:deadline` now takes precedence over `:timeout`.
+  * `GRPC.Client.Adapters.Mint.connect/2` now returns errors directly, instead of formatting as a string.
 
 ### Bug Fixes
 
