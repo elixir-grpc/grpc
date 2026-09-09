@@ -13,15 +13,12 @@ defmodule GRPC.Client.Telemetry do
   | `:connect_error` | none | common metadata plus bounded `stage` and diagnostic `reason` |
   | `:down` | `streams_terminated` | common metadata plus diagnostic `reason` |
   | `:stopped` | `streams_terminated` | common metadata plus diagnostic `reason` |
-  | `:reset` | `streams_terminated` | common metadata plus diagnostic `reason` |
   | `:settings` | none | common metadata plus `max_concurrent_streams` |
   | `:streams` | `active` | common metadata |
 
   Generations start at one on the first successful establishment and increment
   after recovery. Stream occupancy is an authoritative snapshot after each
-  stream-table mutation. When both `:reset` and `:down` describe one loss,
-  terminated streams are counted by `:down`; `:reset` reports zero to prevent
-  double-counting.
+  stream-table mutation.
 
   `:connect_error` is emitted only when the adapter can assign `:resolve`,
   `:tcp`, `:tls`, or `:http2` from a public transport signal.

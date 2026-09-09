@@ -200,7 +200,6 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
       end)
 
     metadata = Map.put(metadata(state), :reason, reason)
-    Telemetry.execute(:reset, %{streams_terminated: 0}, metadata)
     Telemetry.execute(:down, %{streams_terminated: killed_count}, metadata)
     {:noreply, %{new_state | max_concurrent_streams: :unknown}}
   end

@@ -543,7 +543,6 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
            state: state,
            stream_response_pid: response_pid
          } do
-      attach_telemetry([:grpc, :client, :transport, :reset])
       attach_telemetry([:grpc, :client, :transport, :down])
       socket = state.conn.socket
       # this is a mocked message to inform the connection is closed
@@ -556,9 +555,6 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert :queue.to_list(response_state.responses) == [error: "the connection is closed"]
       assert true == response_state.done
       assert pid == self()
-
-      assert_receive {:telemetry, [:grpc, :client, :transport, :reset], %{streams_terminated: 0},
-                      _}
 
       assert_receive {:telemetry, [:grpc, :client, :transport, :down], %{streams_terminated: 1},
                       _}

@@ -437,7 +437,6 @@ if Code.ensure_loaded?(Mint.HTTP) do
     defp finish_all_pending_requests(state, reason) do
       count = map_size(state.requests)
       metadata = Map.put(state.telemetry_metadata, :reason, reason)
-      Telemetry.execute(:reset, %{streams_terminated: 0}, metadata)
       Telemetry.execute(:down, %{streams_terminated: count}, metadata)
 
       new_state =

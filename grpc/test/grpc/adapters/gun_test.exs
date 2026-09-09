@@ -180,7 +180,6 @@ defmodule GRPC.Client.Adapters.GunTest do
             :connected,
             :settings,
             :streams,
-            :reset,
             :down,
             :stopped
           ] do
@@ -224,9 +223,6 @@ defmodule GRPC.Client.Adapters.GunTest do
       send(conn_pid, {:gun_down, gun_pid, :http2, :econnreset, [stream_ref]})
 
       assert_receive {:telemetry, [:grpc, :client, :transport, :streams], %{active: 0}, _}
-
-      assert_receive {:telemetry, [:grpc, :client, :transport, :reset], %{streams_terminated: 0},
-                      _}
 
       assert_receive {:telemetry, [:grpc, :client, :transport, :down], %{streams_terminated: 1},
                       _}
