@@ -20,6 +20,8 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
 
   use GenServer
 
+  @deadline_cancel_grace_ms 100
+
   require Logger
   alias GRPC.Client.Adapters.Gun.StreamResponseProcess
 
@@ -43,12 +45,12 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
       :ok
   end
 
-  def request(connection_process_pid, path, headers, body) do
-    GenServer.call(connection_process_pid, {:request, path, headers, body})
+  def request(connection_process_pid, path, headers, body, deadline \\ :infinity) do
+    GenServer.call(connection_process_pid, {:request, path, headers, body, deadline})
   end
 
-  def open_stream(connection_process_pid, path, headers) do
-    GenServer.call(connection_process_pid, {:open_stream, path, headers})
+  def open_stream(connection_process_pid, path, headers, deadline \\ :infinity) do
+    GenServer.call(connection_process_pid, {:open_stream, path, headers, deadline})
   end
 
   def send_data(connection_process_pid, stream_ref, fin, data) do
@@ -110,21 +112,23 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
     {:stop, :normal, :ok, state}
   end
 
-  def handle_call({:request, path, headers, body}, _from, %{gun_pid: gun_pid} = state) do
+  def handle_call({:request, path, headers, body, deadline}, _from, %{gun_pid: gun_pid} = state) do
     with {:ok, response_pid} <- start_response_process(),
-         stream_ref <- :gun.post(gun_pid, path, headers, body, %{reply_to: response_pid}) do
-      {:reply, {:ok, %{stream_ref: stream_ref, response_pid: response_pid}},
-       put_response_pid(state, stream_ref, response_pid)}
+         stream_ref <- :gun.post(gun_pid, path, headers, body, %{reply_to: response_pid}),
+         state <- put_response_pid(state, stream_ref, response_pid),
+         :ok <- StreamResponseProcess.track(response_pid, self(), stream_ref, deadline) do
+      {:reply, {:ok, %{stream_ref: stream_ref, response_pid: response_pid}}, state}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
 
-  def handle_call({:open_stream, path, headers}, _from, %{gun_pid: gun_pid} = state) do
+  def handle_call({:open_stream, path, headers, deadline}, _from, %{gun_pid: gun_pid} = state) do
     with {:ok, response_pid} <- start_response_process(),
-         stream_ref <- :gun.post(gun_pid, path, headers, %{reply_to: response_pid}) do
-      {:reply, {:ok, %{stream_ref: stream_ref, response_pid: response_pid}},
-       put_response_pid(state, stream_ref, response_pid)}
+         stream_ref <- :gun.post(gun_pid, path, headers, %{reply_to: response_pid}),
+         state <- put_response_pid(state, stream_ref, response_pid),
+         :ok <- StreamResponseProcess.track(response_pid, self(), stream_ref, deadline) do
+      {:reply, {:ok, %{stream_ref: stream_ref, response_pid: response_pid}}, state}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
@@ -135,18 +139,34 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
     {:reply, :ok, state}
   end
 
-  def handle_call({:cancel, stream_ref}, _from, %{gun_pid: gun_pid} = state) do
-    :ok = :gun.cancel(gun_pid, stream_ref)
-
-    if response_pid = response_pid(state, stream_ref) do
-      GenServer.stop(response_pid, :normal)
-    end
-
-    {:reply, :ok, drop_response_pid(state, stream_ref)}
+  def handle_call({:cancel, stream_ref}, _from, state) do
+    {:reply, :ok, cancel_stream(state, stream_ref, nil, true)}
   end
 
   @impl GenServer
   def handle_info({:gun_up, _gun_pid, _protocol}, state), do: {:noreply, state}
+
+  def handle_info({:stream_expired, stream_ref, response_pid}, state) do
+    if response_pid(state, stream_ref) == response_pid do
+      # Give deadline response frames already in flight a chance to close the
+      # stream before Gun sends RST_STREAM. Gun 2.4 treats late HEADERS after
+      # a local reset as a connection error.
+      Process.send_after(self(), {:cancel_expired_stream, stream_ref}, @deadline_cancel_grace_ms)
+      {:noreply, drop_response_pid(state, stream_ref)}
+    else
+      {:noreply, state}
+    end
+  end
+
+  def handle_info({:cancel_expired_stream, stream_ref}, %{gun_pid: gun_pid} = state) do
+    case :gun.stream_info(gun_pid, stream_ref) do
+      {:ok, :undefined} -> :ok
+      {:ok, _info} -> :gun.cancel(gun_pid, stream_ref)
+      {:error, :not_connected} -> :ok
+    end
+
+    {:noreply, state}
+  end
 
   def handle_info({:gun_down, _gun_pid, _protocol, reason, killed_streams}, state) do
     new_state =
@@ -228,6 +248,25 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
       {response_pid, _monitor_ref} -> response_pid
       nil -> nil
     end
+  end
+
+  defp cancel_stream(%{response_processes: processes} = state, stream_ref, expected_pid, stop?) do
+    case Map.get(processes, stream_ref) do
+      {response_pid, _monitor_ref}
+      when is_nil(expected_pid) or response_pid == expected_pid ->
+        :ok = :gun.cancel(state.gun_pid, stream_ref)
+        if stop?, do: stop_response_process(response_pid)
+        drop_response_pid(state, stream_ref)
+
+      _ ->
+        state
+    end
+  end
+
+  defp stop_response_process(response_pid) do
+    GenServer.stop(response_pid, :normal)
+  catch
+    :exit, _reason -> :ok
   end
 
   defp owner_key(%{ref: ref, host: host, port: port}), do: {ref, host, port}
