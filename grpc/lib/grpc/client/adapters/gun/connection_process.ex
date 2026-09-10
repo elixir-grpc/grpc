@@ -20,6 +20,8 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
 
   use GenServer
 
+  @deadline_cancel_grace_ms 100
+
   require Logger
   alias GRPC.Client.Adapters.Gun.StreamResponseProcess
 
@@ -145,7 +147,25 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   def handle_info({:gun_up, _gun_pid, _protocol}, state), do: {:noreply, state}
 
   def handle_info({:stream_expired, stream_ref, response_pid}, state) do
-    {:noreply, cancel_stream(state, stream_ref, response_pid, false)}
+    if response_pid(state, stream_ref) == response_pid do
+      # Give deadline response frames already in flight a chance to close the
+      # stream before Gun sends RST_STREAM. Gun 2.4 treats late HEADERS after
+      # a local reset as a connection error.
+      Process.send_after(self(), {:cancel_expired_stream, stream_ref}, @deadline_cancel_grace_ms)
+      {:noreply, drop_response_pid(state, stream_ref)}
+    else
+      {:noreply, state}
+    end
+  end
+
+  def handle_info({:cancel_expired_stream, stream_ref}, %{gun_pid: gun_pid} = state) do
+    case :gun.stream_info(gun_pid, stream_ref) do
+      {:ok, :undefined} -> :ok
+      {:ok, _info} -> :gun.cancel(gun_pid, stream_ref)
+      {:error, :not_connected} -> :ok
+    end
+
+    {:noreply, state}
   end
 
   def handle_info({:gun_down, _gun_pid, _protocol, reason, killed_streams}, state) do
