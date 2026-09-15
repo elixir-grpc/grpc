@@ -121,15 +121,20 @@ defmodule GRPC.Client.Adapters.MintTest do
   end
 
   describe "handle_errors_receive_data/2" do
-    test "returns a GRPC.RPCError with unknown status" do
-      response = {:error, :closed}
-      stream = build(:client_stream, payload: %{response: response})
+    test "returns a GRPC.RPCError with unknown status and stops the stream response process" do
+      {:ok, stream_response_pid} =
+        GRPC.Client.Adapters.Mint.StreamResponseProcess.start_link(build(:client_stream), true)
+
+      payload = %{response: {:error, :closed}, stream_response_pid: stream_response_pid}
+      stream = build(:client_stream, payload: payload)
 
       assert {:error, %GRPC.RPCError{status: status, message: message}} =
                Mint.handle_errors_receive_data(stream, [])
 
       assert status == GRPC.Status.unknown()
-      assert message == "error occurred while receiving data: #{inspect(response)}"
+      assert message == "error occurred while receiving data: #{inspect(payload.response)}"
+
+      refute Process.alive?(stream_response_pid)
     end
   end
 

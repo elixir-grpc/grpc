@@ -263,7 +263,12 @@ if Code.ensure_loaded?(Mint.HTTP) do
       :exit, _reason -> :ok
     end
 
-    def handle_errors_receive_data(%GRPC.Client.Stream{payload: %{response: response}}, _opts) do
+    def handle_errors_receive_data(
+          %GRPC.Client.Stream{payload: %{response: response, stream_response_pid: pid}},
+          _opts
+        ) do
+      quietly(fn -> GenServer.stop(pid, :normal, @cleanup_timeout) end)
+
       {:error,
        GRPC.RPCError.exception(
          GRPC.Status.unknown(),
