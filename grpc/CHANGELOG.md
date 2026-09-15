@@ -9,6 +9,7 @@
 
 ### Bug Fixes
 
+  * The Mint adapter no longer leaks a `StreamResponseProcess` when the connection process refuses a request.
   * The Gun adapter no longer shares a named channel's connection process across Erlang nodes. It was registered in `:global`, so a node connecting with a `:name` already used on another node adopted the remote connection process; `connect/2` returned `{:ok, channel}`, but every RPC on it then raised `ArgumentError` because `GRPC.Stub.call/5` calls `Process.alive?/1` on the connection pid and that raises for remote pids. Connection processes are now registered in the node-local `GRPC.Client.Registry`, so reuse is per node.
 
 ## v1.0.4 (2026-0-15)
