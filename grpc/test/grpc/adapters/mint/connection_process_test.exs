@@ -625,6 +625,34 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     end
   end
 
+  describe "handle_info - non-200 responses" do
+    setup :quiet_connection
+    setup :valid_stream_request
+    setup :valid_stream_response
+
+    test "reports the HTTP status to the stream response process",
+         %{stream_response_pid: response_pid, state: state} do
+      # A proxy answering with a plain HTTP error: a HEADERS frame whose only
+      # header is `:status` (static table index 8) with the value "502".
+      stream_id = state.conn.next_stream_id - 2
+      headers_frame = <<5::24, 0x01, 0x04, stream_id::32, 0x08, 0x03, "502">>
+      message = {:tcp, state.conn.socket, headers_frame}
+
+      assert {:noreply, new_state} = ConnectionProcess.handle_info(message, state)
+
+      # the connection is untouched, only this request failed
+      assert Mint.HTTP.open?(new_state.conn)
+
+      # the caller-facing stream response process got the status as an error
+      response_state = :sys.get_state(response_pid)
+
+      assert [
+               {:error, %GRPC.RPCError{status: 13, message: "status got is 502 instead of 200"}}
+               | _headers
+             ] = :queue.to_list(response_state.responses)
+    end
+  end
+
   describe "retry_timeout/1" do
     test "returns exponentially increasing timeouts" do
       t1 = ConnectionProcess.retry_timeout(1)
