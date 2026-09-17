@@ -249,8 +249,18 @@ if Code.ensure_loaded?(Mint.HTTP) do
       state
     end
 
+    defp process_response({:status, request_ref, 200}, state) do
+      State.update_response_status(state, request_ref, 200)
+    end
+
     defp process_response({:status, request_ref, status}, state) do
-      State.update_response_status(state, request_ref, status)
+      state
+      |> State.update_response_status(request_ref, status)
+      |> consume_or_cancel_stream(
+        request_ref,
+        :error,
+        GRPC.RPCError.exception(GRPC.Status.internal(), "status got is #{status} instead of 200")
+      )
     end
 
     defp process_response({:headers, request_ref, headers}, state) do
