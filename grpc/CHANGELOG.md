@@ -6,6 +6,7 @@
 
   * The Mint adapter now enforces the requested `:timeout`/`:deadline` on unary receives. A unary call that never receives a response fails with `DEADLINE_EXCEEDED` after the documented 10s default instead of blocking indefinitely, and an explicit `:deadline` now takes precedence over `:timeout`.
   * `GRPC.Client.Adapters.Mint.connect/2` now returns errors directly, instead of formatting as a string.
+  * The Mint adapter now returns `%GRPC.RPCError{}` instead of a bare string when a request or a queued stream body write hits a closed connection (`UNAVAILABLE`) or a cancelled request (`CANCELLED`), matching how the Gun adapter surfaces transport errors.
 
 ### Bug Fixes
 
