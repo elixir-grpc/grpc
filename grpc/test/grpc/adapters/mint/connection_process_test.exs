@@ -625,6 +625,71 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     end
   end
 
+  describe "keepalive" do
+    test "keeps the connection open while the server acknowledges pings", %{port: port} do
+      %{process_pid: pid} = valid_connection(%{port: port}, keepalive: 20, keepalive_tolerance: 1)
+      Process.sleep(250)
+      assert Mint.HTTP.open?(:sys.get_state(pid).conn)
+    end
+
+    @tag :capture_log
+    test "closes the connection when the server stops acknowledging pings", ctx do
+      %{process_pid: pid} = quiet_connection(ctx, keepalive: 20, keepalive_tolerance: 2)
+      assert_receive {:elixir_grpc, :connection_down, ^pid}, 1_000
+    end
+  end
+
+  describe "handle_info - :keepalive" do
+    setup :quiet_connection
+
+    test "each pong acknowledges one ping", %{state: state} do
+      ping_ack = {:tcp, state.conn.socket, <<8::24, 0x06, 0x01, 0::32, 0::64>>}
+
+      {:noreply, state} = ConnectionProcess.handle_info(:keepalive, state)
+
+      assert {:noreply, %{pings_unacked: 2} = state} =
+               ConnectionProcess.handle_info(:keepalive, state)
+
+      assert {:noreply, %{pings_unacked: 1} = state} =
+               ConnectionProcess.handle_info(ping_ack, state)
+
+      assert {:noreply, %{pings_unacked: 0}} = ConnectionProcess.handle_info(ping_ack, state)
+    end
+
+    @tag :capture_log
+    test "closes the connection when the ping cannot be sent", %{state: state} do
+      :ok = :gen_tcp.close(state.conn.socket)
+
+      assert {:stop, :normal, %{pings_unacked: 0, conn: conn}} =
+               ConnectionProcess.handle_info(:keepalive, state)
+
+      refute Mint.HTTP.open?(conn)
+      assert_receive {:elixir_grpc, :connection_down, _pid}
+    end
+  end
+
+  describe "handle_info - :keepalive - with retry" do
+    setup ctx, do: valid_connection(ctx, retry: 3, keepalive: 60_000, keepalive_tolerance: 1)
+
+    @tag :capture_log
+    test "reconnects with a fresh ping count when the tolerance is exceeded", %{state: state} do
+      state = %{state | pings_unacked: 1}
+
+      assert {:noreply, %{pings_unacked: 0, conn: conn}} =
+               ConnectionProcess.handle_info(:keepalive, state)
+
+      assert Mint.HTTP.open?(conn)
+      refute_received {:elixir_grpc, :connection_down, _pid}
+    end
+
+    test "does nothing while reconnecting", %{state: state} do
+      {:ok, conn} = Mint.HTTP.close(state.conn)
+      state = %{state | conn: conn}
+
+      assert {:noreply, ^state} = ConnectionProcess.handle_info(:keepalive, state)
+    end
+  end
+
   describe "retry_timeout/1" do
     test "returns exponentially increasing timeouts" do
       t1 = ConnectionProcess.retry_timeout(1)
@@ -779,7 +844,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   # Like valid_connection/2, but against a bare TCP server that only completes
   # the HTTP/2 preface (server SETTINGS + ack) and then stays silent — so no
   # real server frames race the ones injected by the test.
-  defp quiet_connection(_ctx) do
+  defp quiet_connection(_ctx, opts \\ []) do
     {:ok, listen_socket} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
     {:ok, port} = :inet.port(listen_socket)
 
@@ -795,7 +860,13 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
     on_exit(fn -> :gen_tcp.close(listen_socket) end)
 
-    {:ok, pid} = ConnectionProcess.start_link(:http, "localhost", port, protocols: [:http2])
+    {:ok, pid} =
+      ConnectionProcess.start_link(
+        :http,
+        "localhost",
+        port,
+        Keyword.merge([protocols: [:http2]], opts)
+      )
 
     # The state snapshot must only be taken once the connection has processed
     # the server preface: HTTP/2 requires SETTINGS to be the first server

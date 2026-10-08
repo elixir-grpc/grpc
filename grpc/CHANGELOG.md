@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Enhancements
+
+- The Mint adapter can now be configured to send HTTP/2 keepalive pings. `:keepalive` sets the interval in milliseconds, and `:keepalive_tolerance` the number of unacknowledged pings after which the connection is treated as dead, and forcibly closed.
+   Both default to `nil`, keeping the previous behavior.
+
 ### Behavior Changes
 
   * The Mint adapter now enforces the requested `:timeout`/`:deadline` on unary receives. A unary call that never receives a response fails with `DEADLINE_EXCEEDED` after the documented 10s default instead of blocking indefinitely, and an explicit `:deadline` now takes precedence over `:timeout`.

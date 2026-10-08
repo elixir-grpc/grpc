@@ -10,10 +10,13 @@ if Code.ensure_loaded?(Mint.HTTP) do
       :port,
       :connect_opts,
       :retry_timeout_ms,
+      :keepalive,
+      :keepalive_tolerance,
       requests: %{},
       request_stream_queue: :queue.new(),
       retry: 0,
-      retry_attempt: 0
+      retry_attempt: 0,
+      pings_unacked: 0
     ]
 
     def new(conn, opts) do
@@ -25,7 +28,9 @@ if Code.ensure_loaded?(Mint.HTTP) do
         host: opts[:host],
         port: opts[:port],
         connect_opts: opts[:connect_opts] || [],
-        retry: opts[:retry] || 0
+        retry: opts[:retry] || 0,
+        keepalive: opts[:keepalive],
+        keepalive_tolerance: opts[:keepalive_tolerance]
       }
     end
 
