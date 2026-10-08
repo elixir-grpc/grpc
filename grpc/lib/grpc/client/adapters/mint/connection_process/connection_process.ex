@@ -69,6 +69,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
     @impl true
     def init({scheme, host, port, opts}) do
       {retry, opts} = Keyword.pop(opts, :retry, 0)
+      {keepalive_opts, opts} = Keyword.split(opts, [:keepalive, :keepalive_tolerance])
 
       case Mint.HTTP.connect(scheme, host, port, opts) do
         {:ok, conn} ->
@@ -81,7 +82,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
             retry: retry
           ]
 
-          {:ok, State.new(conn, state_opts)}
+          {:ok, conn |> State.new(state_opts ++ keepalive_opts) |> schedule_keepalive()}
 
         {:error, reason} ->
           Logger.error(
@@ -190,6 +191,12 @@ if Code.ensure_loaded?(Mint.HTTP) do
       attempt_reconnect(state)
     end
 
+    def handle_info(:keepalive, state) do
+      state
+      |> schedule_keepalive()
+      |> handle_keepalive()
+    end
+
     def handle_info(message, state) do
       case Mint.HTTP.stream(state.conn, message) do
         :unknown ->
@@ -197,7 +204,10 @@ if Code.ensure_loaded?(Mint.HTTP) do
           {:noreply, state}
 
         {:ok, conn, responses} ->
-          state = State.update_conn(state, conn)
+          state =
+            state
+            |> State.update_conn(conn)
+            |> acknowledge_pongs(responses)
 
           state =
             case state.requests do
@@ -239,6 +249,53 @@ if Code.ensure_loaded?(Mint.HTTP) do
     @impl true
     def terminate(_reason, _state) do
       :normal
+    end
+
+    defp schedule_keepalive(%{keepalive: interval} = state) when is_integer(interval) do
+      Process.send_after(self(), :keepalive, interval)
+      state
+    end
+
+    defp schedule_keepalive(state), do: state
+
+    defp handle_keepalive(%{conn: %Mint.HTTP2{state: :closed}} = state), do: {:noreply, state}
+
+    defp handle_keepalive(%{pings_unacked: unacked, keepalive_tolerance: tolerance} = state)
+         when is_integer(tolerance) and unacked >= tolerance do
+      Logger.warning(
+        "Closing connection to #{state.scheme}://#{state.host}:#{state.port} after #{unacked} unacknowledged keepalive pings"
+      )
+
+      close_connection(state)
+    end
+
+    defp handle_keepalive(state) do
+      case Mint.HTTP2.ping(state.conn) do
+        {:ok, conn, _ref} ->
+          {:noreply, %{State.update_conn(state, conn) | pings_unacked: state.pings_unacked + 1}}
+
+        {:error, conn, reason} ->
+          Logger.warning(
+            "Closing connection to #{state.scheme}://#{state.host}:#{state.port} after failing to send keepalive ping: #{inspect(reason)}"
+          )
+
+          state
+          |> State.update_conn(conn)
+          |> close_connection()
+      end
+    end
+
+    defp close_connection(state) do
+      {:ok, conn} = Mint.HTTP.close(state.conn)
+
+      state
+      |> State.update_conn(conn)
+      |> finish_all_pending_requests()
+    end
+
+    defp acknowledge_pongs(state, responses) do
+      pongs = Enum.count(responses, &match?({:pong, _ref}, &1))
+      %{state | pings_unacked: state.pings_unacked - pongs}
     end
 
     # Frames may still arrive for a stream whose state was already dropped
@@ -492,7 +549,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
             reconnect_metadata(state, next_attempt)
           )
 
-          new_state = %{state | conn: conn, retry_attempt: 0}
+          new_state = %{state | conn: conn, retry_attempt: 0, pings_unacked: 0}
           {:noreply, new_state}
 
         {:error, reason} ->
