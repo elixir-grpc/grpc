@@ -245,6 +245,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
         },
         Enum.into(adapter_opts, %{})
       )
+      |> put_connection_window_default()
 
     [
       servers_name(endpoint, servers),
@@ -255,6 +256,25 @@ defmodule GRPC.Server.Adapters.Cowboy do
       },
       merged_adapter_opts
     ]
+  end
+
+  # HTTP/2 default stream window (RFC 9113 §6.9.2), which cowboy advertises unless
+  # `initial_stream_window_size` is set.
+  @default_stream_window 65_535
+  @max_window 0x7FFFFFFF
+  @connection_window_streams 16
+
+  # A stream's request data is credited back only as its handler reads it, so a stream whose
+  # handler stops reading also holds its share of the connection window. With the connection
+  # window equal to the stream window, one or two stalled streams take all of it and every other
+  # stream on the connection waits. Unless set, the connection window is 16 stream windows.
+  defp put_connection_window_default(opts) do
+    stream_window = Map.get(opts, :initial_stream_window_size, @default_stream_window)
+    window = min(@connection_window_streams * stream_window, @max_window)
+
+    opts
+    |> Map.put_new(:initial_connection_window_size, window)
+    |> Map.put_new(:connection_window_margin_size, window)
   end
 
   defp socket_opts(port, opts) do
