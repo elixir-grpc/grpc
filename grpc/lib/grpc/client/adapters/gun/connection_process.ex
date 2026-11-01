@@ -21,6 +21,7 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   use GenServer
 
   require Logger
+  alias GRPC.Client.Adapters.CallExit
   alias GRPC.Client.Adapters.Gun.StreamResponseProcess
 
   def connect(channel, open_opts) when is_map(open_opts) do
@@ -43,16 +44,18 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
       :ok
   end
 
+  # Calls carrying headers or bodies go through CallExit, so an exit (busy or dead
+  # connection process) does not leak them into logs and telemetry.
   def request(connection_process_pid, path, headers, body) do
-    GenServer.call(connection_process_pid, {:request, path, headers, body})
+    CallExit.call(connection_process_pid, {:request, path, headers, body})
   end
 
   def open_stream(connection_process_pid, path, headers) do
-    GenServer.call(connection_process_pid, {:open_stream, path, headers})
+    CallExit.call(connection_process_pid, {:open_stream, path, headers})
   end
 
   def send_data(connection_process_pid, stream_ref, fin, data) do
-    GenServer.call(connection_process_pid, {:send_data, stream_ref, fin, data})
+    CallExit.call(connection_process_pid, {:send_data, stream_ref, fin, data})
   end
 
   def cancel(connection_process_pid, stream_ref) do
