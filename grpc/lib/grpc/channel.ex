@@ -8,6 +8,9 @@ defmodule GRPC.Channel do
   ## Fields
 
     * `:host` - server's host to connect
+    * `:hostname` - the name the target resolved from, when `host` is an
+      address the resolver picked (e.g. a `dns://` target that resolved to an
+      IP). Used for TLS SNI and certificate hostname verification.
     * `:port` - server's port to connect
     * `:scheme` - scheme of connection, like `http`
     * `:cred` - credentials used for authentication
@@ -17,6 +20,7 @@ defmodule GRPC.Channel do
   """
 
   defstruct host: nil,
+            hostname: nil,
             port: nil,
             scheme: nil,
             cred: nil,
