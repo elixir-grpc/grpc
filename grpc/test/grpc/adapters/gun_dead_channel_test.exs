@@ -72,16 +72,6 @@ defmodule GRPC.Client.Adapters.GunDeadChannelTest do
     end
   end
 
-  defp assert_ok_or_unavailable(results) do
-    for {kind, result} <- results do
-      case result do
-        {:ok, _} -> :ok
-        {:error, %GRPC.RPCError{status: @unavailable}} -> :ok
-        other -> flunk("#{kind} call returned #{inspect(other)}")
-      end
-    end
-  end
-
   # Waits for the process to be gone. A monitor on a dead pid reports `:noproc`
   # at once, so this works whether or not the process had already exited.
   defp await_down(pid) do
@@ -132,12 +122,64 @@ defmodule GRPC.Client.Adapters.GunDeadChannelTest do
     port
   end
 
+  # Gun reconnects up to twice, 10 ms apart, then exits. The default is 100
+  # retries with backoff of up to two minutes.
+  @short_retries [
+    retry: 2,
+    retry_fun: &__MODULE__.short_retry_fun/2
+  ]
+
+  def short_retry_fun(retries, _opts), do: %{retries: retries - 1, timeout: 10}
+
+  defp stop_server do
+    GRPC.Server.stop(FeatureServer)
+  end
+
+  # Stops the server and waits until the connection process has seen Gun lose
+  # the connection. Gun is retrying from here on.
+  defp stop_server_and_wait_for_gun_down(conn_pid) do
+    attach_telemetry([:grpc, :client, :transport, :down])
+    stop_server()
+    assert_receive {:telemetry, _, _, %{transport_ref: ^conn_pid}}, 5_000
+  end
+
+  # Waits until the pool has no connection left. The pool replaces a dead
+  # connection by opening a new one, so with the server gone it ends up empty.
+  defp wait_for_empty_pool(%{pool: nil}), do: :ok
+
+  defp wait_for_empty_pool(%{pool: pool_ref}) do
+    wait_until(fn -> pool_conn_pids(pool_ref) == [] end)
+  end
+
+  defp pool_conn_pids(pool_ref) do
+    [{pool_pid, _}] =
+      Registry.lookup(GRPC.Client.Pool.Registry, {GRPC.Client.Pool.Server, pool_ref})
+
+    %{channels: channels} = :sys.get_state(pool_pid)
+    for %{channel: %{adapter_payload: %{conn_pid: pid}}} <- Map.values(channels), do: pid
+  end
+
+  defp wait_until(fun, tries \\ 500) do
+    cond do
+      fun.() ->
+        :ok
+
+      tries == 0 ->
+        flunk("condition not met within the wait budget")
+
+      true ->
+        Process.sleep(10)
+        wait_until(fun, tries - 1)
+    end
+  end
+
   for pooled? <- [false, true] do
     describe "channel from GRPC.Stub.connect/2 (pool_enabled: #{pooled?})" do
       setup do
         Application.put_env(:grpc, :pool_enabled, unquote(pooled?))
         port = start_feature_server()
-        {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+        attach_telemetry([:grpc, :client, :transport, :stopped])
+        {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", adapter_opts: @short_retries)
         %{channel: channel}
       end
 
@@ -149,83 +191,144 @@ defmodule GRPC.Client.Adapters.GunDeadChannelTest do
         assert_unavailable(rpc_results(disconnected))
       end
 
+      test "after the server stops and Gun gives up retrying", %{channel: channel} do
+        conn_pid = conn_pid(channel)
+        stop_server_and_wait_for_gun_down(conn_pid)
+
+        # Gun exits when its retries run out; the connection process follows.
+        assert_receive {:telemetry, _, _,
+                        %{transport_ref: ^conn_pid, reason: {:shutdown, {:gun_down, _}}}},
+                       5_000
+
+        await_down(conn_pid)
+        wait_for_empty_pool(channel)
+
+        assert_unavailable(rpc_results(channel))
+      end
+
       test "after the connection process is killed", %{channel: channel} do
         conn_pid = conn_pid(channel)
+        lose_server(conn_pid, unquote(pooled?))
         Process.exit(conn_pid, :kill)
         await_down(conn_pid)
+        wait_for_empty_pool(channel)
 
-        check_after_connection_loss(channel, unquote(pooled?))
+        assert_unavailable(rpc_results(channel))
       end
 
       test "after the connection process exits normally", %{channel: channel} do
         conn_pid = conn_pid(channel)
+        lose_server(conn_pid, unquote(pooled?))
         GenServer.stop(conn_pid, :normal)
         await_down(conn_pid)
+        wait_for_empty_pool(channel)
 
-        check_after_connection_loss(channel, unquote(pooled?))
+        assert_unavailable(rpc_results(channel))
       end
 
-      test "after Gun gives up and exits", %{channel: channel} do
+      test "after Gun exits", %{channel: channel} do
         conn_pid = conn_pid(channel)
+        lose_server(conn_pid, unquote(pooled?))
         Process.exit(gun_pid(conn_pid), :kill)
         await_down(conn_pid)
+        wait_for_empty_pool(channel)
 
-        check_after_connection_loss(channel, unquote(pooled?))
+        assert_unavailable(rpc_results(channel))
       end
     end
   end
 
-  # A bare channel keeps no replacement, so every call fails. A pool starts a
-  # new connection to the live server, so a call may also succeed.
-  defp check_after_connection_loss(channel, false), do: assert_unavailable(rpc_results(channel))
+  # A pool opens a new connection when one dies, so with the server up a call
+  # reaches a live connection. To test the case where no connection is
+  # available, the server goes away first, so the pool cannot reconnect.
+  defp lose_server(conn_pid, true), do: stop_server_and_wait_for_gun_down(conn_pid)
+  defp lose_server(_conn_pid, false), do: :ok
 
-  defp check_after_connection_loss(channel, true),
-    do: assert_ok_or_unavailable(rpc_results(channel))
-
-  describe "calls in flight when the connection process stops" do
+  describe "pool with the server still running" do
     setup do
-      Application.put_env(:grpc, :pool_enabled, false)
-      port = start_quiet_peer()
-      attach_telemetry([:grpc, :client, :transport, :streams])
-      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-      %{channel: channel, conn_pid: conn_pid(channel)}
+      Application.put_env(:grpc, :pool_enabled, true)
+      port = start_feature_server()
+      {:ok, channel} = GRPC.Stub.connect("localhost:#{port}", adapter_opts: @short_retries)
+      %{channel: channel}
     end
 
-    for stop <- [:kill, :normal, :disconnect] do
-      test "unary call when the connection process stops (#{stop})", %{
-        channel: channel,
-        conn_pid: conn_pid
-      } do
-        task =
-          Task.async(fn ->
-            Routeguide.RouteGuide.Stub.get_feature(channel, point(), timeout: 2_000)
-          end)
+    for {label, stop} <- [
+          {"killed", :kill},
+          {"exits normally", :normal},
+          {"Gun exits", :gun}
+        ] do
+      test "replaces a connection process that #{label} and the call succeeds",
+           %{channel: channel} do
+        conn_pid = conn_pid(channel)
 
-        assert_receive {:telemetry, _, %{active: 1}, %{transport_ref: ^conn_pid}}
-        # The event fires before the connection process replies to the request;
-        # this call returns once the reply is on its way.
-        :sys.get_state(conn_pid)
-        stop_connection(unquote(stop), channel, conn_pid)
+        case unquote(stop) do
+          :kill -> Process.exit(conn_pid, :kill)
+          :normal -> GenServer.stop(conn_pid, :normal)
+          :gun -> Process.exit(gun_pid(conn_pid), :kill)
+        end
 
-        assert_unavailable(unary: Task.await(task))
+        await_down(conn_pid)
+
+        wait_until(fn ->
+          case pool_conn_pids(channel.pool) do
+            [new_pid] -> new_pid != conn_pid and Process.alive?(new_pid)
+            _ -> false
+          end
+        end)
+
+        for {kind, result} <- rpc_results(channel) do
+          assert {:ok, _} = result, "#{kind} call returned #{inspect(result)}"
+        end
+      end
+    end
+  end
+
+  for pooled? <- [false, true] do
+    describe "calls in flight when the connection process stops (pool_enabled: #{pooled?})" do
+      setup do
+        Application.put_env(:grpc, :pool_enabled, unquote(pooled?))
+        port = start_quiet_peer()
+        attach_telemetry([:grpc, :client, :transport, :streams])
+        {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+        %{channel: channel, conn_pid: conn_pid(channel)}
       end
 
-      test "server-streaming call when the connection process stops (#{stop})", %{
-        channel: channel,
-        conn_pid: conn_pid
-      } do
-        task =
-          Task.async(fn ->
-            Routeguide.RouteGuide.Stub.list_features(channel, rectangle(), timeout: 2_000)
-          end)
+      for stop <- [:kill, :normal, :disconnect] do
+        test "unary call when the connection process stops (#{stop})", %{
+          channel: channel,
+          conn_pid: conn_pid
+        } do
+          task =
+            Task.async(fn ->
+              Routeguide.RouteGuide.Stub.get_feature(channel, point(), timeout: 2_000)
+            end)
 
-        assert_receive {:telemetry, _, %{active: 1}, %{transport_ref: ^conn_pid}}
-        # The event fires before the connection process replies to the request;
-        # this call returns once the reply is on its way.
-        :sys.get_state(conn_pid)
-        stop_connection(unquote(stop), channel, conn_pid)
+          assert_receive {:telemetry, _, %{active: 1}, %{transport_ref: ^conn_pid}}
+          # The event fires before the connection process replies to the request;
+          # this call returns once the reply is on its way.
+          :sys.get_state(conn_pid)
+          stop_connection(unquote(stop), channel, conn_pid)
 
-        assert_unavailable(server_stream: Task.await(task))
+          assert_unavailable(unary: Task.await(task))
+        end
+
+        test "server-streaming call when the connection process stops (#{stop})", %{
+          channel: channel,
+          conn_pid: conn_pid
+        } do
+          task =
+            Task.async(fn ->
+              Routeguide.RouteGuide.Stub.list_features(channel, rectangle(), timeout: 2_000)
+            end)
+
+          assert_receive {:telemetry, _, %{active: 1}, %{transport_ref: ^conn_pid}}
+          # The event fires before the connection process replies to the request;
+          # this call returns once the reply is on its way.
+          :sys.get_state(conn_pid)
+          stop_connection(unquote(stop), channel, conn_pid)
+
+          assert_unavailable(server_stream: Task.await(task))
+        end
       end
     end
   end
