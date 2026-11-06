@@ -728,6 +728,107 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     end
   end
 
+  # Regression tests for https://github.com/elixir-grpc/grpc/issues/347: a
+  # stream response process that exits mid-request must not take the shared
+  # connection process, or the other requests on it, down.
+  describe "stream response process exits mid-request, with a concurrent request" do
+    setup :valid_connection
+
+    setup do
+      attach_telemetry([:grpc, :client, :mint, :stream_response, :dead])
+      :ok
+    end
+
+    @tag :capture_log
+    test "drops the request and its queued body chunks when the process exits",
+         %{process_pid: pid, request: {method, _path, headers}} do
+      get_feature = "/routeguide.RouteGuide/GetFeature"
+
+      # No body is sent, so the server keeps this request open.
+      dead_pid = start_unlinked_response_process()
+
+      {:ok, %{request_ref: dead_ref}} =
+        ConnectionProcess.request(pid, method, get_feature, headers, :stream,
+          stream_response_pid: dead_pid
+        )
+
+      %{stream: stream, pid: live_pid} =
+        start_feature_request(pid, method, get_feature, headers)
+
+      # A body write still waiting for flow control when the process exits.
+      from = {self(), make_ref()}
+
+      :sys.replace_state(pid, fn state ->
+        queue = :queue.in({dead_ref, <<1, 2, 3>>, from}, state.request_stream_queue)
+        ConnectionProcess.State.update_request_stream_queue(state, queue)
+      end)
+
+      Process.exit(dead_pid, :kill)
+
+      assert_receive {:telemetry, [:grpc, :client, :mint, :stream_response, :dead], %{},
+                      %{request_ref: ^dead_ref, stream_response_pid: ^dead_pid}},
+                     1_000
+
+      # The callback that sent the event has returned by the time the system
+      # message below is handled, so this state is the final one.
+      state = :sys.get_state(pid)
+      refute Map.has_key?(state.requests, dead_ref)
+      refute Enum.any?(:queue.to_list(state.request_stream_queue), &match?({^dead_ref, _, _}, &1))
+
+      {_pid, tag} = from
+      assert_receive {^tag, {:error, %GRPC.RPCError{status: 1}}}
+
+      # The other request on the same connection still completes.
+      assert [{:ok, %Routeguide.Feature{name: "1,2"}}] = Enum.to_list(stream)
+      assert Process.alive?(pid)
+      assert_process_exits(live_pid)
+      assert %{} == :sys.get_state(pid).requests
+    end
+
+    @tag :capture_log
+    test "drops the frames the server sends for a process that exited before they were read",
+         %{process_pid: pid, request: {method, _path, headers}} do
+      # The server answers this unimplemented RPC straight away. Suspending
+      # the response process makes the connection process block in the call
+      # that hands it the first frame, so the process can be killed while the
+      # connection process is waiting for it, and not before the frames arrive.
+      dead_pid = start_unlinked_response_process()
+      :ok = :sys.suspend(dead_pid)
+
+      {:ok, %{request_ref: dead_ref}} =
+        ConnectionProcess.request(
+          pid,
+          method,
+          "/routeguide.RouteGuide/RecordRoute",
+          headers,
+          :stream,
+          stream_response_pid: dead_pid
+        )
+
+      await(fn -> Process.info(dead_pid, :message_queue_len) == {:message_queue_len, 1} end)
+
+      # The connection process is blocked on the suspended process, so this
+      # request waits in its mailbox until the process is killed below.
+      live_request =
+        Task.async(fn ->
+          start_feature_request(pid, method, "/routeguide.RouteGuide/GetFeature", headers)
+        end)
+
+      Process.exit(dead_pid, :kill)
+
+      assert_receive {:telemetry, [:grpc, :client, :mint, :stream_response, :dead], %{},
+                      %{request_ref: ^dead_ref, stream_response_pid: ^dead_pid}},
+                     1_000
+
+      %{stream: stream, pid: live_pid} = Task.await(live_request)
+      assert [{:ok, %Routeguide.Feature{name: "1,2"}}] = Enum.to_list(stream)
+      assert Process.alive?(pid)
+      assert_process_exits(live_pid)
+      assert %{} == :sys.get_state(pid).requests
+      assert :queue.is_empty(:sys.get_state(pid).request_stream_queue)
+    end
+  end
+
   describe "handle_info - incoming stream errors" do
     setup :quiet_connection
     setup :valid_stream_request
@@ -987,6 +1088,48 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert metadata.port == port
       assert metadata.scheme == :http
       assert metadata.reason != nil
+    end
+  end
+
+  defp start_unlinked_response_process do
+    {:ok, response_pid} = StreamResponseProcess.start_link(build(:client_stream), true)
+    Process.unlink(response_pid)
+    response_pid
+  end
+
+  # Starts a unary GetFeature request that the server answers with
+  # Feature "1,2", and returns the stream over its response and the pid of
+  # the process that produces it.
+  defp start_feature_request(conn_pid, method, path, headers) do
+    stream = build(:client_stream, response_mod: Routeguide.Feature)
+    {:ok, response_pid} = StreamResponseProcess.start_link(stream, false)
+    point = %Routeguide.Point{latitude: 1, longitude: 2}
+    {:ok, body, _size} = GRPC.Message.to_data(GRPC.Codec.Proto.encode(point))
+
+    {:ok, %{request_ref: ref}} =
+      ConnectionProcess.request(conn_pid, method, path, headers, body,
+        stream_response_pid: response_pid
+      )
+
+    %{
+      stream: StreamResponseProcess.build_stream(response_pid, false, 5_000),
+      pid: response_pid,
+      ref: ref
+    }
+  end
+
+  # The process stops itself once its stream is done.
+  defp assert_process_exits(pid) do
+    monitor = Process.monitor(pid)
+    assert_receive {:DOWN, ^monitor, :process, ^pid, _reason}, 1_000
+  end
+
+  # Polls `fun` until it returns true, up to about a second.
+  defp await(fun, attempts \\ 200) do
+    cond do
+      fun.() -> :ok
+      attempts == 0 -> flunk("condition not met in time")
+      true -> Process.sleep(5) && await(fun, attempts - 1)
     end
   end
 
