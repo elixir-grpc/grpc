@@ -19,6 +19,9 @@ end
 defmodule GRPC.Server.Interceptor do
   @moduledoc """
   Interceptor on server side. See `GRPC.Endpoint`.
+
+  To test an interceptor without an endpoint, see `GRPC.Server.Test` and the
+  "Testing interceptors" guide.
   """
   alias GRPC.Server.Stream
 

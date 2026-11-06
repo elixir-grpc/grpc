@@ -386,25 +386,28 @@ defmodule GRPC.Server do
         end
       end
 
-      interceptors = interceptors(endpoint, server)
-
-      next =
-        Enum.reduce(interceptors, last, fn {interceptor, opts}, acc ->
-          fn r, s -> interceptor.call(r, s, acc, opts) end
-        end)
+      next = build_chain(interceptors(endpoint, server), last)
 
       next.(req, stream)
+    end)
+  end
+
+  # Wraps `last` in the interceptors, given as initialized `{module, opts}`
+  # in call order. The first one runs first. Also used by `GRPC.Server.Test`.
+  @doc false
+  def build_chain(interceptors, last) do
+    interceptors
+    |> Enum.reverse()
+    |> Enum.reduce(last, fn {interceptor, opts}, acc ->
+      fn r, s -> interceptor.call(r, s, acc, opts) end
     end)
   end
 
   defp interceptors(nil, _), do: []
 
   defp interceptors(endpoint, server) do
-    interceptors =
-      endpoint.__meta__(:interceptors) ++
-        Map.get(endpoint.__meta__(:server_interceptors), server, [])
-
-    interceptors |> Enum.reverse()
+    endpoint.__meta__(:interceptors) ++
+      Map.get(endpoint.__meta__(:server_interceptors), server, [])
   end
 
   # Start the gRPC server. Only used in starting a server manually using `GRPC.Server.start(servers)`
