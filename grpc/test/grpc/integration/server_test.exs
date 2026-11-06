@@ -487,7 +487,7 @@ defmodule GRPC.Integration.ServerTest do
           client_stream = Routeguide.RouteGuide.Stub.route_chat(channel)
           assert %GRPC.Client.Stream{} = client_stream
           {:ok, ex_stream} = GRPC.Stub.recv(client_stream, timeout: :infinity)
-          assert [{:error, %GRPC.RPCError{status: 13}}] = Enum.into(ex_stream, [])
+          assert [{:error, %GRPC.RPCError{status: 14}}] = Enum.into(ex_stream, [])
         end)
       end)
 

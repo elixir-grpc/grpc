@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.6 (2026-11-06)
+
+### Security
+
+  * Enforce `max_body_size` on request-streaming and bidirectional-streaming RPCs. Before this, a client could send an unbounded body across many small frames and exhaust server memory. See [GHSA-vx6q-cr5q-945g](https://github.com/elixir-grpc/grpc/security/advisories/GHSA-vx6q-cr5q-945g) (CVE-2026-71397).
+
 ## v1.0.4 (2026-0-15)
 
 ### Bug Fixes

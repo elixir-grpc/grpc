@@ -28,9 +28,7 @@ defmodule GRPC.Client.Adapters.MintTest do
       assert %{channel | adapter_payload: %{conn_pid: result.adapter_payload.conn_pid}} == result
 
       # Ensure that changing one of the options breaks things
-      assert {:error, message} = Mint.connect(channel, transport_opts: [ip: "256.0.0.0"])
-
-      assert message == "Error while opening connection: {:error, :badarg}"
+      assert {:error, :badarg} = Mint.connect(channel, transport_opts: [ip: "256.0.0.0"])
     end
 
     test "accepts config_options for application specific configuration", %{port: port} do
@@ -42,10 +40,8 @@ defmodule GRPC.Client.Adapters.MintTest do
       assert %{channel | adapter_payload: %{conn_pid: result.adapter_payload.conn_pid}} == result
 
       # Ensure that changing one of the options via config_options also breaks things
-      assert {:error, message} =
+      assert {:error, :badarg} =
                Mint.connect(channel, config_options: [transport_opts: [ip: "256.0.0.0"]])
-
-      assert message == "Error while opening connection: {:error, :badarg}"
     end
 
     test "defaults client settings when none is passed", %{port: port} do

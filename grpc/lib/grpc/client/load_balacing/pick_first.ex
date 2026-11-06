@@ -39,4 +39,12 @@ defmodule GRPC.Client.LoadBalancing.PickFirst do
     :ets.insert(tid, {@current_key, nil})
     {:ok, state}
   end
+
+  @impl true
+  def terminate(%{tid: tid}) do
+    :ets.delete(tid)
+    :ok
+  rescue
+    ArgumentError -> :ok
+  end
 end

@@ -2,6 +2,7 @@ defmodule GRPC.Client.Adapters.GunTest do
   use GRPC.Client.DataCase, async: true
 
   alias GRPC.Client.Adapters.Gun
+  alias GRPC.Client.Adapters.Gun.ConnectionProcess
 
   defmodule Endpoint do
     use GRPC.Endpoint
@@ -97,6 +98,46 @@ defmodule GRPC.Client.Adapters.GunTest do
                  ]
                )
     end
+
+    test "reuses the connection process for a named channel", %{
+      port: port,
+      credential: credential
+    } do
+      channel =
+        build(:channel, port: port, host: "localhost", cred: credential, ref: make_ref())
+
+      assert {:ok, %{adapter_payload: %{conn_pid: conn_pid}} = connected} =
+               Gun.connect(channel, [])
+
+      on_exit(fn -> Gun.disconnect(connected) end)
+
+      assert {:ok, %{adapter_payload: %{conn_pid: ^conn_pid}}} = Gun.connect(channel, [])
+
+      assert [{^conn_pid, _}] =
+               Registry.lookup(
+                 GRPC.Client.Registry,
+                 {ConnectionProcess, {channel.ref, channel.host, channel.port}}
+               )
+    end
+
+    test "does not reuse the connection process for an unnamed channel", %{
+      port: port,
+      credential: credential
+    } do
+      channel = build(:channel, port: port, host: "localhost", cred: credential)
+
+      assert {:ok, %{adapter_payload: %{conn_pid: first_pid}} = first} = Gun.connect(channel, [])
+
+      assert {:ok, %{adapter_payload: %{conn_pid: second_pid}} = second} =
+               Gun.connect(channel, [])
+
+      on_exit(fn ->
+        Gun.disconnect(first)
+        Gun.disconnect(second)
+      end)
+
+      refute first_pid == second_pid
+    end
   end
 
   describe "disconnect/1" do
@@ -130,19 +171,19 @@ defmodule GRPC.Client.Adapters.GunTest do
   end
 
   describe "receive_data/2" do
-    test "maps connection-level gun errors to internal RPC errors" do
+    test "maps connection-level gun errors to unavailable RPC errors" do
       {:ok, response_pid} = GRPC.Client.Adapters.Gun.StreamResponseProcess.start_link()
 
       reason = {:protocol_error, :"The preface was not received in a reasonable amount of time."}
       send(response_pid, {:gun_error, self(), reason})
 
       stream = %GRPC.Client.Stream{payload: %{response_pid: response_pid}, server_stream: false}
-      internal = GRPC.Status.internal()
+      unavailable = GRPC.Status.unavailable()
 
-      assert {:error, %GRPC.RPCError{status: ^internal, message: message}} =
+      assert {:error, %GRPC.RPCError{status: ^unavailable, message: message}} =
                Gun.receive_data(stream, timeout: 100)
 
-      assert message =~ ":connection_error"
+      assert message =~ "connection_error"
       assert message =~ "preface"
     end
   end

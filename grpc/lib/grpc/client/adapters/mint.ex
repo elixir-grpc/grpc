@@ -59,15 +59,11 @@ if Code.ensure_loaded?(Mint.HTTP) do
       |> mint_scheme()
       |> ConnectionProcess.start_link(host, port, opts)
       |> case do
-        {:ok, pid} ->
-          {:ok, %{channel | adapter_payload: %{conn_pid: pid}}}
-
-        error ->
-          {:error, "Error while opening connection: #{inspect(error)}"}
+        {:ok, pid} -> {:ok, %{channel | adapter_payload: %{conn_pid: pid}}}
+        error -> error
       end
     catch
-      :exit, reason ->
-        {:error, "Error while opening connection: #{inspect(reason)}"}
+      :exit, reason -> {:error, reason}
     end
 
     @impl true

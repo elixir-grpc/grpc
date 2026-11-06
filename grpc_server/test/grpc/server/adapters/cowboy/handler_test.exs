@@ -15,6 +15,16 @@ defmodule GRPC.Server.Adapters.Cowboy.HandlerTest do
     end
   end
 
+  # Client-streaming server, used to exercise the streaming read path.
+  defmodule RouteServer do
+    use GRPC.Server, service: Routeguide.RouteGuide.Service
+
+    def record_route(req_enum, _stream) do
+      count = Enum.count(req_enum)
+      %Routeguide.RouteSummary{point_count: count}
+    end
+  end
+
   # --------------------------------------------------------------------------
   # Helpers
   # --------------------------------------------------------------------------
@@ -142,6 +152,46 @@ defmodule GRPC.Server.Adapters.Cowboy.HandlerTest do
 
         conn = open_h2(port)
         ref = :gun.post(conn, "/helloworld.Greeter/SayHello", grpc_request_headers(), body)
+
+        assert collect_grpc_status(conn, ref) == "0"
+
+        :gun.close(conn)
+      end)
+    end
+
+    test "rejects a request-streaming body that exceeds max_body_size with RESOURCE_EXHAUSTED (8)" do
+      capture_log(fn ->
+        run_server_with_opts([RouteServer], [max_body_size: 512], fn port ->
+          # Each frame is small; the total across frames is what exceeds the cap.
+          frame = grpc_frame(Protobuf.encode(%Routeguide.Point{latitude: 1, longitude: 2}))
+          assert byte_size(frame) < 512, "each frame must individually fit under the cap"
+
+          conn = open_h2(port)
+
+          ref =
+            :gun.post(conn, "/routeguide.RouteGuide/RecordRoute", grpc_request_headers())
+
+          # Stream enough frames to cross 512 bytes in aggregate.
+          chunks = div(512, byte_size(frame)) + 5
+          for _ <- 1..chunks, do: :gun.data(conn, ref, :nofin, frame)
+          :gun.data(conn, ref, :fin, <<>>)
+
+          assert collect_grpc_status(conn, ref) == "8"
+
+          :gun.close(conn)
+        end)
+      end)
+    end
+
+    test "allows a request-streaming body within max_body_size and returns OK (0)" do
+      run_server_with_opts([RouteServer], [max_body_size: 4096], fn port ->
+        frame = grpc_frame(Protobuf.encode(%Routeguide.Point{latitude: 1, longitude: 2}))
+
+        conn = open_h2(port)
+        ref = :gun.post(conn, "/routeguide.RouteGuide/RecordRoute", grpc_request_headers())
+
+        for _ <- 1..3, do: :gun.data(conn, ref, :nofin, frame)
+        :gun.data(conn, ref, :fin, <<>>)
 
         assert collect_grpc_status(conn, ref) == "0"
 
