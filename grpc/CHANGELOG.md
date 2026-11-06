@@ -11,6 +11,7 @@
 
 ### Behavior Changes
 
+  * The Mint adapter now sets `TCP_NODELAY` by default, over TCP and TLS, as the Gun adapter already did. Without it, Nagle's algorithm and delayed ACKs can add tens of milliseconds to sequential calls (#323). Pass `transport_opts: [nodelay: false]` to turn it off.
   * The optional `:gun` dependency is now `~> 2.7.0` (was `~> 2.4.0`), which picks up the security fixes in gun 2.5, 2.6 and 2.7. Gun 2.6 and later require Erlang/OTP 27 or newer, so apps that use the Gun adapter must run on OTP 27+.
   * Test suites that define a Mox mock for the `GRPC.Client.Adapter` behaviour must stub the new validation callback. Mox generates optional callbacks on mocks, so `GRPC.Client.Connection` calls `validate_opts/1` on the mock and Mox raises `UnexpectedCallError` when it is not stubbed. Adapters that implement the behaviour with `@behaviour` and do not define `validate_opts/1` are unaffected.
   * The Mint adapter now returns `%GRPC.RPCError{}` instead of a bare string when a request or a queued stream body write hits a closed connection (`UNAVAILABLE`) or a cancelled request (`CANCELLED`), matching how the Gun adapter surfaces transport errors.

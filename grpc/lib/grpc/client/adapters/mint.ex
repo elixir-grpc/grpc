@@ -26,13 +26,15 @@ if Code.ensure_loaded?(Mint.HTTP) do
       initial_window_size: 8_000_000,
       max_frame_size: 8_000_000
     ]
-    @default_transport_opts [timeout: :infinity]
+    @default_transport_opts [timeout: :infinity, nodelay: true]
     @cleanup_timeout 1_000
 
     @doc """
     Connects using Mint based on the provided configs. Options
-      * `:transport_opts`: Defaults to `[timeout: :infinity]`, given the nature of H2 connections (with support to
-        long-lived streams) this default is set to avoid timeouts while waiting for server streams to complete. The other
+      * `:transport_opts`: Defaults to `[timeout: :infinity, nodelay: true]`, given the nature of H2 connections (with support to
+        long-lived streams) `timeout: :infinity` is set to avoid timeouts while waiting for server streams to complete.
+        `nodelay: true` sets `TCP_NODELAY`, so small writes go out at once instead of waiting on Nagle's algorithm and
+        delayed ACKs, which adds tens of milliseconds to sequential calls. Pass `nodelay: false` to turn it off. The other
         options may vary based on the transport used for this connection (tcp or ssl). Check [Mint.HTTP.connect/4](https://hexdocs.pm/mint/Mint.HTTP.html#connect/4)
       * `:client_settings`: Defaults to `[initial_window_size: 8_000_000, max_frame_size: 8_000_000]`, a larger default
         window size ensures that the number of packages exchanges is smaller, thus speeding up the requests by reducing the

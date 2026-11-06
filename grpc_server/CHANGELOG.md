@@ -6,6 +6,8 @@
 
   * `[:grpc, :server, :rpc, :abort]` is now published when the adapter stops an in-flight RPC — an expired deadline, a client cancellation, a dropped connection. The exit signal that stops the RPC process does not unwind it, so `:stop` and `:exception` cannot be published for such a call; the new event carries the stream, server, endpoint, request path, RPC pid and exit reason.
 
+  * A test and a doc note now cover that the Cowboy adapter's accepted sockets, plain and TLS, have `TCP_NODELAY` on. This is Ranch's default and the adapter passes nothing that turns it off (#323).
+
 ### Bug Fixes
 
   * Request data that waits for its handler is credited to the client once, when the handler reads it. It was credited on arrival and again on read, so the receive window grew without bound and a client was never held back. A handler that stops reading now holds its client to the stream window (`initial_stream_window_size`).
