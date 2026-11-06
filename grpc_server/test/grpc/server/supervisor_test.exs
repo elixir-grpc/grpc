@@ -38,30 +38,37 @@ defmodule GRPC.Server.SupervisorTest do
                    %{
                      id: {:ranch_embedded_sup, ^endpoint_str},
                      start:
-                       {:ranch_embedded_sup, :start_link,
+                       {GRPC.Server.Adapters.Cowboy, :start_link,
                         [
-                          ^endpoint_str,
-                          :ranch_tcp,
-                          %{
-                            num_acceptors: 20,
-                            socket_opts: [port: 1234],
-                            connection_type: :supervisor,
-                            max_connections: 16384
-                          },
-                          :cowboy_clear,
-                          %{
-                            env: %{
-                              dispatch:
-                                {:persistent_term,
-                                 GRPC.Server.SupervisorTest.MockEndpoint.Dispatch}
-                            },
-                            idle_timeout: :infinity,
-                            inactivity_timeout: :infinity,
-                            max_received_frame_rate: {10_000_000, 10000},
-                            max_reset_stream_rate: {10000, 10000},
-                            settings_timeout: :infinity,
-                            stream_handlers: [:grpc_stream_h]
-                          }
+                          :http,
+                          MockEndpoint,
+                          _servers,
+                          1234,
+                          {:ranch_embedded_sup, :start_link,
+                           [
+                             ^endpoint_str,
+                             :ranch_tcp,
+                             %{
+                               num_acceptors: 20,
+                               socket_opts: [port: 1234],
+                               connection_type: :supervisor,
+                               max_connections: 16384
+                             },
+                             :cowboy_clear,
+                             %{
+                               env: %{
+                                 dispatch:
+                                   {:persistent_term,
+                                    GRPC.Server.SupervisorTest.MockEndpoint.Dispatch}
+                               },
+                               idle_timeout: :infinity,
+                               inactivity_timeout: :infinity,
+                               max_received_frame_rate: {10_000_000, 10000},
+                               max_reset_stream_rate: {10000, 10000},
+                               settings_timeout: :infinity,
+                               stream_handlers: [:grpc_stream_h]
+                             }
+                           ]}
                         ]},
                      type: :supervisor
                    }

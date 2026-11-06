@@ -43,6 +43,10 @@ defmodule GRPC.Server.Adapters.Cowboy do
         port = :ranch.get_port(servers_name(endpoint, servers))
         {:ok, pid, port}
 
+      {:error, reason} = error ->
+        log_start_error(endpoint, servers, port, reason)
+        error
+
       other ->
         other
     end
@@ -64,45 +68,46 @@ defmodule GRPC.Server.Adapters.Cowboy do
         {:ranch_tcp, :cowboy_clear}
       end
 
+    scheme = if cred_opts, do: :https, else: :http
+
     # Ideally, we would just update Ranch, but compatibility issues with cowboy hold us back on this
     # So we just support both child spec versions here instead
     case :ranch.child_spec(ref, transport, trans_opts, protocol, proto_opts) do
       {ref, mfa, type, timeout, kind, modules} ->
-        scheme = if cred_opts, do: :https, else: :http
-        # Wrap real mfa to print starting log
-        wrapped_mfa = {__MODULE__, :start_link, [scheme, endpoint, servers, mfa]}
-
         %{
           id: ref,
-          start: wrapped_mfa,
+          start: wrap_start(scheme, endpoint, servers, port, mfa),
           restart: type,
           shutdown: timeout,
           type: kind,
           modules: modules
         }
 
-      child_spec when is_map(child_spec) ->
-        child_spec
+      %{start: mfa} = child_spec ->
+        %{child_spec | start: wrap_start(scheme, endpoint, servers, port, mfa)}
     end
   end
 
+  # Wrap the real mfa to log when the server starts, or why it did not
+  defp wrap_start(scheme, endpoint, servers, port, mfa) do
+    {__MODULE__, :start_link, [scheme, endpoint, servers, port, mfa]}
+  end
+
   # spec: :supervisor.mfargs doesn't work
-  def start_link(scheme, endpoint, servers, {m, f, [ref | _] = a}) do
+  def start_link(scheme, endpoint, servers, port, {m, f, [ref | _] = a}) do
     case apply(m, f, a) do
       {:ok, pid} ->
         Logger.info(running_info(scheme, endpoint, servers, ref))
         {:ok, pid}
 
-      {:error, {:shutdown, {_, _, {{_, {:error, :eaddrinuse}}, _}}}} = error ->
-        Logger.error([
-          running_info(scheme, endpoint, servers, ref),
-          " failed, port already in use"
-        ])
+      {:error, reason} = error ->
+        case log_start_error(endpoint, servers, port, reason) do
+          nil -> error
+          message -> {:error, {:listen_failed, message, reason}}
+        end
 
-        error
-
-      {:error, _} = error ->
-        error
+      other ->
+        other
     end
   end
 
@@ -311,6 +316,49 @@ defmodule GRPC.Server.Adapters.Cowboy do
   defp cred_opts(opts) do
     Kernel.get_in(opts, [:cred])
   end
+
+  # Logs why the listener did not start, and returns the message, when the reason is a listen
+  # failure. Ranch reports it as `{:listen_error, ref, reason}` nested in supervisor errors,
+  # or as the bare reason from `:cowboy.start_clear/3`.
+  defp log_start_error(endpoint, servers, port, reason) do
+    case listen_error_reason(reason) do
+      nil ->
+        nil
+
+      listen_reason ->
+        message =
+          "Could not start #{servers_name(endpoint, servers)}: " <>
+            listen_error_message(port, listen_reason)
+
+        Logger.error(message)
+        message
+    end
+  end
+
+  defp listen_error_message(port, :eaddrinuse), do: "port #{port} is already in use (eaddrinuse)"
+
+  defp listen_error_message(port, reason) do
+    "cannot listen on port #{port}: #{:inet.format_error(reason)} (#{reason})"
+  end
+
+  # :eaddrinuse is looked up anywhere in the term, so it is found whatever
+  # the supervisor tree around the listener wraps it in.
+  defp listen_error_reason(reason) do
+    if contains?(reason, :eaddrinuse), do: :eaddrinuse, else: find_listen_error(reason)
+  end
+
+  defp find_listen_error({:listen_error, _ref, reason}) when is_atom(reason), do: reason
+
+  defp find_listen_error(term) when is_tuple(term),
+    do: term |> Tuple.to_list() |> find_listen_error()
+
+  defp find_listen_error(term) when is_list(term), do: Enum.find_value(term, &find_listen_error/1)
+  defp find_listen_error(_), do: nil
+
+  defp contains?(term, term), do: true
+  defp contains?(term, needle) when is_tuple(term), do: contains?(Tuple.to_list(term), needle)
+  defp contains?(term, needle) when is_list(term), do: Enum.any?(term, &contains?(&1, needle))
+  defp contains?(_, _), do: false
 
   defp running_info(scheme, endpoint, servers, ref) do
     {addr, port} = :ranch.get_addr(ref)

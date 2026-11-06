@@ -49,9 +49,11 @@ defmodule GRPC.Server.Adapters.CowboyTest do
   end
 
   defp get_socket_opts_from_child_spec(spec) do
-    {_Cowboy, _start_link, start_opts} = spec.start
+    # The adapter's start_link/5 wraps the real ranch mfa as its last argument
+    {_Cowboy, _start_link, [_scheme, _endpoint, _servers, _port, {_, _, start_opts}]} =
+      spec.start
 
-    # start_opts is directly the ranch listener args:
+    # start_opts is the ranch listener args:
     # [ref, transport, trans_opts, protocol, proto_opts]
     # where ref might be a string in newer ranch versions
     [_ref, _ranch_tcp, transport_opts_map, _cowboy_clear, _opts_map] = start_opts
