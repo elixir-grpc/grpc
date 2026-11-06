@@ -207,6 +207,14 @@ defmodule GRPC.Stub do
     * `:lb_policy` - load-balancing policy (`:pick_first`, `:round_robin`)
     * `:name` - a stable identity for the connection; connecting again with
       the same name reuses the running connection
+    * `:pool` - connection pool options (map):
+      * `:size` - number of persistent connections (default: `1`)
+      * `:max_overflow` - max extra connections when pool is saturated; `nil` for no limit (default: `0`)
+      * `:max_streams` - max concurrent streams per connection; `nil` for no client-side limit (default: `nil`)
+      * `:health_check_enabled` - send periodic gRPC health-check pings (default: `false`)
+
+    The pool can be disabled entirely by setting `config :grpc, pool_enabled: false` in your
+    application config, which restores the pre-pool behaviour (single direct connection per `connect/2` call).
 
   For long-running clients, prefer declaring the connection in your
   supervision tree with `GRPC.Client.Connection` instead of calling
@@ -304,11 +312,11 @@ defmodule GRPC.Stub do
       raise ArgumentError, "accepted_compressors is not a list"
     end
 
-    case resolve_channel(channel, opts) do
+    case acquire_channel(channel, opts) do
       {:error, %GRPC.RPCError{} = error} ->
         unavailable_result(error, stream, request, req_mod, res_mod, req_stream, opts)
 
-      {:ok, ch} ->
+      {:ok, ch, pool_lease} ->
         compressor = Keyword.get(opts, :compressor, ch.compressor)
 
         accepted_compressors =
@@ -321,20 +329,101 @@ defmodule GRPC.Stub do
             accepted_compressors
           end
 
-        stream = %{
-          stream
-          | channel: ch,
-            request_mod: req_mod,
-            response_mod: res_mod,
-            codec: Keyword.get(opts, :codec, ch.codec),
-            compressor: compressor,
-            accepted_compressors: accepted_compressors
-        }
+        lease_handle =
+          if pool_lease do
+            %{channel: channel, lease: pool_lease, atomics: :atomics.new(1, [])}
+          else
+            nil
+          end
 
-        GRPC.Client.Telemetry.client_span(stream, request, fn ->
-          do_call(req_stream, stream, request, opts)
-        end)
+        stream =
+          %{
+            stream
+            | channel: ch,
+              request_mod: req_mod,
+              response_mod: res_mod,
+              server_stream: response_stream,
+              codec: Keyword.get(opts, :codec, ch.codec),
+              compressor: compressor,
+              accepted_compressors: accepted_compressors
+          }
+          |> GRPC.Client.Stream.put_payload(:__pool_lease_handle__, lease_handle)
+
+        if req_stream || response_stream do
+          try do
+            result =
+              GRPC.Client.Telemetry.client_span(stream, request, fn ->
+                do_call(req_stream, stream, request, opts)
+              end)
+
+            case result do
+              %GRPC.Client.Stream{} = res_stream ->
+                GRPC.Client.Stream.put_payload(res_stream, :__pool_lease_handle__, lease_handle)
+
+              {:error, _} ->
+                release_stream_lease(stream)
+                result
+
+              _ ->
+                result
+            end
+          rescue
+            e ->
+              release_stream_lease(stream)
+              reraise e, __STACKTRACE__
+          catch
+            kind, reason ->
+              release_stream_lease(stream)
+              :erlang.raise(kind, reason, __STACKTRACE__)
+          end
+        else
+          try do
+            GRPC.Client.Telemetry.client_span(stream, request, fn ->
+              do_call(req_stream, stream, request, opts)
+            end)
+          after
+            release_stream_lease(stream)
+          end
+        end
     end
+  end
+
+  defp acquire_channel(%Channel{pool: nil} = channel, opts) do
+    case resolve_channel(channel, opts) do
+      {:ok, ch} -> {:ok, ch, nil}
+      {:error, error} -> {:error, error}
+    end
+  end
+
+  defp acquire_channel(%Channel{pool: pool_ref} = channel, opts) do
+    # Always go through pick_channel so the LB can rotate between address pools
+    actual_pool_ref =
+      case Connection.pick_channel(channel, opts) do
+        {:ok, %Channel{pool: picked_pool_ref}} when is_reference(picked_pool_ref) ->
+          picked_pool_ref
+
+        _ ->
+          pool_ref
+      end
+
+    case GRPC.Client.Pool.checkout(actual_pool_ref) do
+      {wrapped, actual_channel, monitor_ref} ->
+        {:ok, actual_channel, {wrapped, actual_pool_ref, monitor_ref}}
+
+      nil ->
+        {:error,
+         GRPC.RPCError.exception(GRPC.Status.resource_exhausted(), "no pool channel available")}
+    end
+  end
+
+  defp release_channel(_channel, nil), do: :ok
+
+  defp release_channel(_channel, {wrapped_channel, pool_ref, monitor_ref}) do
+    GRPC.Client.Pool.checkin(pool_ref, wrapped_channel, monitor_ref)
+  end
+
+  defp release_channel(_channel, {wrapped_channel, pool_ref}) do
+    GRPC.Client.Pool.checkin(pool_ref, wrapped_channel)
   end
 
   # Bounded re-picks let rotating policies advance past a dead entry during
@@ -523,6 +612,8 @@ defmodule GRPC.Stub do
   After that, callings to `recv/2` will return a CANCEL error.
   """
   def cancel(%{channel: channel} = stream) do
+    release_stream_lease(stream)
+
     case channel.adapter.cancel(stream) do
       :ok -> %{stream | canceled: true}
       other -> other
@@ -574,7 +665,8 @@ defmodule GRPC.Stub do
   """
   def recv(stream, opts \\ [])
 
-  def recv(%{canceled: true}, _) do
+  def recv(%{canceled: true} = stream, _) do
+    release_stream_lease(stream)
     {:error, @canceled_error}
   end
 
@@ -586,7 +678,85 @@ defmodule GRPC.Stub do
         opts
       end
 
-    interface[:receive_data].(stream, opts)
+    try do
+      interface[:receive_data].(stream, opts)
+    rescue
+      e ->
+        release_stream_lease(stream)
+        reraise e, __STACKTRACE__
+    catch
+      kind, reason ->
+        release_stream_lease(stream)
+        :erlang.raise(kind, reason, __STACKTRACE__)
+    else
+      result ->
+        handle_recv_result(result, stream)
+    end
+  end
+
+  defp stream_lease_handle(%{payload: %{__pool_lease_handle__: handle}}), do: handle
+  defp stream_lease_handle(_), do: nil
+
+  defp release_stream_lease(stream) do
+    stream
+    |> stream_lease_handle()
+    |> release_lease_handle()
+  end
+
+  defp release_lease_handle(%{channel: channel, lease: lease, atomics: atomics}) do
+    if :atomics.exchange(atomics, 1, 1) == 0 do
+      release_channel(channel, lease)
+    end
+  end
+
+  defp release_lease_handle(_), do: :ok
+
+  defp streaming_response?(%{server_stream: true}), do: true
+
+  defp streaming_response?(%{grpc_type: type})
+       when type in [:server_stream, :bidirectional_stream],
+       do: true
+
+  defp streaming_response?(_), do: false
+
+  defp handle_recv_result(result, stream) do
+    handle = stream_lease_handle(stream)
+
+    if streaming_response?(stream) do
+      case result do
+        {:ok, []} ->
+          release_lease_handle(handle)
+          {:ok, []}
+
+        {:ok, [], headers} ->
+          release_lease_handle(handle)
+          {:ok, [], headers}
+
+        {:ok, enum_stream} ->
+          {:ok, wrap_stream_with_lease_handle(enum_stream, handle)}
+
+        {:ok, enum_stream, headers} ->
+          {:ok, wrap_stream_with_lease_handle(enum_stream, handle), headers}
+
+        error_or_other ->
+          release_lease_handle(handle)
+          error_or_other
+      end
+    else
+      release_lease_handle(handle)
+      result
+    end
+  end
+
+  defp wrap_stream_with_lease_handle(enum_stream, nil), do: enum_stream
+
+  defp wrap_stream_with_lease_handle(enum_stream, handle) do
+    Stream.transform(
+      enum_stream,
+      fn -> nil end,
+      fn item, acc -> {[item], acc} end,
+      fn _acc -> release_lease_handle(handle) end
+    )
   end
 
   @valid_req_opts [
