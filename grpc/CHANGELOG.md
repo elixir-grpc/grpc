@@ -19,6 +19,7 @@
 
 ### Bug Fixes
 
+  * `GRPC.Stub.connect/2` now connects to IPv6 targets without extra options. `"[::1]:50051"` raised a `CaseClauseError`, and `connect("::1", port, [])` built a target the `ipv6:` resolver rejected. The Mint adapter now gets `transport_opts: [inet6: true]` for IPv6 addresses (it opened IPv4 sockets and failed), and a host name with AAAA records and no A records now resolves to its IPv6 address for both adapters. A `:inet6` you set yourself is kept (#361).
   * The Mint adapter no longer leaks a `StreamResponseProcess` when the connection process refuses a request.
   * Invalid Mint `:retry` values now raise `ArgumentError`. Because the old comparisons relied on term ordering, bad input failed silently and in two different directions: a negative integer behaved as no-retry, while *any* atom lead to infinite reconnection.
   * The Mint adapter now drops a request's queued body chunks when the request ends. A chunk left behind outlived its stream and killed the connection process, because draining the queue called `Mint.HTTP2.get_window_size/2` on a stale ref.

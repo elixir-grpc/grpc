@@ -21,7 +21,7 @@ defmodule GRPC.Client.Connection.EndpointResolver do
   @doc """
   Normalises `target` and `cred`, returning `{norm_target, scheme, cred}`.
 
-  - `norm_target` – canonical target string for the resolver (e.g. `"ipv4:1.2.3.4:50051"`, `"ipv6:::1:50051"`)
+  - `norm_target` – canonical target string for the resolver (e.g. `"ipv4:1.2.3.4:50051"`, `"ipv6:[::1]:50051"`)
   - `scheme`      – `"http"`, `"https"`, or `"unix"`
   - `cred`        – resolved `%GRPC.Credential{}`, or `nil` for plain-text targets
 
@@ -38,7 +38,7 @@ defmodule GRPC.Client.Connection.EndpointResolver do
       {"ipv4:localhost:50051", "http", nil}
 
       iex> GRPC.Client.Connection.EndpointResolver.normalize("[::1]:50051", nil)
-      {"ipv6:::1:50051", "http", nil}
+      {"ipv6:[::1]:50051", "http", nil}
 
   """
   def normalize(target, cred)
@@ -48,15 +48,13 @@ defmodule GRPC.Client.Connection.EndpointResolver do
     cond do
       uri.scheme == @secure_scheme and uri.host ->
         resolved_cred = cred || default_ssl_option()
-        prefix = resolver_prefix(uri.host)
-        {"#{prefix}:#{uri.host}:#{uri.port}", @secure_scheme, resolved_cred}
+        {build_target(uri.host, uri.port), @secure_scheme, resolved_cred}
 
       uri.scheme == @insecure_scheme and uri.host ->
         if cred,
           do: raise(ArgumentError, "invalid option for insecure (http) address: :cred")
 
-        prefix = resolver_prefix(uri.host)
-        {"#{prefix}:#{uri.host}:#{uri.port}", @insecure_scheme, nil}
+        {build_target(uri.host, uri.port), @insecure_scheme, nil}
 
       # Compatibility mode: "host:port", bare path, or raw IPv6
       uri.scheme in [nil, ""] ->
@@ -74,6 +72,30 @@ defmodule GRPC.Client.Connection.EndpointResolver do
       true ->
         scheme = if cred, do: @secure_scheme, else: @insecure_scheme
         {target, scheme, cred}
+    end
+  end
+
+  @doc """
+  Builds the `ipv4:` or `ipv6:` resolver target for a host and port.
+
+  IPv6 literals are put in brackets, as the `ipv6:` resolver requires.
+
+  ## Examples
+
+      iex> GRPC.Client.Connection.EndpointResolver.build_target("10.0.0.1", 50051)
+      "ipv4:10.0.0.1:50051"
+
+      iex> GRPC.Client.Connection.EndpointResolver.build_target("::1", 50051)
+      "ipv6:[::1]:50051"
+
+      iex> GRPC.Client.Connection.EndpointResolver.build_target("example.com", 50051)
+      "ipv4:example.com:50051"
+
+  """
+  def build_target(host, port) when is_binary(host) do
+    case resolver_prefix(host) do
+      "ipv6" -> "ipv6:[#{host}]:#{port}"
+      prefix -> "#{prefix}:#{host}:#{port}"
     end
   end
 
@@ -154,11 +176,11 @@ defmodule GRPC.Client.Connection.EndpointResolver do
       String.starts_with?(target, "[") ->
         case Regex.run(~r/^\[([^\]]+)\]:(\d+)$/, target) do
           [_, addr, port] ->
-            {"ipv6:#{addr}:#{port}", scheme, cred}
+            {"ipv6:[#{addr}]:#{port}", scheme, cred}
 
           _ ->
             addr = target |> String.trim_leading("[") |> String.replace("]", "")
-            {"ipv6:#{addr}", scheme, cred}
+            {"ipv6:[#{addr}]:#{@default_port}", scheme, cred}
         end
 
       String.contains?(target, ":") ->
@@ -169,8 +191,7 @@ defmodule GRPC.Client.Connection.EndpointResolver do
             case Integer.parse(port_str) do
               {_port, ""} ->
                 addr = parts |> Enum.drop(-1) |> Enum.join(":")
-                prefix = resolver_prefix(addr)
-                {"#{prefix}:#{addr}:#{port_str}", scheme, cred}
+                {build_target(addr, port_str), scheme, cred}
 
               _ ->
                 prefix = resolver_prefix(target)

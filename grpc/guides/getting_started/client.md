@@ -16,6 +16,26 @@ iex> {:ok, reply} = channel |> Helloworld.GreetingServer.Stub.say_unary_hello(re
 
 ---
 
+## Connecting to IPv6 Addresses
+
+Put an IPv6 address in square brackets and give the port. Both adapters connect without extra options:
+
+```elixir
+iex> {:ok, channel} = GRPC.Stub.connect("[::1]:50051")
+iex> {:ok, channel} = GRPC.Stub.connect("ipv6:[::1]:50051")
+```
+
+A host name that has only AAAA records works the same way as an IPv4 name:
+
+```elixir
+iex> {:ok, channel} = GRPC.Stub.connect("ipv6-only.example.com:50051")
+iex> {:ok, channel} = GRPC.Stub.connect("dns://ipv6-only.example.com:50051")
+```
+
+A name with both A and AAAA records connects over IPv4. To reach its IPv6 address, use the address itself.
+
+---
+
 ## Using Interceptors
 
 Client interceptors allow you to add logic to the request/response lifecycle, such as logging, tracing, or authentication.

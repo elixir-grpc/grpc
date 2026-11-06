@@ -1411,25 +1411,29 @@ defmodule GRPC.Client.Connection do
     cond do
       uri.scheme == @secure_scheme and uri.host ->
         opts = Keyword.put_new_lazy(opts, :cred, &default_ssl_option/0)
-        {"ipv4:#{uri.host}:#{uri.port}", opts, @secure_scheme}
+        {EndpointResolver.build_target(uri.host, uri.port), opts, @secure_scheme}
 
       uri.scheme == @insecure_scheme and uri.host ->
         if opts[:cred],
           do: raise(ArgumentError, "invalid option for insecure (http) address: :cred")
 
-        {"ipv4:#{uri.host}:#{uri.port}", opts, @insecure_scheme}
+        {EndpointResolver.build_target(uri.host, uri.port), opts, @insecure_scheme}
 
       # Compatibility mode: host:port or unix:path
       uri.scheme in [nil, ""] ->
         scheme = if opts[:cred], do: @secure_scheme, else: @insecure_scheme
 
-        case String.split(target, ":") do
-          [host, port] ->
-            {"ipv4:#{host}:#{port}", opts, scheme}
-
-          [path] ->
-            {"unix://#{path}", opts, "unix"}
+        # Handles "host:port", "[ipv6]:port", bare IPv6 and unix socket paths.
+        case EndpointResolver.normalize(target, nil) do
+          {norm_target, "unix", _cred} -> {norm_target, opts, "unix"}
+          {norm_target, _scheme, _cred} -> {norm_target, opts, scheme}
         end
+
+      # URI.parse reads "hostname:port" as scheme "hostname" with no host.
+      is_nil(uri.host) and uri.scheme not in ["ipv4", "ipv6", "dns", "unix", "xds"] ->
+        scheme = if opts[:cred], do: @secure_scheme, else: @insecure_scheme
+        {norm_target, _scheme, _cred} = EndpointResolver.normalize(target, nil)
+        {norm_target, opts, scheme}
 
       # Anything else (dns://, unix://, etc.) handled by resolver
       true ->
@@ -1445,10 +1449,22 @@ defmodule GRPC.Client.Connection do
   end
 
   defp connect_real_channel(%Channel{} = vc, host, port, opts, adapter, hostname) do
+    hostname = hostname || bracketed_ipv6(host)
     connect_channel(%Channel{vc | host: host, port: port, hostname: hostname}, opts, adapter)
   end
 
+  # Mint builds the `:authority` header as "host:port" from the name it is given.
+  # An unbracketed IPv6 literal makes that header invalid and the server resets
+  # the stream, so hand Mint the bracketed form.
+  defp bracketed_ipv6(host) when is_binary(host) do
+    if ipv6_literal?(host), do: "[#{host}]"
+  end
+
+  defp bracketed_ipv6(_host), do: nil
+
   defp connect_channel(%Channel{host: host, port: port} = channel, opts, adapter) do
+    opts = put_inet6_opt(channel, opts)
+
     result =
       if pool_enabled?() do
         Pool.start_for_address(channel, host, port, opts)
@@ -1463,6 +1479,32 @@ defmodule GRPC.Client.Connection do
       Process.monitor(pid)
       result
     end
+  end
+
+  # Mint opens IPv4 sockets unless `inet6: true` is in its transport options
+  # (it then tries IPv6 first and falls back to IPv4). Add it for IPv6 literals
+  # so users don't have to. The user's own `:inet6` setting wins. Gun picks the
+  # address family from the literal itself, and rejects an extra `inet6: true`.
+  defp put_inet6_opt(
+         %Channel{adapter: GRPC.Client.Adapters.Mint, scheme: scheme, host: host},
+         opts
+       )
+       when scheme != "unix" and is_binary(host) do
+    adapter_opts = Keyword.get(opts, :adapter_opts) || []
+    transport_opts = Keyword.get(adapter_opts, :transport_opts) || []
+
+    if ipv6_literal?(host) and not Keyword.has_key?(transport_opts, :inet6) do
+      transport_opts = Keyword.put(transport_opts, :inet6, true)
+      Keyword.put(opts, :adapter_opts, Keyword.put(adapter_opts, :transport_opts, transport_opts))
+    else
+      opts
+    end
+  end
+
+  defp put_inet6_opt(_channel, opts), do: opts
+
+  defp ipv6_literal?(host) do
+    match?({:ok, {_, _, _, _, _, _, _, _}}, :inet.parse_address(String.to_charlist(host)))
   end
 
   defp pool_enabled?, do: Application.get_env(:grpc, :pool_enabled, false)

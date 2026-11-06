@@ -12,6 +12,8 @@ defmodule GRPC.Client.Resolver.IPv4 do
   - IPv4 addresses must include a port.
   - Multiple addresses can be comma-separated.
   - `service_config` is always `nil` as literal IPv4 addresses do not support DNS TXT or xDS.
+  - A host name that has AAAA records and no A records resolves to its IPv6 address.
+    The name stays in the `:hostname` key.
 
   ## Examples
 
@@ -47,9 +49,23 @@ defmodule GRPC.Client.Resolver.IPv4 do
       String.split(addrs_str, ",", trim: true)
       |> Enum.map(fn addr ->
         [ip, port] = String.split(addr, ":", trim: true, parts: 2)
-        %{address: ip, port: String.to_integer(port)}
+        resolve_host(ip, String.to_integer(port))
       end)
 
     {:ok, %{addresses: addresses, service_config: nil}}
+  end
+
+  # The adapters open IPv4 sockets for names. If the name has no A record but
+  # has an AAAA record, hand over the IPv6 address and keep the name for TLS.
+  defp resolve_host(host, port) do
+    charlist = String.to_charlist(host)
+
+    with {:error, _} <- :inet.parse_address(charlist),
+         {:error, _} <- :inet.getaddr(charlist, :inet),
+         {:ok, ipv6} <- :inet.getaddr(charlist, :inet6) do
+      %{address: :inet.ntoa(ipv6) |> to_string(), port: port, hostname: host}
+    else
+      _ -> %{address: host, port: port}
+    end
   end
 end
