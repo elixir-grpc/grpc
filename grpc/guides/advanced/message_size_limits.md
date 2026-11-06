@@ -35,11 +35,8 @@ The client checks the length in a message's prefix, so it stops before it has re
 message. The message reads `Received message is too large (2048 bytes, the limit is 1000 bytes)`.
 
 * A unary call returns `{:error, %GRPC.RPCError{status: 8}}`.
-* On a response stream, the Mint adapter returns `{:error, %GRPC.RPCError{status: 8}}`
-  as an item, and the Gun adapter raises `GRPC.RPCError` while you read the stream.
-  Both end the stream.
-
-This check is part of `grpc_core`. It applies once your `grpc_core` version includes it.
+* On a response stream, both adapters return `{:error, %GRPC.RPCError{status: 8}}`
+  as an item, and end the stream.
 
 ## Receiving very large replies
 

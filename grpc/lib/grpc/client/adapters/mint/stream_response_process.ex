@@ -251,9 +251,12 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
     end
   end
 
-  # `GRPC.Message.get_message/2` raises when a message is over `:max_message_length`.
+  # The prefix is checked here, as newer `GRPC.Message.get_message/2` does, and
+  # that function raises for a message over `:max_message_length` or a gzip bomb.
   defp get_message(buffer, compressor) do
-    GRPC.Message.get_message(buffer, compressor)
+    with :ok <- GRPC.Client.MessageLimit.check_prefix(buffer) do
+      GRPC.Message.get_message(buffer, compressor)
+    end
   rescue
     error in GRPC.RPCError -> {:error, error}
   end

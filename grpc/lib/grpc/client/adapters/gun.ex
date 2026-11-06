@@ -487,7 +487,10 @@ if Code.ensure_loaded?(:gun) do
            %{buffer: buffer, need_more: false, response_mod: res_mod, codec: codec, opts: opts} =
              stream
          ) do
-      case GRPC.Message.get_message(buffer) do
+      case get_message(buffer) do
+        {:error, _} = error ->
+          {error, %{buffer: <<>>, fin: true, fin_resp: nil}}
+
         {{:trailers, trailers}, rest} ->
           new_stream =
             stream
@@ -504,6 +507,17 @@ if Code.ensure_loaded?(:gun) do
         _ ->
           read_stream(Map.put(stream, :need_more, true))
       end
+    end
+
+    # A message over `:max_message_length` ends the stream with an error item.
+    # The prefix is checked here, as newer `GRPC.Message.get_message/1` does, and
+    # that function raises for it.
+    defp get_message(buffer) do
+      with :ok <- GRPC.Client.MessageLimit.check_prefix(buffer) do
+        GRPC.Message.get_message(buffer)
+      end
+    rescue
+      error in GRPC.RPCError -> {:error, error}
     end
 
     defp deadline(nil), do: :infinity
@@ -579,6 +593,7 @@ if Code.ensure_loaded?(:gun) do
       with :ok <- parse_trailers(trailers),
            compressor <- get_compressor(headers, accepted_compressors),
            body <- get_body(codec, body),
+           :ok <- GRPC.Client.MessageLimit.check_prefix(body),
            {:ok, msg, remaining} <- GRPC.Message.from_data(%{compressor: compressor}, body) do
         {:ok, codec.decode(msg, res_mod), check_for_trailers(remaining, compressor)}
       end
