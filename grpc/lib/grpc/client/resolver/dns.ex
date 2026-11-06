@@ -21,7 +21,7 @@ defmodule GRPC.Client.Resolver.DNS do
     with {:ok, addresses} <- lookup_addresses(host) do
       addrs =
         Enum.map(addresses, fn ip ->
-          %{address: :inet.ntoa(ip) |> to_string(), port: port}
+          %{address: :inet.ntoa(ip) |> to_string(), port: port, hostname: host}
         end)
 
       case lookup_service_config(host) do

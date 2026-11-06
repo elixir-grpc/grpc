@@ -17,6 +17,7 @@
 
   * The Mint adapter no longer leaks a `StreamResponseProcess` when the connection process refuses a request.
   * Invalid Mint `:retry` values now raise `ArgumentError`. Because the old comparisons relied on term ordering, bad input failed silently and in two different directions: a negative integer behaved as no-retry, while *any* atom lead to infinite reconnection.
+  * The Mint adapter now drops a request's queued body chunks when the request ends. A chunk left behind outlived its stream and killed the connection process, because draining the queue called `Mint.HTTP2.get_window_size/2` on a stale ref.
   * Request headers (including `authorization`) and bodies no longer leak through client exits. When a call to the Gun or Mint adapter's connection process exits (the process is busy past the 5s call timeout, or dead), the exit reason embeds the call message; `GRPC.Telemetry.client_span/3` logged it at `:error`, `[:grpc, :client, :rpc, :exception]` metadata carried it, and crash reports printed it. The headers and body in that message are now replaced with `:redacted`; the exit still propagates with the same `{reason, {GenServer, :call, [pid, message, timeout]}}` shape and the request path.
 
 ## v1.0.6

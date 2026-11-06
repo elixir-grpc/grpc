@@ -196,6 +196,12 @@ if Code.ensure_loaded?(Mint.HTTP) do
         |> Keyword.put(:grpc_transport_metadata, transport_metadata)
         |> Keyword.merge(keepalive_opts)
 
+      # A dns:// target resolves to an address (the host we dial) while the
+      # hostname it resolved from must still reach TLS for SNI and certificate
+      # verification.
+      opts =
+        if channel.hostname, do: Keyword.put(opts, :hostname, channel.hostname), else: opts
+
       Process.flag(:trap_exit, true)
 
       channel
