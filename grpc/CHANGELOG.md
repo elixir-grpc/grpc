@@ -13,6 +13,7 @@
 
   * Test suites that define a Mox mock for the `GRPC.Client.Adapter` behaviour must stub the new validation callback. Mox generates optional callbacks on mocks, so `GRPC.Client.Connection` calls `validate_opts/1` on the mock and Mox raises `UnexpectedCallError` when it is not stubbed. Adapters that implement the behaviour with `@behaviour` and do not define `validate_opts/1` are unaffected.
   * The Mint adapter now returns `%GRPC.RPCError{}` instead of a bare string when a request or a queued stream body write hits a closed connection (`UNAVAILABLE`) or a cancelled request (`CANCELLED`), matching how the Gun adapter surfaces transport errors.
+  * Connection errors under the Mint adapter now uniformly surface errors with gRPC status `UNAVAILABLE` instead of `UNKNOWN`. 
 
 ### Bug Fixes
 
@@ -32,7 +33,6 @@ No changes. Released for version sync with `:grpc_server`
 
   * The Mint adapter now enforces the requested `:timeout`/`:deadline` on unary receives. A unary call that never receives a response fails with `DEADLINE_EXCEEDED` after the documented 10s default instead of blocking indefinitely, and an explicit `:deadline` now takes precedence over `:timeout`.
   * `GRPC.Client.Adapters.Mint.connect/2` now returns errors directly, instead of formatting as a string.
-  * Connection errors under the Mint adapter now uniformly surface errors with gRPC status `UNAVAILABLE` instead of `UNKNOWN`. 
 
 ### Bug Fixes
 
