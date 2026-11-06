@@ -38,7 +38,8 @@ if Code.ensure_loaded?(Mint.HTTP) do
         window size ensures that the number of packages exchanges is smaller, thus speeding up the requests by reducing the
         amount of networks round trip, with the cost of having larger packages reaching the server per connection.
         Check [Mint.HTTP2.setting() type](https://hexdocs.pm/mint/Mint.HTTP2.html#t:setting/0) for additional configs.
-      * `:retry`: Number of reconnection attempts when the connection drops. Defaults to `0` (no retries).
+      * `:retry`: Number of reconnection attempts when the connection drops, or `:infinity`
+        to keep reconnecting for as long as the process lives. Defaults to `0` (no retries).
         Uses exponential backoff with jitter between attempts.
       * `:keepalive`: Interval in milliseconds between HTTP/2 PING frames sent to the server.
         Defaults to `nil` (no pings).
@@ -46,40 +47,19 @@ if Code.ensure_loaded?(Mint.HTTP) do
         triggering `:retry` if configured. Defaults to `nil` (never close). Has no effect without `:keepalive`.
     """
     @impl true
-    def connect(%{host: host, port: port} = channel, opts \\ []) do
-      {config_opts, opts} = Keyword.pop(opts, :config_options, [])
+    def connect(%Channel{} = channel, opts \\ []) do
       {retry, opts} = Keyword.pop(opts, :retry, 0)
-      # Pooled connections open with `ref: nil`, so the pool passes the logical ref separately
-      {logical_ref, opts} = Keyword.pop(opts, :logical_connection_ref, channel.ref)
-      {keepalive_opts, opts} = Keyword.split(opts, [:keepalive, :keepalive_tolerance])
-      module_opts = Application.get_env(:grpc, __MODULE__, config_opts)
 
-      transport_metadata = %{
-        logical_connection_ref: logical_ref,
-        target: {host, port},
-        adapter: __MODULE__
-      }
-
-      opts =
-        channel
-        |> connect_opts(opts)
-        |> merge_opts(module_opts)
-        |> Keyword.put(:retry, retry)
-        |> Keyword.put(:grpc_transport_metadata, transport_metadata)
-        |> Keyword.merge(keepalive_opts)
-
-      Process.flag(:trap_exit, true)
-
-      channel
-      |> mint_scheme()
-      |> ConnectionProcess.start_link(host, port, opts)
-      |> case do
-        {:ok, pid} -> {:ok, %{channel | adapter_payload: %{conn_pid: pid}}}
-        error -> error
+      with :ok <- validate_retry(retry),
+           {:ok, pid} <- start_connection_process(channel, opts, retry) do
+        {:ok, %{channel | adapter_payload: %{conn_pid: pid}}}
       end
     catch
       :exit, reason -> {:error, reason}
     end
+
+    @impl true
+    def validate_opts(opts), do: validate_retry(opts[:retry])
 
     @impl true
     def disconnect(%{adapter_payload: %{conn_pid: pid}} = channel)
@@ -154,6 +134,13 @@ if Code.ensure_loaded?(Mint.HTTP) do
       ConnectionProcess.cancel(conn_pid, request_ref)
     end
 
+    defp validate_retry(nil), do: :ok
+    defp validate_retry(:infinity), do: :ok
+    defp validate_retry(retry) when is_integer(retry) and retry >= 0, do: :ok
+
+    defp validate_retry(retry),
+      do: {:error, ":retry must be a non-negative integer or :infinity, got: #{inspect(retry)}"}
+
     defp connect_opts(%Channel{scheme: "https"} = channel, opts) do
       %Credential{ssl: ssl} = Map.get(channel, :cred) || %Credential{}
 
@@ -187,6 +174,40 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
     defp mint_scheme(%Channel{scheme: "https"} = _channel), do: :https
     defp mint_scheme(_channel), do: :http
+
+    defp start_connection_process(%{host: host, port: port} = channel, opts, retry) do
+      {config_opts, opts} = Keyword.pop(opts, :config_options, [])
+      # Pooled connections open with `ref: nil`, so the pool passes the logical ref separately
+      {logical_ref, opts} = Keyword.pop(opts, :logical_connection_ref, channel.ref)
+      {keepalive_opts, opts} = Keyword.split(opts, [:keepalive, :keepalive_tolerance])
+      module_opts = Application.get_env(:grpc, __MODULE__, config_opts)
+
+      transport_metadata = %{
+        logical_connection_ref: logical_ref,
+        target: {host, port},
+        adapter: __MODULE__
+      }
+
+      opts =
+        channel
+        |> connect_opts(opts)
+        |> merge_opts(module_opts)
+        |> Keyword.put(:retry, retry)
+        |> Keyword.put(:grpc_transport_metadata, transport_metadata)
+        |> Keyword.merge(keepalive_opts)
+
+      # A dns:// target resolves to an address (the host we dial) while the
+      # hostname it resolved from must still reach TLS for SNI and certificate
+      # verification.
+      opts =
+        if channel.hostname, do: Keyword.put(opts, :hostname, channel.hostname), else: opts
+
+      Process.flag(:trap_exit, true)
+
+      channel
+      |> mint_scheme()
+      |> ConnectionProcess.start_link(host, port, opts)
+    end
 
     defp do_receive_data(%{payload: %{stream_response_pid: pid}}, request_type, opts)
          when request_type in [:bidirectional_stream, :server_stream] do
@@ -230,13 +251,17 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
           {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "deadline exceeded")}
 
+        {:error, %GRPC.RPCError{message: "the connection is closed"} = error} ->
+          GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :connection_unavailable)
+          {:error, error}
+
         {:error, %GRPC.RPCError{} = error} ->
           GRPC.Client.Telemetry.mark_rpc_failure(:remote, nil)
           {:error, error}
 
         {:error, error} ->
           mark_transport_failure(error)
-          {:error, error}
+          {:error, rpc_error({:error, error})}
       end
     end
 
@@ -290,11 +315,46 @@ if Code.ensure_loaded?(Mint.HTTP) do
         ) do
       quietly(fn -> GenServer.stop(pid, :normal, @cleanup_timeout) end)
 
-      {:error,
-       GRPC.RPCError.exception(
-         GRPC.Status.unknown(),
-         "error occurred while receiving data: #{inspect(response)}"
-       )}
+      {:error, rpc_error(response)}
+    end
+
+    # A connection that has dropped, or was never there, is a transient condition
+    # that should map to the gRPC UNAVAILABLE error status.
+    defp rpc_error({:error, %GRPC.RPCError{} = error}), do: error
+
+    defp rpc_error({:error, %Mint.TransportError{} = error}) do
+      unavailable(error)
+    end
+
+    defp rpc_error({:error, %Mint.HTTPError{reason: :closed} = error}) do
+      unavailable(error)
+    end
+
+    defp rpc_error({:error, %Mint.HTTPError{reason: :closed_for_writing} = error}) do
+      unavailable(error)
+    end
+
+    defp rpc_error({:error, %Mint.HTTPError{reason: :unprocessed} = error}) do
+      unavailable(error)
+    end
+
+    defp rpc_error({:error, %Mint.HTTPError{reason: {:server_closed_connection, _, _}} = error}) do
+      unavailable(error)
+    end
+
+    defp rpc_error({:error, :closed}) do
+      GRPC.RPCError.exception(GRPC.Status.unavailable(), "the connection is closed")
+    end
+
+    defp rpc_error(response) do
+      GRPC.RPCError.exception(
+        GRPC.Status.unknown(),
+        "error occurred while receiving data: #{inspect(response)}"
+      )
+    end
+
+    defp unavailable(error) do
+      GRPC.RPCError.exception(GRPC.Status.unavailable(), Exception.message(error))
     end
 
     defp success_response?(%GRPC.Client.Stream{
@@ -352,7 +412,12 @@ if Code.ensure_loaded?(Mint.HTTP) do
       GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :stream_error)
     end
 
-    defp mark_transport_failure("the connection is closed") do
+    defp mark_transport_failure(%Mint.HTTPError{reason: reason})
+         when reason in [:closed, :closed_for_writing, :unprocessed] do
+      GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :connection_unavailable)
+    end
+
+    defp mark_transport_failure(%Mint.HTTPError{reason: {:server_closed_connection, _, _}}) do
       GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :connection_unavailable)
     end
 

@@ -40,6 +40,18 @@ defmodule GRPC.Client.ConnectionTest do
     end
   end
 
+  # Mirrors what GRPC.Client.Resolver.DNS returns for a dns:// target after
+  # the hostname fix: each resolved address keeps the target's hostname.
+  defmodule HostnameResolver do
+    def resolve(_target) do
+      {:ok,
+       %{
+         addresses: [%{address: "127.0.0.1", port: 50051, hostname: "my-service.local"}],
+         service_config: %{}
+       }}
+    end
+  end
+
   setup do
     %{
       ref: make_ref(),
@@ -335,6 +347,15 @@ defmodule GRPC.Client.ConnectionTest do
       end
     end
 
+    test "raises in the caller on invalid adapter-specific options" do
+      assert_raise ArgumentError, ~r/:retry must be a non-negative integer or :infinity/, fn ->
+        Connection.connect("ipv4:127.0.0.1:50051",
+          adapter: GRPC.Client.Adapters.Mint,
+          adapter_opts: [retry: -1]
+        )
+      end
+    end
+
     test "interceptor init/1 runs once per connect", %{
       ref: ref,
       target: target,
@@ -352,6 +373,24 @@ defmodule GRPC.Client.ConnectionTest do
 
       assert_receive :interceptor_init
       refute_received :interceptor_init
+
+      Connection.disconnect(channel)
+    end
+  end
+
+  describe "connect/2 - hostname from the resolver" do
+    test "carries the dns:// hostname onto the channel for TLS SNI", %{ref: ref} do
+      resolver = HostnameResolver
+
+      {:ok, channel} =
+        Connection.connect("dns://my-service.local:50051",
+          adapter: GRPC.Test.ClientAdapter,
+          name: ref,
+          resolver: resolver
+        )
+
+      assert channel.host == "127.0.0.1"
+      assert channel.hostname == "my-service.local"
 
       Connection.disconnect(channel)
     end

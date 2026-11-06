@@ -166,7 +166,11 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
       assert {:reply, {:error, error}, new_state} = response
       assert state.conn != new_state.conn
-      assert "the connection is closed" == error
+
+      assert %GRPC.RPCError{
+               status: GRPC.Status.unavailable(),
+               message: "the connection is closed"
+             } == error
     end
 
     test "returns error response when mint returns an error when starting stream request", %{
@@ -222,7 +226,11 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
       assert {:reply, {:error, error}, new_state} = response
       assert state.conn != new_state.conn
-      assert "the connection is closed" == error
+
+      assert %GRPC.RPCError{
+               status: GRPC.Status.unavailable(),
+               message: "the connection is closed"
+             } == error
     end
 
     test "returns error response when mint returns an error when starting stream request", %{
@@ -460,6 +468,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
   describe "handle_info - connection_closed - no requests" do
     setup :valid_connection
+    setup :attach_reconnect_telemetry
 
     test "send a message to parent process to inform the connection is down", %{
       state: state
@@ -484,6 +493,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert new_state.conn.state == :closed
       assert new_state.retry == 0
       assert_receive {:elixir_grpc, :connection_down, _pid}, 500
+      refute_received {:telemetry, [:grpc, :client, :mint, :reconnect, :exhausted], _, _}
     end
   end
 
@@ -562,6 +572,22 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     end
   end
 
+  describe "handle_info - connection_closed - retry: :infinity" do
+    setup :valid_connection_with_infinite_retry
+    setup :attach_reconnect_telemetry
+
+    test "reconnects when the connection drops", %{state: state} do
+      tcp_message = {:tcp_closed, state.conn.socket}
+
+      assert {:noreply, new_state} = ConnectionProcess.handle_info(tcp_message, state)
+      assert Mint.HTTP.open?(new_state.conn)
+      assert new_state.retry_attempt == 0
+
+      refute_received {:elixir_grpc, :connection_down, _pid}
+      refute_received {:telemetry, [:grpc, :client, :mint, :reconnect, :exhausted], _, _}
+    end
+  end
+
   describe "handle_info - connection_closed - with request" do
     setup :valid_connection
     setup :valid_stream_request
@@ -581,7 +607,14 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert new_state.conn.state == :closed
       assert_receive {:elixir_grpc, :connection_down, pid}, 500
       response_state = :sys.get_state(response_pid)
-      assert :queue.to_list(response_state.responses) == [error: "the connection is closed"]
+
+      assert :queue.to_list(response_state.responses) == [
+               error: %GRPC.RPCError{
+                 status: GRPC.Status.unavailable(),
+                 message: "the connection is closed"
+               }
+             ]
+
       assert true == response_state.done
       assert pid == self()
 
@@ -612,7 +645,14 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert new_state.conn.state == :closed
       assert_receive {:elixir_grpc, :connection_down, pid}, 500
       response_state = :sys.get_state(response_pid)
-      assert :queue.to_list(response_state.responses) == [error: "the connection is closed"]
+
+      assert :queue.to_list(response_state.responses) == [
+               error: %GRPC.RPCError{
+                 status: GRPC.Status.unavailable(),
+                 message: "the connection is closed"
+               }
+             ]
+
       assert true == response_state.done
       assert pid == self()
     end
@@ -1037,6 +1077,8 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   end
 
   defp valid_connection_with_retry(ctx), do: valid_connection(ctx, retry: 3)
+
+  defp valid_connection_with_infinite_retry(ctx), do: valid_connection(ctx, retry: :infinity)
 
   defp attach_reconnect_telemetry(_ctx) do
     test_pid = self()
