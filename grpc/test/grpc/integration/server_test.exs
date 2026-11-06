@@ -614,6 +614,39 @@ defmodule GRPC.Integration.ServerTest do
       end)
     end
 
+    test "rejects a request body that doesn't decode with invalid_argument" do
+      run_server([TranscodeServer], fn port ->
+        for body <- [
+              # valid JSON, but not a valid Transcode.Message
+              Jason.encode!(%{"name" => 1}),
+              # not JSON
+              "{",
+              # JSON, but not an object
+              "[]"
+            ] do
+          {:ok, conn_pid} = :gun.open(~c"localhost", port)
+
+          stream_ref =
+            :gun.post(
+              conn_pid,
+              "/v1/messages",
+              [
+                {"content-type", "application/json"}
+              ],
+              body
+            )
+
+          assert_receive {:gun_up, ^conn_pid, :http}
+          assert_receive {:gun_response, ^conn_pid, ^stream_ref, _fin, status, headers}, 1_000
+
+          assert {400, "3"} == {status, :proplists.get_value("grpc-status", headers)},
+                 "body #{inspect(body)}"
+
+          assert :proplists.get_value("grpc-message", headers) not in [:undefined, ""]
+        end
+      end)
+    end
+
     test "can map request body using HttpRule.body and response using HttpRule.response_body" do
       run_server([TranscodeServer], fn port ->
         {:ok, conn_pid} = :gun.open(~c"localhost", port)

@@ -9,8 +9,10 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
     use GenServer
 
+    alias GRPC.Client.Adapters.CallExit
     alias GRPC.Client.Adapters.Mint.ConnectionProcess.State
     alias GRPC.Client.Adapters.Mint.StreamResponseProcess
+    alias GRPC.Client.Telemetry
 
     require Logger
     require State
@@ -32,12 +34,15 @@ if Code.ensure_loaded?(Mint.HTTP) do
     @doc """
     Sends a request to the connected server.
 
+    If the call exits (the connection process is busy past the call timeout, or
+    dead), the exit reason has the headers and body replaced with `:redacted`.
+
     ## Options
 
       * :stream_response_pid (required) - the process to where send the responses coming from the connection will be sent to be processed
     """
     def request(pid, method, path, headers, body, opts \\ []) do
-      GenServer.call(pid, {:request, method, path, headers, body, opts})
+      CallExit.call(pid, {:request, method, path, headers, body, opts})
     end
 
     @doc """
@@ -51,7 +56,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
     Streams a chunk of the request body on the connection or signals the end of the body.
     """
     def stream_request_body(pid, request_ref, body) do
-      GenServer.call(pid, {:stream_body, request_ref, body})
+      CallExit.call(pid, {:stream_body, request_ref, body})
     end
 
     @doc """
@@ -69,6 +74,10 @@ if Code.ensure_loaded?(Mint.HTTP) do
     @impl true
     def init({scheme, host, port, opts}) do
       {retry, opts} = Keyword.pop(opts, :retry, 0)
+      {metadata, opts} = Keyword.pop(opts, :grpc_transport_metadata, %{})
+      metadata = Map.put(metadata, :transport_ref, self())
+      Telemetry.execute(:started, %{generation: 0, active_streams: 0}, metadata)
+      {keepalive_opts, opts} = Keyword.split(opts, [:keepalive, :keepalive_tolerance])
 
       case Mint.HTTP.connect(scheme, host, port, opts) do
         {:ok, conn} ->
@@ -78,16 +87,19 @@ if Code.ensure_loaded?(Mint.HTTP) do
             host: host,
             port: port,
             connect_opts: opts,
-            retry: retry
+            retry: retry,
+            telemetry_metadata: metadata
           ]
 
-          {:ok, State.new(conn, state_opts)}
+          Telemetry.execute(:connected, %{generation: 1}, Map.put(metadata, :reconnect, false))
+          {:ok, conn |> State.new(state_opts ++ keepalive_opts) |> schedule_keepalive()}
 
         {:error, reason} ->
           Logger.error(
             "unable to establish a connection to #{scheme}://#{host}:#{port}. reason: #{inspect(reason)}"
           )
 
+          connect_failed(metadata, reason)
           {:stop, reason}
       end
     catch
@@ -96,6 +108,8 @@ if Code.ensure_loaded?(Mint.HTTP) do
           "unable to establish a connection to #{scheme}://#{host}:#{port}. reason: #{inspect(reason)}"
         )
 
+        metadata = Map.put(opts[:grpc_transport_metadata] || %{}, :transport_ref, self())
+        connect_failed(metadata, reason)
         {:stop, reason}
     end
 
@@ -117,11 +131,15 @@ if Code.ensure_loaded?(Mint.HTTP) do
         ) do
       case Mint.HTTP.request(state.conn, method, path, headers, :stream) do
         {:ok, conn, request_ref} ->
+          stream_response_pid = opts[:stream_response_pid]
+          monitor_ref = if is_pid(stream_response_pid), do: Process.monitor(stream_response_pid)
+
           new_state =
             state
             |> State.update_conn(conn)
-            |> State.put_empty_ref_state(request_ref, opts[:stream_response_pid])
+            |> State.put_empty_ref_state(request_ref, stream_response_pid, monitor_ref)
 
+          emit_streams(new_state)
           {:reply, {:ok, %{request_ref: request_ref}}, new_state}
 
         {:error, conn, reason} ->
@@ -138,12 +156,16 @@ if Code.ensure_loaded?(Mint.HTTP) do
       case Mint.HTTP.request(state.conn, method, path, headers, :stream) do
         {:ok, conn, request_ref} ->
           queue = :queue.in({request_ref, body, nil}, state.request_stream_queue)
+          stream_response_pid = opts[:stream_response_pid]
+          monitor_ref = if is_pid(stream_response_pid), do: Process.monitor(stream_response_pid)
 
           new_state =
             state
             |> State.update_conn(conn)
             |> State.update_request_stream_queue(queue)
-            |> State.put_empty_ref_state(request_ref, opts[:stream_response_pid])
+            |> State.put_empty_ref_state(request_ref, stream_response_pid, monitor_ref)
+
+          emit_streams(new_state)
 
           {:reply, {:ok, %{request_ref: request_ref}}, new_state,
            {:continue, :process_request_stream_queue}}
@@ -155,12 +177,19 @@ if Code.ensure_loaded?(Mint.HTTP) do
     end
 
     def handle_call({:stream_body, request_ref, :eof}, _from, state) do
-      case Mint.HTTP.stream_request_body(state.conn, request_ref, :eof) do
-        {:ok, conn} ->
-          {:reply, :ok, State.update_conn(state, conn)}
+      if State.has_request_ref(state, request_ref) do
+        case Mint.HTTP.stream_request_body(state.conn, request_ref, :eof) do
+          {:ok, conn} ->
+            {:reply, :ok, State.update_conn(state, conn)}
 
-        {:error, conn, error} ->
-          {:reply, {:error, error}, State.update_conn(state, conn)}
+          {:error, conn, %Mint.HTTPError{reason: :unknown_request_to_stream}} ->
+            {:reply, :ok, State.update_conn(state, conn)}
+
+          {:error, conn, error} ->
+            {:reply, {:error, error}, State.update_conn(state, conn)}
+        end
+      else
+        {:reply, :ok, state}
       end
     end
 
@@ -190,6 +219,23 @@ if Code.ensure_loaded?(Mint.HTTP) do
       attempt_reconnect(state)
     end
 
+    def handle_info(:keepalive, state) do
+      state
+      |> schedule_keepalive()
+      |> handle_keepalive()
+    end
+
+    def handle_info({:DOWN, monitor_ref, :process, pid, reason}, state) do
+      case State.find_request_ref_by_monitor_ref(state, monitor_ref) do
+        nil ->
+          {:noreply, state}
+
+        request_ref ->
+          new_state = cancel_dead_stream(state, request_ref, pid, reason)
+          {:noreply, new_state}
+      end
+    end
+
     def handle_info(message, state) do
       case Mint.HTTP.stream(state.conn, message) do
         :unknown ->
@@ -197,7 +243,10 @@ if Code.ensure_loaded?(Mint.HTTP) do
           {:noreply, state}
 
         {:ok, conn, responses} ->
-          state = State.update_conn(state, conn)
+          state =
+            state
+            |> State.update_conn(conn)
+            |> acknowledge_pongs(responses)
 
           state =
             case state.requests do
@@ -208,11 +257,12 @@ if Code.ensure_loaded?(Mint.HTTP) do
                 Enum.reduce(responses, state, &process_response/2)
             end
 
-          check_connection_status(state)
+          state = observe_settings(state)
+          check_connection_status(state, nil)
 
-        {:error, conn, _error, _responses} ->
+        {:error, conn, error, _responses} ->
           state = State.update_conn(state, conn)
-          check_connection_status(state)
+          check_connection_status(state, error)
       end
     end
 
@@ -237,8 +287,61 @@ if Code.ensure_loaded?(Mint.HTTP) do
     end
 
     @impl true
-    def terminate(_reason, _state) do
+    def terminate(reason, state) do
+      Telemetry.execute(
+        :stopped,
+        %{streams_terminated: map_size(state.requests)},
+        Map.put(state.telemetry_metadata, :reason, reason)
+      )
+
       :normal
+    end
+
+    defp schedule_keepalive(%{keepalive: interval} = state) when is_integer(interval) do
+      Process.send_after(self(), :keepalive, interval)
+      state
+    end
+
+    defp schedule_keepalive(state), do: state
+
+    defp handle_keepalive(%{conn: %Mint.HTTP2{state: :closed}} = state), do: {:noreply, state}
+
+    defp handle_keepalive(%{pings_unacked: unacked, keepalive_tolerance: tolerance} = state)
+         when is_integer(tolerance) and unacked >= tolerance do
+      Logger.warning(
+        "Closing connection to #{state.scheme}://#{state.host}:#{state.port} after #{unacked} unacknowledged keepalive pings"
+      )
+
+      close_connection(state, :keepalive_timeout)
+    end
+
+    defp handle_keepalive(state) do
+      case Mint.HTTP2.ping(state.conn) do
+        {:ok, conn, _ref} ->
+          {:noreply, %{State.update_conn(state, conn) | pings_unacked: state.pings_unacked + 1}}
+
+        {:error, conn, reason} ->
+          Logger.warning(
+            "Closing connection to #{state.scheme}://#{state.host}:#{state.port} after failing to send keepalive ping: #{inspect(reason)}"
+          )
+
+          state
+          |> State.update_conn(conn)
+          |> close_connection(reason)
+      end
+    end
+
+    defp close_connection(state, reason) do
+      {:ok, conn} = Mint.HTTP.close(state.conn)
+
+      state
+      |> State.update_conn(conn)
+      |> finish_all_pending_requests(reason)
+    end
+
+    defp acknowledge_pongs(state, responses) do
+      pongs = Enum.count(responses, &match?({:pong, _ref}, &1))
+      %{state | pings_unacked: state.pings_unacked - pongs}
     end
 
     # Frames may still arrive for a stream whose state was already dropped
@@ -282,6 +385,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       |> end_stream_response(reason)
 
       {_ref, new_state} = State.pop_ref(state, request_ref)
+      emit_streams(new_state)
       new_state
     end
 
@@ -291,6 +395,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       |> StreamResponseProcess.done()
 
       {_ref, new_state} = State.pop_ref(state, request_ref)
+      emit_streams(new_state)
       new_state
     end
 
@@ -315,6 +420,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       })
 
       {_ref, state} = State.pop_ref(state, request_ref)
+      emit_streams(state)
       state = drop_queued_request_chunks(state, request_ref)
 
       case Mint.HTTP2.cancel_request(state.conn, request_ref) do
@@ -422,7 +528,11 @@ if Code.ensure_loaded?(Mint.HTTP) do
       )
     end
 
-    defp finish_all_pending_requests(state) do
+    defp finish_all_pending_requests(state, reason) do
+      count = map_size(state.requests)
+      metadata = Map.put(state.telemetry_metadata, :reason, reason)
+      Telemetry.execute(:down, %{streams_terminated: count}, metadata)
+
       new_state =
         state.request_stream_queue
         |> :queue.to_list()
@@ -454,8 +564,15 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
       clean_state = State.update_request_stream_queue(%{new_state | requests: %{}}, :queue.new())
 
+      if count > 0, do: emit_streams(clean_state)
+
       if clean_state.retry > 0 do
-        attempt_reconnect(clean_state)
+        # A failed attempt already scheduled the next retry; ignore duplicate close events.
+        if clean_state.retry_attempt > 0 do
+          {:noreply, clean_state}
+        else
+          attempt_reconnect(clean_state)
+        end
       else
         send(clean_state.parent, {:elixir_grpc, :connection_down, self()})
         {:stop, :normal, clean_state}
@@ -502,7 +619,24 @@ if Code.ensure_loaded?(Mint.HTTP) do
             reconnect_metadata(state, next_attempt)
           )
 
-          new_state = %{state | conn: conn, retry_attempt: 0}
+          generation = state.generation + 1
+
+          Telemetry.execute(
+            :connected,
+            %{generation: generation},
+            Map.put(state.telemetry_metadata, :reconnect, true)
+          )
+
+          new_state = %{
+            state
+            | conn: conn,
+              retry_attempt: 0,
+              generation: generation,
+              max_concurrent_streams: :unknown,
+              settings_known?: false,
+              pings_unacked: 0
+          }
+
           {:noreply, new_state}
 
         {:error, reason} ->
@@ -516,6 +650,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
             Map.put(reconnect_metadata(state, next_attempt), :reason, reason)
           )
 
+          maybe_connect_error(state.telemetry_metadata, reason)
           timeout = state.retry_timeout_ms || retry_timeout(next_attempt)
           Process.send_after(self(), :reconnect, timeout)
           {:noreply, %{state | retry_attempt: next_attempt}}
@@ -545,12 +680,65 @@ if Code.ensure_loaded?(Mint.HTTP) do
       round(timeout + jitter * timeout)
     end
 
-    defp check_connection_status(state) do
+    defp check_connection_status(state, reason) do
       if Mint.HTTP.open?(state.conn) do
         check_request_stream_queue(state)
       else
-        finish_all_pending_requests(state)
+        finish_all_pending_requests(state, reason || @connection_closed_error)
       end
     end
+
+    defp observe_settings(state) do
+      max =
+        normalize_max_streams(Mint.HTTP2.get_server_setting(state.conn, :max_concurrent_streams))
+
+      if not state.settings_known? or max != state.max_concurrent_streams do
+        Telemetry.execute(
+          :settings,
+          %{},
+          Map.put(state.telemetry_metadata, :max_concurrent_streams, max)
+        )
+      end
+
+      %{state | settings_known?: true, max_concurrent_streams: max}
+    end
+
+    defp emit_streams(state) do
+      Telemetry.execute(:streams, %{active: map_size(state.requests)}, state.telemetry_metadata)
+    end
+
+    # Mint 1.x reports 100 both before an explicit peer value and when the peer
+    # explicitly advertises 100. Treat it as unknown rather than inventing
+    # finite capacity; an upstream SETTINGS-presence hook would remove this gap.
+    defp normalize_max_streams(100), do: :unknown
+    defp normalize_max_streams(:infinity), do: :infinity
+    defp normalize_max_streams(value) when is_integer(value) and value > 0, do: value
+    defp normalize_max_streams(_value), do: :unknown
+
+    defp connect_failed(metadata, reason) do
+      maybe_connect_error(metadata, reason)
+      Telemetry.execute(:stopped, %{streams_terminated: 0}, Map.put(metadata, :reason, reason))
+    end
+
+    defp maybe_connect_error(metadata, reason) do
+      if stage = connect_stage(reason) do
+        Telemetry.execute(
+          :connect_error,
+          %{},
+          Map.merge(metadata, %{stage: stage, reason: reason})
+        )
+      end
+    end
+
+    defp connect_stage(%Mint.TransportError{reason: reason}), do: connect_stage(reason)
+    defp connect_stage(%Mint.HTTPError{}), do: :http2
+    defp connect_stage(reason) when reason in [:nxdomain, :host_not_found], do: :resolve
+
+    defp connect_stage(reason) when reason in [:econnrefused, :enetunreach, :ehostunreach],
+      do: :tcp
+
+    defp connect_stage({:tls_alert, _detail}), do: :tls
+    defp connect_stage({_tag, reason}), do: connect_stage(reason)
+    defp connect_stage(_reason), do: nil
   end
 end

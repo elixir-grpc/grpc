@@ -48,8 +48,8 @@ defmodule GRPC.Server.Router.Query do
   end
 
   # Query params are always strings, but proto bool fields require actual Elixir booleans.
-  # `Protobuf.JSON.from_decoded` throws {:bad_bool, field, value} when given a string,
-  # causing the request to fail silently with a 204 No Content response.
+  # `Protobuf.JSON.from_decoded` rejects a string for a bool field, which would fail
+  # the request with invalid_argument.
   defp coerce_query_value("true"), do: true
   defp coerce_query_value("false"), do: false
   defp coerce_query_value(value), do: value
