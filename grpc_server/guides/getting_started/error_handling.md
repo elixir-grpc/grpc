@@ -76,15 +76,17 @@ This unified model allows developers to build composable and reliable streaming 
 
 When a handler fails, the client gets an error status and the server keeps running. To tell an error reporter such as Sentry or Bugsnag, use one of two signals. Both are on by default.
 
-* **Telemetry.** `[:grpc, :server, :rpc, :exception]` is published when the handler raises, throws or exits, when encoding the reply fails, and when the adapter can't send it. The metadata has `:kind`, `:reason` and `:stacktrace`. See `GRPC.Telemetry` for the metadata of each case.
-* **Logger.** The Cowboy adapter logs a handler failure or an encoding failure with `:crash_reason` metadata, which Logger-based reporters read, such as `Sentry.LoggerHandler`. The `exception_log_filter` option can drop these logs. A failed send is not logged.
+* **Telemetry.** Two events carry `:kind`, `:reason` and `:stacktrace`. `[:grpc, :server, :rpc, :exception]` is published when the handler raises, throws or exits. `[:grpc, :server, :rpc, :send_error]` is published when the handler returned but the reply failed: the codec rejects it, a compressor raises, or the adapter refuses to send it. They are separate because the handler's telemetry span has closed by the time the reply fails. See `GRPC.Telemetry` for the metadata of each.
+* **Logger.** The Cowboy adapter logs a handler failure, an encoding failure or a raising compressor with `:crash_reason` metadata, which Logger-based reporters read, such as `Sentry.LoggerHandler`. The `exception_log_filter` option can drop these logs. A reply the adapter refuses to send is not logged.
+
+A client that disconnects while the server is still replying is not an error the server can raise: writing a reply is an asynchronous message to the connection process, so the call never fails. The adapter stops the RPC and publishes `[:grpc, :server, :rpc, :abort]` with the exit reason (`:shutdown`). It has no `:kind` or `:stacktrace`, and nothing is logged. Attach to `:abort` if you want to count these.
 
 To report from telemetry, attach a handler at application start:
 
 ```elixir
-:telemetry.attach(
+:telemetry.attach_many(
   "report-grpc-server-errors",
-  [:grpc, :server, :rpc, :exception],
+  [[:grpc, :server, :rpc, :exception], [:grpc, :server, :rpc, :send_error]],
   &MyApp.GRPCErrors.handle_event/4,
   nil
 )

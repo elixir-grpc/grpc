@@ -1,6 +1,12 @@
 defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
-  # Every way a server RPC can fail must publish `[:grpc, :server, :rpc, :exception]`
-  # with `kind`, `reason` and `stacktrace`, without changing the reply or the logs.
+  # Every way a server RPC can fail must publish a signal with `kind`, `reason` and
+  # `stacktrace`, without changing the reply or the logs:
+  #
+  #   * the handler fails: `[:grpc, :server, :rpc, :exception]`;
+  #   * the handler returns but the reply can't be encoded, compressed or sent:
+  #     `[:grpc, :server, :rpc, :send_error]`;
+  #   * the client goes away mid-reply: only `[:grpc, :server, :rpc, :abort]`,
+  #     because nothing raised.
   use ExUnit.Case, async: false
 
   import GRPC.DataCase, only: [attach_telemetry: 1]
@@ -8,7 +14,27 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
   alias GRPC.Server.Adapters.ReportException
 
   @exception [:grpc, :server, :rpc, :exception]
+  @send_error [:grpc, :server, :rpc, :send_error]
+  @abort [:grpc, :server, :rpc, :abort]
+  @stop [:grpc, :server, :rpc, :stop]
   @path "/helloworld.Greeter/SayHello"
+
+  # Compressors that fail. The client below accepts both names.
+  defmodule RaisingCompressor do
+    @behaviour GRPC.Compressor
+    def name, do: "raising"
+    def compress(_data), do: raise("compress failed")
+    def decompress(data), do: data
+  end
+
+  # Returns iodata just over the 2 GiB message limit. The list repeats one 1 MiB
+  # binary, so it holds 1 MiB of memory.
+  defmodule HugeCompressor do
+    @behaviour GRPC.Compressor
+    def name, do: "huge"
+    def compress(_data), do: List.duplicate(:binary.copy(<<0>>, 1_048_576), 2049)
+    def decompress(data), do: data
+  end
 
   defmodule ErrorServer do
     use GRPC.Server, service: Helloworld.Greeter.Service
@@ -29,7 +55,36 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
       %Helloworld.HelloReply{message: "ok"}
     end
 
+    def say_hello(%{name: "raising_compressor"}, stream) do
+      GRPC.Server.set_compressor(stream, RaisingCompressor)
+      %Helloworld.HelloReply{message: "ok"}
+    end
+
+    def say_hello(%{name: "oversize"}, stream) do
+      GRPC.Server.set_compressor(stream, HugeCompressor)
+      %Helloworld.HelloReply{message: "ok"}
+    end
+
     def say_hello(req, _stream), do: %Helloworld.HelloReply{message: req.name}
+  end
+
+  # Sends replies until the adapter stops it, and tells the test its pid.
+  defmodule StreamServer do
+    use GRPC.Server, service: Routeguide.RouteGuide.Service
+
+    def list_features(_rectangle, stream) do
+      send(:persistent_term.get({__MODULE__, :test_pid}), {:handler, self()})
+
+      # Bounded, so a failing test doesn't leave the handler running.
+      Enum.each(1..500, fn i ->
+        GRPC.Server.send_reply(stream, %Routeguide.Feature{name: "feature #{i}"})
+
+        receive do
+        after
+          10 -> :ok
+        end
+      end)
+    end
   end
 
   # `:logger` handler that forwards error events to the test process.
@@ -42,6 +97,7 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
     on_exit(fn -> :logger.remove_handler(handler_id) end)
 
     attach_telemetry(@exception)
+    attach_telemetry(@send_error)
   end
 
   describe "handler fails" do
@@ -83,39 +139,134 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
   end
 
   describe "encoding the reply fails" do
-    test "publishes :exception and replies UNKNOWN" do
+    test "publishes :send_error and replies UNKNOWN" do
       assert %{"grpc-status" => "2", "grpc-message" => "Internal%20Server%20Error"} =
                call("encode")
 
-      assert_receive {:telemetry, @exception, %{duration: duration}, metadata}
+      assert_receive {:telemetry, @send_error, %{duration: duration}, metadata}
       assert duration > 0
 
       assert %{kind: :error, reason: %Protobuf.EncodeError{}, stacktrace: [_ | _]} = metadata
       assert metadata.server == ErrorServer
       assert metadata.path == @path
       assert metadata.stream.method_name == "SayHello"
-      refute_receive {:telemetry, @exception, _, _}, 200
+      refute_receive {:telemetry, @send_error, _, %{server: ErrorServer}}, 200
+      refute_receive {:telemetry, @exception, _, %{server: ErrorServer}}, 10
     end
   end
 
   describe "sending the reply fails" do
-    test "publishes :exception and replies INTERNAL" do
+    test "an unaccepted compressor publishes :send_error and replies INTERNAL" do
       assert %{"grpc-status" => "13", "grpc-message" => message} = call("send")
       assert URI.decode(message) =~ "unaccepted encoding gzip"
 
-      assert_receive {:telemetry, @exception, %{duration: duration}, metadata}
+      assert_receive {:telemetry, @send_error, %{duration: duration}, metadata}
       assert duration > 0
 
       assert %{kind: :error, reason: %GRPC.RPCError{status: 13}, stacktrace: [_ | _]} = metadata
       assert metadata.server == ErrorServer
       assert metadata.path == @path
-      refute_receive {:telemetry, @exception, _, _}, 200
+      refute_receive {:telemetry, @send_error, _, %{server: ErrorServer}}, 200
+      refute_receive {:telemetry, @exception, _, %{server: ErrorServer}}, 10
+    end
+
+    # The compressor runs in the Cowboy handler process, not in the RPC process.
+    # Before, the raise crashed that process and the client got no `grpc-status`.
+    test "a compressor that raises publishes :send_error and replies INTERNAL" do
+      assert %{"grpc-status" => "13", "grpc-message" => "Internal%20Server%20Error"} =
+               call("raising_compressor")
+
+      assert_receive {:telemetry, @send_error, %{duration: duration}, metadata}
+      assert duration > 0
+
+      assert %{kind: :error, reason: %RuntimeError{message: "compress failed"}} = metadata
+      assert [_ | _] = metadata.stacktrace
+      assert metadata.server == ErrorServer
+      assert metadata.path == @path
+      refute_receive {:telemetry, @send_error, _, %{server: ErrorServer}}, 200
+      refute_receive {:telemetry, @exception, _, %{server: ErrorServer}}, 10
+    end
+
+    # `GRPC.Message.to_data/2` returns `{:error, message}` for a message over its
+    # limit. The limit is 2 GiB and the adapter doesn't pass a smaller one, so the
+    # compressor returns iodata just over it.
+    test "a reply over the message limit publishes :send_error and replies INTERNAL" do
+      assert %{"grpc-status" => "13", "grpc-message" => message} = call("oversize")
+      assert URI.decode(message) =~ "Encoded message is too large"
+
+      assert_receive {:telemetry, @send_error, %{duration: duration}, metadata}
+      assert duration > 0
+
+      assert %{kind: :error, reason: %GRPC.RPCError{status: 13}, stacktrace: [_ | _]} = metadata
+      assert metadata.reason.message =~ "Encoded message is too large"
+      assert metadata.server == ErrorServer
+      assert metadata.path == @path
+      refute_receive {:telemetry, @send_error, _, %{server: ErrorServer}}, 200
+      refute_receive {:telemetry, @exception, _, %{server: ErrorServer}}, 10
+    end
+  end
+
+  # The server writes the reply by sending a message to the Cowboy connection
+  # process, so a dead socket doesn't make that send fail in the RPC process. Cowboy
+  # ends the stream, the adapter stops the RPC process and publishes `:abort`. No
+  # `kind`, `reason` or `stacktrace` exist, since nothing raised, and neither `:stop`
+  # nor `:exception` fires.
+  describe "the client disconnects while the reply is sent" do
+    setup do
+      attach_telemetry(@abort)
+      attach_telemetry(@stop)
+      :persistent_term.put({StreamServer, :test_pid}, self())
+      on_exit(fn -> :persistent_term.erase({StreamServer, :test_pid}) end)
+    end
+
+    for how <- [:socket_closed, :connection_closed, :stream_cancelled] do
+      test "#{how} publishes :abort and nothing else" do
+        with_server(StreamServer, fn port ->
+          {:ok, conn} = :gun.open(~c"localhost", port, %{protocols: [:http2]})
+          {:ok, :http2} = :gun.await_up(conn, 5_000)
+
+          message = Protobuf.encode(%Routeguide.Rectangle{})
+          body = <<0::8, byte_size(message)::32, message::binary>>
+
+          headers = [{"content-type", "application/grpc+proto"}, {"te", "trailers"}]
+          ref = :gun.post(conn, "/routeguide.RouteGuide/ListFeatures", headers, body)
+
+          assert_receive {:handler, handler}, 5_000
+          monitor = Process.monitor(handler)
+
+          # The reply is under way.
+          assert {:response, :nofin, 200, _headers} = :gun.await(conn, ref, 5_000)
+          assert {:data, :nofin, _data} = :gun.await(conn, ref, 5_000)
+
+          disconnect(unquote(how), conn, ref)
+
+          assert_receive {:telemetry, @abort, %{duration: duration},
+                          %{server: StreamServer} = metadata},
+                         5_000
+
+          assert duration > 0
+          assert metadata.path == "/routeguide.RouteGuide/ListFeatures"
+          assert metadata.server == StreamServer
+          assert metadata.pid == handler
+          assert metadata.reason == :shutdown
+
+          assert_receive {:DOWN, ^monitor, :process, ^handler, _reason}, 5_000
+
+          refute_receive {:telemetry, @abort, _, %{server: StreamServer}}, 200
+          refute_receive {:telemetry, @stop, _, %{server: StreamServer}}, 10
+          refute_receive {:telemetry, @exception, _, %{server: StreamServer}}, 10
+          refute_receive {:telemetry, @send_error, _, %{server: StreamServer}}, 10
+
+          # Nothing in the default log either.
+          assert [] = error_logs_mentioning(StreamServer)
+        end)
+      end
     end
   end
 
   test "a call that succeeds publishes no :exception" do
     assert %{"grpc-status" => "0"} = call("fine")
-    refute_receive {:telemetry, @exception, _, _}, 200
+    refute_receive {:telemetry, @exception, _, %{server: ErrorServer}}, 200
   end
 
   # The default config logs what it logged before telemetry covered these paths:
@@ -159,23 +310,67 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
 
       refute_receive {:log, _}, 200
     end
+
+    test "a reply over the message limit logs nothing" do
+      call("oversize")
+
+      refute_receive {:log, _}, 200
+    end
+
+    # Cowboy used to log the crash of its handler process. The adapter now logs
+    # the raise once, with the same `crash_reason` shape as a handler failure.
+    test "a raising compressor logs one adapter report" do
+      call("raising_compressor")
+
+      assert_receive {:log,
+                      %{
+                        meta: %{
+                          crash_reason:
+                            {%ReportException{reason: %RuntimeError{message: "compress failed"}},
+                             [_ | _]}
+                        }
+                      }},
+                     1_000
+
+      refute_receive {:log, _}, 200
+    end
   end
 
+  # Error logs about `module`. Other test modules leave RPCs running that log
+  # errors too, so this drops the ones that don't mention it.
+  defp error_logs_mentioning(module) do
+    receive do
+      {:log, event} ->
+        if event |> inspect() |> String.contains?(inspect(module)),
+          do: [event | error_logs_mentioning(module)],
+          else: error_logs_mentioning(module)
+    after
+      10 -> []
+    end
+  end
+
+  # `:socket_closed` kills the Gun process, which closes the socket with no HTTP/2 goodbye.
+  defp disconnect(:socket_closed, conn, _ref), do: Process.exit(conn, :kill)
+  defp disconnect(:connection_closed, conn, _ref), do: :gun.close(conn)
+  defp disconnect(:stream_cancelled, conn, ref), do: :gun.cancel(conn, ref)
+
   # Calls SayHello over HTTP/2 and returns the `grpc-*` headers of the reply.
-  defp call(name) do
+  defp call(name), do: with_server(ErrorServer, &call_port(&1, name))
+
+  defp with_server(server, fun) do
     {:ok, _pid, port} =
       start_supervised(%{
         id: {GRPC.Server, System.unique_integer([:positive])},
-        start: {GRPC.Server, :start, [ErrorServer, 0, []]},
+        start: {GRPC.Server, :start, [server, 0, []]},
         type: :worker,
         restart: :permanent,
         shutdown: 500
       })
 
     try do
-      call_port(port, name)
+      fun.(port)
     after
-      GRPC.Server.stop(ErrorServer)
+      GRPC.Server.stop(server)
     end
   end
 
@@ -189,7 +384,7 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
     headers = [
       {"content-type", "application/grpc+proto"},
       {"te", "trailers"},
-      {"grpc-accept-encoding", "identity"}
+      {"grpc-accept-encoding", "identity,raising,huge"}
     ]
 
     ref = :gun.post(conn, @path, headers, body)

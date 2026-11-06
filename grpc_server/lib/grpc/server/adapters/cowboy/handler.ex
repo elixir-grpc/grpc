@@ -441,7 +441,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         "A unaccepted encoding #{compressor.name()} is set, valid are: #{:cowboy_req.header("grpc-accept-encoding", req)}"
 
       error = RPCError.exception(status: :internal, message: msg)
-      publish_exception(state, error)
+      publish_send_error(state, error)
       req = send_error(req, error, state, :rpc_error)
 
       {:stop, req, state}
@@ -454,11 +454,26 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
         {:error, msg} ->
           error = RPCError.exception(status: :internal, message: msg)
-          publish_exception(state, error)
+          publish_send_error(state, error)
           req = send_error(req, error, state, :rpc_error)
           {:stop, req, state}
       end
     end
+  catch
+    # A compressor or codec that raises while the reply is packed. The client
+    # gets INTERNAL instead of a stream reset with no `grpc-status`.
+    kind, reason ->
+      stacktrace = __STACKTRACE__
+      publish_send_error(state, kind, reason, stacktrace)
+
+      error = RPCError.exception(status: :internal, message: "Internal Server Error")
+      req = send_error(req, error, state, :rpc_error)
+
+      [req: req]
+      |> ReportException.new(reason, stacktrace, kind)
+      |> maybe_log_error(state.exception_log_filter, stacktrace)
+
+      {:stop, req, state}
   end
 
   def info({:stream_reply, status, headers}, req, state) do
@@ -624,14 +639,14 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
   # Encoding the reply and handing it to the adapter run after the telemetry span
   # around the handler has closed, so a failure here publishes no `:exception`.
-  # Publish it here, then re-raise so `call_rpc/3` replies as before.
+  # Publish `:send_error` here, then re-raise so `call_rpc/3` replies as before.
   defp report_send_failure(server, path, stream, started_at, send_fun) do
     send_fun.()
   catch
     kind, reason ->
       stacktrace = __STACKTRACE__
 
-      execute_exception(started_at, %{
+      execute_send_error(started_at, %{
         stream: stream,
         server: server,
         endpoint: stream.endpoint,
@@ -756,28 +771,32 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   # Failures found in this process while sending the reply. The error is an
   # `RPCError` that was never raised, so the stacktrace is where this process
   # noticed it.
-  defp publish_exception(state, %RPCError{} = error) do
-    %{stream: stream, endpoint: endpoint, route: route, started_at: started_at} = state
-
+  defp publish_send_error(state, %RPCError{} = error) do
     {:current_stacktrace, [_process_info | stacktrace]} =
       Process.info(self(), :current_stacktrace)
 
-    execute_exception(started_at, %{
+    publish_send_error(state, :error, error, stacktrace)
+  end
+
+  defp publish_send_error(state, kind, reason, stacktrace) do
+    %{stream: stream, endpoint: endpoint, route: route, started_at: started_at} = state
+
+    execute_send_error(started_at, %{
       stream: stream,
       server: stream.server,
       endpoint: endpoint,
       path: route,
-      kind: :error,
-      reason: error,
+      kind: kind,
+      reason: reason,
       stacktrace: stacktrace
     })
   end
 
-  defp execute_exception(started_at, metadata) do
+  defp execute_send_error(started_at, metadata) do
     now = System.monotonic_time()
 
     :telemetry.execute(
-      GRPC.Telemetry.server_rpc_prefix() ++ [:exception],
+      GRPC.Telemetry.server_rpc_prefix() ++ [:send_error],
       %{duration: now - started_at, monotonic_time: now},
       metadata
     )
