@@ -1,15 +1,23 @@
 # Changelog
 
-## v1.0.6
-
-No changes. Released for version sync with `:grpc_server`
-
-## v1.0.5
+## Unreleased
 
 ### Enhancements
 
 - The Mint adapter can now be configured to send HTTP/2 keepalive pings. `:keepalive` sets the interval in milliseconds, and `:keepalive_tolerance` the number of unacknowledged pings after which the connection is treated as dead, and forcibly closed.
    Both default to `nil`, keeping the previous behavior.
+
+### Bug Fixes
+
+  * The Mint adapter no longer leaks a `StreamResponseProcess` when the connection process refuses a request.
+  * The Mint adapter now drops a request's queued body chunks when the request ends. A chunk left behind outlived its stream and killed the connection process, because draining the queue called `Mint.HTTP2.get_window_size/2` on a stale ref.
+  * Request headers (including `authorization`) and bodies no longer leak through client exits. When a call to the Gun or Mint adapter's connection process exits (the process is busy past the 5s call timeout, or dead), the exit reason embeds the call message; `GRPC.Telemetry.client_span/3` logged it at `:error`, `[:grpc, :client, :rpc, :exception]` metadata carried it, and crash reports printed it. The headers and body in that message are now replaced with `:redacted`; the exit still propagates with the same `{reason, {GenServer, :call, [pid, message, timeout]}}` shape and the request path.
+
+## v1.0.6
+
+No changes. Released for version sync with `:grpc_server`
+
+## v1.0.5
 
 ### Behavior Changes
 
@@ -18,10 +26,7 @@ No changes. Released for version sync with `:grpc_server`
 
 ### Bug Fixes
 
-  * The Mint adapter no longer leaks a `StreamResponseProcess` when the connection process refuses a request.
   * The Gun adapter no longer shares a named channel's connection process across Erlang nodes. It was registered in `:global`, so a node connecting with a `:name` already used on another node adopted the remote connection process; `connect/2` returned `{:ok, channel}`, but every RPC on it then raised `ArgumentError` because `GRPC.Stub.call/5` calls `Process.alive?/1` on the connection pid and that raises for remote pids. Connection processes are now registered in the node-local `GRPC.Client.Registry`, so reuse is per node.
-  * The Mint adapter now drops a request's queued body chunks when the request ends. A chunk left behind outlived its stream and killed the connection process, because draining the queue called `Mint.HTTP2.get_window_size/2` on a stale ref.
-  * Request headers (including `authorization`) and bodies no longer leak through client exits. When a call to the Gun or Mint adapter's connection process exits (the process is busy past the 5s call timeout, or dead), the exit reason embeds the call message; `GRPC.Telemetry.client_span/3` logged it at `:error`, `[:grpc, :client, :rpc, :exception]` metadata carried it, and crash reports printed it. The headers and body in that message are now replaced with `:redacted`; the exit still propagates with the same `{reason, {GenServer, :call, [pid, message, timeout]}}` shape and the request path.
 
 ## v1.0.4 (2026-10-15)
 
