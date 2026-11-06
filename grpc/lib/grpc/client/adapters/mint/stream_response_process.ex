@@ -110,7 +110,8 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
       responses: :queue.new(),
       done: false,
       from: nil,
-      compressor: nil
+      compressor: nil,
+      failed: false
     }
 
     {:ok, state}
@@ -119,6 +120,12 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   @impl true
   def handle_call(:get_response, from, state) do
     {:noreply, put_in(state[:from], from), {:continue, :produce_response}}
+  end
+
+  # After a message over the size limit the rest of the body can't be framed
+  # any more, so it is dropped.
+  def handle_call({:consume_response, {:data, _data}}, _from, %{failed: true} = state) do
+    {:reply, :ok, state, {:continue, :produce_response}}
   end
 
   def handle_call({:consume_response, {:data, data}}, _from, state) do
@@ -134,10 +141,20 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
     # the same HTTP/2 data frame.
     combined = buffer <> data
 
-    {new_buffer, new_responses} =
-      drain_buffer(combined, state.compressor, codec, res_mod, responses)
+    new_state =
+      case drain_buffer(combined, state.compressor, codec, res_mod, responses) do
+        {new_buffer, new_responses} ->
+          %{state | buffer: new_buffer, responses: new_responses}
 
-    new_state = %{state | buffer: new_buffer, responses: new_responses}
+        {:error, error, new_responses} ->
+          %{
+            state
+            | buffer: <<>>,
+              responses: :queue.in({:error, error}, new_responses),
+              failed: true
+          }
+      end
+
     {:reply, :ok, new_state, {:continue, :produce_response}}
   end
 
@@ -210,9 +227,13 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   # each decoded response into `responses_queue`. Recursion terminates when
   # `GRPC.Message.get_message/2` can no longer extract a full message from the
   # remaining bytes, at which point the leftover buffer and the populated queue
-  # are returned as `{remaining_buffer, updated_queue}`.
+  # are returned as `{remaining_buffer, updated_queue}`. A message over the size
+  # limit ends the pass with `{:error, error, updated_queue}`.
   defp drain_buffer(buffer, compressor, codec, res_mod, responses_queue) do
-    case GRPC.Message.get_message(buffer, compressor) do
+    case get_message(buffer, compressor) do
+      {:error, error} ->
+        {:error, error, responses_queue}
+
       {{_, message}, rest} ->
         # TODO: add code here to handle compressor headers
         response = codec.decode(message, res_mod)
@@ -228,6 +249,13 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
       _ ->
         {buffer, responses_queue}
     end
+  end
+
+  # `GRPC.Message.get_message/2` raises when a message is over `:max_message_length`.
+  defp get_message(buffer, compressor) do
+    GRPC.Message.get_message(buffer, compressor)
+  rescue
+    error in GRPC.RPCError -> {:error, error}
   end
 
   defp get_headers_response(headers, type) do
