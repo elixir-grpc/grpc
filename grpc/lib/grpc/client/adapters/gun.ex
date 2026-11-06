@@ -73,7 +73,12 @@ if Code.ensure_loaded?(:gun) do
     end
 
     defp do_connect(channel, open_opts) do
-      open_opts = Map.merge(%{retry: @max_retries, retry_fun: &__MODULE__.retry_fun/2}, open_opts)
+      open_opts =
+        open_opts
+        |> Map.merge(%{retry: @max_retries, retry_fun: &__MODULE__.retry_fun/2})
+        |> Map.update(:http2_opts, %{notify_settings_changed: true}, fn opts ->
+          Map.put(opts, :notify_settings_changed, true)
+        end)
 
       case ConnectionProcess.connect(channel, open_opts) do
         {:ok, adapter_payload} ->
@@ -97,23 +102,26 @@ if Code.ensure_loaded?(:gun) do
 
     @impl true
     def send_request(stream, message, opts) do
-      {stream_ref, response_pid} = do_send_request(stream, message, opts)
+      deadline = deadline(opts[:timeout])
+      {stream_ref, response_pid} = do_send_request(stream, message, opts, deadline)
 
       stream
       |> GRPC.Client.Stream.put_payload(:stream_ref, stream_ref)
       |> GRPC.Client.Stream.put_payload(:response_pid, response_pid)
+      |> GRPC.Client.Stream.put_payload(:deadline, deadline)
     end
 
     defp do_send_request(
            %{channel: %{adapter_payload: %{conn_pid: conn_pid}}, path: path} = stream,
            message,
-           opts
+           opts,
+           deadline
          ) do
       headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
       {:ok, data, _} = GRPC.Message.to_data(message, opts)
 
       {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} =
-        ConnectionProcess.request(conn_pid, path, headers, data)
+        ConnectionProcess.request(conn_pid, path, headers, data, deadline)
 
       {stream_ref, response_pid}
     end
@@ -123,14 +131,16 @@ if Code.ensure_loaded?(:gun) do
           %{channel: %{adapter_payload: %{conn_pid: conn_pid}}, path: path} = stream,
           opts
         ) do
+      deadline = deadline(opts[:timeout])
       headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
 
       {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} =
-        ConnectionProcess.open_stream(conn_pid, path, headers)
+        ConnectionProcess.open_stream(conn_pid, path, headers, deadline)
 
       stream
       |> GRPC.Client.Stream.put_payload(:stream_ref, stream_ref)
       |> GRPC.Client.Stream.put_payload(:response_pid, response_pid)
+      |> GRPC.Client.Stream.put_payload(:deadline, deadline)
     end
 
     @impl true
@@ -165,13 +175,14 @@ if Code.ensure_loaded?(:gun) do
           opts
         ) do
       %{payload: payload} = stream
+      deadline = receive_deadline(payload, opts)
 
-      case recv_headers(payload, opts) do
+      case recv_headers(payload, deadline) do
         {:ok, headers, :fin} ->
           handle_fin_response(headers, opts)
 
         {:ok, headers, :nofin} ->
-          handle_streaming_nofin_response(stream, headers, opts)
+          handle_streaming_nofin_response(stream, headers, opts, deadline)
 
         {:error, _} = error ->
           error
@@ -180,13 +191,14 @@ if Code.ensure_loaded?(:gun) do
 
     def receive_data(stream, opts) do
       %{payload: payload} = stream
+      deadline = receive_deadline(payload, opts)
 
-      case recv_headers(payload, opts) do
+      case recv_headers(payload, deadline) do
         {:ok, headers, :fin} ->
           handle_fin_response(headers, opts)
 
         {:ok, headers, :nofin} ->
-          handle_nofin_response(payload, stream, headers, opts)
+          handle_nofin_response(payload, stream, headers, opts, deadline)
 
         {:error, _} = error ->
           error
@@ -204,8 +216,8 @@ if Code.ensure_loaded?(:gun) do
       end
     end
 
-    defp handle_streaming_nofin_response(stream, headers, opts) do
-      response = response_stream(:nofin, stream, opts)
+    defp handle_streaming_nofin_response(stream, headers, opts, deadline) do
+      response = response_stream(:nofin, stream, opts, deadline)
 
       if opts[:return_headers] do
         {:ok, response, %{headers: headers}}
@@ -214,9 +226,9 @@ if Code.ensure_loaded?(:gun) do
       end
     end
 
-    defp handle_nofin_response(payload, stream, headers, opts) do
+    defp handle_nofin_response(payload, stream, headers, opts, deadline) do
       # Regular response: fetch body and trailers
-      with {:ok, body, trailers} <- recv_body(payload, opts),
+      with {:ok, body, trailers} <- recv_body(payload, deadline),
            {:ok, response, embedded_trailers} <- parse_response(stream, headers, body, trailers) do
         if opts[:return_headers] do
           all_trailers = Map.merge(trailers, embedded_trailers)
@@ -232,8 +244,8 @@ if Code.ensure_loaded?(:gun) do
       end
     end
 
-    defp recv_headers(%{response_pid: response_pid}, opts) do
-      case await(response_pid, opts[:timeout]) do
+    defp recv_headers(%{response_pid: response_pid}, deadline) do
+      case await(response_pid, deadline) do
         {:response, headers, fin} ->
           {:ok, headers, fin}
 
@@ -249,8 +261,8 @@ if Code.ensure_loaded?(:gun) do
       end
     end
 
-    defp recv_data_or_trailers(%{response_pid: response_pid}, opts) do
-      case await(response_pid, opts[:timeout]) do
+    defp recv_data_or_trailers(%{response_pid: response_pid}, deadline) do
+      case await(response_pid, deadline) do
         data = {:data, _} ->
           data
 
@@ -269,16 +281,8 @@ if Code.ensure_loaded?(:gun) do
       end
     end
 
-    defp await(response_pid, timeout) do
-      # We should use server timeout for most time
-      timeout =
-        if is_integer(timeout) do
-          timeout * 2
-        else
-          timeout
-        end
-
-      case GRPC.Client.Adapters.Gun.StreamResponseProcess.await(response_pid, timeout) do
+    defp await(response_pid, deadline) do
+      case GRPC.Client.Adapters.Gun.StreamResponseProcess.await(response_pid, deadline) do
         {:response, :fin, status, headers} ->
           if status == 200 do
             headers = GRPC.Transport.HTTP2.decode_headers(headers)
@@ -313,23 +317,24 @@ if Code.ensure_loaded?(:gun) do
           trailers
 
         {:error, :timeout} ->
-          {:error,
-           GRPC.RPCError.exception(
-             GRPC.Status.deadline_exceeded(),
-             "timeout when waiting for server"
-           )}
+          deadline_exceeded()
 
         # Connection-level failures are UNAVAILABLE per the gRPC status spec:
         # the RPC never completed on a live connection, so callers can safely
         # retry (deadline errors above stay DEADLINE_EXCEEDED).
+        {:error, {:connection_error, :closed}} when is_integer(deadline) ->
+          if deadline <= System.monotonic_time(:millisecond) do
+            deadline_exceeded()
+          else
+            connection_error(:closed)
+          end
+
         {:error, {:connection_error, msg}} ->
-          {:error,
-           GRPC.RPCError.exception(
-             GRPC.Status.unavailable(),
-             "connection_error: #{inspect(msg)}"
-           )}
+          connection_error(msg)
 
         {:error, {:stream_error, msg}} ->
+          GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :stream_error)
+
           {:error,
            GRPC.RPCError.exception(GRPC.Status.internal(), "stream_error: #{inspect(msg)}")}
 
@@ -367,17 +372,18 @@ if Code.ensure_loaded?(:gun) do
       %{retries: retries - 1, timeout: timeout}
     end
 
-    defp recv_body(stream_payload, opts) do
-      recv_body(stream_payload, "", opts)
+    defp recv_body(stream_payload, deadline) do
+      recv_body(stream_payload, [], deadline)
     end
 
-    defp recv_body(stream_payload, acc, opts) do
-      case recv_data_or_trailers(stream_payload, opts) do
+    defp recv_body(stream_payload, acc, deadline) do
+      case recv_data_or_trailers(stream_payload, deadline) do
         {:data, data} ->
-          recv_body(stream_payload, <<acc::binary, data::binary>>, opts)
+          recv_body(stream_payload, [acc, data], deadline)
 
         {:trailers, trailers} ->
-          {:ok, acc, GRPC.Transport.HTTP2.decode_headers(trailers)}
+          body = IO.iodata_to_binary(acc)
+          {:ok, body, GRPC.Transport.HTTP2.decode_headers(trailers)}
 
         err ->
           err
@@ -391,7 +397,8 @@ if Code.ensure_loaded?(:gun) do
              codec: codec,
              payload: payload
            },
-           opts
+           opts,
+           deadline
          ) do
       state = %{
         payload: payload,
@@ -400,7 +407,8 @@ if Code.ensure_loaded?(:gun) do
         need_more: true,
         opts: opts,
         response_mod: res_mod,
-        codec: codec
+        codec: codec,
+        deadline: deadline
       }
 
       Stream.unfold(state, fn s -> read_stream(s) end)
@@ -416,10 +424,11 @@ if Code.ensure_loaded?(:gun) do
              payload: payload,
              buffer: buffer,
              need_more: true,
-             opts: opts
+             opts: opts,
+             deadline: deadline
            } = stream
          ) do
-      case recv_data_or_trailers(payload, opts) do
+      case recv_data_or_trailers(payload, deadline) do
         {:data, data} ->
           stream
           |> Map.put(:need_more, false)
@@ -455,6 +464,40 @@ if Code.ensure_loaded?(:gun) do
         _ ->
           read_stream(Map.put(stream, :need_more, true))
       end
+    end
+
+    defp deadline(nil), do: :infinity
+    defp deadline(:infinity), do: :infinity
+
+    defp deadline(timeout) when is_integer(timeout),
+      do: System.monotonic_time(:millisecond) + max(timeout, 0)
+
+    defp receive_deadline(payload, opts) do
+      earlier_deadline(Map.get(payload, :deadline, :infinity), deadline(opts[:timeout]))
+    end
+
+    defp earlier_deadline(:infinity, deadline), do: deadline
+    defp earlier_deadline(deadline, :infinity), do: deadline
+    defp earlier_deadline(left, right), do: min(left, right)
+
+    defp deadline_exceeded do
+      GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :deadline)
+
+      {:error,
+       GRPC.RPCError.exception(
+         GRPC.Status.deadline_exceeded(),
+         "Deadline expired"
+       )}
+    end
+
+    defp connection_error(msg) do
+      GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :connection_unavailable)
+
+      {:error,
+       GRPC.RPCError.exception(
+         GRPC.Status.unavailable(),
+         "connection_error: #{inspect(msg)}"
+       )}
     end
 
     defp parse_response(
@@ -510,6 +553,7 @@ if Code.ensure_loaded?(:gun) do
             encoded_details_bin: trailers["grpc-status-details-bin"]
           })
 
+        GRPC.Client.Telemetry.mark_rpc_failure(:remote, nil)
         {:error, rpc_error}
       end
     end

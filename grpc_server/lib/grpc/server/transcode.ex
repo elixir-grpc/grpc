@@ -25,6 +25,12 @@ defmodule GRPC.Server.Transcode do
     Protobuf.JSON.from_decoded(request, req_mod)
   end
 
+  # With body "*" the body is the request message, so it must be a JSON object.
+  def map_request(%{body: "*"}, body_request, _path_bindings, _query_string, _req_mod)
+      when not is_map(body_request) do
+    {:error, GRPC.RPCError.exception(:invalid_argument, "request body must be a JSON object")}
+  end
+
   def map_request(
         %{body: "*"} = rule,
         body_request,

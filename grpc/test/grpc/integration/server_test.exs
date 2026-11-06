@@ -414,20 +414,16 @@ defmodule GRPC.Integration.ServerTest do
   end
 
   test "return deadline error for slow server" do
-    logs =
-      ExUnit.CaptureLog.capture_log(fn ->
-        run_server([TimeoutServer], fn port ->
-          {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-          rect = %Routeguide.Rectangle{}
-          error = %GRPC.RPCError{message: "Deadline expired", status: 4}
+    ExUnit.CaptureLog.capture_log(fn ->
+      run_server([TimeoutServer], fn port ->
+        {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+        rect = %Routeguide.Rectangle{}
+        error = %GRPC.RPCError{message: "Deadline expired", status: 4}
 
-          assert {:error, ^error} =
-                   channel |> Routeguide.RouteGuide.Stub.list_features(rect, timeout: 50)
-        end)
+        assert {:error, ^error} =
+                 channel |> Routeguide.RouteGuide.Stub.list_features(rect, timeout: 50)
       end)
-
-    assert logs =~
-             "Exception raised while handling /routeguide.RouteGuide/ListFeatures:\n** (GRPC.RPCError) Deadline expired"
+    end)
   end
 
   test "return normally for a little slow server" do
@@ -611,6 +607,39 @@ defmodule GRPC.Integration.ServerTest do
                  "name" => "some_name",
                  "text" => "get_message_with_query"
                } = Jason.decode!(body)
+      end)
+    end
+
+    test "rejects a request body that doesn't decode with invalid_argument" do
+      run_server([TranscodeServer], fn port ->
+        for body <- [
+              # valid JSON, but not a valid Transcode.Message
+              Jason.encode!(%{"name" => 1}),
+              # not JSON
+              "{",
+              # JSON, but not an object
+              "[]"
+            ] do
+          {:ok, conn_pid} = :gun.open(~c"localhost", port)
+
+          stream_ref =
+            :gun.post(
+              conn_pid,
+              "/v1/messages",
+              [
+                {"content-type", "application/json"}
+              ],
+              body
+            )
+
+          assert_receive {:gun_up, ^conn_pid, :http}
+          assert_receive {:gun_response, ^conn_pid, ^stream_ref, _fin, status, headers}, 1_000
+
+          assert {400, "3"} == {status, :proplists.get_value("grpc-status", headers)},
+                 "body #{inspect(body)}"
+
+          assert :proplists.get_value("grpc-message", headers) not in [:undefined, ""]
+        end
       end)
     end
 

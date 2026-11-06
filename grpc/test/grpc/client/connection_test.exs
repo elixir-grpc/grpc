@@ -1,6 +1,12 @@
 defmodule GRPC.Client.ConnectionTest do
   use GRPC.Client.DataCase, async: false
 
+  setup do
+    previous_pool = Application.get_env(:grpc, :pool_enabled)
+    Application.put_env(:grpc, :pool_enabled, false)
+    on_exit(fn -> Application.put_env(:grpc, :pool_enabled, previous_pool) end)
+  end
+
   alias GRPC.Channel
   alias GRPC.Client.Connection
 
@@ -40,7 +46,7 @@ defmodule GRPC.Client.ConnectionTest do
       ip: "127.0.0.1",
       target: "ipv4:127.0.0.1:50051",
       adapter: GRPC.Test.ClientAdapter,
-      supervisor_children: DynamicSupervisor.count_children(GRPC.Client.Supervisor).active
+      children_before: supervisor_child_pids()
     }
   end
 
@@ -68,7 +74,7 @@ defmodule GRPC.Client.ConnectionTest do
     test "terminates a newly started child when no channel can be picked", %{
       ref: ref,
       adapter: adapter,
-      supervisor_children: supervisor_children
+      children_before: children_before
     } do
       Application.put_env(:grpc, NoPickResolver, self())
       on_exit(fn -> Application.delete_env(:grpc, NoPickResolver) end)
@@ -84,8 +90,7 @@ defmodule GRPC.Client.ConnectionTest do
       monitor_ref = Process.monitor(pid)
       assert_receive {:DOWN, ^monitor_ref, :process, ^pid, _reason}, 500
 
-      assert DynamicSupervisor.count_children(GRPC.Client.Supervisor).active ==
-               supervisor_children
+      assert_no_new_children(children_before)
     end
   end
 
@@ -139,7 +144,7 @@ defmodule GRPC.Client.ConnectionTest do
       ref: ref,
       target: target,
       adapter: adapter,
-      supervisor_children: supervisor_children
+      children_before: children_before
     } do
       {:ok, channel} = Connection.connect(target, adapter: adapter, name: ref)
 
@@ -150,8 +155,7 @@ defmodule GRPC.Client.ConnectionTest do
 
       assert_receive {:DOWN, ^ref_mon, :process, ^pid, _reason}, 500
 
-      assert DynamicSupervisor.count_children(GRPC.Client.Supervisor).active ==
-               supervisor_children
+      assert_no_new_children(children_before)
     end
 
     test "pick_channel returns {:error, :no_connection} after disconnect (persistent_term entry is erased)",
@@ -251,7 +255,7 @@ defmodule GRPC.Client.ConnectionTest do
     test "50 binary-heavy cycles leave supervisor memory bounded after garbage collection", %{
       target: target,
       adapter: adapter,
-      supervisor_children: supervisor_children
+      children_before: children_before
     } do
       supervisor = Process.whereis(GRPC.Client.Supervisor)
       :erlang.garbage_collect(supervisor)
@@ -270,8 +274,7 @@ defmodule GRPC.Client.ConnectionTest do
       :erlang.garbage_collect(supervisor)
       {:memory, after_memory} = Process.info(supervisor, :memory)
 
-      assert %{active: ^supervisor_children} =
-               DynamicSupervisor.count_children(GRPC.Client.Supervisor)
+      assert_no_new_children(children_before)
 
       # Residual heap after one GC is typically tens of KB; real header leaks are MBs.
       assert after_memory <= before_memory + 250_000,
@@ -424,6 +427,16 @@ defmodule GRPC.Client.ConnectionTest do
       assert {:ok, ^expected} =
                @peer.call(peer2, Routeguide.RouteGuide.Stub, :get_feature, [channel2, point])
     end
+  end
+
+  defp supervisor_child_pids do
+    for {_, pid, _, _} <- DynamicSupervisor.which_children(GRPC.Client.Supervisor), do: pid
+  end
+
+  # Children leaked by other tests may exit while this one runs, so only
+  # children this test started are checked, not the global count.
+  defp assert_no_new_children(children_before) do
+    assert supervisor_child_pids() -- children_before == []
   end
 
   defp connection_pt_count do
