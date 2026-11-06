@@ -17,6 +17,7 @@ if Code.ensure_loaded?(:gun) do
 
     @behaviour GRPC.Client.Adapter
 
+    alias GRPC.Client.Adapter
     alias GRPC.Client.Adapters.Gun.ConnectionProcess
 
     @default_tcp_opts [nodelay: true]
@@ -103,12 +104,17 @@ if Code.ensure_loaded?(:gun) do
     @impl true
     def send_request(stream, message, opts) do
       deadline = deadline(opts[:timeout])
-      {stream_ref, response_pid} = do_send_request(stream, message, opts, deadline)
 
-      stream
-      |> GRPC.Client.Stream.put_payload(:stream_ref, stream_ref)
-      |> GRPC.Client.Stream.put_payload(:response_pid, response_pid)
-      |> GRPC.Client.Stream.put_payload(:deadline, deadline)
+      case do_send_request(stream, message, opts, deadline) do
+        {:ok, stream_ref, response_pid} ->
+          stream
+          |> GRPC.Client.Stream.put_payload(:stream_ref, stream_ref)
+          |> GRPC.Client.Stream.put_payload(:response_pid, response_pid)
+          |> GRPC.Client.Stream.put_payload(:deadline, deadline)
+
+        {:error, reason} ->
+          put_request_error(stream, reason)
+      end
     end
 
     defp do_send_request(
@@ -120,10 +126,15 @@ if Code.ensure_loaded?(:gun) do
       headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
       {:ok, data, _} = GRPC.Message.to_data(message, opts)
 
-      {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} =
-        ConnectionProcess.request(conn_pid, path, headers, data, deadline)
+      case call_connection(conn_pid, fn ->
+             ConnectionProcess.request(conn_pid, path, headers, data, deadline)
+           end) do
+        {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} ->
+          {:ok, stream_ref, response_pid}
 
-      {stream_ref, response_pid}
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
 
     @impl true
@@ -134,32 +145,54 @@ if Code.ensure_loaded?(:gun) do
       deadline = deadline(opts[:timeout])
       headers = GRPC.Transport.HTTP2.client_headers_without_reserved(stream, opts)
 
-      {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} =
-        ConnectionProcess.open_stream(conn_pid, path, headers, deadline)
+      case call_connection(conn_pid, fn ->
+             ConnectionProcess.open_stream(conn_pid, path, headers, deadline)
+           end) do
+        {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} ->
+          stream
+          |> GRPC.Client.Stream.put_payload(:stream_ref, stream_ref)
+          |> GRPC.Client.Stream.put_payload(:response_pid, response_pid)
+          |> GRPC.Client.Stream.put_payload(:deadline, deadline)
 
-      stream
-      |> GRPC.Client.Stream.put_payload(:stream_ref, stream_ref)
-      |> GRPC.Client.Stream.put_payload(:response_pid, response_pid)
-      |> GRPC.Client.Stream.put_payload(:deadline, deadline)
+        {:error, reason} ->
+          put_request_error(stream, reason)
+      end
     end
 
+    # A failed `send_request/3`, `send_headers/2` or `send_data/3` leaves the error
+    # in the payload, and `receive_data/2` returns it.
     @impl true
+    def send_data(%{payload: %{request_error: _}} = stream, _message, _opts), do: stream
+
     def send_data(%{channel: channel, payload: %{stream_ref: stream_ref}} = stream, message, opts) do
       conn_pid = channel.adapter_payload[:conn_pid]
       fin = if opts[:send_end_stream], do: :fin, else: :nofin
       {:ok, data, _} = GRPC.Message.to_data(message, opts)
-      :ok = ConnectionProcess.send_data(conn_pid, stream_ref, fin, data)
-      stream
+
+      stream_data(stream, conn_pid, stream_ref, fin, data)
     end
 
     @impl true
+    def end_stream(%{payload: %{request_error: _}} = stream), do: stream
+
     def end_stream(%{channel: channel, payload: %{stream_ref: stream_ref}} = stream) do
       conn_pid = channel.adapter_payload[:conn_pid]
-      :ok = ConnectionProcess.send_data(conn_pid, stream_ref, :fin, "")
-      stream
+
+      stream_data(stream, conn_pid, stream_ref, :fin, "")
+    end
+
+    defp stream_data(stream, conn_pid, stream_ref, fin, data) do
+      case call_connection(conn_pid, fn ->
+             ConnectionProcess.send_data(conn_pid, stream_ref, fin, data)
+           end) do
+        :ok -> stream
+        {:error, reason} -> put_request_error(stream, reason)
+      end
     end
 
     @impl true
+    def cancel(%{payload: %{request_error: _}}), do: :ok
+
     def cancel(stream) do
       %{
         channel: %{adapter_payload: %{conn_pid: conn_pid}},
@@ -170,6 +203,8 @@ if Code.ensure_loaded?(:gun) do
     end
 
     @impl true
+    def receive_data(%{payload: %{request_error: error}}, _opts), do: {:error, error}
+
     def receive_data(
           %{server_stream: true} = stream,
           opts
@@ -338,6 +373,10 @@ if Code.ensure_loaded?(:gun) do
           {:error,
            GRPC.RPCError.exception(GRPC.Status.internal(), "stream_error: #{inspect(msg)}")}
 
+        # Gun's own way to report a gone connection, e.g. `{:down, :normal}`
+        {:error, {reason, msg}} when reason in [:down, :noproc, :normal, :shutdown] ->
+          connection_error({reason, msg})
+
         {:error, {reason, msg}} ->
           {:error,
            GRPC.RPCError.exception(GRPC.Status.unknown(), "#{inspect(reason)}: #{inspect(msg)}")}
@@ -498,6 +537,36 @@ if Code.ensure_loaded?(:gun) do
          GRPC.Status.unavailable(),
          "connection_error: #{inspect(msg)}"
        )}
+    end
+
+    # Calls the connection process and turns a dead or missing one into
+    # `{:error, reason}`. The exit reason of a request call carries its headers, so
+    # it goes through `Adapter.redact/1` before it is kept. A call timeout still exits.
+    defp call_connection(nil, _fun), do: {:error, :disconnected}
+
+    defp call_connection(_conn_pid, fun) do
+      fun.()
+    catch
+      :exit, {:timeout, _} = reason ->
+        :erlang.raise(:exit, reason, __STACKTRACE__)
+
+      :exit, reason ->
+        case Adapter.redact(reason) do
+          {reason, {GenServer, :call, _}} -> {:error, reason}
+          reason -> {:error, reason}
+        end
+    end
+
+    defp put_request_error(stream, reason) do
+      GRPC.Client.Telemetry.mark_rpc_failure(:local_pre_send, :connection_unavailable)
+
+      error =
+        GRPC.RPCError.exception(
+          GRPC.Status.unavailable(),
+          "connection_error: #{inspect(reason)}"
+        )
+
+      GRPC.Client.Stream.put_payload(stream, :request_error, error)
     end
 
     defp parse_response(

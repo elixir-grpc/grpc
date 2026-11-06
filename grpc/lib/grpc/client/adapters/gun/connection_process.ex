@@ -81,8 +81,11 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
     Adapter.call(connection_process_pid, {:send_data, stream_ref, fin, data})
   end
 
+  # A dead connection process has nothing left to cancel.
   def cancel(connection_process_pid, stream_ref) do
     GenServer.call(connection_process_pid, {:cancel, stream_ref})
+  catch
+    :exit, _reason -> :ok
   end
 
   defp child_spec(channel, open_opts) do
@@ -371,6 +374,12 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   def terminate(_reason, %{status: :failed}), do: :ok
 
   def terminate(reason, %{response_processes: processes} = state) do
+    # Response processes are linked, so a crash takes them down, but a normal
+    # exit leaves them waiting for messages that will never come.
+    Enum.each(processes, fn {stream_ref, _entry} ->
+      send(response_pid(state, stream_ref), {:connection_down, :closed})
+    end)
+
     Telemetry.execute(
       :stopped,
       %{streams_terminated: map_size(processes)},
