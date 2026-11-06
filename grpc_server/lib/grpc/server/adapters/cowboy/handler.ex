@@ -460,8 +460,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       end
     end
   catch
-    # A compressor or codec that raises while the reply is packed. The client
-    # gets INTERNAL instead of a stream reset with no `grpc-status`.
+    # A compressor or codec raised while it packed the reply.
     kind, reason ->
       stacktrace = __STACKTRACE__
       publish_send_error(state, kind, reason, stacktrace)
@@ -637,9 +636,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  # Encoding the reply and handing it to the adapter run after the telemetry span
-  # around the handler has closed, so a failure here publishes no `:exception`.
-  # Publish `:send_error` here, then re-raise so `call_rpc/3` replies as before.
+  # The telemetry span of the handler is closed here. Publish `:send_error`,
+  # then raise the error again.
   defp report_send_failure(server, path, stream, started_at, send_fun) do
     send_fun.()
   catch
@@ -768,9 +766,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     :ok
   end
 
-  # Failures found in this process while sending the reply. The error is an
-  # `RPCError` that was never raised, so the stacktrace is where this process
-  # noticed it.
+  # The error was not raised, so use the current stacktrace.
   defp publish_send_error(state, %RPCError{} = error) do
     {:current_stacktrace, [_process_info | stacktrace]} =
       Process.info(self(), :current_stacktrace)

@@ -1,12 +1,6 @@
 defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
-  # Every way a server RPC can fail must publish a signal with `kind`, `reason` and
-  # `stacktrace`, without changing the reply or the logs:
-  #
-  #   * the handler fails: `[:grpc, :server, :rpc, :exception]`;
-  #   * the handler returns but the reply can't be encoded, compressed or sent:
-  #     `[:grpc, :server, :rpc, :send_error]`;
-  #   * the client goes away mid-reply: only `[:grpc, :server, :rpc, :abort]`,
-  #     because nothing raised.
+  # Each failure must publish a signal with `kind`, `reason` and `stacktrace`.
+  # The reply and the logs must not change.
   use ExUnit.Case, async: false
 
   import GRPC.DataCase, only: [attach_telemetry: 1]
@@ -19,7 +13,7 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
   @stop [:grpc, :server, :rpc, :stop]
   @path "/helloworld.Greeter/SayHello"
 
-  # Compressors that fail. The client below accepts both names.
+  # Compressors that fail. The client accepts both names.
   defmodule RaisingCompressor do
     @behaviour GRPC.Compressor
     def name, do: "raising"
@@ -27,8 +21,7 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
     def decompress(data), do: data
   end
 
-  # Returns iodata just over the 2 GiB message limit. The list repeats one 1 MiB
-  # binary, so it holds 1 MiB of memory.
+  # Gives iodata a little larger than the 2 GiB limit. It uses only 1 MiB of memory.
   defmodule HugeCompressor do
     @behaviour GRPC.Compressor
     def name, do: "huge"
@@ -46,10 +39,10 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
     def say_hello(%{name: "rpc_error"}, _stream),
       do: raise(GRPC.RPCError, status: :not_found, message: "nope")
 
-    # The codec rejects a string field that holds an integer.
+    # The codec cannot encode an integer in a string field.
     def say_hello(%{name: "encode"}, _stream), do: %Helloworld.HelloReply{message: 123}
 
-    # The client below accepts `identity` only, so the adapter refuses to send gzip.
+    # The client does not accept gzip, so the adapter does not send the reply.
     def say_hello(%{name: "send"}, stream) do
       GRPC.Server.set_compressor(stream, GRPC.Compressor.Gzip)
       %Helloworld.HelloReply{message: "ok"}
@@ -68,14 +61,14 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
     def say_hello(req, _stream), do: %Helloworld.HelloReply{message: req.name}
   end
 
-  # Sends replies until the adapter stops it, and tells the test its pid.
+  # Sends replies until the adapter stops it. Sends its pid to the test.
   defmodule StreamServer do
     use GRPC.Server, service: Routeguide.RouteGuide.Service
 
     def list_features(_rectangle, stream) do
       send(:persistent_term.get({__MODULE__, :test_pid}), {:handler, self()})
 
-      # Bounded, so a failing test doesn't leave the handler running.
+      # The limit stops the handler if a test fails.
       Enum.each(1..500, fn i ->
         GRPC.Server.send_reply(stream, %Routeguide.Feature{name: "feature #{i}"})
 
@@ -87,7 +80,7 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
     end
   end
 
-  # `:logger` handler that forwards error events to the test process.
+  # `:logger` handler. It sends error events to the test process.
   def log(%{level: :error} = event, %{config: pid}), do: send(pid, {:log, event})
   def log(_event, _config), do: :ok
 
@@ -171,7 +164,6 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
     end
 
     # The compressor runs in the Cowboy handler process, not in the RPC process.
-    # Before, the raise crashed that process and the client got no `grpc-status`.
     test "a compressor that raises publishes :send_error and replies INTERNAL" do
       assert %{"grpc-status" => "13", "grpc-message" => "Internal%20Server%20Error"} =
                call("raising_compressor")
@@ -187,9 +179,7 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
       refute_receive {:telemetry, @exception, _, %{server: ErrorServer}}, 10
     end
 
-    # `GRPC.Message.to_data/2` returns `{:error, message}` for a message over its
-    # limit. The limit is 2 GiB and the adapter doesn't pass a smaller one, so the
-    # compressor returns iodata just over it.
+    # The adapter uses the 2 GiB default limit, so the reply must be larger than 2 GiB.
     test "a reply over the message limit publishes :send_error and replies INTERNAL" do
       assert %{"grpc-status" => "13", "grpc-message" => message} = call("oversize")
       assert URI.decode(message) =~ "Encoded message is too large"
@@ -206,11 +196,7 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
     end
   end
 
-  # The server writes the reply by sending a message to the Cowboy connection
-  # process, so a dead socket doesn't make that send fail in the RPC process. Cowboy
-  # ends the stream, the adapter stops the RPC process and publishes `:abort`. No
-  # `kind`, `reason` or `stacktrace` exist, since nothing raised, and neither `:stop`
-  # nor `:exception` fires.
+  # Nothing raises when the client disconnects. The adapter publishes only `:abort`.
   describe "the client disconnects while the reply is sent" do
     setup do
       attach_telemetry(@abort)
@@ -234,7 +220,7 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
           assert_receive {:handler, handler}, 5_000
           monitor = Process.monitor(handler)
 
-          # The reply is under way.
+          # The server has started to send the reply.
           assert {:response, :nofin, 200, _headers} = :gun.await(conn, ref, 5_000)
           assert {:data, :nofin, _data} = :gun.await(conn, ref, 5_000)
 
@@ -257,7 +243,7 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
           refute_receive {:telemetry, @exception, _, %{server: StreamServer}}, 10
           refute_receive {:telemetry, @send_error, _, %{server: StreamServer}}, 10
 
-          # Nothing in the default log either.
+          # The default config logs nothing.
           assert [] = error_logs_mentioning(StreamServer)
         end)
       end
@@ -269,9 +255,7 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
     refute_receive {:telemetry, @exception, _, %{server: ErrorServer}}, 200
   end
 
-  # The default config logs what it logged before telemetry covered these paths:
-  # one `crash_reason` report per failure the adapter already logged, and
-  # nothing for a failed send.
+  # Each logged failure gives one `crash_reason` report. A failed send logs nothing.
   describe "log output with the default config" do
     test "raise logs the handler error and the adapter report" do
       call("raise")
@@ -317,8 +301,8 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
       refute_receive {:log, _}, 200
     end
 
-    # Cowboy used to log the crash of its handler process. The adapter now logs
-    # the raise once, with the same `crash_reason` shape as a handler failure.
+    # Before, Cowboy logged the crash of its handler process. Now the adapter logs
+    # it one time, with `crash_reason`.
     test "a raising compressor logs one adapter report" do
       call("raising_compressor")
 
@@ -336,8 +320,7 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
     end
   end
 
-  # Error logs about `module`. Other test modules leave RPCs running that log
-  # errors too, so this drops the ones that don't mention it.
+  # Gives the error logs that name `module`. RPCs from other tests can also log errors.
   defp error_logs_mentioning(module) do
     receive do
       {:log, event} ->
@@ -349,7 +332,7 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
     end
   end
 
-  # `:socket_closed` kills the Gun process, which closes the socket with no HTTP/2 goodbye.
+  # `:socket_closed` stops the Gun process. The socket closes without an HTTP/2 GOAWAY.
   defp disconnect(:socket_closed, conn, _ref), do: Process.exit(conn, :kill)
   defp disconnect(:connection_closed, conn, _ref), do: :gun.close(conn)
   defp disconnect(:stream_cancelled, conn, ref), do: :gun.cancel(conn, ref)

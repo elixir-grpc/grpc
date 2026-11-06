@@ -72,16 +72,20 @@ This unified model allows developers to build composable and reliable streaming 
 
 ---
 
-## Reporting server errors
+## Report server errors
 
-When a handler fails, the client gets an error status and the server keeps running. To tell an error reporter such as Sentry or Bugsnag, use one of two signals. Both are on by default.
+When a handler fails, the client gets an error status and the server continues to run. To send the error to an error reporter, for example Sentry or Bugsnag, use one of two signals. Both signals are on by default.
 
-* **Telemetry.** Two events carry `:kind`, `:reason` and `:stacktrace`. `[:grpc, :server, :rpc, :exception]` is published when the handler raises, throws or exits. `[:grpc, :server, :rpc, :send_error]` is published when the handler returned but the reply failed: the codec rejects it, a compressor raises, or the adapter refuses to send it. They are separate because the handler's telemetry span has closed by the time the reply fails. See `GRPC.Telemetry` for the metadata of each. `:send_error` has two measurements: `:duration`, the native time from the request's arrival to the failure, and `:monotonic_time`, the time of the failure (`System.monotonic_time/0`). Its metadata is `:stream`, `:server`, `:endpoint`, `:path`, `:kind`, `:reason` and `:stacktrace`.
-* **Logger.** The Cowboy adapter logs a handler failure, an encoding failure or a raising compressor with `:crash_reason` metadata, which Logger-based reporters read, such as `Sentry.LoggerHandler`. The `exception_log_filter` option can drop these logs. A reply the adapter refuses to send is not logged.
+* **Telemetry.** Two events have `:kind`, `:reason` and `:stacktrace`:
+  * `[:grpc, :server, :rpc, :exception]`: the handler raises, throws or exits.
+  * `[:grpc, :server, :rpc, :send_error]`: the handler returns, but the reply fails. The codec cannot encode it, a compressor raises, or the adapter does not send it.
 
-A client that disconnects while the server is still replying is not an error the server can raise: writing a reply is an asynchronous message to the connection process, so the call never fails. The adapter stops the RPC and publishes `[:grpc, :server, :rpc, :abort]` with the exit reason (`:shutdown`). It has no `:kind` or `:stacktrace`, and nothing is logged. Attach to `:abort` if you want to count these.
+  The two events are different because the telemetry span of the handler is closed when the reply fails. Refer to `GRPC.Telemetry` for the metadata of each event. `:send_error` has two measurements. `:duration` is the native time from the start of the pipeline to the failure. `:monotonic_time` is the time of the failure (`System.monotonic_time/0`). Its metadata is `:stream`, `:server`, `:endpoint`, `:path`, `:kind`, `:reason` and `:stacktrace`.
+* **Logger.** The Cowboy adapter logs these failures with `:crash_reason` metadata: a handler failure, an encoding failure and a compressor that raises. Logger-based reporters, for example `Sentry.LoggerHandler`, read this metadata. The `exception_log_filter` option can remove these logs. The adapter does not log a reply that it does not send.
 
-To report from telemetry, attach a handler at application start:
+A client that disconnects during the reply does not cause an error on the server. To write a reply, the server sends a message to the connection process, so the call does not fail. The adapter stops the RPC and publishes `[:grpc, :server, :rpc, :abort]` with the exit reason (`:shutdown`). This event has no `:kind` and no `:stacktrace`, and the adapter logs nothing. To count these disconnects, attach to `:abort`.
+
+To send reports from telemetry, attach a handler when the application starts:
 
 ```elixir
 :telemetry.attach_many(
@@ -92,7 +96,7 @@ To report from telemetry, attach a handler at application start:
 )
 
 defmodule MyApp.GRPCErrors do
-  # Statuses a handler returns on purpose are not worth a report.
+  # A handler returns these statuses on purpose. Do not report them.
   def handle_event(_event, _measurements, %{reason: %GRPC.RPCError{status: status}}, _config)
       when status in [1, 3, 5, 6, 7, 9, 16],
       do: :ok
@@ -109,4 +113,4 @@ defmodule MyApp.GRPCErrors do
 end
 ```
 
-The handler runs in the process that failed, so keep it short. Swap the `Sentry` calls for your reporter's.
+The handler runs in the process that failed. Keep the handler short. Replace the `Sentry` calls with the calls of your reporter.

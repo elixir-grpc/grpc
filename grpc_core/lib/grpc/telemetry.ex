@@ -48,10 +48,10 @@ defmodule GRPC.Telemetry do
       * `:duration` - the duration as measured through `System.monotonic_time()`
         for the execution since the start of the pipeline until the exception happened.
     * `[:grpc, :server, :rpc, :send_error]` - Published by the Cowboy adapter when the
-      handler returned but encoding, compressing or sending the reply failed. See
+      handler returns but the adapter cannot encode, compress or send the reply. See
       "Failures while sending the reply" below.
-      * `:duration` - the duration as measured through `System.monotonic_time()`
-        since the start of the pipeline until the failure.
+      * `:duration` - the time from the start of the pipeline to the failure, as
+        measured through `System.monotonic_time()`.
       * `:monotonic_time` - the time of the failure.
     * `[:grpc, :server, :rpc, :abort]` - Published when the adapter stops an in-flight
       RPC: expired deadline, client cancellation or a dropped connection. The exit
@@ -93,40 +93,42 @@ defmodule GRPC.Telemetry do
 
   ### Failures while sending the reply
 
-  The handler can return and the server can still fail to answer. The Cowboy
-  adapter publishes `[:grpc, :server, :rpc, :send_error]` when:
+  The handler can return, and the server can still fail to send the reply. The
+  Cowboy adapter publishes `[:grpc, :server, :rpc, :send_error]` in these conditions:
 
-    * the codec rejects the reply: `:reason` is the exception the codec raised;
-    * a compressor (or the codec's `pack_for_channel/1`) raises: `:reason` is the
-      exception it raised, and the client gets `INTERNAL` where it used to get no
-      `grpc-status`;
-    * the adapter refuses to send the reply, for example a compressor the client did
-      not accept, or a reply over the message limit: `:reason` is the `GRPC.RPCError`
-      the client received, and `:stacktrace` is the adapter process's stack where it
-      noticed the failure.
+    * The codec cannot encode the reply. `:reason` is the exception from the codec.
+    * A compressor, or the codec's `pack_for_channel/1`, raises an exception.
+      `:reason` is that exception. The client gets `INTERNAL`. Before, the client
+      got no `grpc-status`.
+    * The adapter does not send the reply. Examples are a compressor that the client
+      does not accept, and a reply that is larger than the message limit. `:reason`
+      is the `GRPC.RPCError` that the client gets. `:stacktrace` is the stack of the
+      adapter process at the point where it found the failure.
 
-  This is a separate event, not a second `:exception`. The `:telemetry.span/3`
-  around the handler has closed by then (`:stop` came first for a call that
-  returned), so the event has no `:function_name` or `:telemetry_span_context`, and
-  a tracer that pairs span events by that context never sees it. Its metadata has
-  `:path` instead.
+  This event is not a second `:exception`. The `:telemetry.span/3` around the
+  handler is closed at this time. For a call that returns, `:stop` comes first. Thus
+  the event has no `:function_name` and no `:telemetry_span_context`. A tracer that
+  pairs span events by that context does not see it. The metadata has `:path`
+  instead.
 
-  ### A client that goes away
+  ### A client that disconnects
 
-  When the client closes the socket, closes the connection or cancels the stream
-  while the server is still replying, nothing raises on the server. The adapter
-  stops the RPC process and publishes `[:grpc, :server, :rpc, :abort]`, with the
-  exit reason (`:shutdown`) and no `:kind` or `:stacktrace`. `:stop`, `:exception`
-  and `:send_error` are not published, and nothing is logged. Writing a reply is
-  an asynchronous message to the Cowboy process, so the sending call never fails.
+  The client can close the socket, close the connection or cancel the stream while
+  the server sends the reply. In these conditions, nothing raises on the server.
+  The adapter stops the RPC process and publishes `[:grpc, :server, :rpc, :abort]`.
+  The event has the exit reason (`:shutdown`), but no `:kind` and no `:stacktrace`.
+  The adapter does not publish `:stop`, `:exception` or `:send_error`, and it logs
+  nothing. To write a reply, the server sends a message to the Cowboy process. Thus
+  the send call does not fail.
 
-  ### Forwarding server errors to an error reporter
+  ### Send server errors to an error reporter
 
-  An error reporter that reads `:exception` and `:send_error` events gets every
-  failure above. One that reads Logger reports needs no event: the Cowboy adapter
-  logs a handler failure, an encoding failure or a raising compressor with
-  `:crash_reason` metadata, unless `exception_log_filter` drops it. A reply the
-  adapter refuses to send is not logged.
+  An error reporter that reads `:exception` and `:send_error` events gets all the
+  failures above. An error reporter that reads Logger reports does not need these
+  events. The Cowboy adapter logs these failures with `:crash_reason` metadata: a
+  handler failure, an encoding failure and a compressor that raises.
+  `exception_log_filter` can remove these logs. The adapter does not log a reply
+  that it does not send.
   """
 
   require Logger
