@@ -90,8 +90,9 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   @doc """
   Consume an incoming data or trailers/headers.
 
-  Returns `:ok`, or `{:error, reason}` when the stream response process
-  is no longer alive (e.g. the caller gave up on the request).
+  Returns `:ok`, `:cancel` when the request should be reset because the
+  response is over the message size limit, or `{:error, reason}` when the stream
+  response process is no longer alive (e.g. the caller gave up on the request).
   """
   def consume(pid, type, data) when type in @accepted_types do
     GenServer.call(pid, {:consume_response, {type, data}})
@@ -123,9 +124,9 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   end
 
   # After a message over the size limit the rest of the body can't be framed
-  # any more, so it is dropped.
+  # any more, so it is dropped, and the connection process is told to cancel again.
   def handle_call({:consume_response, {:data, _data}}, _from, %{failed: true} = state) do
-    {:reply, :ok, state, {:continue, :produce_response}}
+    {:reply, :cancel, state, {:continue, :produce_response}}
   end
 
   def handle_call({:consume_response, {:data, data}}, _from, state) do
@@ -141,21 +142,25 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
     # the same HTTP/2 data frame.
     combined = buffer <> data
 
-    new_state =
-      case drain_buffer(combined, state.compressor, codec, res_mod, responses) do
-        {new_buffer, new_responses} ->
-          %{state | buffer: new_buffer, responses: new_responses}
+    case drain_buffer(combined, state.compressor, codec, res_mod, responses) do
+      {new_buffer, new_responses} ->
+        new_state = %{state | buffer: new_buffer, responses: new_responses}
+        {:reply, :ok, new_state, {:continue, :produce_response}}
 
-        {:error, error, new_responses} ->
-          %{
-            state
-            | buffer: <<>>,
-              responses: :queue.in({:error, error}, new_responses),
-              failed: true
-          }
-      end
+      # The error ends the stream, and the reply `:cancel` asks the connection
+      # process to reset the request, so no more of the message is sent. It then
+      # sends nothing else for this request, so `done` is set here.
+      {:error, error, new_responses} ->
+        new_state = %{
+          state
+          | buffer: <<>>,
+            responses: :queue.in({:error, error}, new_responses),
+            failed: true,
+            done: true
+        }
 
-    {:reply, :ok, new_state, {:continue, :produce_response}}
+        {:reply, :cancel, new_state, {:continue, :produce_response}}
+    end
   end
 
   def handle_call(
