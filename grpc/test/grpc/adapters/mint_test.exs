@@ -530,6 +530,46 @@ defmodule GRPC.Client.Adapters.MintTest do
       assert {:error, message} = Mint.validate_opts(retry: :forever)
       assert message =~ ":retry must be a non-negative integer or :infinity"
     end
+
+    test "accepts every option the adapter reads, and the one the pool adds" do
+      assert :ok ==
+               Mint.validate_opts(
+                 retry: 1,
+                 transport_opts: [nodelay: false],
+                 client_settings: [max_frame_size: 16_384],
+                 keepalive: 30_000,
+                 keepalive_tolerance: 2,
+                 config_options: [],
+                 logical_connection_ref: make_ref()
+               )
+    end
+
+    test "rejects an unknown option and lists the valid ones" do
+      assert {:error, message} = Mint.validate_opts(certfile: "client.pem")
+      assert message =~ "unknown option(s) for the Mint adapter: [:certfile]"
+      assert message =~ ":transport_opts"
+      assert message =~ ":keepalive_tolerance"
+      refute message =~ ":logical_connection_ref"
+    end
+
+    test "points :custom_opts at :cred" do
+      assert {:error, message} =
+               Mint.validate_opts(custom_opts: [certfile: "client.pem"], retry: 1)
+
+      assert message =~ "[:custom_opts]"
+      assert message =~ ":cred"
+    end
+
+    test "GRPC.Stub.connect/2 raises for an unknown adapter option", %{port: port} do
+      assert_raise ArgumentError,
+                   ~r/unknown option\(s\) for the Mint adapter: \[:custom_opts\]/,
+                   fn ->
+                     GRPC.Stub.connect("localhost:#{port}",
+                       adapter: Mint,
+                       adapter_opts: [custom_opts: [certfile: "client.pem"]]
+                     )
+                   end
+    end
   end
 
   describe "connect/2 with hostname" do

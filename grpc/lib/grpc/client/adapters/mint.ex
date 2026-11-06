@@ -60,8 +60,22 @@ if Code.ensure_loaded?(Mint.HTTP) do
       :exit, reason -> {:error, reason}
     end
 
+    # Every key `connect/2` and the connection pool read from the adapter options.
+    # `:logical_connection_ref` is added by the pool, not by the caller.
+    @valid_opts [
+      :retry,
+      :transport_opts,
+      :client_settings,
+      :keepalive,
+      :keepalive_tolerance,
+      :config_options,
+      :logical_connection_ref
+    ]
+
     @impl true
-    def validate_opts(opts), do: validate_retry(opts[:retry])
+    def validate_opts(opts) do
+      with :ok <- validate_known_opts(opts), do: validate_retry(opts[:retry])
+    end
 
     @impl true
     def disconnect(%{adapter_payload: %{conn_pid: pid}} = channel)
@@ -134,6 +148,27 @@ if Code.ensure_loaded?(Mint.HTTP) do
       } = stream
 
       ConnectionProcess.cancel(conn_pid, request_ref)
+    end
+
+    defp validate_known_opts(opts) do
+      case for({key, _value} <- opts, key not in @valid_opts, do: key) do
+        [] -> :ok
+        unknown -> {:error, unknown_opts_message(unknown)}
+      end
+    end
+
+    defp unknown_opts_message(unknown) do
+      message =
+        "unknown option(s) for the Mint adapter: #{inspect(unknown)}. " <>
+          "Valid options are: #{inspect(@valid_opts -- [:logical_connection_ref])}."
+
+      if :custom_opts in unknown do
+        message <>
+          " TLS certificates and keys go in the :cred option of GRPC.Stub.connect/2, " <>
+          "as GRPC.Credential.new(ssl: [...])."
+      else
+        message
+      end
     end
 
     defp validate_retry(nil), do: :ok
