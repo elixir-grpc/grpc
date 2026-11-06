@@ -82,8 +82,16 @@ defmodule GRPC.Client.Pool.Server do
   @impl GenServer
   def handle_call(:take_channel, {caller_pid, _tag} = _from, state) do
     case Implementation.take_channel(state, caller_pid) do
-      {nil, _monitor_ref, state} -> {:reply, nil, state}
-      {channel, monitor_ref, state} -> {:reply, {channel, monitor_ref}, state}
+      # No connection at all (every one died and the pool could not open a new
+      # one) differs from every connection being at its stream limit.
+      {nil, _monitor_ref, %{channels: channels} = state} when map_size(channels) == 0 ->
+        {:reply, {:error, :no_connection}, state}
+
+      {nil, _monitor_ref, state} ->
+        {:reply, nil, state}
+
+      {channel, monitor_ref, state} ->
+        {:reply, {channel, monitor_ref}, state}
     end
   end
 

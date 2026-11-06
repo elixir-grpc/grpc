@@ -403,6 +403,9 @@ defmodule GRPC.Stub do
       {wrapped, actual_channel, monitor_ref} ->
         {:ok, actual_channel, {wrapped, actual_pool_ref, monitor_ref}}
 
+      {:error, :no_connection} ->
+        unavailable_error(channel.ref)
+
       nil ->
         {:error,
          GRPC.RPCError.exception(GRPC.Status.resource_exhausted(), "no pool channel available")}

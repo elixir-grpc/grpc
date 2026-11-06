@@ -27,6 +27,8 @@
   * The Mint adapter now returns `{:error, %GRPC.RPCError{}}` instead of raising when a response's HTTP status is not 200, like the Gun adapter.
   * A Gun connect to a slow or unreachable host no longer blocks other connects on the node for up to `:await_timeout`. The handshake ran inside `init/1`, under the node-wide `GRPC.Client.Supervisor`, so every other connect waited for it. The connection process now does the handshake after it starts, and `connect/2` waits for it outside the supervisor. Failed connects return the same errors as before.
   * Gun calls on a connection that is gone now return `{:error, %GRPC.RPCError{status: UNAVAILABLE}}` instead of exiting, raising `MatchError`, or waiting for the deadline. This covers a connection process that died or was disconnected after the channel was checked, and in-flight calls when it stops normally (`GRPC.Stub.disconnect/1`), which used to wait for their deadline. Failed `send_headers`, `send_request`, `send_data` and `end_stream` calls report the error from `GRPC.Stub.recv/2`, and `GRPC.Stub.cancel/1` returns `:ok`. Errors Gun reports as `{:down, _}`, `{:noproc, _}`, `{:normal, _}` or `{:shutdown, _}` also map to `UNAVAILABLE` instead of `UNKNOWN`.
+  * With the pool enabled, a call made when every pooled connection is gone and the pool cannot open a new one (for example the server stopped and Gun gave up) now returns `UNAVAILABLE` instead of `RESOURCE_EXHAUSTED` ("no pool channel available"). `RESOURCE_EXHAUSTED` stays for a pool at its stream or overflow limit.
+  * The Gun adapter now honors `:retry` and `:retry_fun` in `:adapter_opts`. It used to overwrite them with its own defaults.
 
 ## v1.0.6
 
