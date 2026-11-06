@@ -448,7 +448,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
         attempt_reconnect(clean_state)
       else
         send(clean_state.parent, {:elixir_grpc, :connection_down, self()})
-        {:noreply, clean_state}
+        {:stop, :normal, clean_state}
       end
     end
 
@@ -470,7 +470,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       )
 
       send(state.parent, {:elixir_grpc, :connection_down, self()})
-      {:noreply, state}
+      {:stop, :normal, state}
     end
 
     defp attempt_reconnect(state) do

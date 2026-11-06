@@ -85,6 +85,9 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
       {:ok, gun_pid} ->
         case :gun.await_up(gun_pid, await_timeout) do
           {:ok, :http2} ->
+            # Monitor Gun so we don't keep casting into a dead pid if Gun
+            # exhausts its reconnect retries (or crashes)
+            Process.monitor(gun_pid)
             {:ok, %{gun_pid: gun_pid, response_processes: %{}}}
 
           {:ok, proto} ->
@@ -156,6 +159,16 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
       end)
 
     {:noreply, new_state}
+  end
+
+  # Gun is gone for good (reconnect retries exhausted or a crash). Fail all
+  # in-flight streams and stop
+  def handle_info({:DOWN, _monitor_ref, :process, gun_pid, reason}, %{gun_pid: gun_pid} = state) do
+    Enum.each(state.response_processes, fn {_stream_ref, {response_pid, _monitor_ref}} ->
+      send(response_pid, {:connection_down, reason})
+    end)
+
+    {:stop, {:shutdown, {:gun_down, reason}}, state}
   end
 
   def handle_info({:DOWN, monitor_ref, :process, _pid, _reason}, state) do

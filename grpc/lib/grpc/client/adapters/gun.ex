@@ -319,9 +319,19 @@ if Code.ensure_loaded?(:gun) do
              "timeout when waiting for server"
            )}
 
-        {:error, {reason, msg}} when reason in [:stream_error, :connection_error] ->
+        # Connection-level failures are UNAVAILABLE per the gRPC status spec:
+        # the RPC never completed on a live connection, so callers can safely
+        # retry (deadline errors above stay DEADLINE_EXCEEDED).
+        {:error, {:connection_error, msg}} ->
           {:error,
-           GRPC.RPCError.exception(GRPC.Status.internal(), "#{inspect(reason)}: #{inspect(msg)}")}
+           GRPC.RPCError.exception(
+             GRPC.Status.unavailable(),
+             "connection_error: #{inspect(msg)}"
+           )}
+
+        {:error, {:stream_error, msg}} ->
+          {:error,
+           GRPC.RPCError.exception(GRPC.Status.internal(), "stream_error: #{inspect(msg)}")}
 
         {:error, {reason, msg}} ->
           {:error,
