@@ -2,7 +2,7 @@ defmodule GRPC.Server.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/elixir-grpc/grpc_server"
-  @version "1.0.5"
+  @version "1.0.6"
 
   def project do
     [
@@ -34,10 +34,10 @@ defmodule GRPC.Server.MixProject do
   defp deps do
     [
       # {:grpc_core, path: "../grpc_core"},
-      {:grpc_core, "~> 1.0.5"},
+      {:grpc_core, "~> 1.0.6"},
       {:protobuf, "~> 0.17"},
       {:cowboy, "~> 2.14"},
-      {:cowlib, "~> 2.14"},
+      {:cowlib, "~> 2.21"},
       {:flow, "~> 1.2"},
       {:protobuf_generate, "~> 0.1.3", only: [:dev, :test]},
       {:ex_parameterized, "~> 1.3.7", only: :test},
