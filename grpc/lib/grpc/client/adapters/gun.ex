@@ -373,16 +373,17 @@ if Code.ensure_loaded?(:gun) do
     end
 
     defp recv_body(stream_payload, deadline) do
-      recv_body(stream_payload, "", deadline)
+      recv_body(stream_payload, [], deadline)
     end
 
     defp recv_body(stream_payload, acc, deadline) do
       case recv_data_or_trailers(stream_payload, deadline) do
         {:data, data} ->
-          recv_body(stream_payload, <<acc::binary, data::binary>>, deadline)
+          recv_body(stream_payload, [acc, data], deadline)
 
         {:trailers, trailers} ->
-          {:ok, acc, GRPC.Transport.HTTP2.decode_headers(trailers)}
+          body = IO.iodata_to_binary(acc)
+          {:ok, body, GRPC.Transport.HTTP2.decode_headers(trailers)}
 
         err ->
           err

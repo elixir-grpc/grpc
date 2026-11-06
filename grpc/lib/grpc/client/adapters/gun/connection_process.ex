@@ -23,6 +23,7 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   @deadline_cancel_grace_ms 100
 
   require Logger
+  alias GRPC.Client.Adapters.CallExit
   alias GRPC.Client.Adapters.Gun.StreamResponseProcess
   alias GRPC.Client.Telemetry
 
@@ -46,16 +47,18 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
       :ok
   end
 
+  # Calls carrying headers or bodies go through CallExit, so an exit (busy or dead
+  # connection process) does not leak them into logs and telemetry.
   def request(connection_process_pid, path, headers, body, deadline \\ :infinity) do
-    GenServer.call(connection_process_pid, {:request, path, headers, body, deadline})
+    CallExit.call(connection_process_pid, {:request, path, headers, body, deadline})
   end
 
   def open_stream(connection_process_pid, path, headers, deadline \\ :infinity) do
-    GenServer.call(connection_process_pid, {:open_stream, path, headers, deadline})
+    CallExit.call(connection_process_pid, {:open_stream, path, headers, deadline})
   end
 
   def send_data(connection_process_pid, stream_ref, fin, data) do
-    GenServer.call(connection_process_pid, {:send_data, stream_ref, fin, data})
+    CallExit.call(connection_process_pid, {:send_data, stream_ref, fin, data})
   end
 
   def cancel(connection_process_pid, stream_ref) do
