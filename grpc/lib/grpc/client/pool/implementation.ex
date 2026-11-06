@@ -32,7 +32,9 @@ defmodule GRPC.Client.Pool.Implementation do
     # connection instead of all slots aliasing one shared process.
     connect_channel = %GRPC.Channel{base_channel | ref: nil}
 
-    case connect_channel.adapter.connect(connect_channel, config.adapter_opts) do
+    adapter_opts = Keyword.put(config.adapter_opts, :logical_connection_ref, base_channel.ref)
+
+    case connect_channel.adapter.connect(connect_channel, adapter_opts) do
       {:ok, %GRPC.Channel{} = channel} ->
         channel_id = make_ref()
 
