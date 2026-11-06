@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## v1.0.6
+
+No changes. Released for version sync with `:grpc_server`
+
+## v1.0.5
 
 ### Behavior Changes
 
