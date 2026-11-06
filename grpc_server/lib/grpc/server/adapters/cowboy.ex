@@ -27,6 +27,9 @@ defmodule GRPC.Server.Adapters.Cowboy do
       If both `:net` and `:ip` options are given, make sure they are compatible
       (i.e. give a IPv4 for `:inet` and IPv6 for `:inet6`). The default is to listen on all interfaces.
     * `:ipv6_v6only` - If true, only bind on IPv6 addresses (default: `false`).
+
+  Accepted sockets have `TCP_NODELAY` on, which is Ranch's default for both `ranch_tcp` and `ranch_ssl`. Small
+  writes go out at once instead of waiting on Nagle's algorithm and delayed ACKs.
   """
   @impl true
   def start(endpoint, servers, port, opts) do
