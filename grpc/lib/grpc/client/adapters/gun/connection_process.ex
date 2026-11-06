@@ -29,6 +29,9 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   # Extra time for the call on top of `:await_timeout`. The connection process
   # replies by the time its own timer fires, so this only covers scheduling.
   @await_up_call_margin_ms 1_000
+  # Gun counts a stream's `flow` in DATA frames, and a peer sends at most
+  # 16 KiB per frame unless the local settings raise it.
+  @frame_size 16_384
 
   require Logger
   alias GRPC.Client.Adapter
@@ -113,6 +116,7 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
     metadata = metadata(channel, logical_ref)
     Telemetry.execute(:started, %{generation: 0, active_streams: 0}, metadata)
     {await_timeout, open_opts} = Map.pop(open_opts, :await_timeout, @default_await_timeout)
+    {response_window, open_opts} = Map.pop(open_opts, :response_window, :infinity)
 
     case open(host, port, open_opts) do
       {:ok, gun_pid} ->
@@ -125,6 +129,7 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
            channel: channel,
            logical_connection_ref: logical_ref,
            gun_pid: gun_pid,
+           flow: window_to_flow(response_window),
            response_processes: %{},
            generation: 0,
            max_concurrent_streams: :unknown,
@@ -160,7 +165,7 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
         %{gun_pid: gun_pid} = state
       ) do
     with {:ok, response_pid} <- start_response_process(),
-         stream_ref <- :gun.post(gun_pid, path, headers, body, %{reply_to: response_pid}),
+         stream_ref <- :gun.post(gun_pid, path, headers, body, req_opts(state, response_pid)),
          state <- put_response_pid(state, stream_ref, response_pid, caller_pid),
          :ok <- StreamResponseProcess.track(response_pid, self(), stream_ref, deadline) do
       {:reply, {:ok, %{stream_ref: stream_ref, response_pid: response_pid}}, state}
@@ -175,7 +180,7 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
         %{gun_pid: gun_pid} = state
       ) do
     with {:ok, response_pid} <- start_response_process(),
-         stream_ref <- :gun.post(gun_pid, path, headers, %{reply_to: response_pid}),
+         stream_ref <- :gun.post(gun_pid, path, headers, req_opts(state, response_pid)),
          state <- put_response_pid(state, stream_ref, response_pid, caller_pid),
          :ok <- StreamResponseProcess.track(response_pid, self(), stream_ref, deadline) do
       {:reply, {:ok, %{stream_ref: stream_ref, response_pid: response_pid}}, state}
@@ -404,6 +409,16 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   defp via(channel) do
     {:via, Registry, {GRPC.Client.Registry, {__MODULE__, owner_key(channel)}}}
   end
+
+  # Gun sends each DATA frame to `reply_to`, and stops reopening the stream's window
+  # once `flow` frames are unread. `StreamResponseProcess` returns the frames it hands out.
+  defp req_opts(%{flow: :infinity}, response_pid), do: %{reply_to: response_pid}
+  defp req_opts(%{flow: flow}, response_pid), do: %{reply_to: response_pid, flow: flow}
+
+  defp window_to_flow(:infinity), do: :infinity
+
+  defp window_to_flow(bytes) when is_integer(bytes),
+    do: max(div(bytes + @frame_size - 1, @frame_size), 1)
 
   defp start_response_process do
     StreamResponseProcess.start_link()
