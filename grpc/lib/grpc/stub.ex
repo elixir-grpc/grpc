@@ -260,14 +260,7 @@ defmodule GRPC.Stub do
       through the :adapter option for GRPC.Stub.connect/3"
     end
 
-    ip_type =
-      case :inet.parse_address(to_charlist(host)) do
-        {:ok, {_, _, _, _}} -> "ipv4"
-        {:ok, {_, _, _, _, _, _, _, _}} -> "ipv6"
-        {:error, _} -> "ipv4"
-      end
-
-    connect("#{ip_type}:#{host}:#{port}", opts)
+    connect(GRPC.Client.Connection.EndpointResolver.build_target(host, port), opts)
   end
 
   @doc """
