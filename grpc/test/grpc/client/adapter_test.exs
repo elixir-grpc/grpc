@@ -15,7 +15,9 @@ defmodule GRPC.Client.AdapterTest do
     test "Gun request: headers and body are redacted, the shape and path are kept" do
       pid = dead_pid()
 
-      assert {:noproc, {GenServer, :call, [^pid, {:request, @path, :redacted, :redacted}, 5_000]}} =
+      assert {:noproc,
+              {GenServer, :call,
+               [^pid, {:request, @path, :redacted, :redacted, :infinity}, 5_000]}} =
                catch_exit(GunConnectionProcess.request(pid, @path, @headers, @body))
     end
 
@@ -23,7 +25,7 @@ defmodule GRPC.Client.AdapterTest do
       pid = dead_pid()
       ref = make_ref()
 
-      assert {:noproc, {GenServer, :call, [^pid, {:open_stream, @path, :redacted}, _]}} =
+      assert {:noproc, {GenServer, :call, [^pid, {:open_stream, @path, :redacted, :infinity}, _]}} =
                catch_exit(GunConnectionProcess.open_stream(pid, @path, @headers))
 
       assert {:noproc, {GenServer, :call, [^pid, {:send_data, ^ref, :fin, :redacted}, _]}} =
@@ -49,8 +51,9 @@ defmodule GRPC.Client.AdapterTest do
     test "a call timeout to a busy process is redacted too" do
       pid = spawn_link(fn -> Process.sleep(:infinity) end)
 
-      assert {:timeout, {GenServer, :call, [^pid, {:request, @path, :redacted, :redacted}, 50]}} =
-               catch_exit(Adapter.call(pid, {:request, @path, @headers, @body}, 50))
+      assert {:timeout,
+              {GenServer, :call, [^pid, {:request, @path, :redacted, :redacted, :infinity}, 50]}} =
+               catch_exit(Adapter.call(pid, {:request, @path, @headers, @body, :infinity}, 50))
     end
 
     test "the client span neither logs nor emits the headers or the body" do
