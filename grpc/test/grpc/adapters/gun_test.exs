@@ -295,7 +295,9 @@ defmodule GRPC.Client.Adapters.GunTest do
 
       monitor_ref = Process.monitor(response_pid)
 
-      assert_receive {:DOWN, ^monitor_ref, :process, ^response_pid, :normal}
+      # The deadline has already passed, so the process may exit before the monitor is set up.
+      assert_receive {:DOWN, ^monitor_ref, :process, ^response_pid, reason}
+                     when reason in [:normal, :noproc]
 
       refute Map.has_key?(
                :sys.get_state(connected.adapter_payload.conn_pid).response_processes,
@@ -332,7 +334,10 @@ defmodule GRPC.Client.Adapters.GunTest do
 
         monitor_ref = Process.monitor(response_pid)
 
-        assert_receive {:DOWN, ^monitor_ref, :process, ^response_pid, :normal}
+        # The deadline has already passed, so the process may exit before the monitor is set up.
+        assert_receive {:DOWN, ^monitor_ref, :process, ^response_pid, reason}
+                       when reason in [:normal, :noproc]
+
         refute Map.has_key?(:sys.get_state(conn_pid).response_processes, stream_ref)
       end
 

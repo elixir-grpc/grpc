@@ -216,7 +216,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
     @impl true
     def handle_info(:reconnect, state) do
-      attempt_reconnect(state)
+      maybe_attempt_reconnect(state)
     end
 
     def handle_info(:keepalive, state) do
@@ -556,16 +556,11 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
       if count > 0, do: emit_streams(clean_state)
 
-      if clean_state.retry > 0 do
-        # A failed attempt already scheduled the next retry; ignore duplicate close events.
-        if clean_state.retry_attempt > 0 do
-          {:noreply, clean_state}
-        else
-          attempt_reconnect(clean_state)
-        end
+      # A failed attempt already scheduled the next retry; ignore duplicate close events.
+      if clean_state.retry_attempt > 0 do
+        {:noreply, clean_state}
       else
-        send(clean_state.parent, {:elixir_grpc, :connection_down, self()})
-        {:stop, :normal, clean_state}
+        maybe_attempt_reconnect(clean_state)
       end
     end
 
@@ -574,10 +569,15 @@ if Code.ensure_loaded?(Mint.HTTP) do
       StreamResponseProcess.done(pid)
     end
 
-    defp attempt_reconnect(%{retry: max, retry_attempt: attempt} = state)
-         when attempt >= max do
+    defp maybe_attempt_reconnect(%{retry: 0} = state) do
+      send(state.parent, {:elixir_grpc, :connection_down, self()})
+      {:stop, :normal, state}
+    end
+
+    defp maybe_attempt_reconnect(%{retry_attempt: attempt} = state)
+         when State.retries_exhausted?(state) do
       Logger.warning(
-        "Connection retry exhausted (#{attempt}/#{max}) for #{state.scheme}://#{state.host}:#{state.port}"
+        "Connection retry exhausted (#{attempt}/#{state.retry}) for #{state.scheme}://#{state.host}:#{state.port}"
       )
 
       :telemetry.execute(
@@ -590,7 +590,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       {:stop, :normal, state}
     end
 
-    defp attempt_reconnect(state) do
+    defp maybe_attempt_reconnect(state) do
       next_attempt = state.retry_attempt + 1
 
       Logger.info(
