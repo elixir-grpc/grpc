@@ -82,11 +82,11 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert {:reply, {:ok, %{request_ref: request_ref}}, new_state} = response
       assert is_reference(request_ref)
 
-      assert %{
-               stream_response_pid: self(),
-               done: false,
-               response: %{}
-             } == new_state.requests[request_ref]
+      req_state = new_state.requests[request_ref]
+      assert req_state.stream_response_pid == self()
+      assert req_state.done == false
+      assert req_state.response == %{}
+      assert is_reference(req_state.monitor_ref)
 
       assert state.conn != new_state.conn
     end
@@ -136,11 +136,11 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
       assert is_reference(request_ref)
 
-      assert %{
-               stream_response_pid: self(),
-               done: false,
-               response: %{}
-             } == new_state.requests[request_ref]
+      req_state = new_state.requests[request_ref]
+      assert req_state.stream_response_pid == self()
+      assert req_state.done == false
+      assert req_state.response == %{}
+      assert is_reference(req_state.monitor_ref)
 
       assert {[{request_ref, body, nil}], []} == new_state.request_stream_queue
       assert state.conn != new_state.conn
