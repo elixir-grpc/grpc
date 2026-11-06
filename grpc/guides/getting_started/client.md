@@ -53,15 +53,17 @@ iex> {:ok, reply} = channel |> Helloworld.GreetingServer.Stub.say_unary_hello(re
 
 ### Reading response headers
 
-An interceptor sees the response headers and trailers even when the caller did not pass
-`return_headers: true`. The caller's return value does not change. This one saves a session
-token that the server sends in a header:
+By default, `next` in an interceptor returns `{:ok, reply}`, without the response headers and
+trailers. To get them, define `return_headers?/1` and return `true`. This interceptor saves a
+session token that the server sends in a header:
 
 ```elixir
 defmodule MyApp.SessionInterceptor do
   @behaviour GRPC.Client.Interceptor
 
   def init(opts), do: opts
+
+  def return_headers?(_opts), do: true
 
   def call(stream, req, next, _opts) do
     case next.(stream, req) do
@@ -76,13 +78,16 @@ defmodule MyApp.SessionInterceptor do
 end
 ```
 
-Pass `result` on as it is. The stub removes the headers and trailers again after the last
-interceptor, if the caller did not ask for them.
+An interceptor without `return_headers?/1` gets `{:ok, reply}`, as before. The caller's return
+value does not change. Pass `result` on as it is. The stub removes the headers and trailers after
+the last interceptor, if the caller did not ask for them. If the caller passes
+`return_headers: true`, every interceptor gets the long result.
 
 For server-streaming calls the result is `{:ok, replies, %{headers: headers}}`, and the last
 item of `replies` is `{:trailers, trailers}`. For client-streaming and bidirectional calls,
 `call/4` runs when the stream opens, before any reply exists. Implement the optional
-`handle_recv/3`, which `GRPC.Stub.recv/2` calls with the same result shapes:
+`handle_recv/3`, which `GRPC.Stub.recv/2` calls with the same result shapes. It always gets the
+headers, so it needs no `return_headers?/1`:
 
 ```elixir
 def handle_recv(_stream, {:ok, _reply, %{headers: headers}} = result, _opts) do

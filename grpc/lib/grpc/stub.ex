@@ -527,9 +527,7 @@ defmodule GRPC.Stub do
           try do
             result =
               GRPC.Client.Telemetry.client_span(stream, request, fn ->
-                req_stream
-                |> do_call(stream, request, opts)
-                |> strip_headers(response_stream, opts)
+                do_call(req_stream, stream, request, opts)
               end)
 
             case result do
@@ -555,9 +553,7 @@ defmodule GRPC.Stub do
         else
           try do
             GRPC.Client.Telemetry.client_span(stream, request, fn ->
-              req_stream
-              |> do_call(stream, request, opts)
-              |> strip_headers(response_stream, opts)
+              do_call(req_stream, stream, request, opts)
             end)
           after
             release_stream_lease(stream)
@@ -732,28 +728,110 @@ defmodule GRPC.Stub do
     end)
   end
 
-  # Interceptors always see headers and trailers, so the adapter always returns
-  # them. `strip_headers/3` removes them again for callers that did not ask.
+  # Like `run_interceptors/2`, for a `next` that returns headers. An interceptor
+  # gets the long shape only if its `return_headers?/1` says so.
+  defp run_interceptors(channel, last, server_stream?) do
+    Enum.reduce(channel.interceptors, last, fn {interceptor, opts} = entry, acc ->
+      if return_headers?(entry) do
+        fn s, r -> interceptor.call(s, r, acc, opts) end
+      else
+        fn s, r -> call_without_headers(interceptor, opts, s, r, acc, server_stream?) end
+      end
+    end)
+  end
+
+  defp return_headers?({interceptor, opts}) do
+    Code.ensure_loaded?(interceptor) and function_exported?(interceptor, :return_headers?, 1) and
+      interceptor.return_headers?(opts)
+  end
+
+  # Strips the headers from the result of `next` and keeps them in the process
+  # dictionary. If the interceptor returns `{:ok, reply}` or `{:ok, replies}`, the
+  # kept headers go back, so an interceptor further out still sees them.
+  defp call_without_headers(interceptor, opts, stream, req, next, server_stream?) do
+    key = make_ref()
+
+    next = fn s, r ->
+      case next.(s, r) do
+        {:ok, replies, %{} = headers} when server_stream? ->
+          Process.put({key, :headers}, headers)
+          {:ok, drop_trailers(replies, key)}
+
+        {:ok, reply, %{} = headers} ->
+          Process.put({key, :headers}, headers)
+          {:ok, reply}
+
+        other ->
+          other
+      end
+    end
+
+    try do
+      result = interceptor.call(stream, req, next, opts)
+      restore_headers(result, Process.get({key, :headers}), key, server_stream?)
+    after
+      Process.delete({key, :headers})
+    end
+  end
+
+  # The trailers item is the last item of the stream. Keep it aside as the
+  # stream runs, so the plain interceptor never sees it.
+  defp drop_trailers(replies, key) do
+    Stream.flat_map(replies, fn
+      {:trailers, trailers} ->
+        Process.put({key, :trailers}, trailers)
+        []
+
+      reply ->
+        [reply]
+    end)
+  end
+
+  # Whatever the plain interceptor made of the replies stays. The kept trailers
+  # follow it as a last item, read when the stream ends.
+  defp restore_headers({:ok, replies}, %{} = headers, key, true) do
+    last =
+      Stream.flat_map([key], fn key ->
+        case Process.delete({key, :trailers}) do
+          nil -> []
+          trailers -> [{:trailers, trailers}]
+        end
+      end)
+
+    {:ok, Stream.concat(replies, last), headers}
+  end
+
+  defp restore_headers({:ok, reply}, %{} = headers, _key, false), do: {:ok, reply, headers}
+  defp restore_headers(result, _headers, _key, _server_stream?), do: result
+
   defp do_call(
          false,
          %{channel: channel} = stream,
          request,
          opts
        ) do
+    caller_asked? = !!opts[:return_headers]
+    # Ask the adapter for headers only if the caller or an interceptor wants them.
+    headers? = caller_asked? or Enum.any?(channel.interceptors, &return_headers?/1)
+
     last = fn %{codec: codec, compressor: compressor} = s, _ ->
       message = codec.encode(request)
-
-      opts =
-        opts
-        |> Keyword.put(:compressor, compressor)
-        |> Keyword.put(:return_headers, true)
+      opts = Keyword.put(opts, :compressor, compressor)
+      opts = if headers?, do: Keyword.put(opts, :return_headers, true), else: opts
 
       s
       |> channel.adapter.send_request(message, opts)
       |> recv(opts)
     end
 
-    run_interceptors(channel, last).(stream, request)
+    if headers? and not caller_asked? do
+      channel
+      |> run_interceptors(last, stream.server_stream)
+      |> then(& &1.(stream, request))
+      |> strip_headers(stream.server_stream)
+    else
+      run_interceptors(channel, last).(stream, request)
+    end
   end
 
   defp do_call(true, %{channel: channel} = stream, req, opts) do
