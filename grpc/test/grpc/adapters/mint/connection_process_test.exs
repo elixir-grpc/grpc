@@ -763,6 +763,51 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     end
   end
 
+  describe "handle_info - dead stream response process with a queued body write" do
+    setup :quiet_connection
+    setup :valid_stream_request
+    setup :valid_stream_response
+
+    test "replies to the queued write with a cancelled RPCError instead of a bare string", %{
+      state: state,
+      request_ref: request_ref,
+      stream_response_pid: response_pid
+    } do
+      Process.unlink(response_pid)
+      monitor = Process.monitor(response_pid)
+      Process.exit(response_pid, :kill)
+      assert_receive {:DOWN, ^monitor, :process, ^response_pid, :killed}
+
+      # Simulates a `stream_request_body/3` caller still queued (blocked on
+      # flow control) for this ref when the stream response process died.
+      from = {self(), make_ref()}
+
+      queue = :queue.in({request_ref, <<1, 2, 3>>, from}, state.request_stream_queue)
+      state = ConnectionProcess.State.update_request_stream_queue(state, queue)
+
+      # Inject a raw DATA frame for our in-flight request as if it arrived on
+      # the socket, so that `consume_or_cancel_stream/4` detects the dead
+      # stream response process: length 3, type 0x0 (DATA), flags 0, the
+      # request's stream id, payload <<1, 2, 3>>.
+      stream_id = state.conn.next_stream_id - 2
+      data_frame = <<3::24, 0x00, 0, stream_id::32, 1, 2, 3>>
+      message = {:tcp, state.conn.socket, data_frame}
+
+      assert {:noreply, new_state} = ConnectionProcess.handle_info(message, state)
+
+      # the queued write and the request are dropped, the connection survives
+      assert :queue.is_empty(new_state.request_stream_queue)
+      assert %{} == new_state.requests
+      assert Mint.HTTP.open?(new_state.conn)
+
+      {_pid, tag} = from
+      assert_receive {^tag, {:error, error}}
+
+      assert GRPC.RPCError.exception(GRPC.Status.cancelled(), "the request was cancelled") ==
+               error
+    end
+  end
+
   describe "handle_info - non-200 responses" do
     setup :quiet_connection
     setup :valid_stream_request

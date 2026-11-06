@@ -9,7 +9,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
     use GenServer
 
-    alias GRPC.Client.Adapters.CallExit
+    alias GRPC.Client.Adapter
     alias GRPC.Client.Adapters.Mint.ConnectionProcess.State
     alias GRPC.Client.Adapters.Mint.StreamResponseProcess
     alias GRPC.Client.Telemetry
@@ -20,6 +20,10 @@ if Code.ensure_loaded?(Mint.HTTP) do
     @connection_closed_error GRPC.RPCError.exception(
                                GRPC.Status.unavailable(),
                                "the connection is closed"
+                             )
+    @request_cancelled_error GRPC.RPCError.exception(
+                               GRPC.Status.cancelled(),
+                               "the request was cancelled"
                              )
     @stream_response_dead_event [:grpc, :client, :mint, :stream_response, :dead]
     @reconnect_stop_event [:grpc, :client, :mint, :reconnect, :stop]
@@ -45,7 +49,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       * :stream_response_pid (required) - the process to where send the responses coming from the connection will be sent to be processed
     """
     def request(pid, method, path, headers, body, opts \\ []) do
-      CallExit.call(pid, {:request, method, path, headers, body, opts})
+      Adapter.call(pid, {:request, method, path, headers, body, opts})
     end
 
     @doc """
@@ -59,7 +63,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
     Streams a chunk of the request body on the connection or signals the end of the body.
     """
     def stream_request_body(pid, request_ref, body) do
-      CallExit.call(pid, {:stream_body, request_ref, body})
+      Adapter.call(pid, {:stream_body, request_ref, body})
     end
 
     @doc """
@@ -439,7 +443,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
         |> Enum.split_with(&match?({^request_ref, _body, _from}, &1))
 
       for {_ref, _body, from} <- dropped, not is_nil(from) do
-        GenServer.reply(from, {:error, "the request was cancelled"})
+        GenServer.reply(from, {:error, @request_cancelled_error})
       end
 
       State.update_request_stream_queue(state, :queue.from_list(kept))
