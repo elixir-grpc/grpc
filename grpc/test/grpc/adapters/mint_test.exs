@@ -83,6 +83,33 @@ defmodule GRPC.Client.Adapters.MintTest do
     end
   end
 
+  describe "connect/2 - keepalive" do
+    setup(%{port: port}) do
+      %{channel: build(:channel, adapter: Mint, port: port, host: "localhost")}
+    end
+
+    test "is disabled by default", %{channel: channel} do
+      assert {:ok, result} = Mint.connect(channel, [])
+
+      assert %{keepalive: nil, keepalive_tolerance: nil} =
+               :sys.get_state(result.adapter_payload.conn_pid)
+    end
+
+    test "passes keepalive options to the connection process", %{channel: channel} do
+      keepalive = 15_000
+      keepalive_tolerance = 3
+
+      assert {:ok, result} =
+               Mint.connect(channel,
+                 keepalive: keepalive,
+                 keepalive_tolerance: keepalive_tolerance
+               )
+
+      assert %{keepalive: ^keepalive, keepalive_tolerance: ^keepalive_tolerance} =
+               :sys.get_state(result.adapter_payload.conn_pid)
+    end
+  end
+
   describe "disconnect/1" do
     test "keeps adapter_payload as a map with conn_pid set to nil", %{port: port} do
       channel = build(:channel, adapter: Mint, port: port, host: "localhost")

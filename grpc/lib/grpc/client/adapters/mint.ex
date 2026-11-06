@@ -40,6 +40,10 @@ if Code.ensure_loaded?(Mint.HTTP) do
         Check [Mint.HTTP2.setting() type](https://hexdocs.pm/mint/Mint.HTTP2.html#t:setting/0) for additional configs.
       * `:retry`: Number of reconnection attempts when the connection drops. Defaults to `0` (no retries).
         Uses exponential backoff with jitter between attempts.
+      * `:keepalive`: Interval in milliseconds between HTTP/2 PING frames sent to the server.
+        Defaults to `nil` (no pings).
+      * `:keepalive_tolerance`: Number of unacknowledged pings after which the connection is closed,
+        triggering `:retry` if configured. Defaults to `nil` (never close). Has no effect without `:keepalive`.
     """
     @impl true
     def connect(%{host: host, port: port} = channel, opts \\ []) do
@@ -47,6 +51,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       {retry, opts} = Keyword.pop(opts, :retry, 0)
       # Pooled connections open with `ref: nil`, so the pool passes the logical ref separately
       {logical_ref, opts} = Keyword.pop(opts, :logical_connection_ref, channel.ref)
+      {keepalive_opts, opts} = Keyword.split(opts, [:keepalive, :keepalive_tolerance])
       module_opts = Application.get_env(:grpc, __MODULE__, config_opts)
 
       transport_metadata = %{
@@ -61,6 +66,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
         |> merge_opts(module_opts)
         |> Keyword.put(:retry, retry)
         |> Keyword.put(:grpc_transport_metadata, transport_metadata)
+        |> Keyword.merge(keepalive_opts)
 
       Process.flag(:trap_exit, true)
 
