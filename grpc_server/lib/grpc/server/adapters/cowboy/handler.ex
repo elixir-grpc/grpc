@@ -86,7 +86,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           access_mode: access_mode,
           codec: codec,
           exception_log_filter: exception_log_filter,
-          max_body_size: max_body_size
+          max_body_size: max_body_size,
+          body_bytes_read: 0
         }
       }
     else
@@ -323,8 +324,14 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
     case async_read_body(req, opts) do
       {:send, {s, body, req}} ->
-        send(pid, {ref, {s, body}})
-        {:ok, req, state}
+        case track_body_bytes(state, body) do
+          {:ok, state} ->
+            send(pid, {ref, {s, body}})
+            {:ok, req, state}
+
+          {:too_large, total} ->
+            body_too_large(req, state, total)
+        end
 
       {:wait, read_ref} ->
         {:ok, req, %{state | pending_reader: {read_ref, pid, ref}}}
@@ -332,9 +339,14 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   def info({:request_body, ref, :nofin, body}, req, %{pending_reader: {ref, pid, reader_ref}} = s) do
-    send(pid, {reader_ref, {:more, body}})
+    case track_body_bytes(s, body) do
+      {:ok, s} ->
+        send(pid, {reader_ref, {:more, body}})
+        {:ok, req, %{s | pending_reader: nil}}
 
-    {:ok, req, %{s | pending_reader: nil}}
+      {:too_large, total} ->
+        body_too_large(req, s, total)
+    end
   end
 
   def info(
@@ -342,17 +354,23 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         %{headers: headers} = req,
         %{pending_reader: {ref, pid, reader_ref}} = s
       ) do
-    send(pid, {reader_ref, {:ok, body}})
+    case track_body_bytes(s, body) do
+      {:ok, s} ->
+        send(pid, {reader_ref, {:ok, body}})
 
-    # cowboy_req's set_body_length
-    req =
-      Map.merge(req, %{
-        headers: Map.put(headers, "content-length", Integer.to_string(body_length)),
-        body_length: body_length,
-        has_read_body: true
-      })
+        # cowboy_req's set_body_length
+        req =
+          Map.merge(req, %{
+            headers: Map.put(headers, "content-length", Integer.to_string(body_length)),
+            body_length: body_length,
+            has_read_body: true
+          })
 
-    {:ok, req, s}
+        {:ok, req, s}
+
+      {:too_large, total} ->
+        body_too_large(req, s, total)
+    end
   end
 
   def info({:get_headers, ref, pid}, req, state) do
@@ -583,6 +601,28 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       error ->
         error
     end
+  end
+
+  # Streaming reads arrive in chunks, so the cap is applied to the running total
+  # rather than to any single chunk. read_full_body/4 does the same for unary calls.
+  defp track_body_bytes(state, body) do
+    total = Map.get(state, :body_bytes_read, 0) + byte_size(body)
+
+    if total > state.max_body_size do
+      {:too_large, total}
+    else
+      {:ok, %{state | body_bytes_read: total}}
+    end
+  end
+
+  defp body_too_large(req, state, total) do
+    Logger.warning(
+      "Request body exceeded max_body_size (#{state.max_body_size} bytes, got #{total})"
+    )
+
+    error = RPCError.exception(status: :resource_exhausted, message: "Request body too large")
+    req = send_error(req, error, state, :body_too_large)
+    {:stop, req, state}
   end
 
   defp read_full_body(req, body, timer, max_bytes) do
