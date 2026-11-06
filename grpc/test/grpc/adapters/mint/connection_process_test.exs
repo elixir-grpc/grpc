@@ -627,8 +627,12 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
   describe "keepalive" do
     test "keeps the connection open while the server acknowledges pings", %{port: port} do
-      %{process_pid: pid} = valid_connection(%{port: port}, keepalive: 20, keepalive_tolerance: 1)
-      Process.sleep(250)
+      # Closing takes 10 unacknowledged pings (200ms), so a slow pong can't trip
+      # it, while a lost pong still closes the connection well within the sleep.
+      %{process_pid: pid} =
+        valid_connection(%{port: port}, keepalive: 20, keepalive_tolerance: 10)
+
+      Process.sleep(500)
       assert Mint.HTTP.open?(:sys.get_state(pid).conn)
     end
 

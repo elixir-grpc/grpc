@@ -20,11 +20,11 @@ defmodule GRPC.Integration.MintKeepaliveTest do
         {:ok, channel} =
           GRPC.Stub.connect("127.0.0.1:#{port}",
             adapter: GRPC.Client.Adapters.Mint,
-            adapter_opts: [keepalive: 50, keepalive_tolerance: 5]
+            adapter_opts: [keepalive: 20, keepalive_tolerance: 10]
           )
 
         [conn_pid] = pool_conn_pids(channel)
-        Process.sleep(400)
+        Process.sleep(500)
 
         assert [^conn_pid] = pool_conn_pids(channel)
 
