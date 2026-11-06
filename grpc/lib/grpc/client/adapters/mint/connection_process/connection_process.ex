@@ -688,10 +688,17 @@ if Code.ensure_loaded?(Mint.HTTP) do
     end
 
     defp check_connection_status(state, reason) do
-      if Mint.HTTP.open?(state.conn) do
-        check_request_stream_queue(state)
-      else
-        finish_all_pending_requests(state, reason || @connection_closed_error)
+      cond do
+        Mint.HTTP.open?(state.conn) ->
+          check_request_stream_queue(state)
+
+        # After a GOAWAY with NO_ERROR the server still answers the streams it accepted.
+        # The last one to finish takes this to the clause below.
+        is_nil(reason) and map_size(state.requests) > 0 and Mint.HTTP.open?(state.conn, :read) ->
+          check_request_stream_queue(state)
+
+        true ->
+          finish_all_pending_requests(state, reason || @connection_closed_error)
       end
     end
 
