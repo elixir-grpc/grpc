@@ -14,6 +14,8 @@ iex> request = Helloworld.HelloRequest.new(name: "grpc-elixir")
 iex> {:ok, reply} = channel |> Helloworld.GreetingServer.Stub.say_unary_hello(request)
 ```
 
+`use GRPC.Stub` generates one function per RPC, such as `say_unary_hello/3` above. For the arity, return value and options of each RPC kind, see [Generated functions](GRPC.Stub.html#module-generated-functions) in `GRPC.Stub`.
+
 ---
 
 ## Connecting to IPv6 Addresses
