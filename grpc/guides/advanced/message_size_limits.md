@@ -38,6 +38,10 @@ message. The message reads `Received message is too large (2048 bytes, the limit
 * On a response stream, both adapters return `{:error, %GRPC.RPCError{status: 8}}`
   as an item, and end the stream.
 
+Both adapters check the prefix in the first chunk that holds it, then cancel the
+request, which resets the HTTP/2 stream. The server stops sending, and the client
+does not read the rest of the message.
+
 ## Receiving very large replies
 
 A unary reply of 100 MB, 300 MB and 600 MB arrives without error from a Cowboy server

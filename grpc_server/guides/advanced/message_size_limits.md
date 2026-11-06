@@ -25,8 +25,12 @@ at run time. It applies in both directions:
   This was `INTERNAL` before.
 * A request message over the limit is refused, from the length in its prefix, before
   your handler runs. The client gets `RESOURCE_EXHAUSTED` with a message such as
-  `Received message is too large (2048 bytes, the limit is 1000 bytes)`. For a request
-  stream, each message is checked as the handler reads it.
+  `Received message is too large (2048 bytes, the limit is 1000 bytes)`. The server
+  checks the prefix of a gRPC message in the first chunk that holds it, for a unary
+  request and for each message of a request stream, and stops reading there. It
+  sends the error and ends the stream, so the client sends about one flow-control
+  window of the message and no more. The check covers gRPC bodies, not gRPC-web text
+  or transcoded JSON.
 
 The setting is global to the node. A node that runs a client and a server applies
 the same limit to both. Compressed messages count by their size on the wire.

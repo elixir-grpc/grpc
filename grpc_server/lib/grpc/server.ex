@@ -387,7 +387,9 @@ defmodule GRPC.Server do
     if error = message_too_large(byte_size(message)), do: raise(error)
   end
 
-  defp message_too_large(length) do
+  # The error for a message of `length` bytes, or `nil` when it is within the limit.
+  @doc false
+  def message_too_large(length) do
     max_length = max_message_length()
 
     if length > max_length do

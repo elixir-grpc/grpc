@@ -264,7 +264,7 @@ if Code.ensure_loaded?(:gun) do
 
     defp handle_nofin_response(payload, stream, headers, opts, deadline) do
       # Regular response: fetch body and trailers
-      with {:ok, body, trailers} <- recv_body(payload, deadline),
+      with {:ok, body, trailers} <- recv_body(stream, payload, deadline),
            {:ok, response, embedded_trailers} <- parse_response(stream, headers, body, trailers) do
         if opts[:return_headers] do
           all_trailers = Map.merge(trailers, embedded_trailers)
@@ -412,14 +412,19 @@ if Code.ensure_loaded?(:gun) do
       %{retries: retries - 1, timeout: timeout}
     end
 
-    defp recv_body(stream_payload, deadline) do
-      recv_body(stream_payload, [], deadline)
+    defp recv_body(stream, stream_payload, deadline) do
+      recv_body(stream, stream_payload, [], 0, deadline)
     end
 
-    defp recv_body(stream_payload, acc, deadline) do
+    defp recv_body(stream, stream_payload, acc, size, deadline) do
       case recv_data_or_trailers(stream_payload, deadline) do
         {:data, data} ->
-          recv_body(stream_payload, [acc, data], deadline)
+          acc = [acc, data]
+          new_size = size + byte_size(data)
+
+          with :ok <- check_body_prefix(stream, acc, size, new_size) do
+            recv_body(stream, stream_payload, acc, new_size, deadline)
+          end
 
         {:trailers, trailers} ->
           body = IO.iodata_to_binary(acc)
@@ -430,18 +435,42 @@ if Code.ensure_loaded?(:gun) do
       end
     end
 
+    # Checks the length prefix in the chunk that completes it. A reply over
+    # `:max_message_length` is not read to the end: the request is cancelled, which
+    # resets the HTTP/2 stream, and the call fails with RESOURCE_EXHAUSTED. A codec
+    # that packs the body for the channel (gRPC-web text) hides the prefix until the
+    # whole body is unpacked, so it is checked later in `parse_response/4`.
+    defp check_body_prefix(%{codec: codec} = stream, acc, size, new_size)
+         when size < 5 and new_size >= 5 do
+      if function_exported?(codec, :unpack_from_channel, 1) do
+        :ok
+      else
+        case GRPC.Client.MessageLimit.check_prefix(IO.iodata_to_binary(acc)) do
+          :ok ->
+            :ok
+
+          {:error, _} = error ->
+            cancel(stream)
+            error
+        end
+      end
+    end
+
+    defp check_body_prefix(_stream, _acc, _size, _new_size), do: :ok
+
     defp response_stream(
            :nofin,
            %{
              response_mod: res_mod,
              codec: codec,
              payload: payload
-           },
+           } = stream,
            opts,
            deadline
          ) do
       state = %{
         payload: payload,
+        stream: stream,
         buffer: <<>>,
         fin: false,
         need_more: true,
@@ -489,6 +518,8 @@ if Code.ensure_loaded?(:gun) do
          ) do
       case get_message(buffer) do
         {:error, _} = error ->
+          # The rest of the message is not read: reset the stream.
+          cancel(stream.stream)
           {error, %{buffer: <<>>, fin: true, fin_resp: nil}}
 
         {{:trailers, trailers}, rest} ->
