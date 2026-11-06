@@ -72,6 +72,24 @@ iex> {:ok, channel} =
 By default, `GRPC.Stub.connect/2` uses the **Gun** adapter.  
 You can switch to **Mint** (pure Elixir HTTP/2) or other adapters as needed.
 
+### Slow readers with the Gun adapter
+
+The Gun adapter holds back the server when you read a response slower than it
+arrives. It reads ahead of you by at most `:response_window` bytes per stream
+(default 1 MiB), then stops reopening the HTTP/2 window until you take more
+messages. The queue can hold up to the window plus the HTTP/2 stream window, which
+defaults to the same size, so about 2 MiB by default.
+
+```elixir
+iex> GRPC.Stub.connect("localhost:50051",
+...>   adapter_opts: [response_window: 4 * 1024 * 1024]
+...> )
+```
+
+A larger window gives faster streams on high-latency links, and costs memory per
+stream. `response_window: :infinity` turns the limit off. A message larger than the
+window still arrives in full.
+
 ### Using Mint Adapter
 
 ```elixir

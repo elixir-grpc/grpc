@@ -90,8 +90,9 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   @doc """
   Consume an incoming data or trailers/headers.
 
-  Returns `:ok`, or `{:error, reason}` when the stream response process
-  is no longer alive (e.g. the caller gave up on the request).
+  Returns `:ok`, `:cancel` when the request should be reset because the
+  response is over the message size limit, or `{:error, reason}` when the stream
+  response process is no longer alive (e.g. the caller gave up on the request).
   """
   def consume(pid, type, data) when type in @accepted_types do
     GenServer.call(pid, {:consume_response, {type, data}})
@@ -110,7 +111,8 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
       responses: :queue.new(),
       done: false,
       from: nil,
-      compressor: nil
+      compressor: nil,
+      failed: false
     }
 
     {:ok, state}
@@ -119,6 +121,12 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   @impl true
   def handle_call(:get_response, from, state) do
     {:noreply, put_in(state[:from], from), {:continue, :produce_response}}
+  end
+
+  # After a message over the size limit the rest of the body can't be framed
+  # any more, so it is dropped, and the connection process is told to cancel again.
+  def handle_call({:consume_response, {:data, _data}}, _from, %{failed: true} = state) do
+    {:reply, :cancel, state, {:continue, :produce_response}}
   end
 
   def handle_call({:consume_response, {:data, data}}, _from, state) do
@@ -134,11 +142,25 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
     # the same HTTP/2 data frame.
     combined = buffer <> data
 
-    {new_buffer, new_responses} =
-      drain_buffer(combined, state.compressor, codec, res_mod, responses)
+    case drain_buffer(combined, state.compressor, codec, res_mod, responses) do
+      {new_buffer, new_responses} ->
+        new_state = %{state | buffer: new_buffer, responses: new_responses}
+        {:reply, :ok, new_state, {:continue, :produce_response}}
 
-    new_state = %{state | buffer: new_buffer, responses: new_responses}
-    {:reply, :ok, new_state, {:continue, :produce_response}}
+      # The error ends the stream, and the reply `:cancel` asks the connection
+      # process to reset the request, so no more of the message is sent. It then
+      # sends nothing else for this request, so `done` is set here.
+      {:error, error, new_responses} ->
+        new_state = %{
+          state
+          | buffer: <<>>,
+            responses: :queue.in({:error, error}, new_responses),
+            failed: true,
+            done: true
+        }
+
+        {:reply, :cancel, new_state, {:continue, :produce_response}}
+    end
   end
 
   def handle_call(
@@ -210,9 +232,13 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
   # each decoded response into `responses_queue`. Recursion terminates when
   # `GRPC.Message.get_message/2` can no longer extract a full message from the
   # remaining bytes, at which point the leftover buffer and the populated queue
-  # are returned as `{remaining_buffer, updated_queue}`.
+  # are returned as `{remaining_buffer, updated_queue}`. A message over the size
+  # limit ends the pass with `{:error, error, updated_queue}`.
   defp drain_buffer(buffer, compressor, codec, res_mod, responses_queue) do
-    case GRPC.Message.get_message(buffer, compressor) do
+    case get_message(buffer, compressor) do
+      {:error, error} ->
+        {:error, error, responses_queue}
+
       {{_, message}, rest} ->
         # TODO: add code here to handle compressor headers
         response = codec.decode(message, res_mod)
@@ -228,6 +254,16 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
       _ ->
         {buffer, responses_queue}
     end
+  end
+
+  # The prefix is checked here, as newer `GRPC.Message.get_message/2` does, and
+  # that function raises for a message over `:max_message_length` or a gzip bomb.
+  defp get_message(buffer, compressor) do
+    with :ok <- GRPC.Client.MessageLimit.check_prefix(buffer) do
+      GRPC.Message.get_message(buffer, compressor)
+    end
+  rescue
+    error in GRPC.RPCError -> {:error, error}
   end
 
   defp get_headers_response(headers, type) do

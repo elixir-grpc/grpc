@@ -77,7 +77,8 @@ defmodule GRPC.Server.MixProject do
         "guides/advanced/testing_interceptors.md",
         "guides/advanced/telemetry.livemd",
         "guides/advanced/pooling.md",
-        "guides/advanced/custom_codecs.md"
+        "guides/advanced/custom_codecs.md",
+        "guides/advanced/message_size_limits.md"
       ],
       skip_undefined_reference_warnings_on: ["README.md"],
       groups_for_docs: [

@@ -4,6 +4,7 @@
 
 ### Enhancements
 
+  * `config :grpc, max_message_length: bytes` now limits the size of one message the client sends or receives, and `guides/advanced/message_size_limits.md` documents it (#387). The default stays 2 GiB. A request over the limit is not sent: a unary call returns `{:error, %GRPC.RPCError{status: RESOURCE_EXHAUSTED}}`, and `GRPC.Stub.send_request/3` raises. A reply message over the limit fails with the same status, as a unary result, or on a response stream as an `{:error, _}` item, with both adapters. The client checks the length prefix itself, so this works with `grpc_core` 1.0.6, and it checks it in the first chunk that holds it: the Gun and Mint adapters then cancel the request instead of reading the rest of the message. Before, an oversize request crashed the adapter with a `MatchError`. The Mint adapter no longer crashes its response process when `GRPC.Message.get_message/2` raises, for instance on a gzip bomb: it returns the `GRPC.RPCError` instead.
 - The Mint adapter can now be configured to send HTTP/2 keepalive pings. `:keepalive` sets the interval in milliseconds, and `:keepalive_tolerance` the number of unacknowledged pings after which the connection is treated as dead, and forcibly closed.
    Both default to `nil`, keeping the previous behavior.
   * The Mint adapter's `:retry` option explicitly supports `:infinity`, reconnecting for as long as the connection process lives. This previously worked due Erlang term ordering (every atom sorts above every integer).
@@ -12,6 +13,7 @@
 
 ### Behavior Changes
 
+  * The Gun adapter now limits how far a response stream reads ahead of the caller. It opens each stream with a finite Gun `flow` and returns one frame of credit each time the caller takes a data message off the queue, so a slow reader makes the server wait instead of filling `StreamResponseProcess`'s queue without limit. The window is `:response_window` in `:adapter_opts`, in bytes, default `1_048_576`; `:infinity` turns it off. Unless `:http2_opts` sets `:initial_stream_window_size`, Gun's stream window is set to the same size (it was 8 MB), so the queue holds about twice the window at most (#599).
   * The Mint adapter now rejects `:adapter_opts` keys it does not read, such as `custom_opts`, and lists the valid ones: `:retry`, `:transport_opts`, `:client_settings`, `:keepalive`, `:keepalive_tolerance` and `:config_options` (`:logical_connection_ref`, which the connection pool sets, is also accepted but not listed). They were ignored before, so certificates passed that way never reached TLS. A new guide, "TLS and Mutual TLS", shows where TLS options go for both adapters and the server (#393).
   * The Mint adapter now sets `TCP_NODELAY` by default, over TCP and TLS, as the Gun adapter already did. Without it, Nagle's algorithm and delayed ACKs can add tens of milliseconds to sequential calls (#323). Pass `transport_opts: [nodelay: false]` to turn it off.
   * The optional `:gun` dependency is now `~> 2.7.0` (was `~> 2.4.0`), which picks up the security fixes in gun 2.5, 2.6 and 2.7. Gun 2.6 and later require Erlang/OTP 27 or newer, so apps that use the Gun adapter must run on OTP 27+.

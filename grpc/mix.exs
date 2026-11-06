@@ -62,7 +62,8 @@ defmodule GRPC.MixProject do
         "guides/advanced/custom_codecs.md",
         "guides/advanced/load_balancing.md",
         "guides/advanced/connection_pool.md",
-        "guides/advanced/tls.md"
+        "guides/advanced/tls.md",
+        "guides/advanced/message_size_limits.md"
       ],
       groups_for_modules: [
         "Client Core": [

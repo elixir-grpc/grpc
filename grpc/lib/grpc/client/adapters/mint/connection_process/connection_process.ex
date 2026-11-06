@@ -407,7 +407,20 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
       case StreamResponseProcess.consume(pid, type, data) do
         :ok -> state
+        :cancel -> cancel_refused_stream(state, request_ref)
         {:error, reason} -> cancel_dead_stream(state, request_ref, pid, reason)
+      end
+    end
+
+    # The response process refused the response (a message over
+    # `:max_message_length`) and has queued the error. Reset the request so the
+    # server stops sending, and ignore what is already in flight.
+    defp cancel_refused_stream(state, request_ref) do
+      state = drop_request(state, request_ref)
+
+      case Mint.HTTP2.cancel_request(state.conn, request_ref) do
+        {:ok, conn} -> State.update_conn(state, conn)
+        {:error, conn, _error} -> State.update_conn(state, conn)
       end
     end
 

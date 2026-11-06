@@ -19,6 +19,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   # 4 MB – matches gRPC-Go's default max receive message size.
   # Override per-server with the :max_body_size option (bytes).
   @default_max_body_size 4 * 1024 * 1024
+  # Cowboy's own default for how much `read_body` collects before it returns.
+  @default_read_length 8_000_000
 
   @doc """
   This function is meant to be called whenever a new request arrives to an existing connection.
@@ -94,7 +96,11 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           codec: codec,
           exception_log_filter: exception_log_filter,
           max_body_size: max_body_size,
-          body_bytes_read: 0
+          body_bytes_read: 0,
+          # Position in the gRPC framing of the request body: the bytes left in the
+          # current message, and the part of the next 5-byte prefix seen so far.
+          frame_remaining: 0,
+          frame_prefix: <<>>
         }
       }
     else
@@ -353,7 +359,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   # APIs end
 
   def info({:read_full_body, ref, pid}, req, state) do
-    {s, body, req} = read_full_body(req, [], 0, state[:handling_timer], state.max_body_size)
+    limits = %{max_bytes: state.max_body_size, check_prefix?: state.access_mode == :grpc}
+    {s, body, req} = read_full_body(req, [], 0, state[:handling_timer], limits)
     send(pid, {ref, {s, body}})
     {:ok, req, state}
   catch
@@ -366,10 +373,13 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       error = RPCError.exception(status: :resource_exhausted, message: "Request body too large")
       req = send_error(req, error, state, :body_too_large)
       {:stop, req, state}
+
+    :throw, {:message_too_large, error} ->
+      message_too_large(req, state, error)
   end
 
   def info({:read_body, ref, pid}, req, state) do
-    opts = timeout_left_opt(state[:handling_timer])
+    opts = read_length_opt(state, timeout_left_opt(state[:handling_timer]))
 
     case async_read_body(req, opts) do
       {:send, {s, body, req}} ->
@@ -380,6 +390,9 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
           {:too_large, total} ->
             body_too_large(req, state, total)
+
+          {:message_too_large, error} ->
+            message_too_large(req, state, error)
         end
 
       {:wait, read_ref} ->
@@ -395,6 +408,9 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
       {:too_large, total} ->
         body_too_large(req, s, total)
+
+      {:message_too_large, error} ->
+        message_too_large(req, s, error)
     end
   end
 
@@ -419,6 +435,9 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
       {:too_large, total} ->
         body_too_large(req, s, total)
+
+      {:message_too_large, error} ->
+        message_too_large(req, s, error)
     end
   end
 
@@ -490,22 +509,51 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         "A unaccepted encoding #{compressor.name()} is set, valid are: #{:cowboy_req.header("grpc-accept-encoding", req)}"
 
       error = RPCError.exception(status: :internal, message: msg)
+      publish_send_error(state, error)
       req = send_error(req, error, state, :rpc_error)
 
       {:stop, req, state}
     else
-      case GRPC.Message.to_data(data, compressor: compressor, codec: opts[:codec]) do
+      max_length = GRPC.Server.max_message_length()
+
+      to_data_opts = [
+        compressor: compressor,
+        codec: opts[:codec],
+        max_message_length: max_length
+      ]
+
+      case GRPC.Message.to_data(data, to_data_opts) do
         {:ok, data, _size} ->
           req = check_sent_resp(req)
           :cowboy_req.stream_body(data, is_fin, req)
           {:ok, req, state}
 
         {:error, msg} ->
-          error = RPCError.exception(status: :internal, message: msg)
+          error =
+            RPCError.exception(
+              status: :resource_exhausted,
+              message: "#{msg}, the limit is #{max_length} bytes"
+            )
+
+          publish_send_error(state, error)
           req = send_error(req, error, state, :rpc_error)
           {:stop, req, state}
       end
     end
+  catch
+    # A compressor or codec raised while it packed the reply.
+    kind, reason ->
+      stacktrace = __STACKTRACE__
+      publish_send_error(state, kind, reason, stacktrace)
+
+      error = RPCError.exception(status: :internal, message: "Internal Server Error")
+      req = send_error(req, error, state, :rpc_error)
+
+      [req: req]
+      |> ReportException.new(reason, stacktrace, kind)
+      |> maybe_log_error(state.exception_log_filter, stacktrace)
+
+      {:stop, req, state}
   end
 
   def info({:stream_reply, status, headers}, req, state) do
@@ -609,9 +657,11 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   def call_rpc(server, path, stream) do
+    started_at = System.monotonic_time()
+
     result =
       try do
-        case do_call_rpc(server, path, stream) do
+        case do_call_rpc(server, path, stream, started_at) do
           {:error, _} = err ->
             err
 
@@ -637,21 +687,29 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  defp do_call_rpc(server, path, %{http_method: http_method} = stream) do
+  defp do_call_rpc(server, path, %{http_method: http_method} = stream, started_at) do
     case server.__call_rpc__(path, http_method, stream) do
       {:ok, stream, :noreply} ->
-        GRPC.Server.send_trailers(stream, @default_trailers)
+        report_send_failure(server, path, stream, started_at, fn ->
+          GRPC.Server.send_trailers(stream, @default_trailers)
+        end)
+
         {:ok, stream}
 
       {:ok, stream, response} ->
-        stream
-        |> GRPC.Server.send_reply(response)
-        |> GRPC.Server.send_trailers(@default_trailers)
+        report_send_failure(server, path, stream, started_at, fn ->
+          stream
+          |> GRPC.Server.send_reply(response)
+          |> GRPC.Server.send_trailers(@default_trailers)
+        end)
 
         {:ok, stream}
 
       {:ok, stream} ->
-        GRPC.Server.send_trailers(stream, @default_trailers)
+        report_send_failure(server, path, stream, started_at, fn ->
+          GRPC.Server.send_trailers(stream, @default_trailers)
+        end)
+
         {:ok, stream}
 
       error ->
@@ -659,16 +717,91 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
+  # The telemetry span of the handler is closed here. Publish `:send_error`,
+  # then raise the error again.
+  defp report_send_failure(server, path, stream, started_at, send_fun) do
+    send_fun.()
+  catch
+    kind, reason ->
+      stacktrace = __STACKTRACE__
+
+      execute_send_error(started_at, %{
+        stream: stream,
+        server: server,
+        endpoint: stream.endpoint,
+        path: path,
+        kind: kind,
+        reason: reason,
+        stacktrace: stacktrace
+      })
+
+      :erlang.raise(kind, reason, stacktrace)
+  end
+
   # Streaming reads arrive in chunks, so the cap is applied to the running total
   # rather than to any single chunk. read_full_body/5 does the same for unary calls.
+  # Each chunk is also walked for message length prefixes, so a message that claims
+  # to be over `:max_message_length` is refused when its prefix arrives.
   defp track_body_bytes(state, body) do
     total = Map.get(state, :body_bytes_read, 0) + byte_size(body)
 
     if total > state.max_body_size do
       {:too_large, total}
     else
-      {:ok, %{state | body_bytes_read: total}}
+      case scan_frames(state, body) do
+        {:ok, state} -> {:ok, %{state | body_bytes_read: total}}
+        {:message_too_large, _error} = too_large -> too_large
+      end
     end
+  end
+
+  # Only gRPC bodies are framed; transcoded JSON and gRPC-web text are not.
+  defp scan_frames(%{access_mode: :grpc} = state, data), do: do_scan_frames(state, data)
+  defp scan_frames(state, _data), do: {:ok, state}
+
+  defp do_scan_frames(state, <<>>), do: {:ok, state}
+
+  defp do_scan_frames(%{frame_remaining: remaining} = state, data) when remaining > 0 do
+    skip = min(remaining, byte_size(data))
+    rest = binary_part(data, skip, byte_size(data) - skip)
+    do_scan_frames(%{state | frame_remaining: remaining - skip}, rest)
+  end
+
+  defp do_scan_frames(%{frame_prefix: prefix} = state, data) do
+    take = min(5 - byte_size(prefix), byte_size(data))
+    head = binary_part(data, 0, take)
+    rest = binary_part(data, take, byte_size(data) - take)
+
+    case prefix <> head do
+      <<_flag::8, length::32>> ->
+        case GRPC.Server.message_too_large(length) do
+          nil -> do_scan_frames(%{state | frame_prefix: <<>>, frame_remaining: length}, rest)
+          error -> {:message_too_large, error}
+        end
+
+      partial ->
+        {:ok, %{state | frame_prefix: partial}}
+    end
+  end
+
+  # Asks cowboy for a chunk as soon as the next length prefix can be complete, or the
+  # current message and the next prefix are in, so each prefix is checked early. With
+  # cowboy's default of 8 MB, a chunk comes only after 8 MB or 15 s.
+  defp read_length_opt(%{access_mode: :grpc} = state, opts) do
+    length =
+      case state.frame_remaining do
+        0 -> 5 - byte_size(state.frame_prefix)
+        remaining -> min(remaining + 5, @default_read_length)
+      end
+
+    Map.put(opts, :length, length)
+  end
+
+  defp read_length_opt(_state, opts), do: opts
+
+  defp message_too_large(req, state, error) do
+    req = send_error(req, error, state, :message_too_large)
+    {:stop, req, state}
   end
 
   defp body_too_large(req, state, total) do
@@ -681,28 +814,42 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     {:stop, req, state}
   end
 
-  defp read_full_body(req, chunks, size, timer, max_bytes) do
-    result = :cowboy_req.read_body(req, timeout_left_opt(timer))
+  # With a gRPC body, the first chunk that holds the 5-byte length prefix is checked
+  # and a message over the limit stops the read there, so the rest of it is never
+  # requested from cowboy.
+  defp read_full_body(req, chunks, size, timer, limits) do
+    opts = timer |> timeout_left_opt() |> prefix_read_opts(size, limits)
 
-    case result do
+    case :cowboy_req.read_body(req, opts) do
       {:ok, data, req} ->
-        size = size + byte_size(data)
-
-        if size > max_bytes do
-          throw({:body_too_large, size})
-        else
-          {:ok, IO.iodata_to_binary([chunks, data]), req}
-        end
+        check_body_chunk(chunks, data, size, limits)
+        {:ok, IO.iodata_to_binary([chunks, data]), req}
 
       {:more, data, req} ->
-        size = size + byte_size(data)
-
-        if size > max_bytes do
-          throw({:body_too_large, size})
-        else
-          read_full_body(req, [chunks, data], size, timer, max_bytes)
-        end
+        size = check_body_chunk(chunks, data, size, limits)
+        read_full_body(req, [chunks, data], size, timer, limits)
     end
+  end
+
+  # Until the prefix is in, ask for a chunk as soon as 5 bytes are there.
+  defp prefix_read_opts(opts, size, %{check_prefix?: true}) when size < 5,
+    do: Map.put(opts, :length, 5)
+
+  defp prefix_read_opts(opts, _size, _limits), do: opts
+
+  defp check_body_chunk(chunks, data, size, %{max_bytes: max_bytes, check_prefix?: check?}) do
+    new_size = size + byte_size(data)
+
+    if new_size > max_bytes, do: throw({:body_too_large, new_size})
+
+    if check? and size < 5 and new_size >= 5 do
+      <<_flag::8, length::32, _::binary>> = IO.iodata_to_binary([chunks, data])
+
+      if error = GRPC.Server.message_too_large(length),
+        do: throw({:message_too_large, error})
+    end
+
+    new_size
   end
 
   defp check_sent_resp(req, status \\ 200)
@@ -766,6 +913,38 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
 
     :ok
+  end
+
+  # The error was not raised, so use the current stacktrace.
+  defp publish_send_error(state, %RPCError{} = error) do
+    {:current_stacktrace, [_process_info | stacktrace]} =
+      Process.info(self(), :current_stacktrace)
+
+    publish_send_error(state, :error, error, stacktrace)
+  end
+
+  defp publish_send_error(state, kind, reason, stacktrace) do
+    %{stream: stream, endpoint: endpoint, route: route, started_at: started_at} = state
+
+    execute_send_error(started_at, %{
+      stream: stream,
+      server: stream.server,
+      endpoint: endpoint,
+      path: route,
+      kind: kind,
+      reason: reason,
+      stacktrace: stacktrace
+    })
+  end
+
+  defp execute_send_error(started_at, metadata) do
+    now = System.monotonic_time()
+
+    :telemetry.execute(
+      GRPC.Telemetry.server_rpc_prefix() ++ [:send_error],
+      %{duration: now - started_at, monotonic_time: now},
+      metadata
+    )
   end
 
   defp publish_abort(state, pid, reason) do
@@ -866,7 +1045,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   defp async_read_body(req, opts) do
-    length = opts[:length] || 8_000_000
+    length = opts[:length] || @default_read_length
     period = opts[:period] || 15000
     ref = make_ref()
 

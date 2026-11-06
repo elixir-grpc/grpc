@@ -14,8 +14,25 @@ defmodule GRPC.Message do
   import Bitwise
   alias GRPC.RPCError
 
-  @max_message_length bsl(1, 32 - 1)
+  # Override with: config :grpc, max_message_length: bytes
+  @default_max_message_length bsl(1, 32 - 1)
   @trailers_flag 0b1000_0000
+
+  @doc """
+  The largest message, in bytes, that `to_data/2` encodes and the decoding
+  functions accept.
+
+  It is the `:max_message_length` of the `:grpc` application environment, or
+  2 GiB when that is not set. The limit applies to one message as it travels on
+  the wire: its encoded, and if compressed, compressed size when sending, and the
+  length in its prefix when receiving. `GRPC.Compressor.Gzip` has its own limit
+  for the decompressed size.
+
+      config :grpc, max_message_length: 16 * 1024 * 1024
+  """
+  def max_message_length do
+    Application.get_env(:grpc, :max_message_length, @default_max_message_length)
+  end
 
   @doc """
   Transforms Protobuf data into a gRPC body binary.
@@ -25,6 +42,7 @@ defmodule GRPC.Message do
     * `:compressor` - the optional `GRPC.Compressor` to be used.
     * `:iolist` - if `true`, encodes the data as an `t:iolist()` instead of a `t:binary()`
     * `:max_message_length` - the maximum number of bytes for the encoded message.
+      Defaults to `max_message_length/0`.
 
   ## Examples
 
@@ -45,7 +63,7 @@ defmodule GRPC.Message do
     compressor = opts[:compressor]
     iolist = opts[:iolist]
     codec = opts[:codec]
-    max_length = opts[:max_message_length] || @max_message_length
+    max_length = opts[:max_message_length] || max_message_length()
     additional_flags = opts[:message_flag] || 0
 
     {flag, message} =
@@ -82,6 +100,8 @@ defmodule GRPC.Message do
       {<<1, 2, 3, 4, 5, 6, 7, 8>>, <<>>}
   """
   def from_data(data) do
+    check_length!(data)
+
     <<_flag::unsigned-integer-size(8), length::big-32, message::bytes-size(length), rest::binary>> =
       data
 
@@ -96,7 +116,14 @@ defmodule GRPC.Message do
       iex> GRPC.Message.from_data(%{compressor: nil}, <<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7, 8>>)
       {:ok, <<1, 2, 3, 4, 5, 6, 7, 8>>, <<>>}
   """
-  def from_data(%{compressor: nil}, data) do
+  def from_data(%{compressor: _} = stream, data) do
+    case check_length(data) do
+      :ok -> decode_data(stream, data)
+      {:error, _} = error -> error
+    end
+  end
+
+  defp decode_data(%{compressor: nil}, data) do
     case data do
       <<0, length::big-32, message::bytes-size(length), rest::binary>> ->
         {:ok, message, rest}
@@ -116,7 +143,7 @@ defmodule GRPC.Message do
     end
   end
 
-  def from_data(%{compressor: compressor}, data) do
+  defp decode_data(%{compressor: compressor}, data) do
     case data do
       <<1, length::big-32, message::bytes-size(length), rest::binary>> ->
         {:ok, compressor.decompress(message), rest}
@@ -129,6 +156,31 @@ defmodule GRPC.Message do
 
       _ ->
         {:error, RPCError.exception(status: :invalid_argument, message: "Message is malformed.")}
+    end
+  end
+
+  # The length prefix is checked before the message is sliced out of the buffer.
+  defp check_length(<<_flag::8, length::big-32, _::binary>>) do
+    max_length = max_message_length()
+
+    if length > max_length do
+      {:error,
+       RPCError.exception(
+         status: :resource_exhausted,
+         message:
+           "Received message is too large (#{length} bytes, the limit is #{max_length} bytes)"
+       )}
+    else
+      :ok
+    end
+  end
+
+  defp check_length(_data), do: :ok
+
+  defp check_length!(data) do
+    case check_length(data) do
+      :ok -> :ok
+      {:error, error} -> raise error
     end
   end
 
@@ -178,21 +230,31 @@ defmodule GRPC.Message do
       iex> GRPC.Message.get_message(<<0, 0, 0, 0, 8, 1, 2, 3, 4, 5, 6, 7>>)
       false
   """
-  def get_message(
-        <<flag::unsigned-integer-size(8), length::unsigned-integer-size(32),
-          message::bytes-size(length), rest::binary>>
-      ) do
+  def get_message(data) do
+    check_length!(data)
+    take_message(data)
+  end
+
+  defp take_message(
+         <<flag::unsigned-integer-size(8), length::unsigned-integer-size(32),
+           message::bytes-size(length), rest::binary>>
+       ) do
     case flag do
       @trailers_flag -> {{:trailers, message}, rest}
       _ -> {{flag, message}, rest}
     end
   end
 
-  def get_message(_) do
+  defp take_message(_) do
     false
   end
 
-  def get_message(data, nil = _compressor) do
+  def get_message(data, compressor) do
+    check_length!(data)
+    take_message(data, compressor)
+  end
+
+  defp take_message(data, nil = _compressor) do
     case data do
       <<@trailers_flag::8, length::unsigned-integer-size(32), message::bytes-size(length),
         rest::binary>> ->
@@ -207,7 +269,7 @@ defmodule GRPC.Message do
     end
   end
 
-  def get_message(data, compressor) do
+  defp take_message(data, compressor) do
     case data do
       <<1::8, length::unsigned-integer-32, message::bytes-size(length), rest::binary>> ->
         {{1, compressor.decompress(message)}, rest}

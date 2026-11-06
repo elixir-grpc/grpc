@@ -9,6 +9,12 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
   This process buffers the messages for one stream, serves them back to the Gun
   adapter in arrival order, and terminates once the stream has reached a
   terminal state and all buffered messages have been consumed.
+
+  Streams are opened with a finite Gun `flow`, a count of DATA frames. Gun keeps
+  sending `:gun_data` after the count reaches zero, but stops reopening the
+  stream's window until `:gun.update_flow/3` credits frames back. This process
+  credits one frame each time a data message leaves the queue, so the queue holds
+  about one window of data when the caller reads slowly.
   """
 
   use GenServer
@@ -43,7 +49,8 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
        done: false,
        deadline: :infinity,
        deadline_timer: nil,
-       cleanup_target: nil
+       cleanup_target: nil,
+       flow_target: nil
      }}
   end
 
@@ -63,6 +70,7 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
 
     case :queue.out(messages) do
       {{:value, message}, remaining} ->
+        credit_flow(state, message)
         new_state = %{state | messages: remaining}
 
         if done? and :queue.is_empty(remaining) do
@@ -102,8 +110,8 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
     |> push_message({:response, fin, status, headers}, terminal?(fin))
   end
 
-  def handle_info({:gun_data, _conn_pid, _stream_ref, fin, data}, state) do
-    state
+  def handle_info({:gun_data, gun_pid, stream_ref, fin, data}, state) do
+    %{state | flow_target: {gun_pid, stream_ref}}
     |> push_message({:data, fin, data}, terminal?(fin))
   end
 
@@ -138,6 +146,7 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
   defp push_message(%{waiter: from} = state, message, terminal?) when not is_nil(from) do
     state = if terminal?, do: cancel_deadline(state), else: state
     GenServer.reply(from, message)
+    credit_flow(state, message)
     new_state = %{state | waiter: nil, done: terminal?}
 
     if terminal? do
@@ -151,6 +160,14 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
     state = if terminal?, do: cancel_deadline(state), else: state
     {:noreply, %{state | messages: :queue.in(message, messages), done: terminal?}}
   end
+
+  # Returns the frame to Gun's `flow`, which reopens the stream's window once it is
+  # positive again. After the last frame there is nothing left to reopen.
+  defp credit_flow(%{done: false, flow_target: {gun_pid, stream_ref}}, {:data, :nofin, _data}) do
+    :gun.update_flow(gun_pid, stream_ref, 1)
+  end
+
+  defp credit_flow(_state, _message), do: :ok
 
   defp terminal?(:fin), do: true
   defp terminal?(:nofin), do: false
