@@ -13,11 +13,9 @@ defmodule GRPC.Client.Adapters.MTLSTest do
     run(FeatureServer)
   end
 
-  # Logger handler. The Erlang `:ssl` app logs every TLS alert as a report; this
-  # sends the server-side ones to the test process, so a test can wait for the
-  # exact alert instead of guessing from a failed call.
+  # Logger handler. It sends each TLS alert from `:ssl` to the test process.
   def log(%{msg: {:report, %{role: role, alert: alert}}}, %{pid: pid}) do
-    # The alert record ends with its reason, e.g. `:certificate_required`.
+    # The last element of the alert record is the reason.
     send(pid, {:tls_alert, role, elem(alert, tuple_size(alert) - 1)})
   end
 
@@ -81,7 +79,6 @@ defmodule GRPC.Client.Adapters.MTLSTest do
 
   # A connection the server drops can fail a call in more than one way: an error
   # tuple, or an exit from the connection pool. Both mean the call did not go through.
-  # That alone does not say why, so the tests below also wait for the TLS alert.
   defp failed_call(channel) do
     case get_feature(channel, timeout: 2_000) do
       {:error, _reason} -> :failed
@@ -154,9 +151,7 @@ defmodule GRPC.Client.Adapters.MTLSTest do
 
         assert failed_call(channel) == :failed
 
-        # The server rejected the missing certificate. TLS 1.3 clients finish
-        # their half of the handshake first, so the alert can reach the server
-        # after the call has failed. Wait for it rather than checking at once.
+        # With TLS 1.3, the alert can come after the call fails.
         assert_receive {:tls_alert, :server, :certificate_required}, 5_000
       end
 
@@ -168,21 +163,14 @@ defmodule GRPC.Client.Adapters.MTLSTest do
 
         assert failed_call(channel) == :failed
 
-        # The server could not read the HTTP/2 preface as a TLS record. This is
-        # the `WRONG_VERSION_NUMBER` the guide describes, seen from the server.
-        # It is not a certificate alert, so a missing `:cred` can't pass as a
-        # missing client certificate or the other way round.
+        # The server cannot read the HTTP/2 preface as a TLS record.
         assert_receive {:tls_alert, :server, {:unsupported_record_type, _byte}}, 5_000
       end
     end
   end
 
   describe "gun adapter, client side of a rejected certificate" do
-    # Gun finishes the TLS 1.3 handshake, reports the connection as up, and only
-    # then receives the server's `certificate_required` alert. It reconnects and
-    # gets the same alert again. A call made in between either fails with the
-    # alert in its error or waits until its deadline. Gun reports the alert as
-    # the reason of its transport `:down` event, so that is what this asserts.
+    # The call result is not always the same. The `:down` event always has the alert.
     test "reports certificate_required as the reason the connection went down", %{
       port: port,
       certs: certs
