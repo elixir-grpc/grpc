@@ -1,8 +1,6 @@
 defmodule GRPC.Client.Pool.Implementation do
   @moduledoc false
 
-  require Logger
-
   alias GRPC.Client.Pool.Config
   alias GRPC.Client.Pool.Server.State
   alias GRPC.Client.Pool.HealthCheck.DynamicSupervisor
@@ -27,12 +25,12 @@ defmodule GRPC.Client.Pool.Implementation do
     end)
   end
 
-  defp open_new_connection(%Config{} = config) do
+  defp open_new_connection(%Config{channel: %GRPC.Channel{} = base_channel} = config) do
     # The Gun adapter registers named channels (by ref) and returns the existing
     # connection on a duplicate name. Every pool slot connects from the same
     # config.channel, so clearing the ref is what makes each slot an independent
     # connection instead of all slots aliasing one shared process.
-    connect_channel = %GRPC.Channel{config.channel | ref: nil}
+    connect_channel = %GRPC.Channel{base_channel | ref: nil}
 
     case connect_channel.adapter.connect(connect_channel, config.adapter_opts) do
       {:ok, %GRPC.Channel{} = channel} ->

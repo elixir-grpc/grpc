@@ -1,8 +1,6 @@
 defmodule GRPC.Client.Pool.Server do
   @moduledoc false
 
-  require Logger
-
   use GenServer
 
   alias GRPC.Client.Pool.Config

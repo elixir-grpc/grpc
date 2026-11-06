@@ -746,11 +746,6 @@ defmodule GRPC.Stub do
 
   defp wrap_stream_with_lease_handle(enum_stream, nil), do: enum_stream
 
-  defp wrap_stream_with_lease_handle([], handle) do
-    release_lease_handle(handle)
-    []
-  end
-
   defp wrap_stream_with_lease_handle(enum_stream, handle) do
     Stream.transform(
       enum_stream,
