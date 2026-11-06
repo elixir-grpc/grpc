@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## v1.0.6
+
+No changes. Released for version sync with `:grpc_server`
+
+## v1.0.5
 
 ### Enhancements
 
@@ -18,7 +22,7 @@
   * The Gun adapter no longer shares a named channel's connection process across Erlang nodes. It was registered in `:global`, so a node connecting with a `:name` already used on another node adopted the remote connection process; `connect/2` returned `{:ok, channel}`, but every RPC on it then raised `ArgumentError` because `GRPC.Stub.call/5` calls `Process.alive?/1` on the connection pid and that raises for remote pids. Connection processes are now registered in the node-local `GRPC.Client.Registry`, so reuse is per node.
   * Invalid Mint `:retry` values now raise `ArgumentError`. Because the old comparisons relied on term ordering, bad input failed silently and in two different directions: a negative integer behaved as no-retry, while *any* atom lead to infinite reconnection.
 
-## v1.0.4 (2026-0-15)
+## v1.0.4 (2026-10-15)
 
 ### Bug Fixes
 
