@@ -527,7 +527,9 @@ defmodule GRPC.Stub do
           try do
             result =
               GRPC.Client.Telemetry.client_span(stream, request, fn ->
-                do_call(req_stream, stream, request, opts)
+                req_stream
+                |> do_call(stream, request, opts)
+                |> strip_headers(response_stream, opts)
               end)
 
             case result do
@@ -553,7 +555,9 @@ defmodule GRPC.Stub do
         else
           try do
             GRPC.Client.Telemetry.client_span(stream, request, fn ->
-              do_call(req_stream, stream, request, opts)
+              req_stream
+              |> do_call(stream, request, opts)
+              |> strip_headers(response_stream, opts)
             end)
           after
             release_stream_lease(stream)
@@ -728,6 +732,8 @@ defmodule GRPC.Stub do
     end)
   end
 
+  # Interceptors always see headers and trailers, so the adapter always returns
+  # them. `strip_headers/3` removes them again for callers that did not ask.
   defp do_call(
          false,
          %{channel: channel} = stream,
@@ -736,7 +742,11 @@ defmodule GRPC.Stub do
        ) do
     last = fn %{codec: codec, compressor: compressor} = s, _ ->
       message = codec.encode(request)
-      opts = Keyword.put(opts, :compressor, compressor)
+
+      opts =
+        opts
+        |> Keyword.put(:compressor, compressor)
+        |> Keyword.put(:return_headers, true)
 
       s
       |> channel.adapter.send_request(message, opts)
@@ -747,6 +757,13 @@ defmodule GRPC.Stub do
   end
 
   defp do_call(true, %{channel: channel} = stream, req, opts) do
+    # The Mint adapter keeps a reply's headers and trailers only if the flag is
+    # set when the stream opens, and `handle_recv/3` needs them at `recv/2`.
+    opts =
+      if recv_interceptors(channel) == [],
+        do: opts,
+        else: Keyword.put(opts, :return_headers, true)
+
     last = fn s, _ ->
       channel.adapter.send_headers(s, opts)
     end
@@ -855,6 +872,17 @@ defmodule GRPC.Stub do
         opts
       end
 
+    # `handle_recv/3` interceptors see headers and trailers whether or not the
+    # caller asked, so ask the adapter for them and strip them afterwards.
+    # Unary and server-streaming calls run their interceptors in `call/5`.
+    recv_interceptors = recv_interceptors(stream)
+    caller_opts = opts
+
+    opts =
+      if recv_interceptors != [] and is_list(opts),
+        do: Keyword.put(opts, :return_headers, true),
+        else: opts
+
     try do
       interface[:receive_data].(stream, opts)
     rescue
@@ -867,9 +895,51 @@ defmodule GRPC.Stub do
         :erlang.raise(kind, reason, __STACKTRACE__)
     else
       result ->
-        handle_recv_result(result, stream)
+        result = handle_recv_result(result, stream)
+
+        if recv_interceptors == [] do
+          result
+        else
+          recv_interceptors
+          |> Enum.reduce(result, fn {interceptor, interceptor_opts}, acc ->
+            interceptor.handle_recv(stream, acc, interceptor_opts)
+          end)
+          |> strip_headers(streaming_response?(stream), caller_opts)
+        end
     end
   end
+
+  # Interceptors of a client-streaming or bidi stream that implement the
+  # optional `handle_recv/3`, in the order they run.
+  defp recv_interceptors(%{grpc_type: type, channel: channel})
+       when type in [:client_stream, :bidirectional_stream],
+       do: recv_interceptors(channel)
+
+  defp recv_interceptors(%{interceptors: interceptors}) when is_list(interceptors) do
+    Enum.filter(interceptors, fn {interceptor, _opts} ->
+      Code.ensure_loaded?(interceptor) and function_exported?(interceptor, :handle_recv, 3)
+    end)
+  end
+
+  defp recv_interceptors(_), do: []
+
+  # Puts a result back in the shape the caller asked for. With `return_headers`
+  # the caller gets the result as the adapter built it.
+  defp strip_headers(result, streaming_response?, opts) do
+    if opts[:return_headers] do
+      result
+    else
+      strip_headers(result, streaming_response?)
+    end
+  end
+
+  defp strip_headers({:ok, [], %{} = _headers}, true), do: {:ok, []}
+
+  defp strip_headers({:ok, replies, %{} = _headers}, true),
+    do: {:ok, Stream.reject(replies, &match?({:trailers, _}, &1))}
+
+  defp strip_headers({:ok, reply, %{} = _headers}, false), do: {:ok, reply}
+  defp strip_headers(result, _streaming_response?), do: result
 
   defp stream_lease_handle(%{payload: %{__pool_lease_handle__: handle}}), do: handle
   defp stream_lease_handle(_), do: nil

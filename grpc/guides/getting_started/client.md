@@ -51,6 +51,48 @@ iex> request = Helloworld.HelloRequest.new(name: "Alice")
 iex> {:ok, reply} = channel |> Helloworld.GreetingServer.Stub.say_unary_hello(request)
 ```
 
+### Reading response headers
+
+An interceptor sees the response headers and trailers even when the caller did not pass
+`return_headers: true`. The caller's return value does not change. This one saves a session
+token that the server sends in a header:
+
+```elixir
+defmodule MyApp.SessionInterceptor do
+  @behaviour GRPC.Client.Interceptor
+
+  def init(opts), do: opts
+
+  def call(stream, req, next, _opts) do
+    case next.(stream, req) do
+      {:ok, _reply, %{headers: headers}} = result ->
+        if token = headers["x-session-token"], do: MyApp.Session.put(token)
+        result
+
+      other ->
+        other
+    end
+  end
+end
+```
+
+Pass `result` on as it is. The stub removes the headers and trailers again after the last
+interceptor, if the caller did not ask for them.
+
+For server-streaming calls the result is `{:ok, replies, %{headers: headers}}`, and the last
+item of `replies` is `{:trailers, trailers}`. For client-streaming and bidirectional calls,
+`call/4` runs when the stream opens, before any reply exists. Implement the optional
+`handle_recv/3`, which `GRPC.Stub.recv/2` calls with the same result shapes:
+
+```elixir
+def handle_recv(_stream, {:ok, _reply, %{headers: headers}} = result, _opts) do
+  MyApp.Session.put(headers["x-session-token"])
+  result
+end
+
+def handle_recv(_stream, other, _opts), do: other
+```
+
 ---
 
 ## Compression and Metadata
