@@ -8,6 +8,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
   @behaviour GRPC.Server.Adapter
 
   require Logger
+  alias GRPC.Server.Adapters.Cowboy.ConnectionAge
   alias GRPC.Server.Adapters.Cowboy.Handler
 
   @default_num_acceptors 20
@@ -27,6 +28,14 @@ defmodule GRPC.Server.Adapters.Cowboy do
       If both `:net` and `:ip` options are given, make sure they are compatible
       (i.e. give a IPv4 for `:inet` and IPv6 for `:inet6`). The default is to listen on all interfaces.
     * `:ipv6_v6only` - If true, only bind on IPv6 addresses (default: `false`).
+    * `:max_connection_age` - Milliseconds after which the server closes a connection
+      gracefully (default: `:infinity`). The server sends GOAWAY, lets open RPCs finish and
+      refuses new ones. The age has up to ±10% jitter, picked once for each connection, and
+      counts from the first RPC on the connection. See the "Connection age" guide.
+    * `:max_connection_age_grace` - Milliseconds that open RPCs have to finish after GOAWAY.
+      Then the server closes the connection and ends the RPCs that remain (default: `:infinity`,
+      which keeps Cowboy's `goaway_complete_timeout`, 3000 ms). This also applies when the
+      server stops.
 
   Accepted sockets have `TCP_NODELAY` on, which is Ranch's default for both `ranch_tcp` and `ranch_ssl`. Small
   writes go out at once instead of waiting on Nagle's algorithm and delayed ACKs.
@@ -254,6 +263,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
         Enum.into(adapter_opts, %{})
       )
       |> put_connection_window_default()
+      |> ConnectionAge.configure()
 
     [
       servers_name(endpoint, servers),
