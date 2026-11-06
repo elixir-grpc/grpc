@@ -57,7 +57,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       # hostname it resolved from must still reach TLS for SNI and certificate
       # verification.
       opts =
-        if hostname = channel.hostname, do: Keyword.put(opts, :hostname, hostname), else: opts
+        if channel.hostname, do: Keyword.put(opts, :hostname, channel.hostname), else: opts
 
       Process.flag(:trap_exit, true)
 
