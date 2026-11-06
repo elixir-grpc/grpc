@@ -1,6 +1,12 @@
 defmodule GRPC.Client.ConnectionTest do
   use GRPC.Client.DataCase, async: false
 
+  setup do
+    previous_pool = Application.get_env(:grpc, :pool_enabled)
+    Application.put_env(:grpc, :pool_enabled, false)
+    on_exit(fn -> Application.put_env(:grpc, :pool_enabled, previous_pool) end)
+  end
+
   alias GRPC.Channel
   alias GRPC.Client.Connection
 

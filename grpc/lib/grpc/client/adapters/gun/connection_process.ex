@@ -112,10 +112,14 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
     {:stop, :normal, :ok, state}
   end
 
-  def handle_call({:request, path, headers, body, deadline}, _from, %{gun_pid: gun_pid} = state) do
+  def handle_call(
+        {:request, path, headers, body, deadline},
+        {caller_pid, _},
+        %{gun_pid: gun_pid} = state
+      ) do
     with {:ok, response_pid} <- start_response_process(),
          stream_ref <- :gun.post(gun_pid, path, headers, body, %{reply_to: response_pid}),
-         state <- put_response_pid(state, stream_ref, response_pid),
+         state <- put_response_pid(state, stream_ref, response_pid, caller_pid),
          :ok <- StreamResponseProcess.track(response_pid, self(), stream_ref, deadline) do
       {:reply, {:ok, %{stream_ref: stream_ref, response_pid: response_pid}}, state}
     else
@@ -123,10 +127,14 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
     end
   end
 
-  def handle_call({:open_stream, path, headers, deadline}, _from, %{gun_pid: gun_pid} = state) do
+  def handle_call(
+        {:open_stream, path, headers, deadline},
+        {caller_pid, _},
+        %{gun_pid: gun_pid} = state
+      ) do
     with {:ok, response_pid} <- start_response_process(),
          stream_ref <- :gun.post(gun_pid, path, headers, %{reply_to: response_pid}),
-         state <- put_response_pid(state, stream_ref, response_pid),
+         state <- put_response_pid(state, stream_ref, response_pid, caller_pid),
          :ok <- StreamResponseProcess.track(response_pid, self(), stream_ref, deadline) do
       {:reply, {:ok, %{stream_ref: stream_ref, response_pid: response_pid}}, state}
     else
@@ -184,15 +192,57 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   # Gun is gone for good (reconnect retries exhausted or a crash). Fail all
   # in-flight streams and stop
   def handle_info({:DOWN, _monitor_ref, :process, gun_pid, reason}, %{gun_pid: gun_pid} = state) do
-    Enum.each(state.response_processes, fn {_stream_ref, {response_pid, _monitor_ref}} ->
-      send(response_pid, {:connection_down, reason})
+    Enum.each(state.response_processes, fn {_stream_ref, entry} ->
+      pid =
+        case entry do
+          %{response_pid: p} -> p
+          {p, _} -> p
+          _ -> nil
+        end
+
+      if is_pid(pid) do
+        send(pid, {:connection_down, reason})
+      end
     end)
 
     {:stop, {:shutdown, {:gun_down, reason}}, state}
   end
 
-  def handle_info({:DOWN, monitor_ref, :process, _pid, _reason}, state) do
-    {:noreply, drop_response_pid_by_monitor(state, monitor_ref)}
+  def handle_info({:DOWN, monitor_ref, :process, _pid, _reason}, %{gun_pid: gun_pid} = state) do
+    case find_stream_by_monitor(state, monitor_ref) do
+      {stream_ref, entry} ->
+        :ok = :gun.cancel(gun_pid, stream_ref)
+
+        response_pid =
+          case entry do
+            %{response_pid: pid} -> pid
+            {pid, _} -> pid
+            _ -> nil
+          end
+
+        caller_monitor =
+          case entry do
+            %{caller_monitor: mon} -> mon
+            _ -> nil
+          end
+
+        if monitor_ref == caller_monitor and is_pid(response_pid) and Process.alive?(response_pid) do
+          GenServer.stop(response_pid, :normal)
+        end
+
+        {:noreply, drop_response_pid(state, stream_ref)}
+
+      nil ->
+        {:noreply, state}
+    end
+  end
+
+  def handle_info({:gun_error, _conn_pid, stream_ref, reason}, state) do
+    Logger.debug(
+      "#{inspect(__MODULE__)} received gun_error for stream #{inspect(stream_ref)}: #{inspect(reason)}"
+    )
+
+    {:noreply, drop_response_pid(state, stream_ref)}
   end
 
   def handle_info(msg, state) do
@@ -220,13 +270,32 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
     StreamResponseProcess.start_link()
   end
 
-  defp put_response_pid(%{response_processes: processes} = state, stream_ref, response_pid) do
-    monitor_ref = Process.monitor(response_pid)
-    %{state | response_processes: Map.put(processes, stream_ref, {response_pid, monitor_ref})}
+  defp put_response_pid(
+         %{response_processes: processes} = state,
+         stream_ref,
+         response_pid,
+         caller_pid
+       ) do
+    response_monitor = Process.monitor(response_pid)
+    caller_monitor = if is_pid(caller_pid), do: Process.monitor(caller_pid), else: nil
+
+    entry = %{
+      response_pid: response_pid,
+      response_monitor: response_monitor,
+      caller_pid: caller_pid,
+      caller_monitor: caller_monitor
+    }
+
+    %{state | response_processes: Map.put(processes, stream_ref, entry)}
   end
 
   defp drop_response_pid(%{response_processes: processes} = state, stream_ref) do
     case Map.pop(processes, stream_ref) do
+      {%{response_monitor: r_mon, caller_monitor: c_mon}, remaining} ->
+        if r_mon, do: Process.demonitor(r_mon, [:flush])
+        if c_mon, do: Process.demonitor(c_mon, [:flush])
+        %{state | response_processes: remaining}
+
       {{_response_pid, monitor_ref}, remaining} ->
         Process.demonitor(monitor_ref, [:flush])
         %{state | response_processes: remaining}
@@ -236,30 +305,38 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
     end
   end
 
-  defp drop_response_pid_by_monitor(%{response_processes: processes} = state, monitor_ref) do
-    case Enum.find(processes, fn {_stream_ref, {_response_pid, ref}} -> ref == monitor_ref end) do
-      {stream_ref, _entry} -> %{state | response_processes: Map.delete(processes, stream_ref)}
-      nil -> state
-    end
+  defp find_stream_by_monitor(%{response_processes: processes}, monitor_ref) do
+    Enum.find(processes, fn {_stream_ref, entry} ->
+      case entry do
+        %{response_monitor: r_mon, caller_monitor: c_mon} ->
+          r_mon == monitor_ref or c_mon == monitor_ref
+
+        {_pid, r_mon} ->
+          r_mon == monitor_ref
+
+        _ ->
+          false
+      end
+    end)
   end
 
   defp response_pid(%{response_processes: processes}, stream_ref) do
     case Map.get(processes, stream_ref) do
+      %{response_pid: response_pid} -> response_pid
       {response_pid, _monitor_ref} -> response_pid
       nil -> nil
     end
   end
 
-  defp cancel_stream(%{response_processes: processes} = state, stream_ref, expected_pid, stop?) do
-    case Map.get(processes, stream_ref) do
-      {response_pid, _monitor_ref}
-      when is_nil(expected_pid) or response_pid == expected_pid ->
-        :ok = :gun.cancel(state.gun_pid, stream_ref)
-        if stop?, do: stop_response_process(response_pid)
-        drop_response_pid(state, stream_ref)
+  defp cancel_stream(state, stream_ref, expected_pid, stop?) do
+    response_pid = response_pid(state, stream_ref)
 
-      _ ->
-        state
+    if response_pid && (is_nil(expected_pid) or response_pid == expected_pid) do
+      :ok = :gun.cancel(state.gun_pid, stream_ref)
+      if stop?, do: stop_response_process(response_pid)
+      drop_response_pid(state, stream_ref)
+    else
+      state
     end
   end
 
