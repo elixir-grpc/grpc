@@ -73,7 +73,12 @@ if Code.ensure_loaded?(:gun) do
     end
 
     defp do_connect(channel, open_opts) do
-      open_opts = Map.merge(%{retry: @max_retries, retry_fun: &__MODULE__.retry_fun/2}, open_opts)
+      open_opts =
+        open_opts
+        |> Map.merge(%{retry: @max_retries, retry_fun: &__MODULE__.retry_fun/2})
+        |> Map.update(:http2_opts, %{notify_settings_changed: true}, fn opts ->
+          Map.put(opts, :notify_settings_changed, true)
+        end)
 
       case ConnectionProcess.connect(channel, open_opts) do
         {:ok, adapter_payload} ->
@@ -313,6 +318,8 @@ if Code.ensure_loaded?(:gun) do
           trailers
 
         {:error, :timeout} ->
+          GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :deadline)
+
           {:error,
            GRPC.RPCError.exception(
              GRPC.Status.deadline_exceeded(),
@@ -323,6 +330,8 @@ if Code.ensure_loaded?(:gun) do
         # the RPC never completed on a live connection, so callers can safely
         # retry (deadline errors above stay DEADLINE_EXCEEDED).
         {:error, {:connection_error, msg}} ->
+          GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :connection_unavailable)
+
           {:error,
            GRPC.RPCError.exception(
              GRPC.Status.unavailable(),
@@ -330,6 +339,8 @@ if Code.ensure_loaded?(:gun) do
            )}
 
         {:error, {:stream_error, msg}} ->
+          GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :stream_error)
+
           {:error,
            GRPC.RPCError.exception(GRPC.Status.internal(), "stream_error: #{inspect(msg)}")}
 
@@ -368,16 +379,17 @@ if Code.ensure_loaded?(:gun) do
     end
 
     defp recv_body(stream_payload, opts) do
-      recv_body(stream_payload, "", opts)
+      recv_body(stream_payload, [], opts)
     end
 
     defp recv_body(stream_payload, acc, opts) do
       case recv_data_or_trailers(stream_payload, opts) do
         {:data, data} ->
-          recv_body(stream_payload, <<acc::binary, data::binary>>, opts)
+          recv_body(stream_payload, [acc, data], opts)
 
         {:trailers, trailers} ->
-          {:ok, acc, GRPC.Transport.HTTP2.decode_headers(trailers)}
+          body = IO.iodata_to_binary(acc)
+          {:ok, body, GRPC.Transport.HTTP2.decode_headers(trailers)}
 
         err ->
           err
@@ -510,6 +522,7 @@ if Code.ensure_loaded?(:gun) do
             encoded_details_bin: trailers["grpc-status-details-bin"]
           })
 
+        GRPC.Client.Telemetry.mark_rpc_failure(:remote, nil)
         {:error, rpc_error}
       end
     end
