@@ -374,9 +374,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       |> State.stream_response_pid(request_ref)
       |> end_stream_response(reason)
 
-      {_ref, new_state} = State.pop_ref(state, request_ref)
-      emit_streams(new_state)
-      new_state
+      drop_request(state, request_ref)
     end
 
     defp process_response({:done, request_ref}, state) do
@@ -384,9 +382,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       |> State.stream_response_pid(request_ref)
       |> StreamResponseProcess.done()
 
-      {_ref, new_state} = State.pop_ref(state, request_ref)
-      emit_streams(new_state)
-      new_state
+      drop_request(state, request_ref)
     end
 
     defp consume_or_cancel_stream(state, request_ref, type, data) do
@@ -409,14 +405,18 @@ if Code.ensure_loaded?(Mint.HTTP) do
         reason: reason
       })
 
-      {_ref, state} = State.pop_ref(state, request_ref)
-      emit_streams(state)
-      state = drop_queued_request_chunks(state, request_ref)
+      state = drop_request(state, request_ref)
 
       case Mint.HTTP2.cancel_request(state.conn, request_ref) do
         {:ok, conn} -> State.update_conn(state, conn)
         {:error, conn, _error} -> State.update_conn(state, conn)
       end
+    end
+
+    defp drop_request(state, request_ref) do
+      {_ref, state} = State.pop_ref(state, request_ref)
+      emit_streams(state)
+      drop_queued_request_chunks(state, request_ref)
     end
 
     defp drop_queued_request_chunks(state, request_ref) do
