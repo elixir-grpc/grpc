@@ -9,6 +9,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
     use GenServer
 
+    alias GRPC.Client.Adapters.CallExit
     alias GRPC.Client.Adapters.Mint.ConnectionProcess.State
     alias GRPC.Client.Adapters.Mint.StreamResponseProcess
     alias GRPC.Client.Telemetry
@@ -33,12 +34,15 @@ if Code.ensure_loaded?(Mint.HTTP) do
     @doc """
     Sends a request to the connected server.
 
+    If the call exits (the connection process is busy past the call timeout, or
+    dead), the exit reason has the headers and body replaced with `:redacted`.
+
     ## Options
 
       * :stream_response_pid (required) - the process to where send the responses coming from the connection will be sent to be processed
     """
     def request(pid, method, path, headers, body, opts \\ []) do
-      GenServer.call(pid, {:request, method, path, headers, body, opts})
+      CallExit.call(pid, {:request, method, path, headers, body, opts})
     end
 
     @doc """
@@ -52,7 +56,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
     Streams a chunk of the request body on the connection or signals the end of the body.
     """
     def stream_request_body(pid, request_ref, body) do
-      GenServer.call(pid, {:stream_body, request_ref, body})
+      CallExit.call(pid, {:stream_body, request_ref, body})
     end
 
     @doc """
