@@ -180,14 +180,14 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
     end
 
     # The adapter uses the 2 GiB default limit, so the reply must be larger than 2 GiB.
-    test "a reply over the message limit publishes :send_error and replies INTERNAL" do
-      assert %{"grpc-status" => "13", "grpc-message" => message} = call("oversize")
+    test "a reply over the message limit publishes :send_error and replies RESOURCE_EXHAUSTED" do
+      assert %{"grpc-status" => "8", "grpc-message" => message} = call("oversize")
       assert URI.decode(message) =~ "Encoded message is too large"
 
       assert_receive {:telemetry, @send_error, %{duration: duration}, metadata}
       assert duration > 0
 
-      assert %{kind: :error, reason: %GRPC.RPCError{status: 13}, stacktrace: [_ | _]} = metadata
+      assert %{kind: :error, reason: %GRPC.RPCError{status: 8}, stacktrace: [_ | _]} = metadata
       assert metadata.reason.message =~ "Encoded message is too large"
       assert metadata.server == ErrorServer
       assert metadata.path == @path

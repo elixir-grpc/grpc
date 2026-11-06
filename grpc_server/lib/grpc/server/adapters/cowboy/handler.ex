@@ -446,14 +446,27 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
       {:stop, req, state}
     else
-      case GRPC.Message.to_data(data, compressor: compressor, codec: opts[:codec]) do
+      max_length = Application.get_env(:grpc, :max_message_length, Bitwise.bsl(1, 31))
+
+      to_data_opts = [
+        compressor: compressor,
+        codec: opts[:codec],
+        max_message_length: max_length
+      ]
+
+      case GRPC.Message.to_data(data, to_data_opts) do
         {:ok, data, _size} ->
           req = check_sent_resp(req)
           :cowboy_req.stream_body(data, is_fin, req)
           {:ok, req, state}
 
         {:error, msg} ->
-          error = RPCError.exception(status: :internal, message: msg)
+          error =
+            RPCError.exception(
+              status: :resource_exhausted,
+              message: "#{msg}, the limit is #{max_length} bytes"
+            )
+
           publish_send_error(state, error)
           req = send_error(req, error, state, :rpc_error)
           {:stop, req, state}

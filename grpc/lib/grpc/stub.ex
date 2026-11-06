@@ -738,9 +738,11 @@ defmodule GRPC.Stub do
       message = codec.encode(request)
       opts = Keyword.put(opts, :compressor, compressor)
 
-      s
-      |> channel.adapter.send_request(message, opts)
-      |> recv(opts)
+      with :ok <- GRPC.Client.Stream.check_message_length(message) do
+        s
+        |> channel.adapter.send_request(message, opts)
+        |> recv(opts)
+      end
     end
 
     run_interceptors(channel, last).(stream, request)
