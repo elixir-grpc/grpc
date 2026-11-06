@@ -10,6 +10,7 @@
   * The Mint adapter's `:retry` option explicitly supports `:infinity`, reconnecting for as long as the connection process lives. This previously worked due Erlang term ordering (every atom sorts above every integer).
   * `GRPC.Client.Adapter` gained an optional `validate_opts/1` callback. Adapters that implement it have their `:adapter_opts` validated in the caller by `GRPC.Client.Connection.connect/2`, so configuration errors raise there instead of crashing the spawned connection process.
   * The functions `use GRPC.Stub` generates now have a `@doc` built from the RPC. It names the RPC, its request and reply types and its streaming kind, and shows an example. The `GRPC.Stub` moduledoc has a new "Generated functions" section with the arity, return value and call options for each RPC kind (#339).
+  * A client interceptor can read response headers and trailers. It opts in with the new optional `GRPC.Client.Interceptor.return_headers?/1` callback. If it returns `true`, `next` returns `{:ok, reply, %{headers: headers, trailers: trailers}}` for unary calls, and `{:ok, replies, %{headers: headers}}` with a final `{:trailers, trailers}` item for server streaming. Interceptors without the callback get `{:ok, reply}` and `{:ok, replies}`, as before. The optional `handle_recv/3` callback, called from `GRPC.Stub.recv/2` for client-streaming and bidirectional RPCs, always gets the headers and trailers. Callers get the same return values as before (#388).
 
 ### Behavior Changes
 
