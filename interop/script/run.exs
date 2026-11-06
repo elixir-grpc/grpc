@@ -47,6 +47,7 @@ defmodule InteropTestRunner do
       Client.cancel_after_begin!(ch)
       Client.cancel_after_first_response!(ch)
       Client.timeout_on_sleeping_server!(ch)
+      Client.empty_unary!(ch)
 
       IO.inspect(round, label: "Round #{round} --------------------------------")
     end
