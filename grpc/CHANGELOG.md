@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## v1.0.6
+
+No changes. Released for version sync with `:grpc_server`
+
+## v1.0.5
 
 ### Behavior Changes
 
@@ -12,7 +16,7 @@
   * The Mint adapter now returns `{:error, %GRPC.RPCError{}}` instead of raising when a response's HTTP status is not 200, like the Gun adapter.
   * The Gun adapter no longer shares a named channel's connection process across Erlang nodes. It was registered in `:global`, so a node connecting with a `:name` already used on another node adopted the remote connection process; `connect/2` returned `{:ok, channel}`, but every RPC on it then raised `ArgumentError` because `GRPC.Stub.call/5` calls `Process.alive?/1` on the connection pid and that raises for remote pids. Connection processes are now registered in the node-local `GRPC.Client.Registry`, so reuse is per node.
 
-## v1.0.4 (2026-0-15)
+## v1.0.4 (2026-10-15)
 
 ### Bug Fixes
 
