@@ -297,13 +297,6 @@ defmodule GRPC.Server do
     end
   end
 
-  # A body the codec can't parse is the client's error, not the server's.
-  defp decode_transcoded_body(codec, data, req_mod) do
-    {:ok, codec.decode(data, req_mod)}
-  rescue
-    error -> {:error, RPCError.exception(:invalid_argument, Exception.message(error))}
-  end
-
   defp do_handle_request(false, res_stream, %{is_preflight?: true} = stream, func_name) do
     call_with_interceptors(res_stream, func_name, stream, [])
   end
@@ -366,6 +359,13 @@ defmodule GRPC.Server do
       end)
 
     call_with_interceptors(res_stream, func_name, stream, reading_stream)
+  end
+
+  # A body the codec can't parse is the client's error, not the server's.
+  defp decode_transcoded_body(codec, data, req_mod) do
+    {:ok, codec.decode(data, req_mod)}
+  rescue
+    error -> {:error, RPCError.exception(:invalid_argument, Exception.message(error))}
   end
 
   defp call_with_interceptors(
