@@ -74,9 +74,10 @@ if Code.ensure_loaded?(:gun) do
     end
 
     defp do_connect(channel, open_opts) do
+      # `:retry` and `:retry_fun` given in `:adapter_opts` take precedence.
       open_opts =
-        open_opts
-        |> Map.merge(%{retry: @max_retries, retry_fun: &__MODULE__.retry_fun/2})
+        %{retry: @max_retries, retry_fun: &__MODULE__.retry_fun/2}
+        |> Map.merge(open_opts)
         |> Map.update(:http2_opts, %{notify_settings_changed: true}, fn opts ->
           Map.put(opts, :notify_settings_changed, true)
         end)

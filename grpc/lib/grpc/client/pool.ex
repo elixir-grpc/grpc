@@ -45,13 +45,18 @@ defmodule GRPC.Client.Pool do
   end
 
   @spec checkout(reference()) ::
-          {GRPC.Client.Pool.Server.State.Channel.t(), Channel.t(), reference()} | nil
+          {GRPC.Client.Pool.Server.State.Channel.t(), Channel.t(), reference()}
+          | {:error, :no_connection}
+          | nil
   def checkout(pool_ref) do
     case Registry.lookup(GRPC.Client.Pool.Registry, {GRPC.Client.Pool.Server, pool_ref}) do
       [{pool_pid, _}] ->
         case GenServer.call(pool_pid, :take_channel, @call_timeout) do
           nil ->
             nil
+
+          {:error, :no_connection} = error ->
+            error
 
           {%GRPC.Client.Pool.Server.State.Channel{channel: channel} = wrapped, monitor_ref} ->
             {wrapped, channel, monitor_ref}
