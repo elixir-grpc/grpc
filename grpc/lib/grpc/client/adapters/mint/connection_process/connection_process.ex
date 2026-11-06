@@ -117,10 +117,13 @@ if Code.ensure_loaded?(Mint.HTTP) do
         ) do
       case Mint.HTTP.request(state.conn, method, path, headers, :stream) do
         {:ok, conn, request_ref} ->
+          stream_response_pid = opts[:stream_response_pid]
+          monitor_ref = if is_pid(stream_response_pid), do: Process.monitor(stream_response_pid)
+
           new_state =
             state
             |> State.update_conn(conn)
-            |> State.put_empty_ref_state(request_ref, opts[:stream_response_pid])
+            |> State.put_empty_ref_state(request_ref, stream_response_pid, monitor_ref)
 
           {:reply, {:ok, %{request_ref: request_ref}}, new_state}
 
@@ -138,12 +141,14 @@ if Code.ensure_loaded?(Mint.HTTP) do
       case Mint.HTTP.request(state.conn, method, path, headers, :stream) do
         {:ok, conn, request_ref} ->
           queue = :queue.in({request_ref, body, nil}, state.request_stream_queue)
+          stream_response_pid = opts[:stream_response_pid]
+          monitor_ref = if is_pid(stream_response_pid), do: Process.monitor(stream_response_pid)
 
           new_state =
             state
             |> State.update_conn(conn)
             |> State.update_request_stream_queue(queue)
-            |> State.put_empty_ref_state(request_ref, opts[:stream_response_pid])
+            |> State.put_empty_ref_state(request_ref, stream_response_pid, monitor_ref)
 
           {:reply, {:ok, %{request_ref: request_ref}}, new_state,
            {:continue, :process_request_stream_queue}}
@@ -155,12 +160,19 @@ if Code.ensure_loaded?(Mint.HTTP) do
     end
 
     def handle_call({:stream_body, request_ref, :eof}, _from, state) do
-      case Mint.HTTP.stream_request_body(state.conn, request_ref, :eof) do
-        {:ok, conn} ->
-          {:reply, :ok, State.update_conn(state, conn)}
+      if State.has_request_ref(state, request_ref) do
+        case Mint.HTTP.stream_request_body(state.conn, request_ref, :eof) do
+          {:ok, conn} ->
+            {:reply, :ok, State.update_conn(state, conn)}
 
-        {:error, conn, error} ->
-          {:reply, {:error, error}, State.update_conn(state, conn)}
+          {:error, conn, %Mint.HTTPError{reason: :unknown_request_to_stream}} ->
+            {:reply, :ok, State.update_conn(state, conn)}
+
+          {:error, conn, error} ->
+            {:reply, {:error, error}, State.update_conn(state, conn)}
+        end
+      else
+        {:reply, :ok, state}
       end
     end
 
@@ -188,6 +200,17 @@ if Code.ensure_loaded?(Mint.HTTP) do
     @impl true
     def handle_info(:reconnect, state) do
       attempt_reconnect(state)
+    end
+
+    def handle_info({:DOWN, monitor_ref, :process, pid, reason}, state) do
+      case State.find_request_ref_by_monitor_ref(state, monitor_ref) do
+        nil ->
+          {:noreply, state}
+
+        request_ref ->
+          new_state = cancel_dead_stream(state, request_ref, pid, reason)
+          {:noreply, new_state}
+      end
     end
 
     def handle_info(message, state) do
