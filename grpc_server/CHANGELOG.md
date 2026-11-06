@@ -4,6 +4,8 @@
 
 ### Enhancements
 
+  * `[:grpc, :server, :rpc, :exception]` is now also published when the handler returns but encoding or sending the reply fails, so every failed call reaches telemetry with `:kind`, `:reason` and `:stacktrace`. It carries `:path` and no `:function_name`, and comes after `:stop`. Replies, status codes and logs are unchanged. A new section in the error handling guide shows how to forward these events to Sentry or Bugsnag (#349).
+
   * `[:grpc, :server, :rpc, :abort]` is now published when the adapter stops an in-flight RPC — an expired deadline, a client cancellation, a dropped connection. The exit signal that stops the RPC process does not unwind it, so `:stop` and `:exception` cannot be published for such a call; the new event carries the stream, server, endpoint, request path, RPC pid and exit reason.
 
   * A test and a doc note now cover that the Cowboy adapter's accepted sockets, plain and TLS, have `TCP_NODELAY` on. This is Ranch's default and the adapter passes nothing that turns it off (#323).

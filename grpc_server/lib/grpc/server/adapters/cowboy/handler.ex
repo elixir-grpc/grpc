@@ -441,6 +441,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         "A unaccepted encoding #{compressor.name()} is set, valid are: #{:cowboy_req.header("grpc-accept-encoding", req)}"
 
       error = RPCError.exception(status: :internal, message: msg)
+      publish_exception(state, error)
       req = send_error(req, error, state, :rpc_error)
 
       {:stop, req, state}
@@ -453,6 +454,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
         {:error, msg} ->
           error = RPCError.exception(status: :internal, message: msg)
+          publish_exception(state, error)
           req = send_error(req, error, state, :rpc_error)
           {:stop, req, state}
       end
@@ -560,9 +562,11 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   def call_rpc(server, path, stream) do
+    started_at = System.monotonic_time()
+
     result =
       try do
-        case do_call_rpc(server, path, stream) do
+        case do_call_rpc(server, path, stream, started_at) do
           {:error, _} = err ->
             err
 
@@ -588,26 +592,56 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  defp do_call_rpc(server, path, %{http_method: http_method} = stream) do
+  defp do_call_rpc(server, path, %{http_method: http_method} = stream, started_at) do
     case server.__call_rpc__(path, http_method, stream) do
       {:ok, stream, :noreply} ->
-        GRPC.Server.send_trailers(stream, @default_trailers)
+        report_send_failure(server, path, stream, started_at, fn ->
+          GRPC.Server.send_trailers(stream, @default_trailers)
+        end)
+
         {:ok, stream}
 
       {:ok, stream, response} ->
-        stream
-        |> GRPC.Server.send_reply(response)
-        |> GRPC.Server.send_trailers(@default_trailers)
+        report_send_failure(server, path, stream, started_at, fn ->
+          stream
+          |> GRPC.Server.send_reply(response)
+          |> GRPC.Server.send_trailers(@default_trailers)
+        end)
 
         {:ok, stream}
 
       {:ok, stream} ->
-        GRPC.Server.send_trailers(stream, @default_trailers)
+        report_send_failure(server, path, stream, started_at, fn ->
+          GRPC.Server.send_trailers(stream, @default_trailers)
+        end)
+
         {:ok, stream}
 
       error ->
         error
     end
+  end
+
+  # Encoding the reply and handing it to the adapter run after the telemetry span
+  # around the handler has closed, so a failure here publishes no `:exception`.
+  # Publish it here, then re-raise so `call_rpc/3` replies as before.
+  defp report_send_failure(server, path, stream, started_at, send_fun) do
+    send_fun.()
+  catch
+    kind, reason ->
+      stacktrace = __STACKTRACE__
+
+      execute_exception(started_at, %{
+        stream: stream,
+        server: server,
+        endpoint: stream.endpoint,
+        path: path,
+        kind: kind,
+        reason: reason,
+        stacktrace: stacktrace
+      })
+
+      :erlang.raise(kind, reason, stacktrace)
   end
 
   # Streaming reads arrive in chunks, so the cap is applied to the running total
@@ -717,6 +751,36 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
 
     :ok
+  end
+
+  # Failures found in this process while sending the reply. The error is an
+  # `RPCError` that was never raised, so the stacktrace is where this process
+  # noticed it.
+  defp publish_exception(state, %RPCError{} = error) do
+    %{stream: stream, endpoint: endpoint, route: route, started_at: started_at} = state
+
+    {:current_stacktrace, [_process_info | stacktrace]} =
+      Process.info(self(), :current_stacktrace)
+
+    execute_exception(started_at, %{
+      stream: stream,
+      server: stream.server,
+      endpoint: endpoint,
+      path: route,
+      kind: :error,
+      reason: error,
+      stacktrace: stacktrace
+    })
+  end
+
+  defp execute_exception(started_at, metadata) do
+    now = System.monotonic_time()
+
+    :telemetry.execute(
+      GRPC.Telemetry.server_rpc_prefix() ++ [:exception],
+      %{duration: now - started_at, monotonic_time: now},
+      metadata
+    )
   end
 
   defp publish_abort(state, pid, reason) do

@@ -69,3 +69,42 @@ By normalizing all possible outcomes, `GRPC.Stream` ensures fault-tolerant, exce
 This unified model allows developers to build composable and reliable streaming pipelines that gracefully recover from both domain and runtime errors.
 
 >_Note_: In the example above, we could use `map_error/2` instead of `map/2` to handle error cases explicitly. However, since the function also performs a transformation on successful values, `map/2` remains appropriate and useful in this context.
+
+---
+
+## Reporting server errors
+
+When a handler fails, the client gets an error status and the server keeps running. To tell an error reporter such as Sentry or Bugsnag, use one of two signals. Both are on by default.
+
+* **Telemetry.** `[:grpc, :server, :rpc, :exception]` is published when the handler raises, throws or exits, when encoding the reply fails, and when the adapter can't send it. The metadata has `:kind`, `:reason` and `:stacktrace`. See `GRPC.Telemetry` for the metadata of each case.
+* **Logger.** The Cowboy adapter logs a handler failure or an encoding failure with `:crash_reason` metadata, which Logger-based reporters read, such as `Sentry.LoggerHandler`. The `exception_log_filter` option can drop these logs. A failed send is not logged.
+
+To report from telemetry, attach a handler at application start:
+
+```elixir
+:telemetry.attach(
+  "report-grpc-server-errors",
+  [:grpc, :server, :rpc, :exception],
+  &MyApp.GRPCErrors.handle_event/4,
+  nil
+)
+
+defmodule MyApp.GRPCErrors do
+  # Statuses a handler returns on purpose are not worth a report.
+  def handle_event(_event, _measurements, %{reason: %GRPC.RPCError{status: status}}, _config)
+      when status in [1, 3, 5, 6, 7, 9, 16],
+      do: :ok
+
+  def handle_event(_event, _measurements, %{kind: :error} = meta, _config) do
+    Sentry.capture_exception(Exception.normalize(:error, meta.reason, meta.stacktrace),
+      stacktrace: meta.stacktrace
+    )
+  end
+
+  def handle_event(_event, _measurements, %{kind: kind, reason: reason}, _config) do
+    Sentry.capture_message("gRPC handler #{kind}: #{inspect(reason)}")
+  end
+end
+```
+
+The handler runs in the process that failed, so keep it short. Swap the `Sentry` calls for your reporter's.
