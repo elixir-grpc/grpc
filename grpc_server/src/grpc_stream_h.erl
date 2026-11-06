@@ -64,16 +64,13 @@ expect(Req) ->
 
 -spec data(cowboy_stream:streamid(), cowboy_stream:fin(), cowboy_req:resp_body(), State)
 	-> {cowboy_stream:commands(), State} when State::#state{}.
-%% Stream isn't waiting for data.
+%% Stream isn't waiting for data. The data is buffered, not credited: the
+%% window is credited once, when the reader drains the buffer (info/3).
+%% Crediting here as well counted every buffered byte twice, so the receive
+%% window grew without bound and never pushed back on the peer.
 data(StreamID, IsFin, Data, State=#state{
 		read_body_ref=undefined, read_body_buffer=Buffer, body_length=BodyLen}) ->
-	Commands = case byte_size(Data) of
-		0 ->
-			[];
-		Size ->
-			[{flow, Size}]
-	end,
-	do_data(StreamID, IsFin, Data, Commands, State#state{
+	do_data(StreamID, IsFin, Data, [], State#state{
 		expect=undefined,
 		read_body_is_fin=IsFin,
 		read_body_buffer= << Buffer/binary, Data/binary >>,

@@ -18,6 +18,7 @@ defmodule GRPC.Integration.ConnectionTest do
     :ok = GRPC.Server.stop(server)
     {:ok, _, _} = reconnect_server(server, port)
     assert {:ok, _} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
+    {:ok, _} = GRPC.Stub.disconnect(channel)
     :ok = GRPC.Server.stop(server)
   end
 
@@ -33,6 +34,7 @@ defmodule GRPC.Integration.ConnectionTest do
 
     point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
     assert {:ok, _} = channel |> Routeguide.RouteGuide.Stub.get_feature(point)
+    {:ok, _} = GRPC.Stub.disconnect(channel)
     :ok = GRPC.Server.stop(server)
   end
 

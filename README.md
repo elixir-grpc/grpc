@@ -432,6 +432,16 @@ By default, `:retry` is `0` (no reconnection attempts).
 
 > **Note:** Any in-flight requests at the time of the drop will fail immediately. Reconnection only re-establishes the transport connection — it does not replay requests.
 
+#### Keepalive
+
+To detect connections that died without being closed, the Mint adapter can send HTTP/2 pings:
+
+```elixir
+adapter_opts: [keepalive: 30_000, keepalive_tolerance: 2]
+```
+
+This pings every 30 seconds and closes the connection, triggering `:retry`, when 2 pings are left unacknowledged.
+
 ---
 
 ### **HTTP Transcoding**

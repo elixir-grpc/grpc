@@ -170,7 +170,106 @@ defmodule GRPC.Client.Adapters.GunTest do
     end
   end
 
+  describe "transport telemetry" do
+    test "reports lifecycle, settings, occupancy, loss, recovery, and stop", %{
+      port: port,
+      credential: credential
+    } do
+      for event <- [
+            :started,
+            :connected,
+            :settings,
+            :streams,
+            :down,
+            :stopped
+          ] do
+        attach_telemetry([:grpc, :client, :transport, event])
+      end
+
+      logical_ref = make_ref()
+
+      channel =
+        build(:channel,
+          ref: logical_ref,
+          port: port,
+          host: "localhost",
+          scheme: "https",
+          cred: credential
+        )
+
+      assert {:ok, connected} = Gun.connect(channel, [])
+      conn_pid = connected.adapter_payload.conn_pid
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :started],
+                      %{generation: 0, active_streams: 0},
+                      %{logical_connection_ref: ^logical_ref, transport_ref: ^conn_pid}}
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :connected], %{generation: 1},
+                      %{reconnect: false}}
+
+      gun_pid = :sys.get_state(conn_pid).gun_pid
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :settings], %{}, _}
+      send(conn_pid, {:gun_notify, gun_pid, :settings_changed, %{max_concurrent_streams: 1}})
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :settings], %{},
+                      %{max_concurrent_streams: 1}}
+
+      assert {:ok, %{stream_ref: stream_ref}} =
+               ConnectionProcess.open_stream(conn_pid, "/pending", [])
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :streams], %{active: 1}, _}
+
+      send(conn_pid, {:gun_down, gun_pid, :http2, :econnreset, [stream_ref]})
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :streams], %{active: 0}, _}
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :down], %{streams_terminated: 1},
+                      _}
+
+      send(conn_pid, {:gun_up, gun_pid, :http2})
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :connected], %{generation: 2},
+                      %{reconnect: true}}
+
+      assert {:ok, %{stream_ref: recovered_stream_ref}} =
+               ConnectionProcess.open_stream(conn_pid, "/pending", [])
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :streams], %{active: 1}, _}
+      assert :ok = ConnectionProcess.cancel(conn_pid, recovered_stream_ref)
+      assert_receive {:telemetry, [:grpc, :client, :transport, :streams], %{active: 0}, _}
+
+      assert {:ok, _} = Gun.disconnect(connected)
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :stopped],
+                      %{streams_terminated: 0}, _}
+    end
+  end
+
   describe "receive_data/2" do
+    test "classifies a remote RPC error without changing it" do
+      attach_telemetry([:grpc, :client, :rpc, :stop])
+      {:ok, response_pid} = GRPC.Client.Adapters.Gun.StreamResponseProcess.start_link()
+
+      send(
+        response_pid,
+        {:gun_response, self(), make_ref(), :fin, 200,
+         [{"grpc-status", "13"}, {"grpc-message", "remote error"}]}
+      )
+
+      stream = %GRPC.Client.Stream{payload: %{response_pid: response_pid}, server_stream: false}
+
+      assert {:error, %GRPC.RPCError{} = error} =
+               GRPC.Client.Telemetry.client_span(stream, :request, fn ->
+                 Gun.receive_data(stream, timeout: 100)
+               end)
+
+      assert error.status == GRPC.Status.internal()
+
+      assert_receive {:telemetry, [:grpc, :client, :rpc, :stop], _measurements,
+                      %{failure_stage: :remote, failure_reason: nil}}
+    end
+
     test "maps connection-level gun errors to unavailable RPC errors" do
       {:ok, response_pid} = GRPC.Client.Adapters.Gun.StreamResponseProcess.start_link()
 
@@ -185,6 +284,32 @@ defmodule GRPC.Client.Adapters.GunTest do
 
       assert message =~ "connection_error"
       assert message =~ "preface"
+    end
+
+    test "cancels stream and drops response process when caller process dies", %{
+      port: port,
+      credential: credential
+    } do
+      channel = build(:channel, port: port, host: "localhost", cred: credential)
+      {:ok, %{adapter_payload: %{conn_pid: conn_pid}}} = Gun.connect(channel, [])
+
+      parent = self()
+
+      {caller_pid, caller_ref} =
+        spawn_monitor(fn ->
+          {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} =
+            ConnectionProcess.open_stream(conn_pid, "/routeguide.RouteGuide/RouteChat", [])
+
+          send(parent, {:stream_opened, stream_ref, response_pid})
+          exit(:boom)
+        end)
+
+      assert_receive {:stream_opened, stream_ref, response_pid}
+      assert_receive {:DOWN, ^caller_ref, :process, ^caller_pid, :boom}
+
+      state = :sys.get_state(conn_pid)
+      refute Map.has_key?(state.response_processes, stream_ref)
+      refute Process.alive?(response_pid)
     end
   end
 end

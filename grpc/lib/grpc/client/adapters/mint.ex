@@ -40,18 +40,33 @@ if Code.ensure_loaded?(Mint.HTTP) do
         Check [Mint.HTTP2.setting() type](https://hexdocs.pm/mint/Mint.HTTP2.html#t:setting/0) for additional configs.
       * `:retry`: Number of reconnection attempts when the connection drops. Defaults to `0` (no retries).
         Uses exponential backoff with jitter between attempts.
+      * `:keepalive`: Interval in milliseconds between HTTP/2 PING frames sent to the server.
+        Defaults to `nil` (no pings).
+      * `:keepalive_tolerance`: Number of unacknowledged pings after which the connection is closed,
+        triggering `:retry` if configured. Defaults to `nil` (never close). Has no effect without `:keepalive`.
     """
     @impl true
     def connect(%{host: host, port: port} = channel, opts \\ []) do
       {config_opts, opts} = Keyword.pop(opts, :config_options, [])
       {retry, opts} = Keyword.pop(opts, :retry, 0)
+      # Pooled connections open with `ref: nil`, so the pool passes the logical ref separately
+      {logical_ref, opts} = Keyword.pop(opts, :logical_connection_ref, channel.ref)
+      {keepalive_opts, opts} = Keyword.split(opts, [:keepalive, :keepalive_tolerance])
       module_opts = Application.get_env(:grpc, __MODULE__, config_opts)
+
+      transport_metadata = %{
+        logical_connection_ref: logical_ref,
+        target: {host, port},
+        adapter: __MODULE__
+      }
 
       opts =
         channel
         |> connect_opts(opts)
         |> merge_opts(module_opts)
         |> Keyword.put(:retry, retry)
+        |> Keyword.put(:grpc_transport_metadata, transport_metadata)
+        |> Keyword.merge(keepalive_opts)
 
       Process.flag(:trap_exit, true)
 
@@ -211,11 +226,21 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
         {:error, :deadline_exceeded} ->
           give_up_on_request(stream, pid)
+          GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :deadline)
 
           {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "deadline exceeded")}
 
-        {:error, _reason} = error ->
-          {:error, rpc_error(error)}
+        {:error, %GRPC.RPCError{message: "the connection is closed"} = error} ->
+          GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :connection_unavailable)
+          {:error, error}
+
+        {:error, %GRPC.RPCError{} = error} ->
+          GRPC.Client.Telemetry.mark_rpc_failure(:remote, nil)
+          {:error, error}
+
+        {:error, error} ->
+          mark_transport_failure(error)
+          {:error, rpc_error({:error, error})}
       end
     end
 
@@ -263,7 +288,12 @@ if Code.ensure_loaded?(Mint.HTTP) do
       :exit, _reason -> :ok
     end
 
-    def handle_errors_receive_data(%GRPC.Client.Stream{payload: %{response: response}}, _opts) do
+    def handle_errors_receive_data(
+          %GRPC.Client.Stream{payload: %{response: response, stream_response_pid: pid}},
+          _opts
+        ) do
+      quietly(fn -> GenServer.stop(pid, :normal, @cleanup_timeout) end)
+
       {:error, rpc_error(response)}
     end
 
@@ -352,5 +382,24 @@ if Code.ensure_loaded?(Mint.HTTP) do
       # Explicitly check for true to ensure the boolean type here
       opts[:return_headers] == true
     end
+
+    defp mark_transport_failure(%Mint.TransportError{}) do
+      GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :connection_unavailable)
+    end
+
+    defp mark_transport_failure(%Mint.HTTPError{reason: {:server_closed_request, _code}}) do
+      GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :stream_error)
+    end
+
+    defp mark_transport_failure(%Mint.HTTPError{reason: reason})
+         when reason in [:closed, :closed_for_writing, :unprocessed] do
+      GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :connection_unavailable)
+    end
+
+    defp mark_transport_failure(%Mint.HTTPError{reason: {:server_closed_connection, _, _}}) do
+      GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :connection_unavailable)
+    end
+
+    defp mark_transport_failure(_error), do: :ok
   end
 end
