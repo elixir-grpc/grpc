@@ -157,6 +157,69 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcessTest do
     refute Process.alive?(pid)
   end
 
+  describe "flow credit" do
+    # The test process stands in for Gun, so `:gun.update_flow/3` casts to it.
+    test "credits one frame to Gun when a queued data message is taken" do
+      {:ok, pid} = StreamResponseProcess.start_link()
+      stream_ref = make_ref()
+
+      send(pid, {:gun_data, self(), stream_ref, :nofin, "one"})
+      send(pid, {:gun_data, self(), stream_ref, :nofin, "two"})
+      assert_queued(pid, 2)
+      refute_receive {:"$gen_cast", {:update_flow, _, _, _}}, 20
+
+      assert {:data, :nofin, "one"} = StreamResponseProcess.await(pid, deadline_after(5_000))
+      assert_receive {:"$gen_cast", {:update_flow, ^pid, ^stream_ref, 1}}, 1_000
+      refute_receive {:"$gen_cast", {:update_flow, _, _, _}}, 20
+
+      assert {:data, :nofin, "two"} = StreamResponseProcess.await(pid, deadline_after(5_000))
+      assert_receive {:"$gen_cast", {:update_flow, ^pid, ^stream_ref, 1}}, 1_000
+    end
+
+    test "credits a frame handed straight to a waiting caller" do
+      {:ok, pid} = StreamResponseProcess.start_link()
+      stream_ref = make_ref()
+
+      task = Task.async(fn -> StreamResponseProcess.await(pid, deadline_after(1_000)) end)
+      assert_waiter(pid)
+      send(pid, {:gun_data, self(), stream_ref, :nofin, "one"})
+
+      assert {:data, :nofin, "one"} = Task.await(task)
+      assert_receive {:"$gen_cast", {:update_flow, ^pid, ^stream_ref, 1}}, 1_000
+    end
+
+    test "credits nothing for the last frame or once the stream is done" do
+      {:ok, pid} = StreamResponseProcess.start_link()
+      stream_ref = make_ref()
+
+      send(pid, {:gun_data, self(), stream_ref, :nofin, "one"})
+      send(pid, {:gun_trailers, self(), stream_ref, [{"grpc-status", "0"}]})
+      assert_queued(pid, 2)
+
+      assert {:data, :nofin, "one"} = StreamResponseProcess.await(pid, deadline_after(5_000))
+      assert {:trailers, _} = StreamResponseProcess.await(pid, deadline_after(5_000))
+      refute_receive {:"$gen_cast", {:update_flow, _, _, _}}, 20
+
+      {:ok, pid} = StreamResponseProcess.start_link()
+      send(pid, {:gun_data, self(), stream_ref, :fin, "last"})
+      assert {:data, :fin, "last"} = StreamResponseProcess.await(pid, deadline_after(5_000))
+      refute_receive {:"$gen_cast", {:update_flow, _, _, _}}, 20
+    end
+  end
+
+  defp assert_queued(pid, count, attempts \\ 50)
+
+  defp assert_queued(_pid, count, 0), do: flunk("expected #{count} queued messages")
+
+  defp assert_queued(pid, count, attempts) do
+    if :queue.len(:sys.get_state(pid).messages) == count do
+      :ok
+    else
+      Process.sleep(1)
+      assert_queued(pid, count, attempts - 1)
+    end
+  end
+
   defp deadline_after(milliseconds) do
     System.monotonic_time(:millisecond) + milliseconds
   end

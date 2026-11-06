@@ -13,6 +13,19 @@ if Code.ensure_loaded?(:gun) do
     mix deps.clean grpc
     mix deps.compile grpc
     ```
+
+    ## Options
+
+    Options in `:adapter_opts` that this adapter reads itself, besides the ones Gun takes:
+
+      * `:response_window` - bytes of a response the adapter reads ahead of the
+        caller, per stream (default: `1_048_576`). Gun stops sending
+        the stream's window updates once the window is full, and the adapter
+        reopens it as the caller takes messages, so a slow consumer slows
+        the server instead of filling memory. At most the window plus the HTTP/2
+        stream window (set to the window unless `:http2_opts` gives
+        `:initial_stream_window_size`) is held in the queue. Messages larger
+        than the window still arrive in full. `:infinity` turns the limit off.
     """
 
     @behaviour GRPC.Client.Adapter
@@ -22,6 +35,23 @@ if Code.ensure_loaded?(:gun) do
 
     @default_tcp_opts [nodelay: true]
     @max_retries 100
+    # Default of `:response_window`, in bytes.
+    @default_response_window 1_048_576
+
+    @impl true
+    def validate_opts(opts) when is_list(opts) do
+      case Keyword.get(opts, :response_window, @default_response_window) do
+        :infinity ->
+          :ok
+
+        window when is_integer(window) and window > 0 ->
+          :ok
+
+        other ->
+          {:error,
+           ":response_window must be a positive integer or :infinity, got: #{inspect(other)}"}
+      end
+    end
 
     @impl true
     def connect(channel, opts) when is_list(opts) do
@@ -81,6 +111,7 @@ if Code.ensure_loaded?(:gun) do
         |> Map.update(:http2_opts, %{notify_settings_changed: true}, fn opts ->
           Map.put(opts, :notify_settings_changed, true)
         end)
+        |> put_response_window()
 
       case ConnectionProcess.connect(channel, open_opts) do
         {:ok, adapter_payload} ->
@@ -88,6 +119,20 @@ if Code.ensure_loaded?(:gun) do
 
         {:error, reason} ->
           {:error, reason}
+      end
+    end
+
+    # Unless `:http2_opts` says otherwise, Gun's stream window is the response window.
+    # Gun withholds the stream's WINDOW_UPDATE once the `flow` is used up, but the
+    # peer may still fill what is left of the stream window.
+    defp put_response_window(open_opts) do
+      window = Map.get(open_opts, :response_window, @default_response_window)
+      open_opts = Map.put(open_opts, :response_window, window)
+
+      if window == :infinity do
+        open_opts
+      else
+        Map.update!(open_opts, :http2_opts, &Map.put_new(&1, :initial_stream_window_size, window))
       end
     end
 
