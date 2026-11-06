@@ -17,7 +17,10 @@ if Code.ensure_loaded?(Mint.HTTP) do
     require Logger
     require State
 
-    @connection_closed_error "the connection is closed"
+    @connection_closed_error GRPC.RPCError.exception(
+                               GRPC.Status.unavailable(),
+                               "the connection is closed"
+                             )
     @stream_response_dead_event [:grpc, :client, :mint, :stream_response, :dead]
     @reconnect_stop_event [:grpc, :client, :mint, :reconnect, :stop]
     @reconnect_error_event [:grpc, :client, :mint, :reconnect, :error]
@@ -121,7 +124,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
     end
 
     def handle_call(_request, _from, %{conn: %Mint.HTTP2{state: :closed}} = state) do
-      {:reply, {:error, "the connection is closed"}, state}
+      {:reply, {:error, @connection_closed_error}, state}
     end
 
     def handle_call(
@@ -216,7 +219,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
     @impl true
     def handle_info(:reconnect, state) do
-      attempt_reconnect(state)
+      maybe_attempt_reconnect(state)
     end
 
     def handle_info(:keepalive, state) do
@@ -352,8 +355,18 @@ if Code.ensure_loaded?(Mint.HTTP) do
       state
     end
 
+    defp process_response({:status, request_ref, 200}, state) do
+      State.update_response_status(state, request_ref, 200)
+    end
+
     defp process_response({:status, request_ref, status}, state) do
-      State.update_response_status(state, request_ref, status)
+      state
+      |> State.update_response_status(request_ref, status)
+      |> consume_or_cancel_stream(
+        request_ref,
+        :error,
+        GRPC.RPCError.exception(GRPC.Status.internal(), "status got is #{status} instead of 200")
+      )
     end
 
     defp process_response({:headers, request_ref, headers}, state) do
@@ -374,9 +387,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       |> State.stream_response_pid(request_ref)
       |> end_stream_response(reason)
 
-      {_ref, new_state} = State.pop_ref(state, request_ref)
-      emit_streams(new_state)
-      new_state
+      drop_request(state, request_ref)
     end
 
     defp process_response({:done, request_ref}, state) do
@@ -384,9 +395,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       |> State.stream_response_pid(request_ref)
       |> StreamResponseProcess.done()
 
-      {_ref, new_state} = State.pop_ref(state, request_ref)
-      emit_streams(new_state)
-      new_state
+      drop_request(state, request_ref)
     end
 
     defp consume_or_cancel_stream(state, request_ref, type, data) do
@@ -409,14 +418,18 @@ if Code.ensure_loaded?(Mint.HTTP) do
         reason: reason
       })
 
-      {_ref, state} = State.pop_ref(state, request_ref)
-      emit_streams(state)
-      state = drop_queued_request_chunks(state, request_ref)
+      state = drop_request(state, request_ref)
 
       case Mint.HTTP2.cancel_request(state.conn, request_ref) do
         {:ok, conn} -> State.update_conn(state, conn)
         {:error, conn, _error} -> State.update_conn(state, conn)
       end
+    end
+
+    defp drop_request(state, request_ref) do
+      {_ref, state} = State.pop_ref(state, request_ref)
+      emit_streams(state)
+      drop_queued_request_chunks(state, request_ref)
     end
 
     defp drop_queued_request_chunks(state, request_ref) do
@@ -556,16 +569,11 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
       if count > 0, do: emit_streams(clean_state)
 
-      if clean_state.retry > 0 do
-        # A failed attempt already scheduled the next retry; ignore duplicate close events.
-        if clean_state.retry_attempt > 0 do
-          {:noreply, clean_state}
-        else
-          attempt_reconnect(clean_state)
-        end
+      # A failed attempt already scheduled the next retry; ignore duplicate close events.
+      if clean_state.retry_attempt > 0 do
+        {:noreply, clean_state}
       else
-        send(clean_state.parent, {:elixir_grpc, :connection_down, self()})
-        {:stop, :normal, clean_state}
+        maybe_attempt_reconnect(clean_state)
       end
     end
 
@@ -574,10 +582,15 @@ if Code.ensure_loaded?(Mint.HTTP) do
       StreamResponseProcess.done(pid)
     end
 
-    defp attempt_reconnect(%{retry: max, retry_attempt: attempt} = state)
-         when attempt >= max do
+    defp maybe_attempt_reconnect(%{retry: 0} = state) do
+      send(state.parent, {:elixir_grpc, :connection_down, self()})
+      {:stop, :normal, state}
+    end
+
+    defp maybe_attempt_reconnect(%{retry_attempt: attempt} = state)
+         when State.retries_exhausted?(state) do
       Logger.warning(
-        "Connection retry exhausted (#{attempt}/#{max}) for #{state.scheme}://#{state.host}:#{state.port}"
+        "Connection retry exhausted (#{attempt}/#{state.retry}) for #{state.scheme}://#{state.host}:#{state.port}"
       )
 
       :telemetry.execute(
@@ -590,7 +603,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       {:stop, :normal, state}
     end
 
-    defp attempt_reconnect(state) do
+    defp maybe_attempt_reconnect(state) do
       next_attempt = state.retry_attempt + 1
 
       Logger.info(
