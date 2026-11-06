@@ -45,10 +45,12 @@ if Code.ensure_loaded?(Mint.HTTP) do
     def connect(%{host: host, port: port} = channel, opts \\ []) do
       {config_opts, opts} = Keyword.pop(opts, :config_options, [])
       {retry, opts} = Keyword.pop(opts, :retry, 0)
+      # Pooled connections open with `ref: nil`, so the pool passes the logical ref separately
+      {logical_ref, opts} = Keyword.pop(opts, :logical_connection_ref, channel.ref)
       module_opts = Application.get_env(:grpc, __MODULE__, config_opts)
 
       transport_metadata = %{
-        logical_connection_ref: channel.ref,
+        logical_connection_ref: logical_ref,
         target: {host, port},
         adapter: __MODULE__
       }

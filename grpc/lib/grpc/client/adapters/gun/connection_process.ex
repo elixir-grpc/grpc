@@ -80,7 +80,9 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
 
   @impl GenServer
   def init({%{host: host, port: port} = channel, open_opts}) do
-    metadata = metadata(channel)
+    # Pooled connections open with `ref: nil`, so the pool passes the logical ref separately
+    {logical_ref, open_opts} = Map.pop(open_opts, :logical_connection_ref, channel.ref)
+    metadata = metadata(channel, logical_ref)
     Telemetry.execute(:started, %{generation: 0, active_streams: 0}, metadata)
     {await_timeout, open_opts} = Map.pop(open_opts, :await_timeout, 5_000)
 
@@ -96,6 +98,7 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
             {:ok,
              %{
                channel: channel,
+               logical_connection_ref: logical_ref,
                gun_pid: gun_pid,
                response_processes: %{},
                generation: 1,
@@ -396,11 +399,12 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   defp connect_stage({_tag, reason}), do: connect_stage(reason)
   defp connect_stage(_reason), do: nil
 
-  defp metadata(%{channel: channel}), do: metadata(channel)
+  defp metadata(%{channel: channel, logical_connection_ref: logical_ref}),
+    do: metadata(channel, logical_ref)
 
-  defp metadata(channel) do
+  defp metadata(channel, logical_ref) do
     %{
-      logical_connection_ref: channel.ref,
+      logical_connection_ref: logical_ref,
       transport_ref: self(),
       target: {channel.host, channel.port},
       adapter: GRPC.Client.Adapters.Gun
