@@ -186,5 +186,31 @@ defmodule GRPC.Client.Adapters.GunTest do
       assert message =~ "connection_error"
       assert message =~ "preface"
     end
+
+    test "cancels stream and drops response process when caller process dies", %{
+      port: port,
+      credential: credential
+    } do
+      channel = build(:channel, port: port, host: "localhost", cred: credential)
+      {:ok, %{adapter_payload: %{conn_pid: conn_pid}}} = Gun.connect(channel, [])
+
+      parent = self()
+
+      {caller_pid, caller_ref} =
+        spawn_monitor(fn ->
+          {:ok, %{stream_ref: stream_ref, response_pid: response_pid}} =
+            ConnectionProcess.open_stream(conn_pid, "/routeguide.RouteGuide/RouteChat", [])
+
+          send(parent, {:stream_opened, stream_ref, response_pid})
+          exit(:boom)
+        end)
+
+      assert_receive {:stream_opened, stream_ref, response_pid}
+      assert_receive {:DOWN, ^caller_ref, :process, ^caller_pid, :boom}
+
+      state = :sys.get_state(conn_pid)
+      refute Map.has_key?(state.response_processes, stream_ref)
+      refute Process.alive?(response_pid)
+    end
   end
 end

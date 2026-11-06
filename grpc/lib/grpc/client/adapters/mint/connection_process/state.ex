@@ -37,12 +37,19 @@ if Code.ensure_loaded?(Mint.HTTP) do
       %{state | request_stream_queue: queue}
     end
 
-    def put_empty_ref_state(state, ref, response_pid) do
+    def put_empty_ref_state(state, ref, response_pid, monitor_ref \\ nil) do
       put_in(state.requests[ref], %{
         stream_response_pid: response_pid,
+        monitor_ref: monitor_ref,
         done: false,
         response: %{}
       })
+    end
+
+    def find_request_ref_by_monitor_ref(state, monitor_ref) do
+      Enum.find_value(state.requests, fn {ref, req} ->
+        if req[:monitor_ref] == monitor_ref, do: ref
+      end)
     end
 
     def update_response_status(state, ref, status) do
@@ -64,7 +71,13 @@ if Code.ensure_loaded?(Mint.HTTP) do
     defguard has_request_ref(state, ref) when is_map_key(state.requests, ref)
 
     def pop_ref(state, ref) do
-      pop_in(state.requests[ref])
+      {request_data, new_requests} = Map.pop(state.requests, ref)
+
+      if is_map(request_data) and is_reference(request_data[:monitor_ref]) do
+        Process.demonitor(request_data[:monitor_ref], [:flush])
+      end
+
+      {request_data, %{state | requests: new_requests}}
     end
 
     def append_response_data(state, ref, new_data) do
