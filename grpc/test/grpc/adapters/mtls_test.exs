@@ -13,7 +13,23 @@ defmodule GRPC.Client.Adapters.MTLSTest do
     run(FeatureServer)
   end
 
+  # Logger handler. It sends each TLS alert from `:ssl` to the test process.
+  def log(%{msg: {:report, %{role: role, alert: alert}}}, %{pid: pid}) do
+    # The last element of the alert record is the reason.
+    send(pid, {:tls_alert, role, elem(alert, tuple_size(alert) - 1)})
+  end
+
+  def log(_event, _config), do: :ok
+
+  def forward_telemetry(event, _measurements, metadata, pid) do
+    send(pid, {:telemetry, event, metadata})
+  end
+
   setup %{tmp_dir: tmp_dir} do
+    test_pid = self()
+    :ok = :logger.add_handler(:mtls_test_alerts, __MODULE__, %{pid: test_pid})
+    on_exit(fn -> :logger.remove_handler(:mtls_test_alerts) end)
+
     certs = write_certs(tmp_dir)
 
     server_cred =
@@ -134,6 +150,9 @@ defmodule GRPC.Client.Adapters.MTLSTest do
         on_exit(fn -> GRPC.Stub.disconnect(channel) end)
 
         assert failed_call(channel) == :failed
+
+        # With TLS 1.3, the alert can come after the call fails.
+        assert_receive {:tls_alert, :server, :certificate_required}, 5_000
       end
 
       test "a bare host:port without :cred connects, then calls fail", %{port: port} do
@@ -143,7 +162,42 @@ defmodule GRPC.Client.Adapters.MTLSTest do
         on_exit(fn -> GRPC.Stub.disconnect(channel) end)
 
         assert failed_call(channel) == :failed
+
+        # The server cannot read the HTTP/2 preface as a TLS record.
+        assert_receive {:tls_alert, :server, {:unsupported_record_type, _byte}}, 5_000
       end
+    end
+  end
+
+  describe "gun adapter, client side of a rejected certificate" do
+    # The call result is not always the same. The `:down` event always has the alert.
+    test "reports certificate_required as the reason the connection went down", %{
+      port: port,
+      certs: certs
+    } do
+      :ok =
+        :telemetry.attach(
+          "mtls-test-down",
+          [:grpc, :client, :transport, :down],
+          &__MODULE__.forward_telemetry/4,
+          self()
+        )
+
+      on_exit(fn -> :telemetry.detach("mtls-test-down") end)
+
+      {:ok, channel} =
+        GRPC.Stub.connect("https://localhost:#{port}",
+          adapter: Gun,
+          cred: server_only_cred(certs)
+        )
+
+      on_exit(fn -> GRPC.Stub.disconnect(channel) end)
+
+      assert failed_call(channel) == :failed
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :down],
+                      %{reason: {:tls_alert, {:certificate_required, _text}}}},
+                     5_000
     end
   end
 
