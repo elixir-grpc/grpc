@@ -159,6 +159,39 @@ defmodule GRPC.Server.Adapters.Cowboy.HandlerTest do
       end)
     end
 
+    test "rejects a unary body reassembled from several DATA frames that exceeds max_body_size with RESOURCE_EXHAUSTED (8)" do
+      capture_log(fn ->
+        run_server_with_opts([HelloServer], [max_body_size: 512], fn port ->
+          body =
+            grpc_frame(
+              Protobuf.encode(%Helloworld.HelloRequest{name: String.duplicate("x", 800)})
+            )
+
+          <<part1::bytes-size(300), part2::bytes-size(300), part3::binary>> = body
+
+          conn = open_h2(port)
+
+          start_tracing_read_full_body()
+
+          ref =
+            :gun.headers(conn, "POST", "/helloworld.Greeter/SayHello", grpc_request_headers())
+
+          # Each DATA frame fits under the cap and lands in its own read_body
+          # call; only the running total across reads exceeds it.
+          await_read_full_body_call()
+          :gun.data(conn, ref, :nofin, part1)
+          await_read_full_body_call()
+          :gun.data(conn, ref, :nofin, part2)
+          :gun.data(conn, ref, :fin, part3)
+
+          assert collect_grpc_status(conn, ref) == "8"
+
+          stop_tracing_read_full_body()
+          :gun.close(conn)
+        end)
+      end)
+    end
+
     test "rejects a request-streaming body that exceeds max_body_size with RESOURCE_EXHAUSTED (8)" do
       capture_log(fn ->
         run_server_with_opts([RouteServer], [max_body_size: 512], fn port ->
