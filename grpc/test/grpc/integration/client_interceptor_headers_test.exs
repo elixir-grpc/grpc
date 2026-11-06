@@ -109,7 +109,7 @@ defmodule GRPC.Integration.ClientInterceptorHeadersTest do
     def call(%{server_stream: true} = stream, req, next, %{pid: pid, name: name}) do
       case next.(stream, req) do
         {:ok, replies} ->
-          {:ok, Stream.map(replies, fn item -> send(pid, {name, :item, item}) && item end)}
+          {:ok, Stream.each(replies, &send(pid, {name, :item, &1}))}
 
         other ->
           send(pid, {name, :other, other})
