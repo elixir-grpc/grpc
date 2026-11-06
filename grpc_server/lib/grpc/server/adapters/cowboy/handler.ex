@@ -55,7 +55,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         server: server,
         endpoint: endpoint,
         adapter: @adapter,
-        payload: %{pid: stream_pid},
+        payload: %{pid: stream_pid, send_timeout: opts[:send_timeout], deadline: deadline},
         local: opts[:local],
         codec: codec,
         http_method: http_method,
@@ -211,12 +211,34 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   @doc """
-  Asynchronously send back to client a chunk of `data`, when `http_transcode?` is true, the
+  Send back to client a chunk of `data`, when `http_transcode?` is true, the
   data is sent back as it's, with no transformation of protobuf binaries to http2 data frames.
+
+  Returns once the connection has taken the chunk, so a client that reads slowly slows the
+  caller. Waits at most `opts[:send_timeout]` (default `:infinity`), then raises a
+  `:deadline_exceeded` `GRPC.RPCError`. Exits with `:shutdown` if the stream's process is gone.
   """
   def stream_body(pid, data, opts, is_fin, http_transcode? \\ false) do
-    send(pid, {:stream_body, data, opts, is_fin, http_transcode?})
-    :ok
+    ref = Process.monitor(pid)
+    send(pid, {:stream_body, data, opts, is_fin, http_transcode?, {self(), ref}})
+    await_stream_body_ack(ref, Keyword.get(opts, :send_timeout, :infinity))
+  end
+
+  @doc """
+  How long a send may wait for the connection: the `:send_timeout` the server was started with,
+  or the time left to the RPC's deadline, whichever is shorter.
+  """
+  def send_timeout(payload) do
+    configured = Map.get(payload, :send_timeout) || :infinity
+
+    case Map.get(payload, :deadline) do
+      nil ->
+        configured
+
+      deadline ->
+        left = max(deadline - System.monotonic_time(:millisecond), 0)
+        if configured == :infinity, do: left, else: min(configured, left)
+    end
   end
 
   @doc """
@@ -297,6 +319,26 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   """
   def get_bindings(pid) do
     sync_call(pid, :get_bindings)
+  end
+
+  # The stream process acks after cowboy has taken the data, and cowboy withholds that
+  # while its send buffer is full. The late ack of a timed out send is not flushed.
+  defp await_stream_body_ack(ref, timeout) do
+    receive do
+      {^ref, :stream_body_ack} ->
+        Process.demonitor(ref, [:flush])
+        :ok
+
+      {:DOWN, ^ref, :process, _pid, _reason} ->
+        exit(:shutdown)
+    after
+      timeout ->
+        Process.demonitor(ref, [:flush])
+
+        raise RPCError,
+          status: :deadline_exceeded,
+          message: "Timed out waiting for the client to read a reply"
+    end
   end
 
   defp sync_call(pid, key) do
@@ -408,6 +450,13 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     bindings = :cowboy_req.bindings(req)
     send(pid, {ref, bindings})
     {:ok, req, state}
+  end
+
+  # Runs the clauses below, then credits the sender whether or not the send worked.
+  def info({:stream_body, data, opts, is_fin, http_transcode, {sender, ref}}, req, state) do
+    result = info({:stream_body, data, opts, is_fin, http_transcode}, req, state)
+    send(sender, {ref, :stream_body_ack})
+    result
   end
 
   # Handle http/json transcoded response
