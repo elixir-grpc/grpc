@@ -6,6 +6,8 @@
 
   * New event: `[:grpc, :server, :rpc, :send_error]`. The Cowboy adapter publishes it when the handler returns but the adapter cannot encode, compress or send the reply. The metadata has `:kind`, `:reason`, `:stacktrace` and `:path`. It is not an `:exception` event, because the telemetry span of the handler is closed at that time. A client that disconnects during the reply still causes only `:abort`, because nothing raises. A new section in the error handling guide shows how to send these events to Sentry or Bugsnag (#349).
 
+  * `GRPC.Server.Test` runs server interceptors in a test with no endpoint, server process or socket. `build_stream/3` makes a `GRPC.Server.Stream` for an RPC, `run_interceptors/4` runs the chain with the same code the server uses, and `response_headers/1`, `response_trailers/1` and `replies/1` return what was sent. See the new "Testing interceptors" guide (#423).
+
   * `[:grpc, :server, :rpc, :abort]` is now published when the adapter stops an in-flight RPC — an expired deadline, a client cancellation, a dropped connection. The exit signal that stops the RPC process does not unwind it, so `:stop` and `:exception` cannot be published for such a call; the new event carries the stream, server, endpoint, request path, RPC pid and exit reason.
 
   * A test and a doc note now cover that the Cowboy adapter's accepted sockets, plain and TLS, have `TCP_NODELAY` on. This is Ranch's default and the adapter passes nothing that turns it off (#323).

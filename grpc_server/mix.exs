@@ -73,6 +73,7 @@ defmodule GRPC.Server.MixProject do
         "guides/cheatsheets/streams.cheatmd",
         "guides/advanced/transcoding.livemd",
         "guides/advanced/cors.md",
+        "guides/advanced/testing_interceptors.md",
         "guides/advanced/telemetry.livemd",
         "guides/advanced/pooling.md",
         "guides/advanced/custom_codecs.md"
@@ -101,7 +102,9 @@ defmodule GRPC.Server.MixProject do
         "Server Interceptors": [
           GRPC.Server.Interceptor,
           GRPC.Server.Interceptors.Logger,
-          GRPC.Server.Interceptors.CORS
+          GRPC.Server.Interceptors.CORS,
+          GRPC.Server.Test,
+          GRPC.Server.Test.Adapter
         ],
         Transcoding: [
           GRPC.Server.Transcode,

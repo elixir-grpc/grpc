@@ -188,6 +188,11 @@ The fix is on the client: use `https://`, or pass `:cred`.
 
 If the server requires a client certificate and the client sends none, or one the server does not trust, the call fails. With TLS 1.3 the client finishes its half of the handshake first, so `connect/2` returns `{:ok, channel}` and the first call fails. The server logs `certificate_required` or `Bad Certificate`.
 
+The error the caller gets does not name the cause, so read the server log. With the Mint adapter the call fails with `UNAVAILABLE` ("socket closed") or `RESOURCE_EXHAUSTED` ("no pool channel available"), or exits when the connection process has already stopped. With the Gun adapter the call fails in one of two ways, and which one you get varies from run to run:
+
+* It fails with `INTERNAL` and a `stream_error` that holds `certificate_required`.
+* It waits until its deadline and fails with `DEADLINE_EXCEEDED`. Gun reconnects after each rejection, so the call never gets a stream. Attach to the `[:grpc, :client, :transport, :down]` telemetry event: its `:reason` is `{:tls_alert, {:certificate_required, _}}` on every rejection.
+
 Check three things: the client sends `certfile` and `keyfile`; the server's `cacertfile` holds the CA that signed the client certificate; the client certificate has not expired.
 
 ### The client rejects the server
