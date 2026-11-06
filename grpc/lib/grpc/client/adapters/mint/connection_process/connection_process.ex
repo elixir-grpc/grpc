@@ -557,7 +557,12 @@ if Code.ensure_loaded?(Mint.HTTP) do
       if count > 0, do: emit_streams(clean_state)
 
       if clean_state.retry > 0 do
-        attempt_reconnect(clean_state)
+        # A failed attempt already scheduled the next retry; ignore duplicate close events.
+        if clean_state.retry_attempt > 0 do
+          {:noreply, clean_state}
+        else
+          attempt_reconnect(clean_state)
+        end
       else
         send(clean_state.parent, {:elixir_grpc, :connection_down, self()})
         {:stop, :normal, clean_state}

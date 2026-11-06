@@ -504,6 +504,35 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     end
   end
 
+  describe "handle_info - duplicate connection close notifications" do
+    @describetag private_endpoint: ReconnectUnavailableEndpoint
+    setup :start_private_endpoint
+    setup :valid_connection_with_retry
+
+    test "does not start another retry chain after GOAWAY and tcp_closed", %{
+      process_pid: pid
+    } do
+      wait_until_open(pid)
+      state = :sys.get_state(pid)
+      :ok = GRPC.Server.stop_endpoint(ReconnectUnavailableEndpoint)
+
+      goaway_frame = <<8::24, 0x07, 0, 0::32, 0::32, 0::32>>
+      goaway = {:tcp, state.conn.socket, goaway_frame}
+      closed = {:tcp_closed, state.conn.socket}
+      unavailable_state = %{state | retry_timeout_ms: 60_000}
+
+      assert {:noreply, retrying_state} =
+               ConnectionProcess.handle_info(goaway, unavailable_state)
+
+      assert retrying_state.retry_attempt == 1
+
+      assert {:noreply, still_retrying_state} =
+               ConnectionProcess.handle_info(closed, retrying_state)
+
+      assert still_retrying_state.retry_attempt == 1
+    end
+  end
+
   describe "handle_info - connection_closed - with retry - exhausted" do
     @describetag private_endpoint: ReconnectExhaustedEndpoint
     setup :start_private_endpoint
