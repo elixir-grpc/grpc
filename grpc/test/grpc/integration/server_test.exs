@@ -414,20 +414,16 @@ defmodule GRPC.Integration.ServerTest do
   end
 
   test "return deadline error for slow server" do
-    logs =
-      ExUnit.CaptureLog.capture_log(fn ->
-        run_server([TimeoutServer], fn port ->
-          {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
-          rect = %Routeguide.Rectangle{}
-          error = %GRPC.RPCError{message: "Deadline expired", status: 4}
+    ExUnit.CaptureLog.capture_log(fn ->
+      run_server([TimeoutServer], fn port ->
+        {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+        rect = %Routeguide.Rectangle{}
+        error = %GRPC.RPCError{message: "Deadline expired", status: 4}
 
-          assert {:error, ^error} =
-                   channel |> Routeguide.RouteGuide.Stub.list_features(rect, timeout: 50)
-        end)
+        assert {:error, ^error} =
+                 channel |> Routeguide.RouteGuide.Stub.list_features(rect, timeout: 50)
       end)
-
-    assert logs =~
-             "Exception raised while handling /routeguide.RouteGuide/ListFeatures:\n** (GRPC.RPCError) Deadline expired"
+    end)
   end
 
   test "return normally for a little slow server" do

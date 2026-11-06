@@ -27,10 +27,11 @@ defmodule GRPC.Client.Adapters.CallExit do
   def redact(reason), do: reason
 
   # Gun: GRPC.Client.Adapters.Gun.ConnectionProcess
-  defp redact_message({:request, path, _headers, _body}),
-    do: {:request, path, :redacted, :redacted}
+  defp redact_message({:request, path, _headers, _body, deadline}),
+    do: {:request, path, :redacted, :redacted, deadline}
 
-  defp redact_message({:open_stream, path, _headers}), do: {:open_stream, path, :redacted}
+  defp redact_message({:open_stream, path, _headers, deadline}),
+    do: {:open_stream, path, :redacted, deadline}
 
   defp redact_message({:send_data, stream_ref, fin, _data}),
     do: {:send_data, stream_ref, fin, :redacted}
