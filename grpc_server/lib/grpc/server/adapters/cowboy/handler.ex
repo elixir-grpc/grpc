@@ -635,7 +635,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         if size > max_bytes do
           throw({:body_too_large, size})
         else
-          {:ok, [data | chunks] |> Enum.reverse() |> IO.iodata_to_binary(), req}
+          {:ok, IO.iodata_to_binary([chunks, data]), req}
         end
 
       {:more, data, req} ->
@@ -644,7 +644,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         if size > max_bytes do
           throw({:body_too_large, size})
         else
-          read_full_body(req, [data | chunks], size, timer, max_bytes)
+          read_full_body(req, [chunks, data], size, timer, max_bytes)
         end
     end
   end

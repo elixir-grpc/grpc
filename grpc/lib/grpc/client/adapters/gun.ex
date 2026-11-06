@@ -374,10 +374,10 @@ if Code.ensure_loaded?(:gun) do
     defp recv_body(stream_payload, acc, opts) do
       case recv_data_or_trailers(stream_payload, opts) do
         {:data, data} ->
-          recv_body(stream_payload, [data | acc], opts)
+          recv_body(stream_payload, [acc, data], opts)
 
         {:trailers, trailers} ->
-          body = acc |> Enum.reverse() |> IO.iodata_to_binary()
+          body = IO.iodata_to_binary(acc)
           {:ok, body, GRPC.Transport.HTTP2.decode_headers(trailers)}
 
         err ->
