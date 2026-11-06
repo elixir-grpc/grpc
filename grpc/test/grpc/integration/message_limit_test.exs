@@ -7,11 +7,6 @@ defmodule GRPC.Integration.MessageLimitTest do
 
   @limit 1000
 
-  # Receiving is enforced by `GRPC.Message`, in grpc_core. This package resolves
-  # grpc_core from hex, so these tests run once the version it requires has the check.
-  @core_enforces_receive Code.ensure_loaded?(GRPC.Message) and
-                           function_exported?(GRPC.Message, :max_message_length, 0)
-
   defmodule HelloServer do
     use GRPC.Server, service: Helloworld.Greeter.Service
 
@@ -90,7 +85,6 @@ defmodule GRPC.Integration.MessageLimitTest do
         end)
       end
 
-      @tag skip: not @core_enforces_receive
       test "a unary reply over the limit fails with RESOURCE_EXHAUSTED", %{adapter: adapter} do
         port =
           start_fixed_reply_server(
@@ -106,9 +100,6 @@ defmodule GRPC.Integration.MessageLimitTest do
         assert message =~ "the limit is #{@limit} bytes"
       end
 
-      # The Gun adapter raises while the stream is read, the Mint adapter returns the
-      # error as an item.
-      @tag skip: not @core_enforces_receive
       test "a streamed reply message over the limit fails with RESOURCE_EXHAUSTED",
            %{adapter: adapter} do
         feature = Protobuf.encode(%Routeguide.Feature{name: "within the limit"})
@@ -120,13 +111,9 @@ defmodule GRPC.Integration.MessageLimitTest do
         {:ok, replies} =
           Routeguide.RouteGuide.Stub.list_features(channel, %Routeguide.Rectangle{})
 
-        items =
-          try do
-            Enum.to_list(replies)
-          rescue
-            error in RPCError -> [{:error, error}]
-          end
+        items = Enum.to_list(replies)
 
+        assert [{:ok, %Routeguide.Feature{name: "within the limit"}} | _] = items
         assert {:error, %RPCError{status: 8, message: message}} = List.last(items)
         assert message =~ "the limit is #{@limit} bytes"
       end

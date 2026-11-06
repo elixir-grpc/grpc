@@ -446,7 +446,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
       {:stop, req, state}
     else
-      max_length = Application.get_env(:grpc, :max_message_length, Bitwise.bsl(1, 31))
+      max_length = GRPC.Server.max_message_length()
 
       to_data_opts = [
         compressor: compressor,

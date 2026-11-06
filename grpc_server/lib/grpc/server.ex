@@ -368,8 +368,9 @@ defmodule GRPC.Server do
   end
 
   # `:max_message_length` bounds one message in either direction; see
-  # `GRPC.Message.max_message_length/0`.
-  defp max_message_length do
+  # `GRPC.Message.max_message_length/0`. The Cowboy handler reads it from here too.
+  @doc false
+  def max_message_length do
     Application.get_env(:grpc, :max_message_length, Bitwise.bsl(1, 31))
   end
 
