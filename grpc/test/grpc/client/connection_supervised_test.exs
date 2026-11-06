@@ -35,7 +35,7 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
     # Mirrors the Gun adapter's process shape: the "transport" process is NOT
     # linked to the connection process (Gun's ConnectionProcess lives under
     # the adapter's DynamicSupervisor), so its death is only observable via
-    # the monitor the connection sets in connect_real_channel/5. Its pid is
+    # the monitor the connection sets in connect_real_channel/6. Its pid is
     # exposed as adapter_payload.conn_pid; killing it simulates the transport
     # dying mid-flight (e.g. gun giving up after internal retries). Accepts
     # FailingClientAdapter-style :failing_hosts adapter options so tests can
@@ -206,6 +206,20 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
       assert whereis_connection(name) != pid
       assert :ok = Connection.await_ready(name, 2_000)
       assert {:ok, %GRPC.Channel{}} = Connection.pick_channel(%GRPC.Channel{ref: name})
+    end
+  end
+
+  defmodule HostnameResolver do
+    @moduledoc false
+    def resolve(_target) do
+      {:ok,
+       %{
+         addresses: [
+           %{address: "127.0.0.1", port: 50051, hostname: "my-service.local"},
+           %{address: "127.0.0.2", port: 50052, hostname: "my-service.local"}
+         ],
+         service_config: nil
+       }}
     end
   end
 
@@ -397,6 +411,68 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
 
         length(pids) == 2 and Enum.all?(pids, &Process.alive?/1)
       end)
+    end
+
+    @tag capture_log: true
+    test "redialed channels keep the dns:// hostname for TLS SNI" do
+      name = unique_name("hostname_redial")
+      attach_telemetry([:grpc, :client, :connection, :connected])
+
+      start_supervised!(
+        {Connection,
+         name: name,
+         target: "dns://my-service.local:50051",
+         resolver: HostnameResolver,
+         lb_policy: :round_robin,
+         adapter: TransportProcessAdapter}
+      )
+
+      assert :ok = Connection.await_ready(name, 2_000)
+      assert_receive {:telemetry, [:grpc, :client, :connection, :connected], _, %{name: ^name}}
+
+      conn = whereis_connection(name)
+      handle = %GRPC.Channel{ref: name}
+
+      connected_pids = fn ->
+        for {_key, {:connected, %{adapter_payload: %{conn_pid: pid}}}} <-
+              :sys.get_state(conn).real_channels,
+            do: pid
+      end
+
+      assert_hostnames = fn ->
+        channels = :sys.get_state(conn).real_channels
+        assert map_size(channels) == 2
+
+        for {_key, {:connected, ch}} <- channels do
+          assert ch.hostname == "my-service.local"
+        end
+      end
+
+      assert_hostnames.()
+
+      # One transport dies: the repair loop redials it.
+      [dead, survivor] = connected_pids.()
+      kill_and_await(dead)
+
+      wait_until(fn ->
+        pids = connected_pids.()
+        length(pids) == 2 and dead not in pids
+      end)
+
+      assert_hostnames.()
+
+      # Every transport dies: the connection re-establishes from scratch.
+      pids = connected_pids.()
+      assert survivor in pids
+      Enum.each(pids, &kill_and_await/1)
+
+      assert_receive {:telemetry, [:grpc, :client, :connection, :connected], _, %{name: ^name}},
+                     2_000
+
+      assert :ok = Connection.await_ready(name, 2_000)
+      assert {:ok, %GRPC.Channel{}} = Connection.pick_channel(handle)
+      assert whereis_connection(name) == conn
+      assert_hostnames.()
     end
 
     test "stub calls through an unresolvable virtual handle return UNAVAILABLE" do
