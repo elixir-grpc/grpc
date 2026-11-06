@@ -20,8 +20,15 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
     GenServer.start_link(__MODULE__, [])
   end
 
-  def await(pid, timeout) do
-    GenServer.call(pid, {:await, timeout}, :infinity)
+  def track(pid, connection_pid, stream_ref, deadline) do
+    GenServer.call(pid, {:track, connection_pid, stream_ref, deadline})
+  catch
+    :exit, _reason ->
+      :ok
+  end
+
+  def await(pid, deadline) do
+    GenServer.call(pid, {:await, deadline}, :infinity)
   catch
     :exit, _reason ->
       @terminated_stream_error
@@ -29,11 +36,31 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
 
   @impl GenServer
   def init([]) do
-    {:ok, %{messages: :queue.new(), waiter: nil, done: false}}
+    {:ok,
+     %{
+       messages: :queue.new(),
+       waiter: nil,
+       done: false,
+       deadline: :infinity,
+       deadline_timer: nil,
+       cleanup_target: nil
+     }}
   end
 
   @impl GenServer
-  def handle_call({:await, timeout}, from, %{messages: messages, done: done?} = state) do
+  def handle_call({:track, connection_pid, stream_ref, deadline}, _from, state) do
+    state =
+      state
+      |> Map.put(:cleanup_target, {connection_pid, stream_ref})
+      |> put_earlier_deadline(deadline)
+
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:await, deadline}, from, state) do
+    state = put_earlier_deadline(state, deadline)
+    %{messages: messages, done: done?} = state
+
     case :queue.out(messages) do
       {{:value, message}, remaining} ->
         new_state = %{state | messages: remaining}
@@ -48,18 +75,27 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
         if done? do
           {:stop, :normal, @terminated_stream_error, state}
         else
-          {:noreply, %{state | waiter: {from, start_timeout(timeout)}}}
+          {:noreply, %{state | waiter: from}}
         end
     end
   end
 
   @impl GenServer
-  def handle_info({:await_timeout, timeout_ref}, %{waiter: {from, timeout_ref}} = state) do
-    GenServer.reply(from, {:error, :timeout})
-    {:noreply, %{state | waiter: nil}}
+  def handle_info({:deadline_expired, timer_ref}, %{deadline_timer: timer_ref} = state) do
+    if state.waiter, do: GenServer.reply(state.waiter, {:error, :timeout})
+
+    case state.cleanup_target do
+      {connection_pid, stream_ref} ->
+        send(connection_pid, {:stream_expired, stream_ref, self()})
+
+      nil ->
+        :ok
+    end
+
+    {:stop, :normal, %{state | waiter: nil, done: true, deadline_timer: nil}}
   end
 
-  def handle_info({:await_timeout, _timeout_ref}, state), do: {:noreply, state}
+  def handle_info({:deadline_expired, _timer_ref}, state), do: {:noreply, state}
 
   def handle_info({:gun_response, _conn_pid, _stream_ref, fin, status, headers}, state) do
     state
@@ -99,8 +135,8 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
     {:noreply, state}
   end
 
-  defp push_message(%{waiter: {from, timeout_ref}} = state, message, terminal?) do
-    cancel_timeout(timeout_ref)
+  defp push_message(%{waiter: from} = state, message, terminal?) when not is_nil(from) do
+    state = if terminal?, do: cancel_deadline(state), else: state
     GenServer.reply(from, message)
     new_state = %{state | waiter: nil, done: terminal?}
 
@@ -112,24 +148,31 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
   end
 
   defp push_message(%{messages: messages} = state, message, terminal?) do
+    state = if terminal?, do: cancel_deadline(state), else: state
     {:noreply, %{state | messages: :queue.in(message, messages), done: terminal?}}
   end
 
   defp terminal?(:fin), do: true
   defp terminal?(:nofin), do: false
 
-  defp start_timeout(:infinity), do: nil
+  defp put_earlier_deadline(%{done: true} = state, _deadline), do: state
+  defp put_earlier_deadline(state, :infinity), do: state
 
-  defp start_timeout(timeout) when is_integer(timeout) do
-    timeout_ref = make_ref()
-    Process.send_after(self(), {:await_timeout, timeout_ref}, timeout)
-    timeout_ref
+  defp put_earlier_deadline(%{deadline: current} = state, deadline)
+       when is_integer(deadline) and (current == :infinity or deadline < current) do
+    state = cancel_deadline(state)
+    timer_ref = make_ref()
+    timeout = max(deadline - System.monotonic_time(:millisecond), 0)
+    Process.send_after(self(), {:deadline_expired, timer_ref}, timeout)
+    %{state | deadline: deadline, deadline_timer: timer_ref}
   end
 
-  defp cancel_timeout(nil), do: :ok
+  defp put_earlier_deadline(state, _deadline), do: state
 
-  defp cancel_timeout(timeout_ref) do
-    Process.cancel_timer(timeout_ref)
-    :ok
+  defp cancel_deadline(%{deadline_timer: nil} = state), do: state
+
+  defp cancel_deadline(%{deadline_timer: timer_ref} = state) do
+    Process.cancel_timer(timer_ref)
+    %{state | deadline_timer: nil}
   end
 end

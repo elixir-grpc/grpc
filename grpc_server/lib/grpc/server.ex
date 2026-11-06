@@ -279,18 +279,29 @@ defmodule GRPC.Server do
          func_name
        ) do
     {:ok, data} = adapter.read_body(payload)
-    request_body = codec.decode(data, req_mod)
     rule = GRPC.Service.rpc_options(rpc, :http) || %{value: %{}}
     bindings = adapter.get_bindings(payload)
     qs = adapter.get_qs(payload)
 
-    case Transcode.map_request(rule.value, request_body, bindings, qs, req_mod) do
-      {:ok, request} ->
-        call_with_interceptors(res_stream, func_name, stream, request)
+    with {:ok, request_body} <- decode_transcoded_body(codec, data, req_mod),
+         {:ok, request} <- Transcode.map_request(rule.value, request_body, bindings, qs, req_mod) do
+      call_with_interceptors(res_stream, func_name, stream, request)
+    else
+      # Only an RPCError becomes a reply; any other error would end the
+      # request with an empty 204.
+      {:error, %Protobuf.JSON.DecodeError{} = error} ->
+        {:error, RPCError.exception(:invalid_argument, Exception.message(error))}
 
       resp = {:error, _} ->
         resp
     end
+  end
+
+  # A body the codec can't parse is the client's error, not the server's.
+  defp decode_transcoded_body(codec, data, req_mod) do
+    {:ok, codec.decode(data, req_mod)}
+  rescue
+    error -> {:error, RPCError.exception(:invalid_argument, Exception.message(error))}
   end
 
   defp do_handle_request(false, res_stream, %{is_preflight?: true} = stream, func_name) do

@@ -27,5 +27,6 @@ defmodule GRPC.Channel do
             interceptors: [],
             compressor: nil,
             accepted_compressors: [],
-            headers: []
+            headers: [],
+            pool: nil
 end

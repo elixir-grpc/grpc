@@ -7,6 +7,7 @@ defmodule GRPC.Client.Application do
 
     children = [
       {Registry, [keys: :unique, name: GRPC.Client.Registry]},
+      {Registry, [keys: :unique, name: GRPC.Client.Pool.Registry]},
       {DynamicSupervisor,
        [
          name: GRPC.Client.Supervisor,
