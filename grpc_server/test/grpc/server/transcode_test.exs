@@ -12,6 +12,13 @@ defmodule GRPC.TranscodeTest do
              Transcode.map_request(rule, request_body, bindings, qs, Routeguide.Point)
   end
 
+  test "map_request/5 with HttpRule.body: '*' rejects a body that isn't an object" do
+    rule = %Google.Api.HttpRule{body: "*"}
+
+    assert {:error, %GRPC.RPCError{status: 3}} =
+             Transcode.map_request(rule, [], %{}, "", Routeguide.Point)
+  end
+
   test "map_request/5 with empty HttpRule.body" do
     rule = %Google.Api.HttpRule{body: ""}
     request_body = %{"latitude" => 10, "longitude" => 20}
