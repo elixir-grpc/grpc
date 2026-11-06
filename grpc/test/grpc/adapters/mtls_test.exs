@@ -13,7 +13,25 @@ defmodule GRPC.Client.Adapters.MTLSTest do
     run(FeatureServer)
   end
 
+  # Logger handler. The Erlang `:ssl` app logs every TLS alert as a report; this
+  # sends the server-side ones to the test process, so a test can wait for the
+  # exact alert instead of guessing from a failed call.
+  def log(%{msg: {:report, %{role: role, alert: alert}}}, %{pid: pid}) do
+    # The alert record ends with its reason, e.g. `:certificate_required`.
+    send(pid, {:tls_alert, role, elem(alert, tuple_size(alert) - 1)})
+  end
+
+  def log(_event, _config), do: :ok
+
+  def forward_telemetry(event, _measurements, metadata, pid) do
+    send(pid, {:telemetry, event, metadata})
+  end
+
   setup %{tmp_dir: tmp_dir} do
+    test_pid = self()
+    :ok = :logger.add_handler(:mtls_test_alerts, __MODULE__, %{pid: test_pid})
+    on_exit(fn -> :logger.remove_handler(:mtls_test_alerts) end)
+
     certs = write_certs(tmp_dir)
 
     server_cred =
@@ -63,6 +81,7 @@ defmodule GRPC.Client.Adapters.MTLSTest do
 
   # A connection the server drops can fail a call in more than one way: an error
   # tuple, or an exit from the connection pool. Both mean the call did not go through.
+  # That alone does not say why, so the tests below also wait for the TLS alert.
   defp failed_call(channel) do
     case get_feature(channel, timeout: 2_000) do
       {:error, _reason} -> :failed
@@ -134,6 +153,11 @@ defmodule GRPC.Client.Adapters.MTLSTest do
         on_exit(fn -> GRPC.Stub.disconnect(channel) end)
 
         assert failed_call(channel) == :failed
+
+        # The server rejected the missing certificate. TLS 1.3 clients finish
+        # their half of the handshake first, so the alert can reach the server
+        # after the call has failed. Wait for it rather than checking at once.
+        assert_receive {:tls_alert, :server, :certificate_required}, 5_000
       end
 
       test "a bare host:port without :cred connects, then calls fail", %{port: port} do
@@ -143,7 +167,49 @@ defmodule GRPC.Client.Adapters.MTLSTest do
         on_exit(fn -> GRPC.Stub.disconnect(channel) end)
 
         assert failed_call(channel) == :failed
+
+        # The server could not read the HTTP/2 preface as a TLS record. This is
+        # the `WRONG_VERSION_NUMBER` the guide describes, seen from the server.
+        # It is not a certificate alert, so a missing `:cred` can't pass as a
+        # missing client certificate or the other way round.
+        assert_receive {:tls_alert, :server, {:unsupported_record_type, _byte}}, 5_000
       end
+    end
+  end
+
+  describe "gun adapter, client side of a rejected certificate" do
+    # Gun finishes the TLS 1.3 handshake, reports the connection as up, and only
+    # then receives the server's `certificate_required` alert. It reconnects and
+    # gets the same alert again. A call made in between either fails with the
+    # alert in its error or waits until its deadline. Gun reports the alert as
+    # the reason of its transport `:down` event, so that is what this asserts.
+    test "reports certificate_required as the reason the connection went down", %{
+      port: port,
+      certs: certs
+    } do
+      :ok =
+        :telemetry.attach(
+          "mtls-test-down",
+          [:grpc, :client, :transport, :down],
+          &__MODULE__.forward_telemetry/4,
+          self()
+        )
+
+      on_exit(fn -> :telemetry.detach("mtls-test-down") end)
+
+      {:ok, channel} =
+        GRPC.Stub.connect("https://localhost:#{port}",
+          adapter: Gun,
+          cred: server_only_cred(certs)
+        )
+
+      on_exit(fn -> GRPC.Stub.disconnect(channel) end)
+
+      assert failed_call(channel) == :failed
+
+      assert_receive {:telemetry, [:grpc, :client, :transport, :down],
+                      %{reason: {:tls_alert, {:certificate_required, _text}}}},
+                     5_000
     end
   end
 
