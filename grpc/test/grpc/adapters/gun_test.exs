@@ -180,11 +180,24 @@ defmodule GRPC.Client.Adapters.GunTest do
       # Both callers share one handshake instead of running one after the other
       assert System.monotonic_time(:millisecond) - started_at < 900
 
-      assert [] ==
-               Registry.lookup(
-                 GRPC.Client.Registry,
-                 {ConnectionProcess, {stalled.ref, stalled.host, stalled.port}}
-               )
+      wait_for_unregistered({ConnectionProcess, {stalled.ref, stalled.host, stalled.port}})
+    end
+  end
+
+  # The connection process replies to waiters before it stops, and Registry
+  # drops the name only after it sees the exit
+  defp wait_for_unregistered(key, attempts \\ 100)
+
+  defp wait_for_unregistered(key, 0) do
+    flunk(
+      "#{inspect(key)} is still registered: #{inspect(Registry.lookup(GRPC.Client.Registry, key))}"
+    )
+  end
+
+  defp wait_for_unregistered(key, attempts) do
+    if Registry.lookup(GRPC.Client.Registry, key) != [] do
+      Process.sleep(5)
+      wait_for_unregistered(key, attempts - 1)
     end
   end
 
