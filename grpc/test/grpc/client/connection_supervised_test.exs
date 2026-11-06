@@ -481,6 +481,57 @@ defmodule GRPC.Client.ConnectionSupervisedTest do
       assert_hostnames.()
     end
 
+    @tag capture_log: true
+    test "pooled connections keep the dns:// hostname for TLS SNI, including after replenish" do
+      Application.put_env(:grpc, :pool_enabled, true)
+      name = unique_name("hostname_pool")
+
+      start_supervised!(
+        {Connection,
+         name: name,
+         target: "dns://my-service.local:50051",
+         resolver: HostnameResolver,
+         lb_policy: :round_robin,
+         adapter: TransportProcessAdapter}
+      )
+
+      assert :ok = Connection.await_ready(name, 2_000)
+
+      pool_refs =
+        for {_key, {:connected, %{pool: ref}}} <-
+              :sys.get_state(whereis_connection(name)).real_channels,
+            do: ref
+
+      assert length(pool_refs) == 2
+
+      pooled_channels = fn ref ->
+        [{pool_pid, _}] =
+          Registry.lookup(GRPC.Client.Pool.Registry, {GRPC.Client.Pool.Server, ref})
+
+        for {_id, %{channel: ch}} <- :sys.get_state(pool_pid).channels, do: ch
+      end
+
+      assert_pooled_hostnames = fn ->
+        for ref <- pool_refs do
+          wait_until(fn -> length(pooled_channels.(ref)) == 1 end)
+          assert [%{hostname: "my-service.local"}] = pooled_channels.(ref)
+        end
+      end
+
+      assert_pooled_hostnames.()
+
+      # A pooled transport dies: the pool replenishes it from its base channel.
+      [ref | _] = pool_refs
+      [%{adapter_payload: %{conn_pid: dead}}] = pooled_channels.(ref)
+      kill_and_await(dead)
+
+      wait_until(fn ->
+        match?([%{adapter_payload: %{conn_pid: pid}}] when pid != dead, pooled_channels.(ref))
+      end)
+
+      assert_pooled_hostnames.()
+    end
+
     test "stub calls through an unresolvable virtual handle return UNAVAILABLE" do
       handle = %GRPC.Channel{ref: :no_such_connection_name}
       unavailable = GRPC.Status.unavailable()
