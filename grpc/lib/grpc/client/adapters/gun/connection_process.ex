@@ -16,11 +16,19 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
 
   Named channels are registered in the node-local `GRPC.Client.Registry` under
   `{ref, host, port}`, so a connection is reused by every caller on the node.
+
+  The handshake runs after `init/1` returns, and `connect/2` waits for it
+  outside the node-wide `GRPC.Client.Supervisor`. A slow or unreachable host
+  therefore doesn't hold up connects to other hosts.
   """
 
   use GenServer
 
   @deadline_cancel_grace_ms 100
+  @default_await_timeout 5_000
+  # Extra time for the call on top of `:await_timeout`. The connection process
+  # replies by the time its own timer fires, so this only covers scheduling.
+  @await_up_call_margin_ms 1_000
 
   require Logger
   alias GRPC.Client.Adapter
@@ -30,14 +38,26 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   def connect(channel, open_opts) when is_map(open_opts) do
     case DynamicSupervisor.start_child(GRPC.Client.Supervisor, child_spec(channel, open_opts)) do
       {:ok, connection_process_pid} ->
-        {:ok, %{conn_pid: connection_process_pid}}
+        await_up(connection_process_pid, open_opts)
 
       {:error, {:already_started, connection_process_pid}} ->
-        {:ok, %{conn_pid: connection_process_pid}}
+        await_up(connection_process_pid, open_opts)
 
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  defp await_up(connection_process_pid, open_opts) do
+    timeout =
+      Map.get(open_opts, :await_timeout, @default_await_timeout) + @await_up_call_margin_ms
+
+    case GenServer.call(connection_process_pid, :await_up, timeout) do
+      :ok -> {:ok, %{conn_pid: connection_process_pid}}
+      {:error, reason} -> {:error, reason}
+    end
+  catch
+    :exit, {reason, {GenServer, :call, _}} -> {:error, reason}
   end
 
   def disconnect(connection_process_pid) when is_pid(connection_process_pid) do
@@ -89,50 +109,26 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
     {logical_ref, open_opts} = Map.pop(open_opts, :logical_connection_ref, channel.ref)
     metadata = metadata(channel, logical_ref)
     Telemetry.execute(:started, %{generation: 0, active_streams: 0}, metadata)
-    {await_timeout, open_opts} = Map.pop(open_opts, :await_timeout, 5_000)
+    {await_timeout, open_opts} = Map.pop(open_opts, :await_timeout, @default_await_timeout)
 
     case open(host, port, open_opts) do
       {:ok, gun_pid} ->
-        case :gun.await_up(gun_pid, await_timeout) do
-          {:ok, :http2} ->
-            # Monitor Gun so we don't keep casting into a dead pid if Gun
-            # exhausts its reconnect retries (or crashes)
-            Process.monitor(gun_pid)
-            Telemetry.execute(:connected, %{generation: 1}, Map.put(metadata, :reconnect, false))
+        # Monitor Gun so we don't keep casting into a dead pid if Gun
+        # exhausts its reconnect retries (or crashes)
+        Process.monitor(gun_pid)
 
-            {:ok,
-             %{
-               channel: channel,
-               logical_connection_ref: logical_ref,
-               gun_pid: gun_pid,
-               response_processes: %{},
-               generation: 1,
-               max_concurrent_streams: :unknown
-             }}
-
-          {:ok, proto} ->
-            :gun.shutdown(gun_pid)
-            reason = "Error when opening connection: protocol #{proto} is not http2"
-
-            Telemetry.execute(
-              :connect_error,
-              %{},
-              Map.merge(metadata, %{stage: :http2, reason: reason})
-            )
-
-            Telemetry.execute(
-              :stopped,
-              %{streams_terminated: 0},
-              Map.put(metadata, :reason, reason)
-            )
-
-            {:stop, reason}
-
-          {:error, reason} ->
-            :gun.shutdown(gun_pid)
-            connect_failed(metadata, reason)
-            {:stop, reason}
-        end
+        {:ok,
+         %{
+           channel: channel,
+           logical_connection_ref: logical_ref,
+           gun_pid: gun_pid,
+           response_processes: %{},
+           generation: 0,
+           max_concurrent_streams: :unknown,
+           status: :connecting,
+           waiters: [],
+           await_timer: Process.send_after(self(), :await_up_timeout, await_timeout)
+         }}
 
       {:error, reason} ->
         connect_failed(metadata, reason)
@@ -141,9 +137,18 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   end
 
   @impl GenServer
+  def handle_call(:await_up, _from, %{status: :up} = state) do
+    {:reply, :ok, state}
+  end
+
+  def handle_call(:await_up, from, %{status: :connecting} = state) do
+    {:noreply, %{state | waiters: [from | state.waiters]}}
+  end
+
   def handle_call(:disconnect, _from, %{gun_pid: gun_pid} = state) do
     :ok = :gun.shutdown(gun_pid)
-    {:stop, :normal, :ok, state}
+    reply_waiters(state, {:error, :disconnected})
+    {:stop, :normal, :ok, %{state | waiters: []}}
   end
 
   def handle_call(
@@ -186,6 +191,49 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   end
 
   @impl GenServer
+  def handle_info({:gun_up, gun_pid, protocol}, %{status: :connecting, gun_pid: gun_pid} = state) do
+    Process.cancel_timer(state.await_timer)
+    state = %{state | await_timer: nil}
+
+    case protocol do
+      :http2 ->
+        Telemetry.execute(
+          :connected,
+          %{generation: 1},
+          state |> metadata() |> Map.put(:reconnect, false)
+        )
+
+        reply_waiters(state, :ok)
+        {:noreply, %{state | status: :up, generation: 1, waiters: []}}
+
+      proto ->
+        :gun.shutdown(gun_pid)
+        reason = "Error when opening connection: protocol #{proto} is not http2"
+
+        Telemetry.execute(
+          :connect_error,
+          %{},
+          Map.merge(metadata(state), %{stage: :http2, reason: reason})
+        )
+
+        Telemetry.execute(
+          :stopped,
+          %{streams_terminated: 0},
+          Map.put(metadata(state), :reason, reason)
+        )
+
+        fail_connect(state, reason)
+    end
+  end
+
+  def handle_info(:await_up_timeout, %{status: :connecting, gun_pid: gun_pid} = state) do
+    :gun.shutdown(gun_pid)
+    connect_failed(metadata(state), :timeout)
+    fail_connect(%{state | await_timer: nil}, :timeout)
+  end
+
+  def handle_info(:await_up_timeout, state), do: {:noreply, state}
+
   def handle_info({:gun_up, _gun_pid, :http2}, state) do
     generation = state.generation + 1
 
@@ -246,6 +294,15 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
     end
 
     {:noreply, %{state | max_concurrent_streams: max}}
+  end
+
+  def handle_info(
+        {:DOWN, _monitor_ref, :process, gun_pid, reason},
+        %{status: :connecting, gun_pid: gun_pid} = state
+      ) do
+    Process.cancel_timer(state.await_timer)
+    connect_failed(metadata(state), {:down, reason})
+    fail_connect(%{state | await_timer: nil}, {:down, reason})
   end
 
   # Gun is gone for good (reconnect retries exhausted or a crash). Fail all
@@ -310,6 +367,9 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   end
 
   @impl GenServer
+  # A failed connect already published `:stopped` with the connect error as reason
+  def terminate(_reason, %{status: :failed}), do: :ok
+
   def terminate(reason, %{response_processes: processes} = state) do
     Telemetry.execute(
       :stopped,
@@ -429,6 +489,17 @@ defmodule GRPC.Client.Adapters.Gun.ConnectionProcess do
   defp normalize_max_streams(:infinity), do: :infinity
   defp normalize_max_streams(value) when is_integer(value) and value > 0, do: value
   defp normalize_max_streams(_value), do: :unknown
+
+  # Stops with `:normal` so `GRPC.Client.Supervisor` doesn't log every failed
+  # connect; the reason reaches callers through the waiter replies.
+  defp fail_connect(state, reason) do
+    reply_waiters(state, {:error, reason})
+    {:stop, :normal, %{state | status: :failed, waiters: []}}
+  end
+
+  defp reply_waiters(%{waiters: waiters}, reply) do
+    Enum.each(waiters, &GenServer.reply(&1, reply))
+  end
 
   defp connect_failed(metadata, reason) do
     maybe_connect_error(metadata, reason)
