@@ -4,6 +4,8 @@
 
 ### Enhancements
 
+  * New event: `[:grpc, :server, :rpc, :send_error]`. The Cowboy adapter publishes it when the handler returns but the adapter cannot encode, compress or send the reply. The metadata has `:kind`, `:reason`, `:stacktrace` and `:path`. It is not an `:exception` event, because the telemetry span of the handler is closed at that time. A client that disconnects during the reply still causes only `:abort`, because nothing raises. A new section in the error handling guide shows how to send these events to Sentry or Bugsnag (#349).
+
   * `GRPC.Server.Test` runs server interceptors in a test with no endpoint, server process or socket. `build_stream/3` makes a `GRPC.Server.Stream` for an RPC, `run_interceptors/4` runs the chain with the same code the server uses, and `response_headers/1`, `response_trailers/1` and `replies/1` return what was sent. See the new "Testing interceptors" guide (#423).
 
   * `[:grpc, :server, :rpc, :abort]` is now published when the adapter stops an in-flight RPC — an expired deadline, a client cancellation, a dropped connection. The exit signal that stops the RPC process does not unwind it, so `:stop` and `:exception` cannot be published for such a call; the new event carries the stream, server, endpoint, request path, RPC pid and exit reason.
@@ -12,6 +14,7 @@
 
 ### Bug Fixes
 
+  * A compressor that raises does not crash the Cowboy handler process now. The client gets `INTERNAL` with a `grpc-status`. Before, it got no `grpc-status`. The adapter logs the error one time, with `crash_reason`.
   * A listen failure now logs which endpoint could not start and why, for example `Could not start MyApp.Endpoint: port 50051 is already in use (eaddrinuse)`. Before, the Cowboy adapter's `:eaddrinuse` clause never matched Ranch's `{:listen_error, ref, :eaddrinuse}`, and nothing named the port. Under a supervisor, the child's error is now `{:listen_failed, message, reason}`, with the old term as `reason`; match on `:eaddrinuse` anywhere in it. `GRPC.Server.start_endpoint/3` still returns the same `{:error, reason}`. `GRPC.Server.Adapters.Cowboy.start_link/5` replaces `start_link/4` and takes the port. With Ranch 2, the adapter now also logs `Running ... with Cowboy using ...` at startup (#330).
   * Request data that waits for its handler is credited to the client once, when the handler reads it. It was credited on arrival and again on read, so the receive window grew without bound and a client was never held back. A handler that stops reading now holds its client to the stream window (`initial_stream_window_size`).
   * Unless set, the Cowboy adapter's connection window is 16 stream windows (`initial_connection_window_size`, `connection_window_margin_size`), so streams whose handlers stop reading can't take the whole connection window from the other streams on it.

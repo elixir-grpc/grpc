@@ -47,6 +47,12 @@ defmodule GRPC.Telemetry do
     * `[:grpc, :server, :rpc, :exception]` - Published if any exception occurs while receiving a message.
       * `:duration` - the duration as measured through `System.monotonic_time()`
         for the execution since the start of the pipeline until the exception happened.
+    * `[:grpc, :server, :rpc, :send_error]` - Published by the Cowboy adapter when the
+      handler returns but the adapter cannot encode, compress or send the reply. See
+      "Failures while sending the reply" below.
+      * `:duration` - the time from the start of the pipeline to the failure, as
+        measured through `System.monotonic_time()`.
+      * `:monotonic_time` - the time of the failure.
     * `[:grpc, :server, :rpc, :abort]` - Published when the adapter stops an in-flight
       RPC: expired deadline, client cancellation or a dropped connection. The exit
       signal doesn't unwind the RPC process, so `:stop` and `:exception` are not
@@ -59,6 +65,7 @@ defmodule GRPC.Telemetry do
   | `[:rpc, :start]`  | `:count`     | `:stream`, `:server`, `:endpoint`, `:function_name` |
   | `[:rpc, :stop]`  | `:duration`  | `:stream`, `:server`, `:endpoint`, `:function_name` , `:result` |
   | `[:rpc, :exception]` | `:duration`  | `:stream`, `:server`, `:endpoint`, `:function_name`, `:kind`, `:reason`, `:stacktrace` |
+  | `[:rpc, :send_error]` | `:duration`, `:monotonic_time` | `:stream`, `:server`, `:endpoint`, `:path`, `:kind`, `:reason`, `:stacktrace` |
   | `[:rpc, :abort]` | `:duration`  | `:stream`, `:server`, `:endpoint`, `:path`, `:pid`, `:reason` |
 
   ### Metadata
@@ -83,6 +90,45 @@ defmodule GRPC.Telemetry do
         `:error` tuple, which will be reported as `:error`.
       * `:exit` — from a caught process exit.
       * `:throw` — from a caught value, this doesn't necessarily mean that an error occurred.
+
+  ### Failures while sending the reply
+
+  The handler can return, and the server can still fail to send the reply. The
+  Cowboy adapter publishes `[:grpc, :server, :rpc, :send_error]` in these conditions:
+
+    * The codec cannot encode the reply. `:reason` is the exception from the codec.
+    * A compressor, or the codec's `pack_for_channel/1`, raises an exception.
+      `:reason` is that exception. The client gets `INTERNAL`. Before, the client
+      got no `grpc-status`.
+    * The adapter does not send the reply. Examples are a compressor that the client
+      does not accept, and a reply that is larger than the message limit. `:reason`
+      is the `GRPC.RPCError` that the client gets. `:stacktrace` is the stack of the
+      adapter process at the point where it found the failure.
+
+  This event is not a second `:exception`. The `:telemetry.span/3` around the
+  handler is closed at this time. For a call that returns, `:stop` comes first. Thus
+  the event has no `:function_name` and no `:telemetry_span_context`. A tracer that
+  pairs span events by that context does not see it. The metadata has `:path`
+  instead.
+
+  ### A client that disconnects
+
+  The client can close the socket, close the connection or cancel the stream while
+  the server sends the reply. In these conditions, nothing raises on the server.
+  The adapter stops the RPC process and publishes `[:grpc, :server, :rpc, :abort]`.
+  The event has the exit reason (`:shutdown`), but no `:kind` and no `:stacktrace`.
+  The adapter does not publish `:stop`, `:exception` or `:send_error`, and it logs
+  nothing. To write a reply, the server sends a message to the Cowboy process. Thus
+  the send call does not fail.
+
+  ### Send server errors to an error reporter
+
+  An error reporter that reads `:exception` and `:send_error` events gets all the
+  failures above. An error reporter that reads Logger reports does not need these
+  events. The Cowboy adapter logs these failures with `:crash_reason` metadata: a
+  handler failure, an encoding failure and a compressor that raises.
+  `exception_log_filter` can remove these logs. The adapter does not log a reply
+  that it does not send.
   """
 
   require Logger
