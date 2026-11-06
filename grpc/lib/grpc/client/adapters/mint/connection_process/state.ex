@@ -10,12 +10,16 @@ if Code.ensure_loaded?(Mint.HTTP) do
       :port,
       :connect_opts,
       :retry_timeout_ms,
+      :telemetry_metadata,
       :keepalive,
       :keepalive_tolerance,
       requests: %{},
       request_stream_queue: :queue.new(),
       retry: 0,
       retry_attempt: 0,
+      generation: 1,
+      max_concurrent_streams: :unknown,
+      settings_known?: false,
       pings_unacked: 0
     ]
 
@@ -29,6 +33,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
         port: opts[:port],
         connect_opts: opts[:connect_opts] || [],
         retry: opts[:retry] || 0,
+        telemetry_metadata: opts[:telemetry_metadata],
         keepalive: opts[:keepalive],
         keepalive_tolerance: opts[:keepalive_tolerance]
       }

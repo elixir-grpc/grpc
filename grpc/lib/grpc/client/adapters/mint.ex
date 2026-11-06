@@ -49,14 +49,23 @@ if Code.ensure_loaded?(Mint.HTTP) do
     def connect(%{host: host, port: port} = channel, opts \\ []) do
       {config_opts, opts} = Keyword.pop(opts, :config_options, [])
       {retry, opts} = Keyword.pop(opts, :retry, 0)
+      # Pooled connections open with `ref: nil`, so the pool passes the logical ref separately
+      {logical_ref, opts} = Keyword.pop(opts, :logical_connection_ref, channel.ref)
       {keepalive_opts, opts} = Keyword.split(opts, [:keepalive, :keepalive_tolerance])
       module_opts = Application.get_env(:grpc, __MODULE__, config_opts)
+
+      transport_metadata = %{
+        logical_connection_ref: logical_ref,
+        target: {host, port},
+        adapter: __MODULE__
+      }
 
       opts =
         channel
         |> connect_opts(opts)
         |> merge_opts(module_opts)
         |> Keyword.put(:retry, retry)
+        |> Keyword.put(:grpc_transport_metadata, transport_metadata)
         |> Keyword.merge(keepalive_opts)
 
       Process.flag(:trap_exit, true)
@@ -217,10 +226,16 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
         {:error, :deadline_exceeded} ->
           give_up_on_request(stream, pid)
+          GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :deadline)
 
           {:error, GRPC.RPCError.exception(GRPC.Status.deadline_exceeded(), "deadline exceeded")}
 
+        {:error, %GRPC.RPCError{} = error} ->
+          GRPC.Client.Telemetry.mark_rpc_failure(:remote, nil)
+          {:error, error}
+
         {:error, error} ->
+          mark_transport_failure(error)
           {:error, error}
       end
     end
@@ -323,5 +338,19 @@ if Code.ensure_loaded?(Mint.HTTP) do
       # Explicitly check for true to ensure the boolean type here
       opts[:return_headers] == true
     end
+
+    defp mark_transport_failure(%Mint.TransportError{}) do
+      GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :connection_unavailable)
+    end
+
+    defp mark_transport_failure(%Mint.HTTPError{reason: {:server_closed_request, _code}}) do
+      GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :stream_error)
+    end
+
+    defp mark_transport_failure("the connection is closed") do
+      GRPC.Client.Telemetry.mark_rpc_failure(:after_dispatch, :connection_unavailable)
+    end
+
+    defp mark_transport_failure(_error), do: :ok
   end
 end
