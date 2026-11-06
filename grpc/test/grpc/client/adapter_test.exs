@@ -1,9 +1,9 @@
-defmodule GRPC.Client.Adapters.CallExitTest do
+defmodule GRPC.Client.AdapterTest do
   use ExUnit.Case, async: true
 
   import ExUnit.CaptureLog
 
-  alias GRPC.Client.Adapters.CallExit
+  alias GRPC.Client.Adapter
   alias GRPC.Client.Adapters.Gun.ConnectionProcess, as: GunConnectionProcess
   alias GRPC.Client.Adapters.Mint.ConnectionProcess, as: MintConnectionProcess
 
@@ -53,7 +53,7 @@ defmodule GRPC.Client.Adapters.CallExitTest do
 
       assert {:timeout,
               {GenServer, :call, [^pid, {:request, @path, :redacted, :redacted, :infinity}, 50]}} =
-               catch_exit(CallExit.call(pid, {:request, @path, @headers, @body, :infinity}, 50))
+               catch_exit(Adapter.call(pid, {:request, @path, @headers, @body, :infinity}, 50))
     end
 
     test "the client span neither logs nor emits the headers or the body" do
@@ -95,7 +95,7 @@ defmodule GRPC.Client.Adapters.CallExitTest do
             {:timeout, {GenServer, :call, [self(), :disconnect, 5_000]}},
             {:noproc, {GenServer, :call, [self(), {:cancel, make_ref()}, 5_000]}}
           ] do
-        assert CallExit.redact(reason) == reason
+        assert Adapter.redact(reason) == reason
       end
     end
   end
