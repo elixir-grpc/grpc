@@ -1,10 +1,6 @@
 # Changelog
 
-## v1.0.6
-
-No changes. Released for version sync with `:grpc_server`
-
-## v1.0.5
+## Unreleased
 
 ### Enhancements
 
@@ -15,16 +11,28 @@ No changes. Released for version sync with `:grpc_server`
 
 ### Behavior Changes
 
-  * The Mint adapter now enforces the requested `:timeout`/`:deadline` on unary receives. A unary call that never receives a response fails with `DEADLINE_EXCEEDED` after the documented 10s default instead of blocking indefinitely, and an explicit `:deadline` now takes precedence over `:timeout`.
-  * `GRPC.Client.Adapters.Mint.connect/2` now returns errors directly, instead of formatting as a string.
   * Test suites that define a Mox mock for the `GRPC.Client.Adapter` behaviour must stub the new validation callback. Mox generates optional callbacks on mocks, so `GRPC.Client.Connection` calls `validate_opts/1` on the mock and Mox raises `UnexpectedCallError` when it is not stubbed. Adapters that implement the behaviour with `@behaviour` and do not define `validate_opts/1` are unaffected.
 
 ### Bug Fixes
 
   * The Mint adapter no longer leaks a `StreamResponseProcess` when the connection process refuses a request.
-  * The Gun adapter no longer shares a named channel's connection process across Erlang nodes. It was registered in `:global`, so a node connecting with a `:name` already used on another node adopted the remote connection process; `connect/2` returned `{:ok, channel}`, but every RPC on it then raised `ArgumentError` because `GRPC.Stub.call/5` calls `Process.alive?/1` on the connection pid and that raises for remote pids. Connection processes are now registered in the node-local `GRPC.Client.Registry`, so reuse is per node.
   * Invalid Mint `:retry` values now raise `ArgumentError`. Because the old comparisons relied on term ordering, bad input failed silently and in two different directions: a negative integer behaved as no-retry, while *any* atom lead to infinite reconnection.
   * Request headers (including `authorization`) and bodies no longer leak through client exits. When a call to the Gun or Mint adapter's connection process exits (the process is busy past the 5s call timeout, or dead), the exit reason embeds the call message; `GRPC.Telemetry.client_span/3` logged it at `:error`, `[:grpc, :client, :rpc, :exception]` metadata carried it, and crash reports printed it. The headers and body in that message are now replaced with `:redacted`; the exit still propagates with the same `{reason, {GenServer, :call, [pid, message, timeout]}}` shape and the request path.
+
+## v1.0.6
+
+No changes. Released for version sync with `:grpc_server`
+
+## v1.0.5
+
+### Behavior Changes
+
+  * The Mint adapter now enforces the requested `:timeout`/`:deadline` on unary receives. A unary call that never receives a response fails with `DEADLINE_EXCEEDED` after the documented 10s default instead of blocking indefinitely, and an explicit `:deadline` now takes precedence over `:timeout`.
+  * `GRPC.Client.Adapters.Mint.connect/2` now returns errors directly, instead of formatting as a string.
+
+### Bug Fixes
+
+  * The Gun adapter no longer shares a named channel's connection process across Erlang nodes. It was registered in `:global`, so a node connecting with a `:name` already used on another node adopted the remote connection process; `connect/2` returned `{:ok, channel}`, but every RPC on it then raised `ArgumentError` because `GRPC.Stub.call/5` calls `Process.alive?/1` on the connection pid and that raises for remote pids. Connection processes are now registered in the node-local `GRPC.Client.Registry`, so reuse is per node.
 
 ## v1.0.4 (2026-10-15)
 
