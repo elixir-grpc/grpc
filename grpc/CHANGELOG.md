@@ -8,6 +8,7 @@
    Both default to `nil`, keeping the previous behavior.
   * The Mint adapter's `:retry` option explicitly supports `:infinity`, reconnecting for as long as the connection process lives. This previously worked due Erlang term ordering (every atom sorts above every integer).
   * `GRPC.Client.Adapter` gained an optional `validate_opts/1` callback. Adapters that implement it have their `:adapter_opts` validated in the caller by `GRPC.Client.Connection.connect/2`, so configuration errors raise there instead of crashing the spawned connection process.
+  * The functions `use GRPC.Stub` generates now have a `@doc` built from the RPC. It names the RPC, its request and reply types and its streaming kind, and shows an example. The `GRPC.Stub` moduledoc has a new "Generated functions" section with the arity, return value and call options for each RPC kind (#339).
 
 ### Behavior Changes
 

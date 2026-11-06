@@ -35,7 +35,90 @@ defmodule GRPC.Stub do
   then use `recv/1` to receive the reply. And if the reply is streaming, `recv/1`
   returns a `Stream`.
 
-  You can refer to `call/6` for doc of your RPC functions.
+  See "Generated functions" below for the functions and options of each RPC kind.
+
+  ## Generated functions
+
+  `use GRPC.Stub` defines one function per RPC. The function name is the RPC name in
+  snake case (`SayHello` becomes `say_hello`). Each one has a `@doc` built from the
+  RPC, so the docs of your stub module name the request and reply types and the
+  streaming kind of every RPC.
+
+  The shape of the function depends on the RPC kind. `opts` is a keyword list, and
+  defaults to `[]`.
+
+  ### Unary: `rpc :SayHello, Request, Reply`
+
+  `say_hello(channel, request, opts \\\\ [])` sends one request and waits for one reply.
+
+      {:ok, reply} = Greeter.Stub.say_hello(channel, request)
+
+      # With :return_headers
+      {:ok, reply, %{headers: headers, trailers: trailers}} =
+        Greeter.Stub.say_hello(channel, request, return_headers: true)
+
+  On failure it returns `{:error, %GRPC.RPCError{}}`.
+
+  ### Server streaming: `rpc :ListReplies, Request, stream(Reply)`
+
+  `list_replies(channel, request, opts \\\\ [])` sends one request. The reply is an
+  `Enumerable` of `{:ok, reply}` or `{:error, error}` items.
+
+      {:ok, replies} = Greeter.Stub.list_replies(channel, request)
+      Enum.each(replies, fn {:ok, reply} -> IO.inspect(reply) end)
+
+  With `return_headers: true` the call returns `{:ok, replies, %{headers: headers}}`,
+  and the last item of `replies` is `{:trailers, trailers}`.
+
+  ### Client streaming: `rpc :Collect, stream(Request), Reply`
+
+  `collect(channel, opts \\\\ [])` takes no request. It returns a `GRPC.Client.Stream`.
+  Send requests with `send_request/3`, end the stream, then read the single reply
+  with `recv/2`.
+
+      stream = Greeter.Stub.collect(channel)
+      stream = GRPC.Stub.send_request(stream, request)
+      stream = GRPC.Stub.send_request(stream, request, end_stream: true)
+      {:ok, reply} = GRPC.Stub.recv(stream)
+
+  Instead of `end_stream: true`, call `end_stream/1` after the last request. If
+  no connection is available, the function raises `GRPC.RPCError`.
+
+  ### Bidirectional streaming: `rpc :Chat, stream(Request), stream(Reply)`
+
+  `chat(channel, opts \\\\ [])` returns a `GRPC.Client.Stream`, like client streaming.
+  `recv/2` returns an `Enumerable` of `{:ok, reply}` or `{:error, error}` items.
+
+      stream = Greeter.Stub.chat(channel)
+      stream = GRPC.Stub.send_request(stream, request, end_stream: true)
+      {:ok, replies} = GRPC.Stub.recv(stream)
+      Enum.each(replies, fn {:ok, reply} -> IO.inspect(reply) end)
+
+  ### Call options
+
+  Every generated function takes these options. For streaming requests, pass them
+  to the generated function; `recv/2` also accepts `:timeout`, `:deadline` and
+  `:return_headers`.
+
+    * `:timeout` - request timeout in milliseconds. The default is 10 seconds for
+      unary calls and `:infinity` when the request or the reply is streaming.
+    * `:deadline` - an absolute time (a `DateTime`). It overrides `:timeout`.
+    * `:metadata` - a map of custom request metadata.
+    * `:return_headers` - when `true`, the result carries the response headers and
+      trailers, as shown above. Default is `false`.
+    * `:compressor` - the compressor for this call. It overrides the one set in `connect/2`.
+    * `:accepted_compressors` - the compressors you accept in the reply, as a list.
+    * `:codec` - the codec for this call. It overrides the one set in `connect/2`.
+
+  Any other option raises `ArgumentError`.
+
+  ### Name collisions
+
+  If two RPC names give the same snake case name (`ProcessData` and `process_data`),
+  no function is generated for either, and compiling warns about it (silence it with
+  `warn_on_collision: false`). Call them with `call/3` or `call/4` and the RPC name:
+
+      Greeter.Stub.call(:ProcessData, channel, request, opts)
   """
   require Logger
 
@@ -139,12 +222,14 @@ defmodule GRPC.Stub do
       end)
 
       # Define convenience functions for non-colliding RPCs
-      Enum.each(service_mod.__rpc_calls__(), fn {name, {_, req_stream}, _, options} ->
+      Enum.each(service_mod.__rpc_calls__(), fn {name, {_, req_stream}, _, options} = rpc ->
         has_collision = Map.get(options, :__name_collision__, false)
 
         unless has_collision do
           func_name = name |> to_string |> Macro.underscore() |> String.to_atom()
+          doc = GRPC.Stub.__rpc_doc__(rpc, service_name, __MODULE__, func_name)
 
+          @doc doc
           if req_stream do
             def unquote(func_name)(%GRPC.Channel{} = channel, opts \\ []) do
               call(unquote(name), channel, opts)
@@ -167,6 +252,102 @@ defmodule GRPC.Stub do
          )}
       end
     end
+  end
+
+  # Builds the @doc of the function generated for `rpc`. Called from `__using__/1`.
+  @doc false
+  def __rpc_doc__({name, {req, _}, {res, _}, _} = rpc, service_name, stub_mod, func_name) do
+    path = "/#{service_name}/#{name}"
+    stub = inspect(stub_mod)
+    req_name = inspect(req)
+    res_name = inspect(res)
+
+    {kind, signature, details} =
+      case GRPC.Service.grpc_type(rpc) do
+        :unary ->
+          {"unary", "#{func_name}(channel, request, opts \\\\ [])",
+           """
+           Sends one `#{req_name}` and returns one `#{res_name}`.
+
+           ## Returns
+
+             * `{:ok, reply}`, where `reply` is a `#{res_name}`
+             * `{:ok, reply, %{headers: headers, trailers: trailers}}` with `return_headers: true`
+             * `{:error, %GRPC.RPCError{}}`
+
+           ## Example
+
+               {:ok, reply} = #{stub}.#{func_name}(channel, request)
+           """}
+
+        :server_stream ->
+          {"server streaming", "#{func_name}(channel, request, opts \\\\ [])",
+           """
+           Sends one `#{req_name}` and returns a stream of `#{res_name}`.
+
+           ## Returns
+
+             * `{:ok, replies}`, where `replies` is an `Enumerable` of
+               `{:ok, #{res_name}}` or `{:error, error}` items
+             * `{:ok, replies, %{headers: headers}}` with `return_headers: true`. The
+               last item of `replies` is then `{:trailers, trailers}`.
+             * `{:error, %GRPC.RPCError{}}`
+
+           ## Example
+
+               {:ok, replies} = #{stub}.#{func_name}(channel, request)
+               Enum.each(replies, fn {:ok, reply} -> IO.inspect(reply) end)
+           """}
+
+        :client_stream ->
+          {"client streaming", "#{func_name}(channel, opts \\\\ [])",
+           """
+           Opens a stream for `#{req_name}` requests and returns a `GRPC.Client.Stream`.
+           It takes no request. Send each one with `GRPC.Stub.send_request/3`, end the
+           stream with `end_stream: true` on the last one or with `GRPC.Stub.end_stream/1`,
+           then call `GRPC.Stub.recv/2` to get the single `#{res_name}` reply as `{:ok, reply}`.
+
+           Raises `GRPC.RPCError` if no connection is available.
+
+           ## Example
+
+               stream = #{stub}.#{func_name}(channel)
+               stream = GRPC.Stub.send_request(stream, request)
+               stream = GRPC.Stub.send_request(stream, request, end_stream: true)
+               {:ok, reply} = GRPC.Stub.recv(stream)
+           """}
+
+        :bidirectional_stream ->
+          {"bidirectional streaming", "#{func_name}(channel, opts \\\\ [])",
+           """
+           Opens a stream for `#{req_name}` requests and returns a `GRPC.Client.Stream`.
+           It takes no request. Send each one with `GRPC.Stub.send_request/3`, end the
+           stream with `end_stream: true` on the last one or with `GRPC.Stub.end_stream/1`,
+           then call `GRPC.Stub.recv/2`. It returns `{:ok, replies}`, an `Enumerable` of
+           `{:ok, #{res_name}}` or `{:error, error}` items.
+
+           Raises `GRPC.RPCError` if no connection is available.
+
+           ## Example
+
+               stream = #{stub}.#{func_name}(channel)
+               stream = GRPC.Stub.send_request(stream, request, end_stream: true)
+               {:ok, replies} = GRPC.Stub.recv(stream)
+               Enum.each(replies, fn {:ok, reply} -> IO.inspect(reply) end)
+           """}
+      end
+
+    """
+    Calls the `#{name}` RPC (`#{path}`, #{kind}): `#{req_name}` to `#{res_name}`.
+
+        #{signature}
+
+    #{details}
+    ## Options
+
+    `:timeout`, `:deadline`, `:metadata`, `:return_headers`, `:compressor`,
+    `:accepted_compressors` and `:codec`. See "Generated functions" in `GRPC.Stub`.
+    """
   end
 
   @doc """
