@@ -1,7 +1,14 @@
 defmodule GRPC.Client.Adapters.MintTest do
   use GRPC.Client.DataCase, async: false
 
+  alias Elixir.Mint.HTTPError
+  alias Elixir.Mint.TransportError
   alias GRPC.Client.Adapters.Mint
+
+  defmodule TLSEndpoint do
+    use GRPC.Endpoint
+    run(FeatureServer)
+  end
 
   setup do
     {:ok, _, port} = GRPC.Server.start(FeatureServer, 0)
@@ -148,20 +155,79 @@ defmodule GRPC.Client.Adapters.MintTest do
   end
 
   describe "handle_errors_receive_data/2" do
-    test "returns a GRPC.RPCError with unknown status and stops the stream response process" do
+    setup do
       {:ok, stream_response_pid} =
         GRPC.Client.Adapters.Mint.StreamResponseProcess.start_link(build(:client_stream), true)
 
-      payload = %{response: {:error, :closed}, stream_response_pid: stream_response_pid}
-      stream = build(:client_stream, payload: payload)
+      %{stream_response_pid: stream_response_pid}
+    end
+
+    test "returns UNAVAILABLE when the connection is gone and stops the stream response process",
+         %{stream_response_pid: pid} do
+      stream =
+        build(:client_stream, payload: %{response: {:error, :closed}, stream_response_pid: pid})
+
+      assert {:error, %GRPC.RPCError{status: status, message: message}} =
+               Mint.handle_errors_receive_data(stream, [])
+
+      assert status == GRPC.Status.unavailable()
+      assert message == "the connection is closed"
+
+      refute Process.alive?(pid)
+    end
+
+    test "returns UNAVAILABLE for a transport error", %{stream_response_pid: pid} do
+      error = %TransportError{reason: :econnrefused}
+
+      stream =
+        build(:client_stream, payload: %{response: {:error, error}, stream_response_pid: pid})
+
+      assert {:error, %GRPC.RPCError{status: status, message: message}} =
+               Mint.handle_errors_receive_data(stream, [])
+
+      assert status == GRPC.Status.unavailable()
+      assert message == Exception.message(error)
+    end
+
+    test "returns UNAVAILABLE when the server closed the connection", %{
+      stream_response_pid: pid
+    } do
+      error = %HTTPError{
+        module: Elixir.Mint.HTTP2,
+        reason: {:server_closed_connection, :no_error, "shutting down"}
+      }
+
+      stream =
+        build(:client_stream, payload: %{response: {:error, error}, stream_response_pid: pid})
+
+      assert {:error, %GRPC.RPCError{status: status, message: message}} =
+               Mint.handle_errors_receive_data(stream, [])
+
+      assert status == GRPC.Status.unavailable()
+      assert message == Exception.message(error)
+    end
+
+    test "passes an existing GRPC.RPCError through untouched", %{stream_response_pid: pid} do
+      error = GRPC.RPCError.exception(GRPC.Status.unavailable(), "the connection is closed")
+
+      stream =
+        build(:client_stream, payload: %{response: {:error, error}, stream_response_pid: pid})
+
+      assert {:error, ^error} = Mint.handle_errors_receive_data(stream, [])
+    end
+
+    test "returns UNKNOWN for a reason it cannot classify and stops the stream response process",
+         %{stream_response_pid: pid} do
+      response = {:error, :something_else}
+      stream = build(:client_stream, payload: %{response: response, stream_response_pid: pid})
 
       assert {:error, %GRPC.RPCError{status: status, message: message}} =
                Mint.handle_errors_receive_data(stream, [])
 
       assert status == GRPC.Status.unknown()
-      assert message == "error occurred while receiving data: #{inspect(payload.response)}"
+      assert message == "error occurred while receiving data: #{inspect(response)}"
 
-      refute Process.alive?(stream_response_pid)
+      refute Process.alive?(pid)
     end
 
     test "classifies a remote RPC error without changing it" do
@@ -194,11 +260,13 @@ defmodule GRPC.Client.Adapters.MintTest do
     test "classifies a closed connection without changing the error" do
       attach_telemetry([:grpc, :client, :rpc, :stop])
 
+      error = GRPC.RPCError.exception(GRPC.Status.unavailable(), "the connection is closed")
+
       {:ok, response_pid} =
         GRPC.Client.Adapters.Mint.StreamResponseProcess.start_link(build(:client_stream), true)
 
-      error = GRPC.RPCError.exception(GRPC.Status.unavailable(), "the connection is closed")
-      :ok = GRPC.Client.Adapters.Mint.StreamResponseProcess.consume(response_pid, :error, error)
+      :ok =
+        GRPC.Client.Adapters.Mint.StreamResponseProcess.consume(response_pid, :error, error)
 
       :ok = GRPC.Client.Adapters.Mint.StreamResponseProcess.done(response_pid)
 
@@ -220,6 +288,94 @@ defmodule GRPC.Client.Adapters.MintTest do
                         failure_stage: :after_dispatch,
                         failure_reason: :connection_unavailable
                       }}
+    end
+  end
+
+  describe "receive_data/2 - connection errors from the stream response process" do
+    @describetag timeout: 5_000
+
+    test "classifies a server-closed connection as UNAVAILABLE and connection_unavailable" do
+      attach_telemetry([:grpc, :client, :rpc, :stop])
+
+      error = %HTTPError{
+        module: Elixir.Mint.HTTP2,
+        reason: {:server_closed_connection, :no_error, "shutting down"}
+      }
+
+      {:ok, response_pid} =
+        GRPC.Client.Adapters.Mint.StreamResponseProcess.start_link(build(:client_stream), true)
+
+      :ok = GRPC.Client.Adapters.Mint.StreamResponseProcess.consume(response_pid, :error, error)
+      :ok = GRPC.Client.Adapters.Mint.StreamResponseProcess.done(response_pid)
+
+      stream =
+        build(:client_stream,
+          payload: %{
+            response: {:ok, %{request_ref: make_ref()}},
+            stream_response_pid: response_pid
+          }
+        )
+
+      assert {:error, %GRPC.RPCError{status: status, message: message}} =
+               GRPC.Client.Telemetry.client_span(stream, :request, fn ->
+                 Mint.receive_data(stream, [])
+               end)
+
+      assert status == GRPC.Status.unavailable()
+      assert message == Exception.message(error)
+
+      assert_receive {:telemetry, [:grpc, :client, :rpc, :stop], _measurements,
+                      %{
+                        failure_stage: :after_dispatch,
+                        failure_reason: :connection_unavailable
+                      }}
+    end
+  end
+
+  describe "receive_data/2 - request ended by the connection mid-request" do
+    @describetag timeout: 5_000
+
+    setup do
+      {:ok, stream_response_pid} =
+        GRPC.Client.Adapters.Mint.StreamResponseProcess.start_link(build(:client_stream), true)
+
+      stream =
+        build(:client_stream,
+          payload: %{
+            stream_response_pid: stream_response_pid,
+            response: {:ok, %{request_ref: make_ref()}}
+          }
+        )
+
+      %{stream: stream, stream_response_pid: stream_response_pid}
+    end
+
+    test "returns the UNAVAILABLE error the connection process produced", %{
+      stream: stream,
+      stream_response_pid: pid
+    } do
+      error = GRPC.RPCError.exception(GRPC.Status.unavailable(), "the connection is closed")
+
+      :ok = GRPC.Client.Adapters.Mint.StreamResponseProcess.consume(pid, :error, error)
+      :ok = GRPC.Client.Adapters.Mint.StreamResponseProcess.done(pid)
+
+      assert {:error, ^error} = Mint.receive_data(stream, [])
+    end
+
+    test "normalises a raw transport error into an UNAVAILABLE GRPC.RPCError", %{
+      stream: stream,
+      stream_response_pid: pid
+    } do
+      error = %TransportError{reason: :closed}
+
+      :ok = GRPC.Client.Adapters.Mint.StreamResponseProcess.consume(pid, :error, error)
+      :ok = GRPC.Client.Adapters.Mint.StreamResponseProcess.done(pid)
+
+      assert {:error, %GRPC.RPCError{status: status, message: message}} =
+               Mint.receive_data(stream, [])
+
+      assert status == GRPC.Status.unavailable()
+      assert message == Exception.message(error)
     end
   end
 
@@ -334,6 +490,75 @@ defmodule GRPC.Client.Adapters.MintTest do
       state = :sys.get_state(connected.adapter_payload.conn_pid)
 
       assert state.retry == 0
+    end
+
+    test "accepts :infinity as the retry budget", %{port: port} do
+      channel = build(:channel, adapter: Mint, port: port, host: "localhost")
+
+      {:ok, connected} = Mint.connect(channel, retry: :infinity)
+      state = :sys.get_state(connected.adapter_payload.conn_pid)
+
+      assert state.retry == :infinity
+    end
+
+    test "rejects a retry budget that is neither a non-negative integer nor :infinity", %{
+      port: port
+    } do
+      channel = build(:channel, adapter: Mint, port: port, host: "localhost")
+
+      assert {:error, message} = Mint.connect(channel, retry: -1)
+      assert message =~ ":retry must be a non-negative integer or :infinity"
+
+      assert {:error, message} = Mint.connect(channel, retry: :forever)
+      assert message =~ ":retry must be a non-negative integer or :infinity"
+    end
+  end
+
+  describe "validate_opts/1" do
+    test "accepts an unset retry, a non-negative integer or :infinity" do
+      assert :ok == Mint.validate_opts([])
+      assert :ok == Mint.validate_opts(retry: nil)
+      assert :ok == Mint.validate_opts(retry: 0)
+      assert :ok == Mint.validate_opts(retry: 3)
+      assert :ok == Mint.validate_opts(retry: :infinity)
+    end
+
+    test "returns an error for anything else" do
+      assert {:error, message} = Mint.validate_opts(retry: -1)
+      assert message =~ ":retry must be a non-negative integer or :infinity"
+
+      assert {:error, message} = Mint.validate_opts(retry: :forever)
+      assert message =~ ":retry must be a non-negative integer or :infinity"
+    end
+  end
+
+  describe "connect/2 with hostname" do
+    setup do
+      server_credential = build(:credential)
+
+      {:ok, _, port} =
+        GRPC.Server.start_endpoint(TLSEndpoint, 0, adapter_opts: [cred: server_credential])
+
+      on_exit(fn -> :ok = GRPC.Server.stop_endpoint(TLSEndpoint) end)
+
+      %{port: port}
+    end
+
+    test "dials the resolved address but hands the hostname to Mint for TLS", %{port: port} do
+      channel =
+        build(:channel,
+          adapter: Mint,
+          port: port,
+          host: "127.0.0.1",
+          hostname: "my-service.local",
+          scheme: "https"
+        )
+
+      {:ok, connected} = Mint.connect(channel, [])
+      state = :sys.get_state(connected.adapter_payload.conn_pid)
+
+      assert state.host == "127.0.0.1"
+      assert state.connect_opts[:hostname] == "my-service.local"
     end
   end
 end

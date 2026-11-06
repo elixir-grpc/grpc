@@ -154,4 +154,20 @@ defmodule GRPC.Client.Resolver.DNSTest do
     assert [%{address: "127.0.0.1", port: 50051}] = addrs
     assert {:ok, %{load_balancing_policy: :pick_first}} = config
   end
+
+  test "keeps the hostname of a dns:// target alongside the resolved IP" do
+    host = "my-service.local"
+    config_name = "_grpc_config." <> host
+
+    DNS.MockAdapter
+    |> expect(:lookup, fn ^host, :a ->
+      {:ok, [{127, 0, 0, 1}]}
+    end)
+    |> expect(:lookup, fn ^config_name, :txt ->
+      {:ok, []}
+    end)
+
+    assert {:ok, %{addresses: addrs}} = DNS.resolve("dns://#{host}:50051")
+    assert [%{address: "127.0.0.1", port: 50051, hostname: ^host}] = addrs
+  end
 end

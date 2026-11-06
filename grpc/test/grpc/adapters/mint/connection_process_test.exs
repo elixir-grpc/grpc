@@ -167,8 +167,10 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert {:reply, {:error, error}, new_state} = response
       assert state.conn != new_state.conn
 
-      assert GRPC.RPCError.exception(GRPC.Status.unavailable(), "the connection is closed") ==
-               error
+      assert %GRPC.RPCError{
+               status: GRPC.Status.unavailable(),
+               message: "the connection is closed"
+             } == error
     end
 
     test "returns error response when mint returns an error when starting stream request", %{
@@ -225,8 +227,10 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert {:reply, {:error, error}, new_state} = response
       assert state.conn != new_state.conn
 
-      assert GRPC.RPCError.exception(GRPC.Status.unavailable(), "the connection is closed") ==
-               error
+      assert %GRPC.RPCError{
+               status: GRPC.Status.unavailable(),
+               message: "the connection is closed"
+             } == error
     end
 
     test "returns error response when mint returns an error when starting stream request", %{
@@ -464,6 +468,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
   describe "handle_info - connection_closed - no requests" do
     setup :valid_connection
+    setup :attach_reconnect_telemetry
 
     test "send a message to parent process to inform the connection is down", %{
       state: state
@@ -488,6 +493,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert new_state.conn.state == :closed
       assert new_state.retry == 0
       assert_receive {:elixir_grpc, :connection_down, _pid}, 500
+      refute_received {:telemetry, [:grpc, :client, :mint, :reconnect, :exhausted], _, _}
     end
   end
 
@@ -566,6 +572,22 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
     end
   end
 
+  describe "handle_info - connection_closed - retry: :infinity" do
+    setup :valid_connection_with_infinite_retry
+    setup :attach_reconnect_telemetry
+
+    test "reconnects when the connection drops", %{state: state} do
+      tcp_message = {:tcp_closed, state.conn.socket}
+
+      assert {:noreply, new_state} = ConnectionProcess.handle_info(tcp_message, state)
+      assert Mint.HTTP.open?(new_state.conn)
+      assert new_state.retry_attempt == 0
+
+      refute_received {:elixir_grpc, :connection_down, _pid}
+      refute_received {:telemetry, [:grpc, :client, :mint, :reconnect, :exhausted], _, _}
+    end
+  end
+
   describe "handle_info - connection_closed - with request" do
     setup :valid_connection
     setup :valid_stream_request
@@ -586,11 +608,12 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert_receive {:elixir_grpc, :connection_down, pid}, 500
       response_state = :sys.get_state(response_pid)
 
-      assert :queue.to_list(response_state.responses) ==
-               [
-                 error:
-                   GRPC.RPCError.exception(GRPC.Status.unavailable(), "the connection is closed")
-               ]
+      assert :queue.to_list(response_state.responses) == [
+               error: %GRPC.RPCError{
+                 status: GRPC.Status.unavailable(),
+                 message: "the connection is closed"
+               }
+             ]
 
       assert true == response_state.done
       assert pid == self()
@@ -623,11 +646,12 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       assert_receive {:elixir_grpc, :connection_down, pid}, 500
       response_state = :sys.get_state(response_pid)
 
-      assert :queue.to_list(response_state.responses) ==
-               [
-                 error:
-                   GRPC.RPCError.exception(GRPC.Status.unavailable(), "the connection is closed")
-               ]
+      assert :queue.to_list(response_state.responses) == [
+               error: %GRPC.RPCError{
+                 status: GRPC.Status.unavailable(),
+                 message: "the connection is closed"
+               }
+             ]
 
       assert true == response_state.done
       assert pid == self()
@@ -781,6 +805,34 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
 
       assert GRPC.RPCError.exception(GRPC.Status.cancelled(), "the request was cancelled") ==
                error
+    end
+  end
+
+  describe "handle_info - non-200 responses" do
+    setup :quiet_connection
+    setup :valid_stream_request
+    setup :valid_stream_response
+
+    test "reports the HTTP status to the stream response process",
+         %{stream_response_pid: response_pid, state: state} do
+      # A proxy answering with a plain HTTP error: a HEADERS frame whose only
+      # header is `:status` (static table index 8) with the value "502".
+      stream_id = state.conn.next_stream_id - 2
+      headers_frame = <<5::24, 0x01, 0x04, stream_id::32, 0x08, 0x03, "502">>
+      message = {:tcp, state.conn.socket, headers_frame}
+
+      assert {:noreply, new_state} = ConnectionProcess.handle_info(message, state)
+
+      # the connection is untouched, only this request failed
+      assert Mint.HTTP.open?(new_state.conn)
+
+      # the caller-facing stream response process got the status as an error
+      response_state = :sys.get_state(response_pid)
+
+      assert [
+               {:error, %GRPC.RPCError{status: 13, message: "status got is 502 instead of 200"}}
+               | _headers
+             ] = :queue.to_list(response_state.responses)
     end
   end
 
@@ -1070,6 +1122,8 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   end
 
   defp valid_connection_with_retry(ctx), do: valid_connection(ctx, retry: 3)
+
+  defp valid_connection_with_infinite_retry(ctx), do: valid_connection(ctx, retry: :infinity)
 
   defp attach_reconnect_telemetry(_ctx) do
     test_pid = self()
