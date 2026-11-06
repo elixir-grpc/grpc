@@ -138,6 +138,73 @@ defmodule GRPC.Client.Adapters.GunTest do
 
       refute first_pid == second_pid
     end
+
+    test "a stalled handshake doesn't delay connects to other hosts", %{
+      port: port,
+      credential: credential
+    } do
+      stalled = stalled_tls_channel(credential)
+      parent = self()
+
+      spawn_link(fn ->
+        send(parent, {:stalled_result, Gun.connect(stalled, await_timeout: 1_000)})
+      end)
+
+      # Let the stalled connect reach the TLS handshake
+      Process.sleep(100)
+
+      healthy = build(:channel, port: port, host: "localhost", cred: credential)
+      {elapsed_us, {:ok, connected}} = :timer.tc(fn -> Gun.connect(healthy, []) end)
+      on_exit(fn -> Gun.disconnect(connected) end)
+
+      assert elapsed_us < 500_000
+      assert_receive {:stalled_result, {:error, :timeout}}, 2_000
+    end
+
+    test "a second caller on a named channel waits for the handshake in progress", %{
+      credential: credential
+    } do
+      stalled = %{stalled_tls_channel(credential) | ref: make_ref()}
+      parent = self()
+      started_at = System.monotonic_time(:millisecond)
+
+      for _ <- 1..2 do
+        spawn_link(fn ->
+          send(parent, {:stalled_result, Gun.connect(stalled, await_timeout: 500)})
+        end)
+      end
+
+      assert_receive {:stalled_result, {:error, :timeout}}, 2_000
+      assert_receive {:stalled_result, {:error, :timeout}}, 2_000
+
+      # Both callers share one handshake instead of running one after the other
+      assert System.monotonic_time(:millisecond) - started_at < 900
+
+      assert [] ==
+               Registry.lookup(
+                 GRPC.Client.Registry,
+                 {ConnectionProcess, {stalled.ref, stalled.host, stalled.port}}
+               )
+    end
+  end
+
+  # A TCP listener that accepts and never answers, so the TLS handshake stalls
+  defp stalled_tls_channel(credential) do
+    {:ok, listen_socket} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+    {:ok, port} = :inet.port(listen_socket)
+
+    acceptor =
+      spawn(fn ->
+        Stream.repeatedly(fn -> :gen_tcp.accept(listen_socket) end)
+        |> Enum.take_while(&match?({:ok, _}, &1))
+      end)
+
+    on_exit(fn ->
+      Process.exit(acceptor, :kill)
+      :gen_tcp.close(listen_socket)
+    end)
+
+    build(:channel, port: port, host: "127.0.0.1", scheme: "https", cred: credential)
   end
 
   describe "disconnect/1" do

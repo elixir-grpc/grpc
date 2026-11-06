@@ -22,6 +22,7 @@
   * The Mint adapter now drops a request's queued body chunks when the request ends. A chunk left behind outlived its stream and killed the connection process, because draining the queue called `Mint.HTTP2.get_window_size/2` on a stale ref.
   * Request headers (including `authorization`) and bodies no longer leak through client exits. When a call to the Gun or Mint adapter's connection process exits (the process is busy past the 5s call timeout, or dead), the exit reason embeds the call message; `GRPC.Telemetry.client_span/3` logged it at `:error`, `[:grpc, :client, :rpc, :exception]` metadata carried it, and crash reports printed it. The headers and body in that message are now replaced with `:redacted`; the exit still propagates with the same `{reason, {GenServer, :call, [pid, message, timeout]}}` shape and the request path.
   * The Mint adapter now returns `{:error, %GRPC.RPCError{}}` instead of raising when a response's HTTP status is not 200, like the Gun adapter.
+  * A Gun connect to a slow or unreachable host no longer blocks other connects on the node for up to `:await_timeout`. The handshake ran inside `init/1`, under the node-wide `GRPC.Client.Supervisor`, so every other connect waited for it. The connection process now does the handshake after it starts, and `connect/2` waits for it outside the supervisor. Failed connects return the same errors as before.
 
 ## v1.0.6
 
