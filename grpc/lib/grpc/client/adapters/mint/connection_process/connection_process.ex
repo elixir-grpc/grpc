@@ -21,6 +21,10 @@ if Code.ensure_loaded?(Mint.HTTP) do
                                GRPC.Status.unavailable(),
                                "the connection is closed"
                              )
+    @request_cancelled_error GRPC.RPCError.exception(
+                               GRPC.Status.cancelled(),
+                               "the request was cancelled"
+                             )
     @stream_response_dead_event [:grpc, :client, :mint, :stream_response, :dead]
     @reconnect_stop_event [:grpc, :client, :mint, :reconnect, :stop]
     @reconnect_error_event [:grpc, :client, :mint, :reconnect, :error]
@@ -439,7 +443,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
         |> Enum.split_with(&match?({^request_ref, _body, _from}, &1))
 
       for {_ref, _body, from} <- dropped, not is_nil(from) do
-        GenServer.reply(from, {:error, "the request was cancelled"})
+        GenServer.reply(from, {:error, @request_cancelled_error})
       end
 
       State.update_request_stream_queue(state, :queue.from_list(kept))
