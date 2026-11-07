@@ -230,9 +230,9 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     monitor = Process.monitor(pid)
     # The stream process sends the ack to the alias. Dropping the alias on a timeout
     # keeps a late ack out of the caller's mailbox.
-    alias = :erlang.alias([:reply])
-    send(pid, {:stream_body, data, opts, is_fin, http_transcode?, alias})
-    await_stream_body_ack(alias, monitor, Keyword.get(opts, :send_timeout, :infinity))
+    reply_alias = :erlang.alias([:reply])
+    send(pid, {:stream_body, data, opts, is_fin, http_transcode?, reply_alias})
+    await_stream_body_ack(reply_alias, monitor, Keyword.get(opts, :send_timeout, :infinity))
   end
 
   @doc """
@@ -343,19 +343,19 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   # The stream process acks after cowboy has taken the data, and cowboy withholds that
   # while its send buffer is full. A `:reply` alias is off once the ack arrives. On a timeout
   # or a `:DOWN`, turn it off, then drop an ack that came before that.
-  defp await_stream_body_ack(alias, monitor, timeout) do
+  defp await_stream_body_ack(reply_alias, monitor, timeout) do
     receive do
-      [^alias | :stream_body_ack] ->
+      [^reply_alias | :stream_body_ack] ->
         Process.demonitor(monitor, [:flush])
         :ok
 
       {:DOWN, ^monitor, :process, _pid, _reason} ->
-        drop_stream_body_ack(alias)
+        drop_stream_body_ack(reply_alias)
         exit(:shutdown)
     after
       timeout ->
         Process.demonitor(monitor, [:flush])
-        drop_stream_body_ack(alias)
+        drop_stream_body_ack(reply_alias)
 
         raise RPCError,
           status: :deadline_exceeded,
@@ -363,11 +363,11 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  defp drop_stream_body_ack(alias) do
-    :erlang.unalias(alias)
+  defp drop_stream_body_ack(reply_alias) do
+    :erlang.unalias(reply_alias)
 
     receive do
-      [^alias | :stream_body_ack] -> :ok
+      [^reply_alias | :stream_body_ack] -> :ok
     after
       0 -> :ok
     end
@@ -498,9 +498,9 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   # Runs the clauses below, then credits the sender whether or not the send worked.
-  def info({:stream_body, data, opts, is_fin, http_transcode, alias}, req, state) do
+  def info({:stream_body, data, opts, is_fin, http_transcode, reply_alias}, req, state) do
     result = info({:stream_body, data, opts, is_fin, http_transcode}, req, state)
-    send(alias, [alias | :stream_body_ack])
+    send(reply_alias, [reply_alias | :stream_body_ack])
     result
   end
 
@@ -698,7 +698,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         # A reply sent after the handler returned, such as the unary reply, is outside
         # `server_span`. Keep its status, as for an error raised by the handler.
         :error, %GRPC.RPCError{} = e ->
-          {:error, e}
+          {:rpc_error, e, __STACKTRACE__}
 
         kind, e ->
           reason = Exception.normalize(kind, e, __STACKTRACE__)
@@ -707,6 +707,9 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       end
 
     case result do
+      {:rpc_error, e, stacktrace} ->
+        exit({:shutdown, {e, stacktrace}})
+
       {:error, %GRPC.RPCError{} = e} ->
         exit({:shutdown, {e, _stacktrace = []}})
 

@@ -131,6 +131,15 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
     end
   end
 
+  # Cowboy routes by path, so an unknown path is a 404. The fallback `__call_rpc__` clause
+  # takes a known path with an HTTP method that the RPC does not accept. It raises the
+  # error, and the server's span does not see it.
+  describe "the method is unknown" do
+    test "replies UNIMPLEMENTED" do
+      assert %{"grpc-status" => "12"} = call("any", "GET")
+    end
+  end
+
   describe "encoding the reply fails" do
     test "publishes :send_error and replies UNKNOWN" do
       assert %{"grpc-status" => "2", "grpc-message" => "Internal%20Server%20Error"} =
@@ -274,6 +283,24 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
       refute_receive {:log, _}, 200
     end
 
+    test "an unknown method logs the error with its stacktrace" do
+      call("any", "GET")
+
+      assert_receive {:log,
+                      %{
+                        meta: %{
+                          crash_reason:
+                            {%ReportException{reason: %GRPC.RPCError{status: 12}}, stacktrace}
+                        }
+                      }},
+                     1_000
+
+      assert [_ | _] = stacktrace
+      assert Enum.any?(stacktrace, &match?({ErrorServer, :__call_rpc__, _, _}, &1))
+
+      refute_receive {:log, _}, 200
+    end
+
     test "an encoding failure logs one adapter report" do
       call("encode")
 
@@ -338,7 +365,8 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
   defp disconnect(:stream_cancelled, conn, ref), do: :gun.cancel(conn, ref)
 
   # Calls SayHello over HTTP/2 and returns the `grpc-*` headers of the reply.
-  defp call(name), do: with_server(ErrorServer, &call_port(&1, name))
+  defp call(name, method \\ "POST"),
+    do: with_server(ErrorServer, &call_port(&1, name, method))
 
   defp with_server(server, fun) do
     {:ok, _pid, port} =
@@ -357,7 +385,7 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
     end
   end
 
-  defp call_port(port, name) do
+  defp call_port(port, name, method) do
     {:ok, conn} = :gun.open(~c"localhost", port, %{protocols: [:http2]})
     {:ok, :http2} = :gun.await_up(conn, 5_000)
 
@@ -370,7 +398,7 @@ defmodule GRPC.Server.Adapters.Cowboy.ErrorReportingTest do
       {"grpc-accept-encoding", "identity,raising,huge"}
     ]
 
-    ref = :gun.post(conn, @path, headers, body)
+    ref = :gun.request(conn, method, @path, headers, body)
     grpc_headers = await_grpc_headers(conn, ref, %{})
     :gun.close(conn)
     grpc_headers
