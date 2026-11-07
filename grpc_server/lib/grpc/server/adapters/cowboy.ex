@@ -406,7 +406,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
 
   # Without an endpoint, `Module.concat(nil, Dispatch)` is one key for all listeners.
   # Each listener needs its own routes, so the key uses the listener name.
-  defp dispatch_key(nil, servers), do: {Dispatch, servers_name(nil, servers)}
+  defp dispatch_key(nil, servers), do: {__MODULE__, :dispatch, servers_name(nil, servers)}
   defp dispatch_key(endpoint, _servers), do: Module.concat(endpoint, Dispatch)
 
   defp servers_name(nil, servers) do
