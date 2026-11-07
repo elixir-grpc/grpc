@@ -39,10 +39,18 @@ if Code.ensure_loaded?(:gun) do
     `:http2_opts` raises the byte limit in the same way.
 
     A message larger than the window still arrives in full, because each read of
-    a frame reopens the window. A window under one frame would stall cowlib
-    senders, which hold data back when the stream window is under 16,384 bytes
-    and the data does not fit. Keep a custom `:initial_stream_window_size` at
-    16,384 or more.
+    a frame reopens the window. A stream window under one frame would stall
+    cowlib senders, which hold data back when the stream window is under 16,384
+    bytes and the data does not fit. No credit from the client restarts them.
+    The adapter therefore also rejects `http2_opts: %{initial_stream_window_size: n}`
+    with `n` under `16_384`. The option is the stream window that Gun
+    announces, so the check does not depend on `:response_window`.
+
+    `initial_connection_window_size` has no such floor in this adapter. A cowlib
+    sender holds data back only when the stream window is under 16,384 bytes. A
+    small connection window limits what it sends, but a connection credit from
+    the client restarts it. Gun itself needs a value of 65,535 or more, and fails
+    to open the connection with a smaller one.
     """
 
     @behaviour GRPC.Client.Adapter
@@ -60,6 +68,12 @@ if Code.ensure_loaded?(:gun) do
 
     @impl true
     def validate_opts(opts) when is_list(opts) do
+      with :ok <- validate_response_window(opts) do
+        validate_stream_window(Keyword.get(opts, :http2_opts))
+      end
+    end
+
+    defp validate_response_window(opts) do
       case Keyword.get(opts, :response_window, @default_response_window) do
         :infinity ->
           :ok
@@ -73,6 +87,21 @@ if Code.ensure_loaded?(:gun) do
              "#{@min_response_window} bytes (one HTTP/2 frame), got: #{inspect(other)}"}
       end
     end
+
+    # `:http2_opts` is a map, as Gun takes it. Gun checks its other keys.
+    defp validate_stream_window(%{initial_stream_window_size: window}) do
+      if is_integer(window) and window >= @min_response_window do
+        :ok
+      else
+        {:error,
+         "http2_opts :initial_stream_window_size must be an integer of at least " <>
+           "#{@min_response_window} bytes (one HTTP/2 frame), got: #{inspect(window)}. " <>
+           "A cowlib peer holds data back while the stream window is under " <>
+           "#{@min_response_window} bytes and the data does not fit."}
+      end
+    end
+
+    defp validate_stream_window(_http2_opts), do: :ok
 
     @impl true
     def connect(channel, opts) when is_list(opts) do

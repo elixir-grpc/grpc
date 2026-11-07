@@ -345,6 +345,78 @@ defmodule GRPC.Client.Adapters.GunFlowControlTest do
     end
   end
 
+  describe "http2_opts initial_stream_window_size" do
+    test "a value at the floor delivers small and large replies", %{port: port} do
+      channel = connect(port, http2_opts: %{initial_stream_window_size: 16_384})
+
+      {:ok, replies} = Stub.list_features(channel, list_request(20, 1_000), timeout: 10_000)
+      replies = Enum.to_list(replies)
+      assert length(replies) == 20
+      assert Enum.all?(replies, &match?({:ok, %{name: n}} when byte_size(n) == 1_000, &1))
+
+      size = 1024 * 1024
+
+      assert {:ok, %Routeguide.Feature{name: big}} =
+               Stub.get_feature(channel, %Routeguide.Point{latitude: size}, timeout: 30_000)
+
+      assert byte_size(big) == size
+    end
+
+    test "is validated" do
+      for ok <- [16_384, 16_385, 8_000_000] do
+        assert :ok = Gun.validate_opts(http2_opts: %{initial_stream_window_size: ok})
+      end
+
+      assert :ok = Gun.validate_opts(http2_opts: %{})
+      assert :ok = Gun.validate_opts(http2_opts: %{stream_window_margin_size: 0})
+
+      for bad <- [0, 1, 16_383, -1, 1.5, "16384", nil] do
+        assert {:error, message} =
+                 Gun.validate_opts(http2_opts: %{initial_stream_window_size: bad})
+
+        assert message =~ ":initial_stream_window_size"
+        assert message =~ "16384"
+        assert message =~ inspect(bad)
+      end
+    end
+
+    test "is checked when :response_window is valid and when it is not" do
+      assert {:error, message} =
+               Gun.validate_opts(
+                 response_window: :infinity,
+                 http2_opts: %{initial_stream_window_size: 100}
+               )
+
+      assert message =~ ":initial_stream_window_size"
+
+      assert {:error, message} =
+               Gun.validate_opts(
+                 response_window: 100,
+                 http2_opts: %{initial_stream_window_size: 100}
+               )
+
+      assert message =~ ":response_window"
+    end
+
+    test "a value under the floor is rejected by GRPC.Stub.connect/2", %{port: port} do
+      assert_raise ArgumentError, ~r/:initial_stream_window_size.*16384/, fn ->
+        GRPC.Stub.connect("localhost:#{port}",
+          adapter_opts: [http2_opts: %{initial_stream_window_size: 16_383}]
+        )
+      end
+    end
+  end
+
+  describe "http2_opts initial_connection_window_size" do
+    # A cowlib sender holds data back only when the stream window is small, so
+    # the connection window has no floor here.
+    test "is not limited by validate_opts" do
+      for size <- [0, 1_000, 16_383, 65_535, 8_000_000] do
+        assert :ok = Gun.validate_opts(http2_opts: %{initial_connection_window_size: size})
+      end
+    end
+  end
+
   # What the response queue can hold: the frames Gun credits, plus the HTTP/2 stream
   # window (the same size as the response window) and the margin cowlib adds to
   # each stream window update. One frame of slack covers a partly read message.
