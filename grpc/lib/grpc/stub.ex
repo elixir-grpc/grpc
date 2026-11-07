@@ -745,20 +745,26 @@ defmodule GRPC.Stub do
       interceptor.return_headers?(opts)
   end
 
-  # Strips the headers from the result of `next` and keeps them in the process
-  # dictionary. If the interceptor returns `{:ok, reply}` or `{:ok, replies}`, the
-  # kept headers go back, so an interceptor further out still sees them.
+  # Strips the headers from the result of `next` and sends them to the calling
+  # process as a message. `next` may run in another process, so the process
+  # dictionary is not used. If the interceptor returns `{:ok, reply}` or
+  # `{:ok, replies}`, the headers go back, so an interceptor further out still
+  # sees them.
   defp call_without_headers(interceptor, opts, stream, req, next, server_stream?) do
-    key = make_ref()
+    owner = self()
+    ref = make_ref()
+    # Tells `drop_trailers/4` where to send the trailers. 0: to `owner`, which
+    # waits for them. 1: to the process that reads the stream. 2: nowhere.
+    mode = :atomics.new(1, [])
 
     next = fn s, r ->
       case next.(s, r) do
         {:ok, replies, %{} = headers} when server_stream? ->
-          Process.put({key, :headers}, headers)
-          {:ok, drop_trailers(replies, key)}
+          send(owner, {ref, :headers, headers})
+          {:ok, drop_trailers(replies, owner, ref, mode)}
 
         {:ok, reply, %{} = headers} ->
-          Process.put({key, :headers}, headers)
+          send(owner, {ref, :headers, headers})
           {:ok, reply}
 
         other ->
@@ -768,18 +774,24 @@ defmodule GRPC.Stub do
 
     try do
       result = interceptor.call(stream, req, next, opts)
-      restore_headers(result, Process.get({key, :headers}), key, server_stream?)
+      restore_headers(result, take_last(ref, :headers), ref, mode, server_stream?)
     after
-      Process.delete({key, :headers})
+      :atomics.compare_exchange(mode, 1, 0, 2)
+      flush(ref)
     end
   end
 
-  # The trailers item is the last item of the stream. Keep it aside as the
+  # The trailers item is the last item of the stream. Send it aside as the
   # stream runs, so the plain interceptor never sees it.
-  defp drop_trailers(replies, key) do
+  defp drop_trailers(replies, owner, ref, mode) do
     Stream.flat_map(replies, fn
       {:trailers, trailers} ->
-        Process.put({key, :trailers}, trailers)
+        case :atomics.get(mode, 1) do
+          0 -> send(owner, {ref, :trailers, trailers})
+          1 -> send(self(), {ref, :trailers, trailers})
+          _ -> :ok
+        end
+
         []
 
       reply ->
@@ -787,22 +799,51 @@ defmodule GRPC.Stub do
     end)
   end
 
-  # Whatever the plain interceptor made of the replies stays. The kept trailers
-  # follow it as a last item, read when the stream ends.
-  defp restore_headers({:ok, replies}, %{} = headers, key, true) do
+  # Whatever the plain interceptor made of the replies stays. The trailers
+  # follow it as a last item. If the interceptor already read the stream to its
+  # end, the item holds them. Otherwise the item takes them from the process
+  # that reads the stream, when it reaches the end.
+  defp restore_headers({:ok, replies}, %{} = headers, ref, mode, true) do
     last =
-      Stream.flat_map([key], fn key ->
-        case Process.delete({key, :trailers}) do
-          nil -> []
-          trailers -> [{:trailers, trailers}]
-        end
-      end)
+      case take_last(ref, :trailers) do
+        nil ->
+          :atomics.put(mode, 1, 1)
+
+          Stream.flat_map([ref], fn ref ->
+            case take_last(ref, :trailers) do
+              nil -> []
+              trailers -> [{:trailers, trailers}]
+            end
+          end)
+
+        trailers ->
+          [{:trailers, trailers}]
+      end
 
     {:ok, Stream.concat(replies, last), headers}
   end
 
-  defp restore_headers({:ok, reply}, %{} = headers, _key, false), do: {:ok, reply, headers}
-  defp restore_headers(result, _headers, _key, _server_stream?), do: result
+  defp restore_headers({:ok, reply}, %{} = headers, _ref, _mode, false),
+    do: {:ok, reply, headers}
+
+  defp restore_headers(result, _headers, _ref, _mode, _server_stream?), do: result
+
+  # The last message of `kind` for `ref`, or `nil`. It does not wait.
+  defp take_last(ref, kind, last \\ nil) do
+    receive do
+      {^ref, ^kind, value} -> take_last(ref, kind, value)
+    after
+      0 -> last
+    end
+  end
+
+  defp flush(ref) do
+    receive do
+      {^ref, _kind, _value} -> flush(ref)
+    after
+      0 -> :ok
+    end
+  end
 
   defp do_call(
          false,
