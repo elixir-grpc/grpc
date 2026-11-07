@@ -182,7 +182,7 @@ defmodule GRPC.Integration.ClientInterceptorHeadersTest do
     def call(stream, req, next, _opts), do: next.(stream, req)
   end
 
-  # No `return_headers?/1`. Calls `next` in a process that starts after `call/4`
+  # No `return_headers?/1`. Calls `next` in a process that runs after `call/4`
   # returns, and does not wait for it. The process waits for `:go`, so the test
   # decides when it runs. It returns an empty result at once.
   defmodule Detached do
@@ -201,6 +201,32 @@ defmodule GRPC.Integration.ClientInterceptorHeadersTest do
       send(pid, {:detached, detached})
 
       if stream.server_stream, do: {:ok, []}, else: {:ok, %Feature{name: "detached"}}
+    end
+  end
+
+  # No `return_headers?/1`. Calls `next` in a task that waits for `:go`, and
+  # gives up on the task after 1 ms. It returns an empty result.
+  defmodule AwaitTimeout do
+    @behaviour GRPC.Client.Interceptor
+
+    def init(opts), do: opts
+
+    def call(stream, req, next, %{pid: pid}) do
+      task =
+        Task.async(fn ->
+          send(pid, {:task, self()})
+
+          receive do
+            :go -> next.(stream, req)
+          end
+        end)
+
+      try do
+        Task.await(task, 1)
+      catch
+        :exit, {:timeout, _} ->
+          if stream.server_stream, do: {:ok, []}, else: {:ok, %Feature{name: "timeout"}}
+      end
     end
   end
 
@@ -559,6 +585,44 @@ defmodule GRPC.Integration.ClientInterceptorHeadersTest do
             assert_receive {:DOWN, ^monitor, :process, ^pid, _reason}
           end
 
+          assert_no_ref_messages()
+        end)
+      end
+
+      test "a task that finishes after its await timed out leaves no message in the mailbox",
+           %{adapter: adapter} do
+        with_channel(adapter, [{AwaitTimeout, %{pid: self()}}, recorder(:out)], fn channel ->
+          assert {:ok, %Feature{name: "timeout"}} = Stub.get_feature(channel, %Point{})
+          assert_receive {:task, unary}
+          assert {:ok, []} = Stub.list_features(channel, %Rectangle{})
+          assert_receive {:task, streaming}
+
+          for pid <- [unary, streaming] do
+            monitor = Process.monitor(pid)
+            send(pid, :go)
+            assert_receive {:DOWN, ^monitor, :process, ^pid, _reason}
+          end
+
+          assert_no_ref_messages()
+        end)
+      end
+
+      test "a process that reads the stream after the wrapper closed gets the trailers and leaves no message",
+           %{adapter: adapter} do
+        with_channel(adapter, [{Upcaser, []}, recorder(:out)], fn channel ->
+          assert {:ok, replies} = Stub.list_features(channel, %Rectangle{})
+          parent = self()
+
+          {pid, monitor} =
+            spawn_monitor(fn ->
+              items = Enum.to_list(replies)
+              {:messages, messages} = Process.info(self(), :messages)
+              send(parent, {:read, items, Enum.filter(messages, &is_reference(elem(&1, 0)))})
+            end)
+
+          assert_receive {:DOWN, ^monitor, :process, ^pid, _reason}
+          assert_received {:read, [{:ok, %Feature{}}, {:ok, %Feature{}}], []}
+          assert_received {:out, :trailers, %{"x-test-trailer" => "from-server"}}
           assert_no_ref_messages()
         end)
       end
