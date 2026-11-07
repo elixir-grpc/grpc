@@ -13,6 +13,19 @@ if Code.ensure_loaded?(:gun) do
     mix deps.clean grpc
     mix deps.compile grpc
     ```
+
+    ## Options
+
+    Options in `:adapter_opts` that this adapter reads itself, besides the ones Gun takes:
+
+      * `:response_window` - bytes of a response the adapter reads ahead of the
+        caller, per stream (default: `1_048_576`). Gun stops sending
+        the stream's window updates once the window is full, and the adapter
+        reopens it as the caller takes messages, so a slow consumer slows
+        the server instead of filling memory. At most the window plus the HTTP/2
+        stream window (set to the window unless `:http2_opts` gives
+        `:initial_stream_window_size`) is held in the queue. Messages larger
+        than the window still arrive in full. `:infinity` turns the limit off.
     """
 
     @behaviour GRPC.Client.Adapter
@@ -22,6 +35,23 @@ if Code.ensure_loaded?(:gun) do
 
     @default_tcp_opts [nodelay: true]
     @max_retries 100
+    # Default of `:response_window`, in bytes.
+    @default_response_window 1_048_576
+
+    @impl true
+    def validate_opts(opts) when is_list(opts) do
+      case Keyword.get(opts, :response_window, @default_response_window) do
+        :infinity ->
+          :ok
+
+        window when is_integer(window) and window > 0 ->
+          :ok
+
+        other ->
+          {:error,
+           ":response_window must be a positive integer or :infinity, got: #{inspect(other)}"}
+      end
+    end
 
     @impl true
     def connect(channel, opts) when is_list(opts) do
@@ -81,6 +111,7 @@ if Code.ensure_loaded?(:gun) do
         |> Map.update(:http2_opts, %{notify_settings_changed: true}, fn opts ->
           Map.put(opts, :notify_settings_changed, true)
         end)
+        |> put_response_window()
 
       case ConnectionProcess.connect(channel, open_opts) do
         {:ok, adapter_payload} ->
@@ -88,6 +119,20 @@ if Code.ensure_loaded?(:gun) do
 
         {:error, reason} ->
           {:error, reason}
+      end
+    end
+
+    # Unless `:http2_opts` says otherwise, Gun's stream window is the response window.
+    # Gun withholds the stream's WINDOW_UPDATE once the `flow` is used up, but the
+    # peer may still fill what is left of the stream window.
+    defp put_response_window(open_opts) do
+      window = Map.get(open_opts, :response_window, @default_response_window)
+      open_opts = Map.put(open_opts, :response_window, window)
+
+      if window == :infinity do
+        open_opts
+      else
+        Map.update!(open_opts, :http2_opts, &Map.put_new(&1, :initial_stream_window_size, window))
       end
     end
 
@@ -264,7 +309,7 @@ if Code.ensure_loaded?(:gun) do
 
     defp handle_nofin_response(payload, stream, headers, opts, deadline) do
       # Regular response: fetch body and trailers
-      with {:ok, body, trailers} <- recv_body(payload, deadline),
+      with {:ok, body, trailers} <- recv_body(stream, payload, deadline),
            {:ok, response, embedded_trailers} <- parse_response(stream, headers, body, trailers) do
         if opts[:return_headers] do
           all_trailers = Map.merge(trailers, embedded_trailers)
@@ -412,14 +457,19 @@ if Code.ensure_loaded?(:gun) do
       %{retries: retries - 1, timeout: timeout}
     end
 
-    defp recv_body(stream_payload, deadline) do
-      recv_body(stream_payload, [], deadline)
+    defp recv_body(stream, stream_payload, deadline) do
+      recv_body(stream, stream_payload, [], 0, deadline)
     end
 
-    defp recv_body(stream_payload, acc, deadline) do
+    defp recv_body(stream, stream_payload, acc, size, deadline) do
       case recv_data_or_trailers(stream_payload, deadline) do
         {:data, data} ->
-          recv_body(stream_payload, [acc, data], deadline)
+          acc = [acc, data]
+          new_size = size + byte_size(data)
+
+          with :ok <- check_body_prefix(stream, acc, size, new_size) do
+            recv_body(stream, stream_payload, acc, new_size, deadline)
+          end
 
         {:trailers, trailers} ->
           body = IO.iodata_to_binary(acc)
@@ -430,18 +480,42 @@ if Code.ensure_loaded?(:gun) do
       end
     end
 
+    # Checks the length prefix in the chunk that completes it. A reply over
+    # `:max_message_length` is not read to the end: the request is cancelled, which
+    # resets the HTTP/2 stream, and the call fails with RESOURCE_EXHAUSTED. A codec
+    # that packs the body for the channel (gRPC-web text) hides the prefix until the
+    # whole body is unpacked, so it is checked later in `parse_response/4`.
+    defp check_body_prefix(%{codec: codec} = stream, acc, size, new_size)
+         when size < 5 and new_size >= 5 do
+      if function_exported?(codec, :unpack_from_channel, 1) do
+        :ok
+      else
+        case GRPC.Client.MessageLimit.check_prefix(IO.iodata_to_binary(acc)) do
+          :ok ->
+            :ok
+
+          {:error, _} = error ->
+            cancel(stream)
+            error
+        end
+      end
+    end
+
+    defp check_body_prefix(_stream, _acc, _size, _new_size), do: :ok
+
     defp response_stream(
            :nofin,
            %{
              response_mod: res_mod,
              codec: codec,
              payload: payload
-           },
+           } = stream,
            opts,
            deadline
          ) do
       state = %{
         payload: payload,
+        stream: stream,
         buffer: <<>>,
         fin: false,
         need_more: true,
@@ -487,7 +561,12 @@ if Code.ensure_loaded?(:gun) do
            %{buffer: buffer, need_more: false, response_mod: res_mod, codec: codec, opts: opts} =
              stream
          ) do
-      case GRPC.Message.get_message(buffer) do
+      case get_message(buffer) do
+        {:error, _} = error ->
+          # The rest of the message is not read: reset the stream.
+          cancel(stream.stream)
+          {error, %{buffer: <<>>, fin: true, fin_resp: nil}}
+
         {{:trailers, trailers}, rest} ->
           new_stream =
             stream
@@ -504,6 +583,17 @@ if Code.ensure_loaded?(:gun) do
         _ ->
           read_stream(Map.put(stream, :need_more, true))
       end
+    end
+
+    # A message over `:max_message_length` ends the stream with an error item.
+    # The prefix is checked here, as newer `GRPC.Message.get_message/1` does, and
+    # that function raises for it.
+    defp get_message(buffer) do
+      with :ok <- GRPC.Client.MessageLimit.check_prefix(buffer) do
+        GRPC.Message.get_message(buffer)
+      end
+    rescue
+      error in GRPC.RPCError -> {:error, error}
     end
 
     defp deadline(nil), do: :infinity
@@ -579,6 +669,7 @@ if Code.ensure_loaded?(:gun) do
       with :ok <- parse_trailers(trailers),
            compressor <- get_compressor(headers, accepted_compressors),
            body <- get_body(codec, body),
+           :ok <- GRPC.Client.MessageLimit.check_prefix(body),
            {:ok, msg, remaining} <- GRPC.Message.from_data(%{compressor: compressor}, body) do
         {:ok, codec.decode(msg, res_mod), check_for_trailers(remaining, compressor)}
       end

@@ -728,25 +728,122 @@ defmodule GRPC.Stub do
     end)
   end
 
+  # Like `run_interceptors/2`, for a `next` that returns headers. An interceptor
+  # gets the long shape only if its `return_headers?/1` says so.
+  defp run_interceptors(channel, last, server_stream?) do
+    Enum.reduce(channel.interceptors, last, fn {interceptor, opts} = entry, acc ->
+      if return_headers?(entry) do
+        fn s, r -> interceptor.call(s, r, acc, opts) end
+      else
+        fn s, r -> call_without_headers(interceptor, opts, s, r, acc, server_stream?) end
+      end
+    end)
+  end
+
+  defp return_headers?({interceptor, opts}) do
+    Code.ensure_loaded?(interceptor) and function_exported?(interceptor, :return_headers?, 1) and
+      interceptor.return_headers?(opts)
+  end
+
+  # Strips the headers from the result of `next` and keeps them in the process
+  # dictionary. If the interceptor returns `{:ok, reply}` or `{:ok, replies}`, the
+  # kept headers go back, so an interceptor further out still sees them.
+  defp call_without_headers(interceptor, opts, stream, req, next, server_stream?) do
+    key = make_ref()
+
+    next = fn s, r ->
+      case next.(s, r) do
+        {:ok, replies, %{} = headers} when server_stream? ->
+          Process.put({key, :headers}, headers)
+          {:ok, drop_trailers(replies, key)}
+
+        {:ok, reply, %{} = headers} ->
+          Process.put({key, :headers}, headers)
+          {:ok, reply}
+
+        other ->
+          other
+      end
+    end
+
+    try do
+      result = interceptor.call(stream, req, next, opts)
+      restore_headers(result, Process.get({key, :headers}), key, server_stream?)
+    after
+      Process.delete({key, :headers})
+    end
+  end
+
+  # The trailers item is the last item of the stream. Keep it aside as the
+  # stream runs, so the plain interceptor never sees it.
+  defp drop_trailers(replies, key) do
+    Stream.flat_map(replies, fn
+      {:trailers, trailers} ->
+        Process.put({key, :trailers}, trailers)
+        []
+
+      reply ->
+        [reply]
+    end)
+  end
+
+  # Whatever the plain interceptor made of the replies stays. The kept trailers
+  # follow it as a last item, read when the stream ends.
+  defp restore_headers({:ok, replies}, %{} = headers, key, true) do
+    last =
+      Stream.flat_map([key], fn key ->
+        case Process.delete({key, :trailers}) do
+          nil -> []
+          trailers -> [{:trailers, trailers}]
+        end
+      end)
+
+    {:ok, Stream.concat(replies, last), headers}
+  end
+
+  defp restore_headers({:ok, reply}, %{} = headers, _key, false), do: {:ok, reply, headers}
+  defp restore_headers(result, _headers, _key, _server_stream?), do: result
+
   defp do_call(
          false,
          %{channel: channel} = stream,
          request,
          opts
        ) do
+    caller_asked? = !!opts[:return_headers]
+    # Ask the adapter for headers only if the caller or an interceptor wants them.
+    headers? = caller_asked? or Enum.any?(channel.interceptors, &return_headers?/1)
+
     last = fn %{codec: codec, compressor: compressor} = s, _ ->
       message = codec.encode(request)
       opts = Keyword.put(opts, :compressor, compressor)
+      opts = if headers?, do: Keyword.put(opts, :return_headers, true), else: opts
 
-      s
-      |> channel.adapter.send_request(message, opts)
-      |> recv(opts)
+      with :ok <- GRPC.Client.Stream.check_message_length(message) do
+        s
+        |> channel.adapter.send_request(message, opts)
+        |> recv(opts)
+      end
     end
 
-    run_interceptors(channel, last).(stream, request)
+    if headers? and not caller_asked? do
+      channel
+      |> run_interceptors(last, stream.server_stream)
+      |> then(& &1.(stream, request))
+      |> strip_headers(stream.server_stream)
+    else
+      run_interceptors(channel, last).(stream, request)
+    end
   end
 
   defp do_call(true, %{channel: channel} = stream, req, opts) do
+    # The Mint adapter keeps a reply's headers and trailers only if the flag is
+    # set when the stream opens, and `handle_recv/3` needs them at `recv/2`.
+    opts =
+      if recv_interceptors(channel) == [],
+        do: opts,
+        else: Keyword.put(opts, :return_headers, true)
+
     last = fn s, _ ->
       channel.adapter.send_headers(s, opts)
     end
@@ -855,6 +952,17 @@ defmodule GRPC.Stub do
         opts
       end
 
+    # `handle_recv/3` interceptors see headers and trailers whether or not the
+    # caller asked, so ask the adapter for them and strip them afterwards.
+    # Unary and server-streaming calls run their interceptors in `call/5`.
+    recv_interceptors = recv_interceptors(stream)
+    caller_opts = opts
+
+    opts =
+      if recv_interceptors != [] and is_list(opts),
+        do: Keyword.put(opts, :return_headers, true),
+        else: opts
+
     try do
       interface[:receive_data].(stream, opts)
     rescue
@@ -867,9 +975,51 @@ defmodule GRPC.Stub do
         :erlang.raise(kind, reason, __STACKTRACE__)
     else
       result ->
-        handle_recv_result(result, stream)
+        result = handle_recv_result(result, stream)
+
+        if recv_interceptors == [] do
+          result
+        else
+          recv_interceptors
+          |> Enum.reduce(result, fn {interceptor, interceptor_opts}, acc ->
+            interceptor.handle_recv(stream, acc, interceptor_opts)
+          end)
+          |> strip_headers(streaming_response?(stream), caller_opts)
+        end
     end
   end
+
+  # Interceptors of a client-streaming or bidi stream that implement the
+  # optional `handle_recv/3`, in the order they run.
+  defp recv_interceptors(%{grpc_type: type, channel: channel})
+       when type in [:client_stream, :bidirectional_stream],
+       do: recv_interceptors(channel)
+
+  defp recv_interceptors(%{interceptors: interceptors}) when is_list(interceptors) do
+    Enum.filter(interceptors, fn {interceptor, _opts} ->
+      Code.ensure_loaded?(interceptor) and function_exported?(interceptor, :handle_recv, 3)
+    end)
+  end
+
+  defp recv_interceptors(_), do: []
+
+  # Puts a result back in the shape the caller asked for. With `return_headers`
+  # the caller gets the result as the adapter built it.
+  defp strip_headers(result, streaming_response?, opts) do
+    if opts[:return_headers] do
+      result
+    else
+      strip_headers(result, streaming_response?)
+    end
+  end
+
+  defp strip_headers({:ok, [], %{} = _headers}, true), do: {:ok, []}
+
+  defp strip_headers({:ok, replies, %{} = _headers}, true),
+    do: {:ok, Stream.reject(replies, &match?({:trailers, _}, &1))}
+
+  defp strip_headers({:ok, reply, %{} = _headers}, false), do: {:ok, reply}
+  defp strip_headers(result, _streaming_response?), do: result
 
   defp stream_lease_handle(%{payload: %{__pool_lease_handle__: handle}}), do: handle
   defp stream_lease_handle(_), do: nil

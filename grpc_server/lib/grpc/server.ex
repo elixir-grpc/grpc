@@ -316,14 +316,18 @@ defmodule GRPC.Server do
         data
       end
 
-    case GRPC.Message.from_data(stream, body) do
-      {:ok, message, <<>>} ->
-        request = codec.decode(message, req_mod)
+    # Checked here, as well as in GRPC.Message.from_data/2, because this package
+    # can run against a grpc_core release that predates the check.
+    with :ok <- check_message_length(body) do
+      case GRPC.Message.from_data(stream, body) do
+        {:ok, message, <<>>} ->
+          request = codec.decode(message, req_mod)
 
-        call_with_interceptors(res_stream, func_name, stream, request)
+          call_with_interceptors(res_stream, func_name, stream, request)
 
-      resp = {:error, _} ->
-        resp
+        resp = {:error, _} ->
+          resp
+      end
     end
   end
 
@@ -342,6 +346,8 @@ defmodule GRPC.Server do
     reading_stream =
       adapter.reading_stream(payload)
       |> Elixir.Stream.map(fn {flag, message} ->
+        check_message_length!(message)
+
         cond do
           flag == 0 ->
             codec.decode(message, req_mod)
@@ -359,6 +365,40 @@ defmodule GRPC.Server do
       end)
 
     call_with_interceptors(res_stream, func_name, stream, reading_stream)
+  end
+
+  # `:max_message_length` bounds one message in either direction; see
+  # `GRPC.Message.max_message_length/0`. The Cowboy handler reads it from here too.
+  @doc false
+  def max_message_length do
+    Application.get_env(:grpc, :max_message_length, Bitwise.bsl(1, 31))
+  end
+
+  defp check_message_length(<<_flag::8, length::32, _::binary>>) do
+    case message_too_large(length) do
+      nil -> :ok
+      error -> {:error, error}
+    end
+  end
+
+  defp check_message_length(_body), do: :ok
+
+  defp check_message_length!(message) do
+    if error = message_too_large(byte_size(message)), do: raise(error)
+  end
+
+  # The error for a message of `length` bytes, or `nil` when it is within the limit.
+  @doc false
+  def message_too_large(length) do
+    max_length = max_message_length()
+
+    if length > max_length do
+      RPCError.exception(
+        status: :resource_exhausted,
+        message:
+          "Received message is too large (#{length} bytes, the limit is #{max_length} bytes)"
+      )
+    end
   end
 
   # A body the codec can't parse is the client's error, not the server's.

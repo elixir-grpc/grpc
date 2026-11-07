@@ -59,6 +59,9 @@ defmodule GRPC.Client.Stream do
     encoded = codec.encode(request)
     send_end_stream = Keyword.get(opts, :end_stream) || false
 
+    # Streaming sends return the stream, so an oversize message raises.
+    with {:error, error} <- check_message_length(encoded), do: raise(error)
+
     # If compressor exists, compress is true by default
     compressor =
       if opts[:compress] == false do
@@ -71,6 +74,27 @@ defmodule GRPC.Client.Stream do
       send_end_stream: send_end_stream,
       compressor: compressor
     )
+  end
+
+  # Checks an encoded message against `:max_message_length` before an adapter
+  # sees it, so every adapter fails the same way. `GRPC.Message.to_data/2`
+  # enforces the limit too, but the adapters match its result with `{:ok, ...} =`
+  # and would crash.
+  @doc false
+  def check_message_length(encoded) do
+    max_length = Application.get_env(:grpc, :max_message_length, Bitwise.bsl(1, 31))
+    length = IO.iodata_length(encoded)
+
+    if length > max_length do
+      {:error,
+       GRPC.RPCError.exception(
+         status: :resource_exhausted,
+         message:
+           "Message to send is too large (#{length} bytes, the limit is #{max_length} bytes)"
+       )}
+    else
+      :ok
+    end
   end
 
   def receive_data(%{channel: %{adapter: adapter}} = stream, opts) do

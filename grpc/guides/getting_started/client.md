@@ -51,6 +51,53 @@ iex> request = Helloworld.HelloRequest.new(name: "Alice")
 iex> {:ok, reply} = channel |> Helloworld.GreetingServer.Stub.say_unary_hello(request)
 ```
 
+### Reading response headers
+
+By default, `next` in an interceptor returns `{:ok, reply}`, without the response headers and
+trailers. To get them, define `return_headers?/1` and return `true`. This interceptor saves a
+session token that the server sends in a header:
+
+```elixir
+defmodule MyApp.SessionInterceptor do
+  @behaviour GRPC.Client.Interceptor
+
+  def init(opts), do: opts
+
+  def return_headers?(_opts), do: true
+
+  def call(stream, req, next, _opts) do
+    case next.(stream, req) do
+      {:ok, _reply, %{headers: headers}} = result ->
+        if token = headers["x-session-token"], do: MyApp.Session.put(token)
+        result
+
+      other ->
+        other
+    end
+  end
+end
+```
+
+An interceptor without `return_headers?/1` gets `{:ok, reply}`, as before. The caller's return
+value does not change. Pass `result` on as it is. The stub removes the headers and trailers after
+the last interceptor, if the caller did not ask for them. If the caller passes
+`return_headers: true`, every interceptor gets the long result.
+
+For server-streaming calls the result is `{:ok, replies, %{headers: headers}}`, and the last
+item of `replies` is `{:trailers, trailers}`. For client-streaming and bidirectional calls,
+`call/4` runs when the stream opens, before any reply exists. Implement the optional
+`handle_recv/3`, which `GRPC.Stub.recv/2` calls with the same result shapes. It always gets the
+headers, so it needs no `return_headers?/1`:
+
+```elixir
+def handle_recv(_stream, {:ok, _reply, %{headers: headers}} = result, _opts) do
+  MyApp.Session.put(headers["x-session-token"])
+  result
+end
+
+def handle_recv(_stream, other, _opts), do: other
+```
+
 ---
 
 ## Compression and Metadata
@@ -71,6 +118,24 @@ iex> {:ok, channel} =
 
 By default, `GRPC.Stub.connect/2` uses the **Gun** adapter.  
 You can switch to **Mint** (pure Elixir HTTP/2) or other adapters as needed.
+
+### Slow readers with the Gun adapter
+
+The Gun adapter holds back the server when you read a response slower than it
+arrives. It reads ahead of you by at most `:response_window` bytes per stream
+(default 1 MiB), then stops reopening the HTTP/2 window until you take more
+messages. The queue can hold up to the window plus the HTTP/2 stream window, which
+defaults to the same size, so about 2 MiB by default.
+
+```elixir
+iex> GRPC.Stub.connect("localhost:50051",
+...>   adapter_opts: [response_window: 4 * 1024 * 1024]
+...> )
+```
+
+A larger window gives faster streams on high-latency links, and costs memory per
+stream. `response_window: :infinity` turns the limit off. A message larger than the
+window still arrives in full.
 
 ### Using Mint Adapter
 

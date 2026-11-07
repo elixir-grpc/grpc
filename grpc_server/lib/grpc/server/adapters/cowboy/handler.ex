@@ -19,6 +19,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   # 4 MB – matches gRPC-Go's default max receive message size.
   # Override per-server with the :max_body_size option (bytes).
   @default_max_body_size 4 * 1024 * 1024
+  # Cowboy's own default for how much `read_body` collects before it returns.
+  @default_read_length 8_000_000
 
   @doc """
   This function is meant to be called whenever a new request arrives to an existing connection.
@@ -55,7 +57,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         server: server,
         endpoint: endpoint,
         adapter: @adapter,
-        payload: %{pid: stream_pid},
+        payload: %{pid: stream_pid, send_timeout: opts[:send_timeout], deadline: deadline},
         local: opts[:local],
         codec: codec,
         http_method: http_method,
@@ -94,7 +96,11 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
           codec: codec,
           exception_log_filter: exception_log_filter,
           max_body_size: max_body_size,
-          body_bytes_read: 0
+          body_bytes_read: 0,
+          # Position in the gRPC framing of the request body: the bytes left in the
+          # current message, and the part of the next 5-byte prefix seen so far.
+          frame_remaining: 0,
+          frame_prefix: <<>>
         }
       }
     else
@@ -211,12 +217,34 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   @doc """
-  Asynchronously send back to client a chunk of `data`, when `http_transcode?` is true, the
+  Send back to client a chunk of `data`, when `http_transcode?` is true, the
   data is sent back as it's, with no transformation of protobuf binaries to http2 data frames.
+
+  Returns once the connection has taken the chunk, so a client that reads slowly slows the
+  caller. Waits at most `opts[:send_timeout]` (default `:infinity`), then raises a
+  `:deadline_exceeded` `GRPC.RPCError`. Exits with `:shutdown` if the stream's process is gone.
   """
   def stream_body(pid, data, opts, is_fin, http_transcode? \\ false) do
-    send(pid, {:stream_body, data, opts, is_fin, http_transcode?})
-    :ok
+    ref = Process.monitor(pid)
+    send(pid, {:stream_body, data, opts, is_fin, http_transcode?, {self(), ref}})
+    await_stream_body_ack(ref, Keyword.get(opts, :send_timeout, :infinity))
+  end
+
+  @doc """
+  How long a send may wait for the connection: the `:send_timeout` the server was started with,
+  or the time left to the RPC's deadline, whichever is shorter.
+  """
+  def send_timeout(payload) do
+    configured = Map.get(payload, :send_timeout) || :infinity
+
+    case Map.get(payload, :deadline) do
+      nil ->
+        configured
+
+      deadline ->
+        left = max(deadline - System.monotonic_time(:millisecond), 0)
+        if configured == :infinity, do: left, else: min(configured, left)
+    end
   end
 
   @doc """
@@ -299,6 +327,26 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     sync_call(pid, :get_bindings)
   end
 
+  # The stream process acks after cowboy has taken the data, and cowboy withholds that
+  # while its send buffer is full. The late ack of a timed out send is not flushed.
+  defp await_stream_body_ack(ref, timeout) do
+    receive do
+      {^ref, :stream_body_ack} ->
+        Process.demonitor(ref, [:flush])
+        :ok
+
+      {:DOWN, ^ref, :process, _pid, _reason} ->
+        exit(:shutdown)
+    after
+      timeout ->
+        Process.demonitor(ref, [:flush])
+
+        raise RPCError,
+          status: :deadline_exceeded,
+          message: "Timed out waiting for the client to read a reply"
+    end
+  end
+
   defp sync_call(pid, key) do
     ref = make_ref()
     send(pid, {key, ref, self()})
@@ -311,7 +359,8 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   # APIs end
 
   def info({:read_full_body, ref, pid}, req, state) do
-    {s, body, req} = read_full_body(req, [], 0, state[:handling_timer], state.max_body_size)
+    limits = %{max_bytes: state.max_body_size, check_prefix?: state.access_mode == :grpc}
+    {s, body, req} = read_full_body(req, [], 0, state[:handling_timer], limits)
     send(pid, {ref, {s, body}})
     {:ok, req, state}
   catch
@@ -324,10 +373,13 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       error = RPCError.exception(status: :resource_exhausted, message: "Request body too large")
       req = send_error(req, error, state, :body_too_large)
       {:stop, req, state}
+
+    :throw, {:message_too_large, error} ->
+      message_too_large(req, state, error)
   end
 
   def info({:read_body, ref, pid}, req, state) do
-    opts = timeout_left_opt(state[:handling_timer])
+    opts = read_length_opt(state, timeout_left_opt(state[:handling_timer]))
 
     case async_read_body(req, opts) do
       {:send, {s, body, req}} ->
@@ -338,6 +390,9 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
           {:too_large, total} ->
             body_too_large(req, state, total)
+
+          {:message_too_large, error} ->
+            message_too_large(req, state, error)
         end
 
       {:wait, read_ref} ->
@@ -353,6 +408,9 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
       {:too_large, total} ->
         body_too_large(req, s, total)
+
+      {:message_too_large, error} ->
+        message_too_large(req, s, error)
     end
   end
 
@@ -377,6 +435,9 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
       {:too_large, total} ->
         body_too_large(req, s, total)
+
+      {:message_too_large, error} ->
+        message_too_large(req, s, error)
     end
   end
 
@@ -408,6 +469,13 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     bindings = :cowboy_req.bindings(req)
     send(pid, {ref, bindings})
     {:ok, req, state}
+  end
+
+  # Runs the clauses below, then credits the sender whether or not the send worked.
+  def info({:stream_body, data, opts, is_fin, http_transcode, {sender, ref}}, req, state) do
+    result = info({:stream_body, data, opts, is_fin, http_transcode}, req, state)
+    send(sender, {ref, :stream_body_ack})
+    result
   end
 
   # Handle http/json transcoded response
@@ -446,14 +514,27 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
       {:stop, req, state}
     else
-      case GRPC.Message.to_data(data, compressor: compressor, codec: opts[:codec]) do
+      max_length = GRPC.Server.max_message_length()
+
+      to_data_opts = [
+        compressor: compressor,
+        codec: opts[:codec],
+        max_message_length: max_length
+      ]
+
+      case GRPC.Message.to_data(data, to_data_opts) do
         {:ok, data, _size} ->
           req = check_sent_resp(req)
           :cowboy_req.stream_body(data, is_fin, req)
           {:ok, req, state}
 
         {:error, msg} ->
-          error = RPCError.exception(status: :internal, message: msg)
+          error =
+            RPCError.exception(
+              status: :resource_exhausted,
+              message: "#{msg}, the limit is #{max_length} bytes"
+            )
+
           publish_send_error(state, error)
           req = send_error(req, error, state, :rpc_error)
           {:stop, req, state}
@@ -659,14 +740,68 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
 
   # Streaming reads arrive in chunks, so the cap is applied to the running total
   # rather than to any single chunk. read_full_body/5 does the same for unary calls.
+  # Each chunk is also walked for message length prefixes, so a message that claims
+  # to be over `:max_message_length` is refused when its prefix arrives.
   defp track_body_bytes(state, body) do
     total = Map.get(state, :body_bytes_read, 0) + byte_size(body)
 
     if total > state.max_body_size do
       {:too_large, total}
     else
-      {:ok, %{state | body_bytes_read: total}}
+      case scan_frames(state, body) do
+        {:ok, state} -> {:ok, %{state | body_bytes_read: total}}
+        {:message_too_large, _error} = too_large -> too_large
+      end
     end
+  end
+
+  # Only gRPC bodies are framed; transcoded JSON and gRPC-web text are not.
+  defp scan_frames(%{access_mode: :grpc} = state, data), do: do_scan_frames(state, data)
+  defp scan_frames(state, _data), do: {:ok, state}
+
+  defp do_scan_frames(state, <<>>), do: {:ok, state}
+
+  defp do_scan_frames(%{frame_remaining: remaining} = state, data) when remaining > 0 do
+    skip = min(remaining, byte_size(data))
+    rest = binary_part(data, skip, byte_size(data) - skip)
+    do_scan_frames(%{state | frame_remaining: remaining - skip}, rest)
+  end
+
+  defp do_scan_frames(%{frame_prefix: prefix} = state, data) do
+    take = min(5 - byte_size(prefix), byte_size(data))
+    head = binary_part(data, 0, take)
+    rest = binary_part(data, take, byte_size(data) - take)
+
+    case prefix <> head do
+      <<_flag::8, length::32>> ->
+        case GRPC.Server.message_too_large(length) do
+          nil -> do_scan_frames(%{state | frame_prefix: <<>>, frame_remaining: length}, rest)
+          error -> {:message_too_large, error}
+        end
+
+      partial ->
+        {:ok, %{state | frame_prefix: partial}}
+    end
+  end
+
+  # Asks cowboy for a chunk as soon as the next length prefix can be complete, or the
+  # current message and the next prefix are in, so each prefix is checked early. With
+  # cowboy's default of 8 MB, a chunk comes only after 8 MB or 15 s.
+  defp read_length_opt(%{access_mode: :grpc} = state, opts) do
+    length =
+      case state.frame_remaining do
+        0 -> 5 - byte_size(state.frame_prefix)
+        remaining -> min(remaining + 5, @default_read_length)
+      end
+
+    Map.put(opts, :length, length)
+  end
+
+  defp read_length_opt(_state, opts), do: opts
+
+  defp message_too_large(req, state, error) do
+    req = send_error(req, error, state, :message_too_large)
+    {:stop, req, state}
   end
 
   defp body_too_large(req, state, total) do
@@ -679,28 +814,42 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     {:stop, req, state}
   end
 
-  defp read_full_body(req, chunks, size, timer, max_bytes) do
-    result = :cowboy_req.read_body(req, timeout_left_opt(timer))
+  # With a gRPC body, the first chunk that holds the 5-byte length prefix is checked
+  # and a message over the limit stops the read there, so the rest of it is never
+  # requested from cowboy.
+  defp read_full_body(req, chunks, size, timer, limits) do
+    opts = timer |> timeout_left_opt() |> prefix_read_opts(size, limits)
 
-    case result do
+    case :cowboy_req.read_body(req, opts) do
       {:ok, data, req} ->
-        size = size + byte_size(data)
-
-        if size > max_bytes do
-          throw({:body_too_large, size})
-        else
-          {:ok, IO.iodata_to_binary([chunks, data]), req}
-        end
+        check_body_chunk(chunks, data, size, limits)
+        {:ok, IO.iodata_to_binary([chunks, data]), req}
 
       {:more, data, req} ->
-        size = size + byte_size(data)
-
-        if size > max_bytes do
-          throw({:body_too_large, size})
-        else
-          read_full_body(req, [chunks, data], size, timer, max_bytes)
-        end
+        size = check_body_chunk(chunks, data, size, limits)
+        read_full_body(req, [chunks, data], size, timer, limits)
     end
+  end
+
+  # Until the prefix is in, ask for a chunk as soon as 5 bytes are there.
+  defp prefix_read_opts(opts, size, %{check_prefix?: true}) when size < 5,
+    do: Map.put(opts, :length, 5)
+
+  defp prefix_read_opts(opts, _size, _limits), do: opts
+
+  defp check_body_chunk(chunks, data, size, %{max_bytes: max_bytes, check_prefix?: check?}) do
+    new_size = size + byte_size(data)
+
+    if new_size > max_bytes, do: throw({:body_too_large, new_size})
+
+    if check? and size < 5 and new_size >= 5 do
+      <<_flag::8, length::32, _::binary>> = IO.iodata_to_binary([chunks, data])
+
+      if error = GRPC.Server.message_too_large(length),
+        do: throw({:message_too_large, error})
+    end
+
+    new_size
   end
 
   defp check_sent_resp(req, status \\ 200)
@@ -896,7 +1045,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   defp async_read_body(req, opts) do
-    length = opts[:length] || 8_000_000
+    length = opts[:length] || @default_read_length
     period = opts[:period] || 15000
     ref = make_ref()
 

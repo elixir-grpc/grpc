@@ -36,6 +36,12 @@ defmodule GRPC.Server.Adapters.Cowboy do
       Then the server closes the connection and ends the RPCs that remain (default: `:infinity`,
       which keeps Cowboy's `goaway_complete_timeout`, 3000 ms). This also applies when the
       server stops.
+    * `:send_timeout` - How long `GRPC.Server.send_reply/3` waits for the client to read earlier
+      replies, in milliseconds, before it raises a `:deadline_exceeded` `GRPC.RPCError`
+      (default: `:infinity`). A call with a deadline waits no longer than the deadline.
+    * `:max_stream_buffer_size` and `:max_connection_buffer_size` - Cowboy options that limit the
+      bytes queued for a client that doesn't read, per stream and per connection (defaults: 8,000,000
+      and 16,000,000). `send_reply/3` waits once either is reached.
 
   Accepted sockets have `TCP_NODELAY` on, which is Ranch's default for both `ranch_tcp` and `ranch_ssl`. Small
   writes go out at once instead of waiting on Nagle's algorithm and delayed ACKs.
@@ -161,8 +167,9 @@ defmodule GRPC.Server.Adapters.Cowboy do
   end
 
   @impl true
-  def send_reply(%{pid: pid}, data, opts) do
+  def send_reply(%{pid: pid} = payload, data, opts) do
     http_transcode = Keyword.get(opts, :http_transcode)
+    opts = Keyword.put(opts, :send_timeout, Handler.send_timeout(payload))
     Handler.stream_body(pid, data, opts, :nofin, http_transcode)
   end
 
@@ -207,6 +214,18 @@ defmodule GRPC.Server.Adapters.Cowboy do
     Handler.set_compressor(pid, compressor)
   end
 
+  # The handler takes the send timeout from its route options, not from the adapter options.
+  defp put_send_timeout(opts, adapter_opts) do
+    case Keyword.get(adapter_opts, :send_timeout, :infinity) do
+      timeout when timeout == :infinity or (is_integer(timeout) and timeout >= 0) ->
+        Keyword.put(opts, :send_timeout, timeout)
+
+      other ->
+        raise ArgumentError,
+              "invalid :send_timeout #{inspect(other)}, expected :infinity or a non-negative integer in milliseconds"
+    end
+  end
+
   defp build_handlers(endpoint, servers, opts) do
     Enum.flat_map(servers, fn {_name, server_mod} = server ->
       routes = server_mod.__meta__(:routes)
@@ -228,7 +247,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
     {adapter_opts, opts} = Keyword.pop(opts, :adapter_opts, [])
     status_handler = Keyword.get(adapter_opts, :status_handler)
 
-    handlers = build_handlers(endpoint, servers, opts)
+    handlers = build_handlers(endpoint, servers, put_send_timeout(opts, adapter_opts))
 
     handlers =
       if status_handler do
