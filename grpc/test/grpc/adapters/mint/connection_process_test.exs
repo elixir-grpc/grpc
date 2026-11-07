@@ -54,17 +54,21 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   describe "disconnect/1" do
     test "stop the process when disconnecting", %{port: port} do
       {:ok, pid} = ConnectionProcess.start_link(:http, "localhost", port)
+      ref = Process.monitor(pid)
       assert :ok == ConnectionProcess.disconnect(pid)
-      refute Process.alive?(pid)
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
     end
 
     test "close the connection when disconnect", %{port: port} do
       {:ok, pid} = ConnectionProcess.start_link(:http, "localhost", port)
       state = :sys.get_state(pid)
 
-      assert {:stop, :normal, :ok, new_state} =
-               ConnectionProcess.handle_call(:disconnect, nil, state)
+      tag = make_ref()
 
+      assert {:stop, :normal, new_state} =
+               ConnectionProcess.handle_call(:disconnect, {self(), tag}, state)
+
+      assert_received {^tag, :ok}
       refute Mint.HTTP.open?(new_state.conn)
     end
   end
@@ -251,7 +255,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   end
 
   describe "handle_call/2 - stream_body" do
-    setup :valid_connection
+    setup :quiet_connection
     setup :valid_stream_request
 
     test "reply with :ok when stream :eof is successful", %{
@@ -284,7 +288,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   end
 
   describe "handle_call/2 - cancel_request" do
-    setup :valid_connection
+    setup :quiet_connection
     setup :valid_stream_request
     setup :valid_stream_response
 
@@ -332,7 +336,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   end
 
   describe "handle_continue/2 - :process_stream_queue" do
-    setup :valid_connection
+    setup :quiet_connection
     setup :valid_stream_request
     setup :valid_stream_response
 
