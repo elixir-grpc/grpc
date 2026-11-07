@@ -139,9 +139,15 @@ Cowboy) holds a message back while the stream window is smaller than 16,384
 bytes and the message does not fit. `response_window: :infinity` turns the limit
 off. A message larger than the window still arrives in full.
 
+The same floor applies to the HTTP/2 stream window. Unless you set
+`http2_opts: %{initial_stream_window_size: n}`, the adapter sets it to
+`:response_window`. If you set it, `n` must be 16,384 or more, and
+`GRPC.Stub.connect/2` raises `ArgumentError` for a smaller value. A cowlib peer
+does not restart a stalled stream when the client sends more credit.
+
 The queue holds more than the window. After the frames are used up, the server
 can still fill what is left of the HTTP/2 stream window. That window is set to
-the response window, and Gun adds 65,535 bytes to it each time it reopens it. At
+the response window (unless you set `initial_stream_window_size`), and Gun adds 65,535 bytes to it each time it reopens it. At
 most the queue holds the window in frames, plus the window and 65,535 bytes: about
 2.1 MiB by default.
 
