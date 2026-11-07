@@ -257,7 +257,7 @@ defmodule GRPC.Server.Adapters.Cowboy do
       end
 
     dispatch = GRPC.Server.Adapters.Cowboy.Router.compile([{:_, handlers}])
-    dispatch_key = Module.concat(endpoint, Dispatch)
+    dispatch_key = dispatch_key(endpoint, servers)
     :persistent_term.put(dispatch_key, dispatch)
 
     idle_timeout = Keyword.get(adapter_opts, :idle_timeout) || :infinity
@@ -403,6 +403,11 @@ defmodule GRPC.Server.Adapters.Cowboy do
 
     "Running #{servers_name(endpoint, servers)} with Cowboy using #{scheme}://#{addr_str}"
   end
+
+  # Without an endpoint, `Module.concat(nil, Dispatch)` is one key for all listeners.
+  # Each listener needs its own routes, so the key uses the listener name.
+  defp dispatch_key(nil, servers), do: {Dispatch, servers_name(nil, servers)}
+  defp dispatch_key(endpoint, _servers), do: Module.concat(endpoint, Dispatch)
 
   defp servers_name(nil, servers) do
     servers |> Map.values() |> Enum.map(fn s -> inspect(s) end) |> Enum.join(",")
