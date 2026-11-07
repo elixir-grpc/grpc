@@ -32,6 +32,7 @@
   * A listen failure now logs which endpoint could not start and why, for example `Could not start MyApp.Endpoint: port 50051 is already in use (eaddrinuse)`. Before, the Cowboy adapter's `:eaddrinuse` clause never matched Ranch's `{:listen_error, ref, :eaddrinuse}`, and nothing named the port. Under a supervisor, the child's error is now `{:listen_failed, message, reason}`, with the old term as `reason`; match on `:eaddrinuse` anywhere in it. `GRPC.Server.start_endpoint/3` still returns the same `{:error, reason}`. `GRPC.Server.Adapters.Cowboy.start_link/5` replaces `start_link/4` and takes the port. With Ranch 2, the adapter now also logs `Running ... with Cowboy using ...` at startup (#330).
   * Request data that waits for its handler is credited to the client once, when the handler reads it. It was credited on arrival and again on read, so the receive window grew without bound and a client was never held back. A handler that stops reading now holds its client to the stream window (`initial_stream_window_size`).
   * Unless set, the Cowboy adapter's connection window is 16 stream windows (`initial_connection_window_size`, `connection_window_margin_size`), so streams whose handlers stop reading can't take the whole connection window from the other streams on it.
+  * Servers started with `GRPC.Server.start/3` (no endpoint) now each keep their own routes. The last server started used to replace the routes of the others, and a call could fail with UNIMPLEMENTED or 404. Servers started with an endpoint are not changed (#649).
 
 ## v1.0.6 (2026-11-06)
 

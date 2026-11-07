@@ -52,7 +52,9 @@ defmodule GRPC.Integration.ServerConnectionAgeTest do
         run_server(
           AgedServer,
           fn port ->
+            watch_transport(port)
             {:ok, channel} = GRPC.Stub.connect("127.0.0.1:#{port}", adapter: unquote(adapter))
+            assert_receive {:transport, :connected}, @ceiling
 
             task =
               Task.async(fn ->
@@ -72,6 +74,11 @@ defmodule GRPC.Integration.ServerConnectionAgeTest do
             assert {:ok, %Routeguide.Feature{name: "released"}} = Task.await(task, @ceiling)
             assert_receive {:DOWN, ^ref, :process, ^old_conn, _}, @ceiling
 
+            # The client replaces the closed connection in the background. A call made
+            # before that can fail, because it has no live connection.
+            assert_receive {:transport, :down}, @ceiling
+            assert_receive {:transport, :connected}, @ceiling
+
             assert {:ok, %Routeguide.Feature{name: "quick"}} =
                      Routeguide.RouteGuide.Stub.get_feature(channel, point(2), timeout: @ceiling)
 
@@ -86,6 +93,20 @@ defmodule GRPC.Integration.ServerConnectionAgeTest do
       end
     end
   end
+
+  # Sends the client transport events for `port` to the test process.
+  defp watch_transport(port) do
+    id = {__MODULE__, make_ref()}
+    events = for event <- [:connected, :down], do: [:grpc, :client, :transport, event]
+    :ok = :telemetry.attach_many(id, events, &__MODULE__.forward_transport/4, {self(), port})
+    on_exit(fn -> :telemetry.detach(id) end)
+  end
+
+  @doc false
+  def forward_transport([_, _, _, event], _measurements, %{target: {_host, port}}, {pid, port}),
+    do: send(pid, {:transport, event})
+
+  def forward_transport(_event, _measurements, _metadata, _config), do: :ok
 
   defp point(latitude), do: %Routeguide.Point{latitude: latitude, longitude: 0}
 
