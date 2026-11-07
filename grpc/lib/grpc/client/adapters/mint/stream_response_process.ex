@@ -192,6 +192,11 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcess do
     end
   end
 
+  # A late error does not replace a response that has ended.
+  def handle_call({:consume_response, {:error, _error}}, _from, %{done: true} = state) do
+    {:reply, :ok, state, {:continue, :produce_response}}
+  end
+
   def handle_call(
         {:consume_response, {:error, _error} = error},
         _from,

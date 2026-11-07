@@ -197,6 +197,63 @@ defmodule GRPC.Integration.MintGoawayDrainTest do
     end
   end
 
+  describe "a connection process that stops or dies" do
+    setup do
+      Application.put_env(:grpc, :pool_enabled, true)
+    end
+
+    test "a late send does not replace a reply that already ended" do
+      run_server(DrainServer, fn port ->
+        {:ok, channel} = GRPC.Stub.connect("127.0.0.1:#{port}", adapter: @adapter)
+
+        stream = Routeguide.RouteGuide.Stub.record_route(channel, timeout: 10_000)
+        stream = GRPC.Stub.send_request(stream, point(1), end_stream: true)
+        conn_pid = stream.channel.adapter_payload.conn_pid
+
+        # The server has answered when the connection process has no open request.
+        await_until(fn -> :sys.get_state(conn_pid).requests == %{} end)
+        monitor = Process.monitor(conn_pid)
+        GenServer.stop(conn_pid, :normal)
+        assert_receive {:DOWN, ^monitor, :process, ^conn_pid, _}, @ceiling
+
+        stream = GRPC.Stub.send_request(stream, point(2))
+        stream = GRPC.Stub.end_stream(stream)
+
+        task = Task.async(fn -> GRPC.Stub.recv(stream) end)
+
+        assert {:ok, {:ok, %Routeguide.RouteSummary{point_count: 1}}} =
+                 Task.yield(task, @ceiling)
+
+        GRPC.Stub.disconnect(channel)
+      end)
+    end
+
+    test "a connection process killed during a send fails the call with UNAVAILABLE" do
+      run_server(DrainServer, fn port ->
+        {:ok, channel} = GRPC.Stub.connect("127.0.0.1:#{port}", adapter: @adapter)
+
+        stream = Routeguide.RouteGuide.Stub.record_route(channel, timeout: 10_000)
+        stream = GRPC.Stub.send_request(stream, point(1))
+        conn_pid = stream.channel.adapter_payload.conn_pid
+
+        # The suspended process holds the send in its mailbox. The kill ends the call.
+        :ok = :sys.suspend(conn_pid)
+        send_task = Task.async(fn -> GRPC.Stub.send_request(stream, point(2)) end)
+
+        await_until(fn -> send_queued?(conn_pid) end)
+        Process.exit(conn_pid, :kill)
+
+        assert {:ok, %GRPC.Client.Stream{} = stream} = Task.yield(send_task, @ceiling)
+        stream = GRPC.Stub.end_stream(stream)
+        task = Task.async(fn -> GRPC.Stub.recv(stream) end)
+
+        assert {:ok, {:error, %GRPC.RPCError{status: 14}}} = Task.yield(task, @ceiling)
+
+        GRPC.Stub.disconnect(channel)
+      end)
+    end
+  end
+
   describe "without the pool" do
     setup do
       Application.put_env(:grpc, :pool_enabled, false)
@@ -278,6 +335,26 @@ defmodule GRPC.Integration.MintGoawayDrainTest do
 
       result ->
         result
+    end
+  end
+
+  defp send_queued?(pid) do
+    {:messages, messages} = Process.info(pid, :messages)
+    Enum.any?(messages, &match?({:"$gen_call", _from, {:stream_body, _ref, _body}}, &1))
+  end
+
+  # There is no event for these: a bounded poll of process state.
+  defp await_until(check, deadline \\ System.monotonic_time(:millisecond) + @ceiling) do
+    cond do
+      check.() ->
+        :ok
+
+      System.monotonic_time(:millisecond) > deadline ->
+        flunk("the condition did not hold in time")
+
+      true ->
+        Process.sleep(10)
+        await_until(check, deadline)
     end
   end
 

@@ -26,9 +26,9 @@ if Code.ensure_loaded?(Mint.HTTP) do
     `UNAVAILABLE` too. The server did not process it, so a retry is safe.
 
     Mint takes no request body on a connection after GOAWAY, not even the end of the
-    stream. Take a client-streaming or bidirectional call that is open at GOAWAY and has
-    not ended its request stream. It cannot send more messages or end the stream. The
-    adapter drops the stream and the call fails with `UNAVAILABLE`. Mint 1.9 sends no RST_STREAM
+    stream. A client-streaming or bidirectional call that is open at GOAWAY and has not
+    ended its request stream cannot send more messages or end the stream. The adapter
+    drops the stream and the call fails with `UNAVAILABLE`. Mint 1.9 sends no RST_STREAM
     after GOAWAY, so the server sees the stream end when the connection closes.
     """
 
@@ -180,12 +180,16 @@ if Code.ensure_loaded?(Mint.HTTP) do
         result -> result
       end
     catch
-      # The connection process is gone. Nothing may have told the response process, so
-      # end it here. Else `receive_data/2` waits forever.
-      :exit, {reason, {GenServer, :call, _args}} when reason in [:noproc, :normal] ->
+      # The connection process is gone, or died during the call (`:noproc`, `:normal`,
+      # `:killed`, `:shutdown` or a crash). Nothing may have told the response process,
+      # so end it here. Else `receive_data/2` waits forever.
+      # A `:timeout` means the process is alive but busy. The exit goes to the caller as
+      # before, and the response stays open, because the request may still go through.
+      :exit, {reason, {GenServer, :call, _args}} when reason != :timeout ->
         fail_response(stream)
     end
 
+    # The response process ignores this error if the response has ended.
     defp fail_response(%{payload: %{stream_response_pid: pid}}) do
       error = GRPC.RPCError.exception(@unavailable, "the connection is closed")
       StreamResponseProcess.consume(pid, :error, error)
