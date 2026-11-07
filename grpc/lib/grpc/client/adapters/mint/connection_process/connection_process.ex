@@ -54,9 +54,14 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
     @doc """
     Closes the given connection.
+
+    Returns `:ok` before the socket is closed. A connection process that is
+    already dead also gives `:ok`.
     """
     def disconnect(pid) do
       GenServer.call(pid, :disconnect)
+    catch
+      :exit, _reason -> :ok
     end
 
     @doc """
