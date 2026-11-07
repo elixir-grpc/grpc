@@ -150,6 +150,38 @@ defmodule GRPC.Integration.ClientInterceptorHeadersTest do
     end
   end
 
+  # No `return_headers?/1`. Calls `next` in another process.
+  defmodule TaskCaller do
+    @behaviour GRPC.Client.Interceptor
+
+    def init(opts), do: opts
+
+    def call(stream, req, next, _opts) do
+      Task.await(Task.async(fn -> next.(stream, req) end))
+    end
+  end
+
+  # No `return_headers?/1`. Reads a server stream to a list before it returns.
+  # With `task: true` it reads in another process.
+  defmodule Eager do
+    @behaviour GRPC.Client.Interceptor
+
+    def init(opts), do: opts
+
+    def call(%{server_stream: true} = stream, req, next, opts) do
+      read = fn ->
+        case next.(stream, req) do
+          {:ok, replies} -> {:ok, Enum.to_list(replies)}
+          other -> other
+        end
+      end
+
+      if opts[:task], do: Task.await(Task.async(read)), else: read.()
+    end
+
+    def call(stream, req, next, _opts), do: next.(stream, req)
+  end
+
   defmodule Endpoint do
     use GRPC.Endpoint
 
@@ -399,6 +431,80 @@ defmodule GRPC.Integration.ClientInterceptorHeadersTest do
 
           assert_received {:in, :trailers, %{"x-test-trailer" => "from-server"}}
         end)
+      end
+
+      test "unary: a plain interceptor that calls next in a task hides nothing from an outer one",
+           %{adapter: adapter} do
+        with_channel(adapter, [{TaskCaller, []}, recorder(:out)], fn channel ->
+          assert {:ok, %Feature{name: "one"}} = Stub.get_feature(channel, %Point{})
+
+          assert_received {:out, :headers, %{"x-test-header" => "from-server"}}
+          assert_received {:out, :trailers, %{"x-test-trailer" => "from-server"}}
+          refute_received {:out, :no_headers, _}
+        end)
+      end
+
+      # The Gun adapter ends a stream when the process that opened it exits, so
+      # the task reads the replies before it returns.
+      test "server streaming: a plain interceptor that calls next in a task hides nothing from an outer one",
+           %{adapter: adapter} do
+        with_channel(adapter, [{Eager, %{task: true}}, recorder(:out)], fn channel ->
+          assert {:ok, replies} = Stub.list_features(channel, %Rectangle{})
+
+          assert [{:ok, %Feature{name: "one"}}, {:ok, %Feature{name: "two"}}] =
+                   Enum.to_list(replies)
+
+          assert_received {:out, :headers, %{"x-test-header" => "from-server"}}
+          assert_received {:out, :trailers, %{"x-test-trailer" => "from-server"}}
+          refute_received {:out, :no_headers, _}
+        end)
+      end
+
+      test "server streaming: the trailers reach an outer interceptor when the caller reads in another process",
+           %{adapter: adapter} do
+        plains = [{Upcaser, []}, {Eager, %{}}, {Eager, %{task: true}}]
+        # A stream that Gun opened in a task ends with the task.
+        plains =
+          if adapter == GRPC.Client.Adapters.Mint, do: [{TaskCaller, []} | plains], else: plains
+
+        for plain <- plains do
+          with_channel(adapter, [plain, recorder(:out)], fn channel ->
+            assert {:ok, replies} = Stub.list_features(channel, %Rectangle{})
+            items = Task.await(Task.async(fn -> Enum.to_list(replies) end))
+
+            assert [{:ok, %Feature{}}, {:ok, %Feature{}}] = items
+            assert_received {:out, :headers, %{"x-test-header" => "from-server"}}
+            assert_received {:out, :trailers, %{"x-test-trailer" => "from-server"}}
+          end)
+        end
+      end
+
+      test "server streaming: a plain interceptor that reads eagerly keeps the trailers for the caller",
+           %{adapter: adapter} do
+        for plain <- [{Eager, %{}}, {Eager, %{task: true}}] do
+          with_channel(adapter, [plain, recorder(:out)], fn channel ->
+            assert {:ok, replies} = Stub.list_features(channel, %Rectangle{})
+            assert [{:ok, %Feature{}}, {:ok, %Feature{}}] = Enum.to_list(replies)
+
+            assert_received {:out, :headers, %{"x-test-header" => "from-server"}}
+            assert_received {:out, :trailers, %{"x-test-trailer" => "from-server"}}
+          end)
+        end
+      end
+
+      test "server streaming: an unread stream leaves nothing in the process dictionary or mailbox",
+           %{adapter: adapter} do
+        for plain <- [{Eager, %{}}, {Eager, %{task: true}}, {TaskCaller, []}, {Upcaser, []}] do
+          with_channel(adapter, [plain, recorder(:out)], fn channel ->
+            keys = Process.get_keys()
+
+            assert {:ok, _replies} = Stub.list_features(channel, %Rectangle{})
+
+            assert Process.get_keys() -- keys == []
+            assert {:messages, messages} = Process.info(self(), :messages)
+            refute Enum.any?(messages, &match?({ref, _, _} when is_reference(ref), &1))
+          end)
+        end
       end
 
       test "the adapter is not asked for headers without an opt-in or a caller flag",
