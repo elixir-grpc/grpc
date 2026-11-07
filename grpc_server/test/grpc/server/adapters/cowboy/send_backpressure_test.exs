@@ -76,6 +76,22 @@ defmodule GRPC.Server.Adapters.Cowboy.SendBackpressureTest do
               {:messages, messages} = Process.info(self(), :messages)
               send(test, {:mailbox, self(), messages})
           end
+
+        5 ->
+          # The adapter ends the call at its deadline and sends the exit signal. The handler
+          # traps it, so it is still running when it calls `send_reply/2` on the expired call.
+          Process.flag(:trap_exit, true)
+
+          receive do
+            {:EXIT, _stream_process, _reason} -> :ok
+          end
+
+          try do
+            GRPC.Server.send_reply(stream, %Routeguide.Feature{name: "late"})
+            send(test, {:sent, self()})
+          catch
+            kind, reason -> send(test, {:send_failed, self(), kind, reason})
+          end
       end
     end
   end
@@ -200,6 +216,19 @@ defmodule GRPC.Server.Adapters.Cowboy.SendBackpressureTest do
       refute_received {:stream_body, _, _, _, _, _}
     end
 
+    test "a call whose deadline has passed gives the client DEADLINE_EXCEEDED" do
+      with_stalled_client(
+        5,
+        fn producer, _handler, socket ->
+          assert_receive {:send_failed, ^producer, :error, %GRPC.RPCError{status: 4}}, 5_000
+          refute_received {:sent, ^producer}
+
+          assert %{"grpc-status" => "4"} = read_trailers(socket)
+        end,
+        headers: [{"grpc-timeout", "100m"}]
+      )
+    end
+
     test "waits at most the time left to the deadline" do
       deadline = System.monotonic_time(:millisecond) + 60_000
       wait = Handler.send_timeout(%{send_timeout: nil, deadline: deadline})
@@ -218,7 +247,6 @@ defmodule GRPC.Server.Adapters.Cowboy.SendBackpressureTest do
 
           # The send timed out. The stream process is still stuck, so the client can't see
           # the status yet.
-          Process.sleep(1500)
           assert_receive {:telemetry, @send_error, _, %{reason: %GRPC.RPCError{status: 4}}}, 5_000
 
           open_window(socket)
