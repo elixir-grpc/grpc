@@ -39,6 +39,9 @@ init(StreamID, Req=#{ref := Ref}, Opts) ->
 	Pid = proc_lib:spawn_link(?MODULE, request_process, [Req, Env, Middlewares]),
 	Expect = expect(Req),
 	{Commands, Next} = cowboy_stream:init(StreamID, Req, Opts),
+	%% Last, so a stream that fails in init/3 is never counted. Cowboy does not call
+	%% terminate/3 for it.
+	ok = 'Elixir.GRPC.Server.Adapters.Cowboy.ConnectionAge':stream_opened(),
 	{[{spawn, Pid, Shutdown}|Commands],
 		#state{next=Next, ref=Ref, pid=Pid, expect=Expect}}.
 
@@ -290,6 +293,8 @@ do_info(StreamID, Info, Commands1, State0=#state{next=Next0}) ->
 
 -spec terminate(cowboy_stream:streamid(), cowboy_stream:reason(), #state{}) -> ok.
 terminate(StreamID, Reason, #state{next=Next}) ->
+	%% First, so a failure in the next handler does not leave the stream counted.
+	ok = 'Elixir.GRPC.Server.Adapters.Cowboy.ConnectionAge':stream_closed(),
 	cowboy_stream:terminate(StreamID, Reason, Next).
 
 -spec early_error(cowboy_stream:streamid(), cowboy_stream:reason(),
