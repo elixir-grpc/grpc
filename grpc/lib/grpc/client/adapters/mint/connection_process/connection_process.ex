@@ -25,6 +25,10 @@ if Code.ensure_loaded?(Mint.HTTP) do
                                GRPC.Status.cancelled(),
                                "the request was cancelled"
                              )
+    @goaway_error GRPC.RPCError.exception(
+                    GRPC.Status.unavailable(),
+                    "the server is closing the connection, so the request body cannot be sent"
+                  )
     @stream_response_dead_event [:grpc, :client, :mint, :stream_response, :dead]
     @reconnect_stop_event [:grpc, :client, :mint, :reconnect, :stop]
     @reconnect_error_event [:grpc, :client, :mint, :reconnect, :error]
@@ -87,6 +91,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
     @impl true
     def init({scheme, host, port, opts}) do
       {retry, opts} = Keyword.pop(opts, :retry, 0)
+      {notify_drain, opts} = Keyword.pop(opts, :notify_drain, false)
       {metadata, opts} = Keyword.pop(opts, :grpc_transport_metadata, %{})
       metadata = Map.put(metadata, :transport_ref, self())
       Telemetry.execute(:started, %{generation: 0, active_streams: 0}, metadata)
@@ -101,6 +106,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
             port: port,
             connect_opts: opts,
             retry: retry,
+            notify_drain: notify_drain,
             telemetry_metadata: metadata
           ]
 
@@ -200,6 +206,10 @@ if Code.ensure_loaded?(Mint.HTTP) do
           {:error, conn, %Mint.HTTPError{reason: :unknown_request_to_stream}} ->
             {:reply, :ok, State.update_conn(state, conn)}
 
+          {:error, conn, %Mint.HTTPError{reason: :closed_for_writing}} ->
+            state = state |> State.update_conn(conn) |> drop_unsendable_stream(request_ref)
+            {:reply, {:error, @goaway_error}, state, {:continue, :check_connection_status}}
+
           {:error, conn, error} ->
             {:reply, {:error, error}, State.update_conn(state, conn)}
         end
@@ -282,6 +292,10 @@ if Code.ensure_loaded?(Mint.HTTP) do
     end
 
     @impl true
+    def handle_continue(:check_connection_status, state) do
+      check_connection_status(state, nil)
+    end
+
     def handle_continue(:process_request_stream_queue, state) do
       {{:value, request}, queue} = :queue.out(state.request_stream_queue)
       {ref, body, _from} = request
@@ -484,6 +498,9 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
           {:noreply, new_state}
 
+        {:error, conn, %Mint.HTTPError{reason: :closed_for_writing}} ->
+          fail_unsendable_stream(state, conn, request_ref, from)
+
         {:error, conn, error} ->
           if from != nil do
             # We need an explicit reply here because the process that called this GenServer
@@ -510,6 +527,9 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
           check_request_stream_queue(State.update_conn(state, conn))
 
+        {:error, conn, %Mint.HTTPError{reason: :closed_for_writing}} ->
+          fail_unsendable_stream(state, conn, request_ref, from)
+
         {:error, conn, error} ->
           if not send_eof? do
             GenServer.reply(from, {:error, error})
@@ -520,6 +540,31 @@ if Code.ensure_loaded?(Mint.HTTP) do
           end
 
           check_request_stream_queue(State.update_conn(state, conn))
+      end
+    end
+
+    # After GOAWAY, Mint takes no more request body for any stream, not even `:eof`,
+    # and it sends no RST_STREAM. The server waits for the body, so the call and the
+    # drain would not end. Drop the stream and fail it. The server sees the connection
+    # close when the drain ends.
+    defp fail_unsendable_stream(state, conn, request_ref, from) do
+      state = state |> State.update_conn(conn) |> drop_unsendable_stream(request_ref)
+      if from, do: GenServer.reply(from, {:error, @goaway_error})
+      check_connection_status(state, nil)
+    end
+
+    defp drop_unsendable_stream(state, request_ref) do
+      if State.has_request_ref(state, request_ref) do
+        state
+        |> State.stream_response_pid(request_ref)
+        |> end_stream_response(@goaway_error)
+      end
+
+      state = drop_request(state, request_ref)
+
+      case Mint.HTTP2.cancel_request(state.conn, request_ref) do
+        {:ok, conn} -> State.update_conn(state, conn)
+        {:error, conn, _error} -> State.update_conn(state, conn)
       end
     end
 
@@ -605,6 +650,12 @@ if Code.ensure_loaded?(Mint.HTTP) do
     defp end_stream_response(pid, error) do
       StreamResponseProcess.consume(pid, :error, error)
       StreamResponseProcess.done(pid)
+    end
+
+    # The pool already opened a replacement for a draining connection.
+    defp maybe_attempt_reconnect(%{draining: true} = state) do
+      send(state.parent, {:elixir_grpc, :connection_down, self()})
+      {:stop, :normal, state}
     end
 
     defp maybe_attempt_reconnect(%{retry: 0} = state) do
@@ -716,12 +767,20 @@ if Code.ensure_loaded?(Mint.HTTP) do
         # After a GOAWAY with NO_ERROR the server still answers the streams it accepted.
         # The last one to finish takes this to the clause below.
         is_nil(reason) and map_size(state.requests) > 0 and Mint.HTTP.open?(state.conn, :read) ->
-          check_request_stream_queue(state)
+          state |> notify_draining() |> check_request_stream_queue()
 
         true ->
           finish_all_pending_requests(state, reason || @connection_closed_error)
       end
     end
+
+    # Tells the pool, once, to send new calls to another connection.
+    defp notify_draining(%{notify_drain: true, draining: false} = state) do
+      send(state.parent, {:elixir_grpc, :draining, self()})
+      %{state | draining: true}
+    end
+
+    defp notify_draining(state), do: state
 
     defp observe_settings(state) do
       max =

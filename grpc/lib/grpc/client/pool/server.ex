@@ -24,7 +24,7 @@ defmodule GRPC.Client.Pool.Server do
     defmodule Channel do
       use GRPC.Client.Pool.Server.DeriveAccess
 
-      defstruct [:id, :open_streams, :channel, :monitor_ref]
+      defstruct [:id, :open_streams, :channel, :monitor_ref, draining: false]
 
       @type id :: reference()
 
@@ -32,7 +32,8 @@ defmodule GRPC.Client.Pool.Server do
               id: id(),
               open_streams: non_neg_integer(),
               channel: GRPC.Channel.t(),
-              monitor_ref: reference() | nil
+              monitor_ref: reference() | nil,
+              draining: boolean()
             }
     end
 
@@ -82,13 +83,14 @@ defmodule GRPC.Client.Pool.Server do
   @impl GenServer
   def handle_call(:take_channel, {caller_pid, _tag} = _from, state) do
     case Implementation.take_channel(state, caller_pid) do
-      # No connection at all (every one died and the pool could not open a new
-      # one) differs from every connection being at its stream limit.
-      {nil, _monitor_ref, %{channels: channels} = state} when map_size(channels) == 0 ->
-        {:reply, {:error, :no_connection}, state}
-
       {nil, _monitor_ref, state} ->
-        {:reply, nil, state}
+        # No usable connection (every one died or drains, and the pool could not open
+        # a new one) differs from every connection being at its stream limit.
+        if Implementation.live_channel_count(state) == 0 do
+          {:reply, {:error, :no_connection}, state}
+        else
+          {:reply, nil, state}
+        end
 
       {channel, monitor_ref, state} ->
         {:reply, {channel, monitor_ref}, state}
@@ -143,6 +145,12 @@ defmodule GRPC.Client.Pool.Server do
     {state, monitor_refs} = Implementation.handle_connection_process_crush(state, pid)
     Enum.map(monitor_refs, &Process.demonitor/1)
     {:noreply, state}
+  end
+
+  @impl GenServer
+  # A Mint connection got GOAWAY and waits for its open calls. Send new calls elsewhere.
+  def handle_info({:elixir_grpc, :draining, pid}, state) do
+    {:noreply, Implementation.handle_draining(state, pid)}
   end
 
   @impl GenServer

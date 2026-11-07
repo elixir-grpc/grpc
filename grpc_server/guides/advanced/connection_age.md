@@ -44,6 +44,16 @@ When the age ends, or the connection has been idle for `:max_connection_idle`, t
 
 The client sees GOAWAY, sends new calls on a new connection, and lets the open calls finish on the old one.
 
+## What the client does
+
+The client lets the open calls finish on the old connection and sends new calls to a new one:
+
+  * The Gun adapter does this by default.
+  * The Mint adapter does this with the connection pool (`config :grpc, pool_enabled: true`). The pool opens a new connection when the old one gets GOAWAY, and removes the old one when its last call ends.
+  * The Mint adapter without the pool fails a call that starts during the drain with `UNAVAILABLE`. The client connects again when the drain ends. The pool also fails a call that it gave to the old connection just before the GOAWAY, with the same status. The server did not process these calls, so the client can retry them.
+
+Mint takes no request body after GOAWAY, not even the end of a stream. With the Mint adapter, a client-streaming or bidirectional call that is open at GOAWAY and has not ended its request stream fails with `UNAVAILABLE`. The server handler of that call waits for more messages until the connection closes or `:max_connection_age_grace` ends. Keep such calls short, set a `:max_connection_age_grace` that fits them, or use the Gun adapter.
+
 ## Where the age counts from
 
 The age counts from the first call on the connection, not from the moment the server accepts the connection. A connection that sends no call is not closed because of its age.
@@ -93,4 +103,4 @@ With this change, the helper in this adapter can send the PINGs and check the ac
 
   * `:max_connection_age_grace` also limits the time that open calls have when the server stops.
   * The age applies to HTTP/2 connections only.
-  * The Mint client adapter lets the open calls finish after GOAWAY. Earlier versions failed them with `UNAVAILABLE`.
+  * The Mint client adapter lets the open calls finish after GOAWAY. Earlier versions failed them with `UNAVAILABLE`. See "What the client does" for new calls and for calls that stream a request.
