@@ -121,10 +121,12 @@ if Code.ensure_loaded?(Mint.HTTP) do
     end
 
     @impl true
-    def handle_call(:disconnect, _from, state) do
+    def handle_call(:disconnect, from, state) do
       # TODO add a code to if disconnect is brutal we just  stop if is friendly we wait for pending requests
+      # :ssl.close/1 can wait up to 5 seconds for the peer, so reply before the close.
+      GenServer.reply(from, :ok)
       {:ok, conn} = Mint.HTTP.close(state.conn)
-      {:stop, :normal, :ok, State.update_conn(state, conn)}
+      {:stop, :normal, State.update_conn(state, conn)}
     end
 
     def handle_call(_request, _from, %{conn: %Mint.HTTP2{state: :closed}} = state) do
