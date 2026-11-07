@@ -13,8 +13,10 @@ defmodule GRPC.Client.Adapters.Gun.StreamResponseProcess do
   Streams are opened with a finite Gun `flow`, a count of DATA frames. Gun keeps
   sending `:gun_data` after the count reaches zero, but stops reopening the
   stream's window until `:gun.update_flow/3` credits frames back. This process
-  credits one frame each time a data message leaves the queue, so the queue holds
-  about one window of data when the caller reads slowly.
+  credits one frame each time a data message leaves the queue. When the caller
+  reads slowly, the queue holds the credited frames plus what is left of the
+  HTTP/2 stream window. See the `:response_window` option of
+  `GRPC.Client.Adapters.Gun` for the bound.
   """
 
   use GenServer
