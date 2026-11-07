@@ -24,8 +24,7 @@ children = [
 
   * `:max_connection_age` - the age, in milliseconds, at which the server starts to close a connection. The default is `:infinity`: the server never closes a connection because of its age.
   * `:max_connection_age_grace` - the time, in milliseconds, that open calls have to finish after the server starts to close the connection. The default is `:infinity`. This keeps the Cowboy default, `goaway_complete_timeout`, of 3000 ms. A number sets `goaway_complete_timeout`.
-
-  * `:max_connection_idle` - the time, in milliseconds, that a connection can have no open call before the server starts to close it. The default is `:infinity`: the server never closes a connection because it is idle.
+  * `:max_connection_idle` - the time, in milliseconds, that a connection has no open call before the server starts to close it. The default is `:infinity`.
 
 Each value is `:infinity` or a positive integer. Other values raise `ArgumentError` when the server starts.
 
@@ -65,7 +64,7 @@ Cowboy's `idle_timeout` is not the same. It ignores open streams, and it closes 
 
 A9 measures the idle time from the creation of the connection. This adapter measures it from the first call. A connection that never sends a call is never closed because it is idle.
 
-The reason is that Cowboy has no hook that runs in the connection process before the first stream. The adapter starts its helper process from the stream handler, so it can only start with the first stream.
+The reason is that Cowboy has no hook that runs in the connection process before the first stream. The adapter starts its helper process from the stream handler, so it starts with the first stream.
 
 Only Cowboy's `idle_timeout` limits such a connection. This adapter sets `idle_timeout` to `:infinity` unless you set it in `adapter_opts`. Set `:idle_timeout` if you need to limit connections that send no call. Cowboy then also closes a connection that has open calls and no data for that time. Use a value that is longer than your longest call.
 

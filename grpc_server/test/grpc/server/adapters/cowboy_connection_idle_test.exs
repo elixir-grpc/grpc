@@ -2,7 +2,7 @@ defmodule GRPC.Server.Adapters.CowboyConnectionIdleTest do
   # A raw HTTP/2 client shows what the server sends on the wire. The ceilings are
   # long on purpose: each test waits for an event, not for a fixed time.
   #
-  # The server tests pass `max_connection_idle_test_pid`. The helper then sends
+  # The server tests pass `__max_connection_idle_test_pid__`. The helper then sends
   # `{:idle_check, :open | :idle}` at each wake, and `{:idle_close, helper}` before it
   # closes the connection. It waits for `{:continue, helper}`.
   use GRPC.Integration.TestCase
