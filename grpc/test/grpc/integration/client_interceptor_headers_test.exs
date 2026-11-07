@@ -182,6 +182,70 @@ defmodule GRPC.Integration.ClientInterceptorHeadersTest do
     def call(stream, req, next, _opts), do: next.(stream, req)
   end
 
+  # No `return_headers?/1`. Calls `next` in a process that runs after `call/4`
+  # returns, and does not wait for it. The process waits for `:go`, so the test
+  # decides when it runs. It returns an empty result at once.
+  defmodule Detached do
+    @behaviour GRPC.Client.Interceptor
+
+    def init(opts), do: opts
+
+    def call(stream, req, next, %{pid: pid}) do
+      detached =
+        spawn(fn ->
+          receive do
+            :go -> next.(stream, req)
+          end
+        end)
+
+      send(pid, {:detached, detached})
+
+      if stream.server_stream, do: {:ok, []}, else: {:ok, %Feature{name: "detached"}}
+    end
+  end
+
+  # No `return_headers?/1`. Calls `next` in a task that waits for `:go`, and
+  # gives up on the task after 1 ms. It returns an empty result.
+  defmodule AwaitTimeout do
+    @behaviour GRPC.Client.Interceptor
+
+    def init(opts), do: opts
+
+    def call(stream, req, next, %{pid: pid}) do
+      task =
+        Task.async(fn ->
+          send(pid, {:task, self()})
+
+          receive do
+            :go -> next.(stream, req)
+          end
+        end)
+
+      try do
+        Task.await(task, 1)
+      catch
+        :exit, {:timeout, _} ->
+          if stream.server_stream, do: {:ok, []}, else: {:ok, %Feature{name: "timeout"}}
+      end
+    end
+  end
+
+  # No `return_headers?/1`. Calls `next`, then fails as `mode` says.
+  defmodule Failer do
+    @behaviour GRPC.Client.Interceptor
+
+    def init(opts), do: opts
+
+    def call(stream, req, next, %{mode: mode}) do
+      next.(stream, req)
+
+      case mode do
+        :raise -> raise "interceptor failed"
+        :error -> {:error, GRPC.RPCError.exception(GRPC.Status.internal(), "interceptor failed")}
+      end
+    end
+  end
+
   defmodule Endpoint do
     use GRPC.Endpoint
 
@@ -507,6 +571,98 @@ defmodule GRPC.Integration.ClientInterceptorHeadersTest do
         end
       end
 
+      test "a call to next after the interceptor returned leaves no message in the mailbox",
+           %{adapter: adapter} do
+        with_channel(adapter, [{Detached, %{pid: self()}}, recorder(:out)], fn channel ->
+          assert {:ok, %Feature{name: "detached"}} = Stub.get_feature(channel, %Point{})
+          assert_receive {:detached, unary}
+          assert {:ok, []} = Stub.list_features(channel, %Rectangle{})
+          assert_receive {:detached, streaming}
+
+          for pid <- [unary, streaming] do
+            monitor = Process.monitor(pid)
+            send(pid, :go)
+            assert_receive {:DOWN, ^monitor, :process, ^pid, _reason}
+          end
+
+          assert_no_ref_messages()
+        end)
+      end
+
+      test "a task that finishes after its await timed out leaves no message in the mailbox",
+           %{adapter: adapter} do
+        with_channel(adapter, [{AwaitTimeout, %{pid: self()}}, recorder(:out)], fn channel ->
+          assert {:ok, %Feature{name: "timeout"}} = Stub.get_feature(channel, %Point{})
+          assert_receive {:task, unary}
+          assert {:ok, []} = Stub.list_features(channel, %Rectangle{})
+          assert_receive {:task, streaming}
+
+          for pid <- [unary, streaming] do
+            monitor = Process.monitor(pid)
+            send(pid, :go)
+            assert_receive {:DOWN, ^monitor, :process, ^pid, _reason}
+          end
+
+          assert_no_ref_messages()
+        end)
+      end
+
+      test "a process that reads the stream after the wrapper closed gets the trailers and leaves no message",
+           %{adapter: adapter} do
+        with_channel(adapter, [{Upcaser, []}, recorder(:out)], fn channel ->
+          assert {:ok, replies} = Stub.list_features(channel, %Rectangle{})
+          parent = self()
+
+          {pid, monitor} =
+            spawn_monitor(fn ->
+              items = Enum.to_list(replies)
+              {:messages, messages} = Process.info(self(), :messages)
+              send(parent, {:read, items, Enum.filter(messages, &is_reference(elem(&1, 0)))})
+            end)
+
+          assert_receive {:DOWN, ^monitor, :process, ^pid, _reason}
+          assert_received {:read, [{:ok, %Feature{}}, {:ok, %Feature{}}], []}
+          assert_received {:out, :trailers, %{"x-test-trailer" => "from-server"}}
+          assert_no_ref_messages()
+        end)
+      end
+
+      test "an interceptor that raises, or returns an error, leaves no message in the mailbox",
+           %{adapter: adapter} do
+        with_channel(adapter, [{Failer, %{mode: :raise}}, recorder(:out)], fn channel ->
+          assert_raise RuntimeError, "interceptor failed", fn ->
+            Stub.get_feature(channel, %Point{})
+          end
+
+          assert_no_ref_messages()
+        end)
+
+        with_channel(adapter, [{Failer, %{mode: :error}}, recorder(:out)], fn channel ->
+          assert {:error, %GRPC.RPCError{message: "interceptor failed"}} =
+                   Stub.get_feature(channel, %Point{})
+
+          assert {:error, %GRPC.RPCError{message: "interceptor failed"}} =
+                   Stub.list_features(channel, %Rectangle{})
+
+          assert_no_ref_messages()
+        end)
+      end
+
+      test "a server stream that the caller halts leaves no message in the mailbox",
+           %{adapter: adapter} do
+        for plain <- [{Upcaser, []}, {Eager, %{}}] do
+          with_channel(adapter, [plain, recorder(:out)], fn channel ->
+            keys = Process.get_keys()
+
+            assert {:ok, replies} = Stub.list_features(channel, %Rectangle{})
+            assert [{:ok, %Feature{}}] = Enum.take(replies, 1)
+
+            assert Process.get_keys() -- keys == []
+            assert_no_ref_messages()
+          end)
+        end
+      end
+
       test "the adapter is not asked for headers without an opt-in or a caller flag",
            %{adapter: adapter} do
         with_recording_channel(adapter, [matcher(:plain), {Plain, []}], fn channel ->
@@ -643,6 +799,11 @@ defmodule GRPC.Integration.ClientInterceptorHeadersTest do
 
   defp recorder(name), do: {Recorder, %{pid: self(), name: name}}
   defp matcher(name), do: {Matcher, %{pid: self(), name: name}}
+
+  defp assert_no_ref_messages do
+    assert {:messages, messages} = Process.info(self(), :messages)
+    refute Enum.any?(messages, &match?({ref, _, _} when is_reference(ref), &1))
+  end
 
   defp with_recording_channel(adapter, interceptors, fun) do
     name = Module.concat(__MODULE__, "Recording" <> (adapter |> Module.split() |> List.last()))
