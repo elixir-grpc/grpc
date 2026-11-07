@@ -4,6 +4,8 @@
 
 ### Enhancements
 
+  * New Cowboy adapter options `:max_connection_age` and `:max_connection_age_grace`, in milliseconds. After the age, the server sends GOAWAY, lets open calls finish, and closes the connection. After the grace, it ends calls that are still open. The age has ±10% jitter and counts from the first call on the connection. Both default to `:infinity`, which changes nothing. Clients that balance over many servers, for example behind a Kubernetes headless service, then reconnect and find new replicas. The new "Connection age" guide has the details and the parts of gRPC proposal A9 that are not done: `MAX_CONNECTION_IDLE` and server keepalive PINGs (#355).
+
   * New event: `[:grpc, :server, :rpc, :send_error]`. The Cowboy adapter publishes it when the handler returns but the adapter cannot encode, compress or send the reply. The metadata has `:kind`, `:reason`, `:stacktrace` and `:path`. It is not an `:exception` event, because the telemetry span of the handler is closed at that time. A client that disconnects during the reply still causes only `:abort`, because nothing raises. A new section in the error handling guide shows how to send these events to Sentry or Bugsnag (#349).
 
   * `GRPC.Server.Test` runs server interceptors in a test with no endpoint, server process or socket. `build_stream/3` makes a `GRPC.Server.Stream` for an RPC, `run_interceptors/4` runs the chain with the same code the server uses, and `response_headers/1`, `response_trailers/1` and `replies/1` return what was sent. See the new "Testing interceptors" guide (#423).

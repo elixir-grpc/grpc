@@ -34,6 +34,7 @@
   * Gun calls on a connection that is gone now return `{:error, %GRPC.RPCError{status: UNAVAILABLE}}` instead of exiting, raising `MatchError`, or waiting for the deadline. This covers a connection process that died or was disconnected after the channel was checked, and in-flight calls when it stops normally (`GRPC.Stub.disconnect/1`), which used to wait for their deadline. Failed `send_headers`, `send_request`, `send_data` and `end_stream` calls report the error from `GRPC.Stub.recv/2`, and `GRPC.Stub.cancel/1` returns `:ok`. Errors Gun reports as `{:down, _}`, `{:noproc, _}`, `{:normal, _}` or `{:shutdown, _}` also map to `UNAVAILABLE` instead of `UNKNOWN`.
   * With the pool enabled, a call made when every pooled connection is gone and the pool cannot open a new one (for example the server stopped and Gun gave up) now returns `UNAVAILABLE` instead of `RESOURCE_EXHAUSTED` ("no pool channel available"). `RESOURCE_EXHAUSTED` stays for a pool at its stream or overflow limit.
   * The Gun adapter now honors `:retry` and `:retry_fun` in `:adapter_opts`. It used to overwrite them with its own defaults.
+  * The Mint adapter now lets in-flight calls finish when the server sends GOAWAY with `NO_ERROR`, for example after the server's `:max_connection_age`. It failed them with `UNAVAILABLE` at once. When the last call ends, the connection process stops or reconnects, as before. A call that starts after GOAWAY still fails (#355).
 
 ## v1.0.6
 

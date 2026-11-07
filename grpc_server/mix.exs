@@ -73,6 +73,7 @@ defmodule GRPC.Server.MixProject do
         "guides/cheatsheets/streams.cheatmd",
         "guides/advanced/transcoding.livemd",
         "guides/advanced/cors.md",
+        "guides/advanced/connection_age.md",
         "guides/advanced/backpressure.md",
         "guides/advanced/testing_interceptors.md",
         "guides/advanced/telemetry.livemd",

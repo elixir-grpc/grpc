@@ -32,6 +32,7 @@
 -spec init(cowboy_stream:streamid(), cowboy_req:req(), cowboy:opts())
 	-> {[{spawn, pid(), timeout()}], #state{}}.
 init(StreamID, Req=#{ref := Ref}, Opts) ->
+	ok = 'Elixir.GRPC.Server.Adapters.Cowboy.ConnectionAge':stream_init(Req, Opts),
 	Env = maps:get(env, Opts, #{}),
 	Middlewares = maps:get(middlewares, Opts, ['Elixir.GRPC.Server.Adapters.Cowboy.Router', cowboy_handler]),
 	Shutdown = maps:get(shutdown_timeout, Opts, 5000),
