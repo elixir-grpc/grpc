@@ -42,7 +42,7 @@ When the age ends, or the connection has been idle for `:max_connection_idle`, t
   4. Waits for the open calls to finish. When the last call finishes, the server closes the connection.
   5. After `:max_connection_age_grace`, closes the connection. Calls that are still open end. The server publishes `[:grpc, :server, :rpc, :abort]` for each of them.
 
-The client sees GOAWAY, sends new calls on a new connection, and lets the open calls finish on the old one.
+The client sees GOAWAY and lets the open calls finish on the old one. Gun and Mint with the pool send new calls on a new connection. See "What the client does".
 
 ## What the client does
 

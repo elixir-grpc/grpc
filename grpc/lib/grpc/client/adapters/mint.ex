@@ -26,9 +26,9 @@ if Code.ensure_loaded?(Mint.HTTP) do
     `UNAVAILABLE` too. The server did not process it, so a retry is safe.
 
     Mint takes no request body on a connection after GOAWAY, not even the end of the
-    stream. A client-streaming or bidirectional call that is open at GOAWAY and has not
-    ended its request stream cannot send more messages or end the stream. The adapter
-    drops the stream and the call fails with `UNAVAILABLE`. Mint 1.9 sends no RST_STREAM
+    stream. Take a client-streaming or bidirectional call that is open at GOAWAY and has
+    not ended its request stream. It cannot send more messages or end the stream. The
+    adapter drops the stream and the call fails with `UNAVAILABLE`. Mint 1.9 sends no RST_STREAM
     after GOAWAY, so the server sees the stream end when the connection closes.
     """
 
@@ -146,8 +146,8 @@ if Code.ensure_loaded?(Mint.HTTP) do
           opts
         ) do
       {:ok, data, _} = GRPC.Message.to_data(message, opts)
-      :ok = stream_body(pid, request_ref, data)
-      if opts[:send_end_stream], do: stream_body(pid, request_ref, :eof)
+      :ok = stream_body(stream, pid, request_ref, data)
+      if opts[:send_end_stream], do: stream_body(stream, pid, request_ref, :eof)
       stream
     end
 
@@ -158,7 +158,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
             payload: %{response: {:ok, %{request_ref: request_ref}}}
           } = stream
         ) do
-      stream_body(pid, request_ref, :eof)
+      stream_body(stream, pid, request_ref, :eof)
       stream
     end
 
@@ -174,15 +174,23 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
     # After GOAWAY the connection process fails the call with UNAVAILABLE and gives the
     # error to the response process, so `receive_data/2` returns it. Do not crash here.
-    defp stream_body(pid, request_ref, body) do
+    defp stream_body(stream, pid, request_ref, body) do
       case ConnectionProcess.stream_request_body(pid, request_ref, body) do
         {:error, %GRPC.RPCError{status: @unavailable}} -> :ok
         result -> result
       end
     catch
-      # The connection process stopped after it failed the call, and the response
-      # process has the error.
-      :exit, {reason, {GenServer, :call, _args}} when reason in [:noproc, :normal] -> :ok
+      # The connection process is gone. Nothing may have told the response process, so
+      # end it here. Else `receive_data/2` waits forever.
+      :exit, {reason, {GenServer, :call, _args}} when reason in [:noproc, :normal] ->
+        fail_response(stream)
+    end
+
+    defp fail_response(%{payload: %{stream_response_pid: pid}}) do
+      error = GRPC.RPCError.exception(@unavailable, "the connection is closed")
+      StreamResponseProcess.consume(pid, :error, error)
+      StreamResponseProcess.done(pid)
+      :ok
     end
 
     defp validate_known_opts(opts) do

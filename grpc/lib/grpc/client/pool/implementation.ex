@@ -341,7 +341,9 @@ defmodule GRPC.Client.Pool.Implementation do
     {
       Enum.find_value(wrapped_channel, fn {_id,
                                            %State.Channel{open_streams: open_streams, id: id} = ch} ->
-        if (is_nil(max_streams) or open_streams < max_streams) and id == channel_id, do: ch
+        if not ch.draining and (is_nil(max_streams) or open_streams < max_streams) and
+             id == channel_id,
+           do: ch
       end),
       state
     }

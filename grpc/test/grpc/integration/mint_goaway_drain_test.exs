@@ -7,7 +7,7 @@ defmodule GRPC.Integration.MintGoawayDrainTest do
 
   @ceiling 5_000
   # Long enough that a new connection does not age out while a test runs.
-  @age 1_500
+  @age 3_000
   @adapter GRPC.Client.Adapters.Mint
 
   @server_opts [
@@ -34,6 +34,7 @@ defmodule GRPC.Integration.MintGoawayDrainTest do
 
     # Waits for the end of the request stream, which a client cannot send during a drain.
     def record_route(req_enum, _stream) do
+      send(test_pid(), {:in_flight, self()})
       %Routeguide.RouteSummary{point_count: Enum.count(req_enum)}
     end
 
@@ -138,7 +139,8 @@ defmodule GRPC.Integration.MintGoawayDrainTest do
 
           stream = Routeguide.RouteGuide.Stub.record_route(channel, timeout: 10_000)
           stream = GRPC.Stub.send_request(stream, point(1))
-          old_server_conn = await_server_connection()
+          assert_receive {:in_flight, _rpc}, @ceiling
+          [old_server_conn] = :ranch.procs(inspect(DrainServer), :connections)
           server_ref = Process.monitor(old_server_conn)
 
           assert assert_connected(ref) != old
@@ -163,6 +165,35 @@ defmodule GRPC.Integration.MintGoawayDrainTest do
         0,
         @server_opts
       )
+    end
+  end
+
+  describe "a dead connection process" do
+    setup do
+      Application.put_env(:grpc, :pool_enabled, true)
+    end
+
+    test "a client-streaming call fails with UNAVAILABLE and does not wait forever" do
+      run_server(DrainServer, fn port ->
+        {:ok, channel} = GRPC.Stub.connect("127.0.0.1:#{port}", adapter: @adapter)
+
+        stream = Routeguide.RouteGuide.Stub.record_route(channel, timeout: 10_000)
+        stream = GRPC.Stub.send_request(stream, point(1))
+
+        conn_pid = stream.channel.adapter_payload.conn_pid
+        monitor = Process.monitor(conn_pid)
+        Process.exit(conn_pid, :kill)
+        assert_receive {:DOWN, ^monitor, :process, ^conn_pid, _}, @ceiling
+
+        stream = GRPC.Stub.send_request(stream, point(2))
+        stream = GRPC.Stub.end_stream(stream)
+
+        task = Task.async(fn -> GRPC.Stub.recv(stream) end)
+
+        assert {:ok, {:error, %GRPC.RPCError{status: 14}}} = Task.yield(task, @ceiling)
+
+        GRPC.Stub.disconnect(channel)
+      end)
     end
   end
 
@@ -250,20 +281,7 @@ defmodule GRPC.Integration.MintGoawayDrainTest do
     end
   end
 
-  defp await_server_connection(deadline \\ System.monotonic_time(:millisecond) + @ceiling) do
-    case :ranch.procs(inspect(DrainServer), :connections) do
-      [conn] ->
-        conn
-
-      _ ->
-        if System.monotonic_time(:millisecond) > deadline,
-          do: flunk("the server has no connection")
-
-        Process.sleep(10)
-        await_server_connection(deadline)
-    end
-  end
-
+  # There is no event for this: the pool is off, so the process sends no drain message.
   defp await_goaway(conn_pid, deadline \\ System.monotonic_time(:millisecond) + @ceiling) do
     cond do
       not Mint.HTTP.open?(:sys.get_state(conn_pid).conn) ->
