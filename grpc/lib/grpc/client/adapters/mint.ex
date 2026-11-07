@@ -26,10 +26,13 @@ if Code.ensure_loaded?(Mint.HTTP) do
     `UNAVAILABLE` too. The server did not process it, so a retry is safe.
 
     Mint takes no request body on a connection after GOAWAY, not even the end of the
-    stream. A client-streaming or bidirectional call that is open at GOAWAY and has not
-    ended its request stream cannot send more messages or end the stream. The adapter
+    stream. A client-streaming or bidirectional call can be open at GOAWAY without an
+    ended request stream. It cannot send more messages or end the stream. The adapter
     drops the stream and the call fails with `UNAVAILABLE`. Mint 1.9 sends no RST_STREAM
     after GOAWAY, so the server sees the stream end when the connection closes.
+
+    A send that times out on a busy connection process exits to the caller. The
+    response stays open.
     """
 
     alias GRPC.Channel

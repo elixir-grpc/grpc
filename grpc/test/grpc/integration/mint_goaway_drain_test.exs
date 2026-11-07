@@ -238,6 +238,11 @@ defmodule GRPC.Integration.MintGoawayDrainTest do
 
         # The suspended process holds the send in its mailbox. The kill ends the call.
         :ok = :sys.suspend(conn_pid)
+
+        on_exit(fn ->
+          if Process.alive?(conn_pid), do: :sys.resume(conn_pid)
+        end)
+
         send_task = Task.async(fn -> GRPC.Stub.send_request(stream, point(2)) end)
 
         await_until(fn -> send_queued?(conn_pid) end)
