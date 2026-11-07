@@ -223,16 +223,24 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   Returns once the connection has taken the chunk, so a client that reads slowly slows the
   caller. Waits at most `opts[:send_timeout]` (default `:infinity`), then raises a
   `:deadline_exceeded` `GRPC.RPCError`. Exits with `:shutdown` if the stream's process is gone.
+
+  The reply is already queued when the wait ends, so it is still sent later.
   """
   def stream_body(pid, data, opts, is_fin, http_transcode? \\ false) do
-    ref = Process.monitor(pid)
-    send(pid, {:stream_body, data, opts, is_fin, http_transcode?, {self(), ref}})
-    await_stream_body_ack(ref, Keyword.get(opts, :send_timeout, :infinity))
+    monitor = Process.monitor(pid)
+    # The stream process sends the ack to the alias. Dropping the alias on a timeout
+    # keeps a late ack out of the caller's mailbox.
+    alias = :erlang.alias([:reply])
+    send(pid, {:stream_body, data, opts, is_fin, http_transcode?, alias})
+    await_stream_body_ack(alias, monitor, Keyword.get(opts, :send_timeout, :infinity))
   end
 
   @doc """
   How long a send may wait for the connection: the `:send_timeout` the server was started with,
   or the time left to the RPC's deadline, whichever is shorter.
+
+  Raises a `:deadline_exceeded` `GRPC.RPCError` if the deadline has already passed. The call
+  is expired then, and an ack can't arrive in no time, so no reply is queued.
   """
   def send_timeout(payload) do
     configured = Map.get(payload, :send_timeout) || :infinity
@@ -242,7 +250,12 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
         configured
 
       deadline ->
-        left = max(deadline - System.monotonic_time(:millisecond), 0)
+        left = deadline - System.monotonic_time(:millisecond)
+
+        if left <= 0 do
+          raise RPCError, status: :deadline_exceeded, message: "Deadline expired"
+        end
+
         if configured == :infinity, do: left, else: min(configured, left)
     end
   end
@@ -328,22 +341,35 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   # The stream process acks after cowboy has taken the data, and cowboy withholds that
-  # while its send buffer is full. The late ack of a timed out send is not flushed.
-  defp await_stream_body_ack(ref, timeout) do
+  # while its send buffer is full. A `:reply` alias is off once the ack arrives. On a timeout
+  # or a `:DOWN`, turn it off, then drop an ack that came before that.
+  defp await_stream_body_ack(alias, monitor, timeout) do
     receive do
-      {^ref, :stream_body_ack} ->
-        Process.demonitor(ref, [:flush])
+      [^alias | :stream_body_ack] ->
+        Process.demonitor(monitor, [:flush])
         :ok
 
-      {:DOWN, ^ref, :process, _pid, _reason} ->
+      {:DOWN, ^monitor, :process, _pid, _reason} ->
+        drop_stream_body_ack(alias)
         exit(:shutdown)
     after
       timeout ->
-        Process.demonitor(ref, [:flush])
+        Process.demonitor(monitor, [:flush])
+        drop_stream_body_ack(alias)
 
         raise RPCError,
           status: :deadline_exceeded,
           message: "Timed out waiting for the client to read a reply"
+    end
+  end
+
+  defp drop_stream_body_ack(alias) do
+    :erlang.unalias(alias)
+
+    receive do
+      [^alias | :stream_body_ack] -> :ok
+    after
+      0 -> :ok
     end
   end
 
@@ -472,9 +498,9 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
   end
 
   # Runs the clauses below, then credits the sender whether or not the send worked.
-  def info({:stream_body, data, opts, is_fin, http_transcode, {sender, ref}}, req, state) do
+  def info({:stream_body, data, opts, is_fin, http_transcode, alias}, req, state) do
     result = info({:stream_body, data, opts, is_fin, http_transcode}, req, state)
-    send(sender, {ref, :stream_body_ack})
+    send(alias, [alias | :stream_body_ack])
     result
   end
 
@@ -669,6 +695,11 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
             :ok
         end
       catch
+        # A reply sent after the handler returned, such as the unary reply, is outside
+        # `server_span`. Keep its status, as for an error raised by the handler.
+        :error, %GRPC.RPCError{} = e ->
+          {:error, e}
+
         kind, e ->
           reason = Exception.normalize(kind, e, __STACKTRACE__)
 

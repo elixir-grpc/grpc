@@ -27,3 +27,11 @@ adapter_opts: [send_timeout: 30_000]
 ## When the client is gone
 
 The server's process for the stream is stuck while it waits for the client, so it can't act on the disconnect itself. Cowboy asks it to shut down and kills it after `shutdown_timeout` (default 5,000 ms, also an option in `adapter_opts`). Until then the producer is still waiting in `send_reply/3`. When the stream's process is killed, `send_reply/3` exits with `:shutdown`, or the exit signal stops the calling process first. Use `try/after` for cleanup.
+
+## Limits
+
+A handler that waits in `send_reply/3` does not read requests. In a bidirectional call, a client that sends all its requests before it reads can hang. The server waits for the client to read, and the client waits for the server to read. The hang ends when `:send_timeout` or the call's deadline passes. To avoid it, make the client read while it sends, for example in a second process. You can also set `:send_timeout` or a deadline.
+
+A reply whose wait timed out stays queued in Cowboy. It is still sent when the client reads again, even though `send_reply/3` raised.
+
+A call whose deadline has already passed raises in `send_reply/3` before it queues the reply.

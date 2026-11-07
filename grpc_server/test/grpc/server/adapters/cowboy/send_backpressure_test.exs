@@ -2,6 +2,10 @@ defmodule GRPC.Server.Adapters.Cowboy.SendBackpressureTest do
   # Not async: the tests sample process state, and other servers' load would blur it.
   use GRPC.Integration.TestCase, async: false
 
+  import GRPC.DataCase, only: [attach_telemetry: 1]
+
+  alias GRPC.Server.Adapters.Cowboy.Handler
+
   # A raw HTTP/2 client that never sends WINDOW_UPDATE holds the server to the initial 65,535 byte
   # windows. A client library would read and credit the data.
   @window 65_535
@@ -11,6 +15,7 @@ defmodule GRPC.Server.Adapters.Cowboy.SendBackpressureTest do
   # Cowboy's own buffers, kept small so they don't hide the queue the server builds.
   @buffers [max_stream_buffer_size: 32_768, max_connection_buffer_size: 65_536]
   @shutdown_timeout 300
+  @send_error [:grpc, :server, :rpc, :send_error]
 
   # Messages the connection can hold before it reports its buffers full, plus the one send
   # that crosses the limit and the one waiting for an ack.
@@ -52,7 +57,38 @@ defmodule GRPC.Server.Adapters.Cowboy.SendBackpressureTest do
           catch
             kind, reason -> send(test, {:producer_stopped, self(), kind, reason})
           end
+
+        4 ->
+          # Stops at the first send that times out. Waits for the test to open the client's
+          # window. The reply of `get_bindings/1` comes after the stream process has acked
+          # the timed out send, so the mailbox is checked after the ack was sent.
+          try do
+            Enum.each(features, &GRPC.Server.send_reply(stream, &1))
+          catch
+            :error, %GRPC.RPCError{status: 4} ->
+              send(test, {:timed_out, self()})
+
+              receive do
+                :window_open -> :ok
+              end
+
+              Handler.get_bindings(stream.payload.pid)
+              {:messages, messages} = Process.info(self(), :messages)
+              send(test, {:mailbox, self(), messages})
+          end
       end
+    end
+  end
+
+  # Cowboy acks a send that fills its buffer, and holds the ack of the next one. A unary
+  # handler that sends one big reply first has its returned reply held, as if other calls
+  # on the connection had filled the buffer.
+  defmodule BigReplyServer do
+    use GRPC.Server, service: Routeguide.RouteGuide.Service
+
+    def get_feature(_point, stream) do
+      GRPC.Server.send_reply(stream, %Routeguide.Feature{name: :binary.copy("x", 200_000)})
+      %Routeguide.Feature{name: "last"}
     end
   end
 
@@ -131,6 +167,66 @@ defmodule GRPC.Server.Adapters.Cowboy.SendBackpressureTest do
           assert_receive {:producer_stopped, ^producer, :error, %GRPC.RPCError{status: 4}}, 5_000
         end,
         headers: [{"grpc-timeout", "200m"}]
+      )
+    end
+
+    test "does not leave a late ack in the sender's mailbox" do
+      with_stalled_client(
+        4,
+        fn producer, _handler, socket ->
+          assert_receive {:timed_out, ^producer}, 5_000
+
+          open_window(socket)
+          send(producer, :window_open)
+
+          assert_receive {:mailbox, ^producer, messages}, 5_000
+
+          refute Enum.any?(messages, &stray_ack?/1),
+                 "late ack in the mailbox: #{inspect(messages)}"
+        end,
+        adapter_opts: [send_timeout: 200] ++ @buffers
+      )
+    end
+
+    test "does not queue a reply when the deadline has passed" do
+      payload = %{pid: self(), send_timeout: nil, deadline: System.monotonic_time(:millisecond)}
+
+      error =
+        assert_raise GRPC.RPCError, fn ->
+          GRPC.Server.Adapters.Cowboy.send_reply(payload, %Routeguide.Feature{}, [])
+        end
+
+      assert error.status == GRPC.Status.deadline_exceeded()
+      refute_received {:stream_body, _, _, _, _, _}
+    end
+
+    test "waits at most the time left to the deadline" do
+      deadline = System.monotonic_time(:millisecond) + 60_000
+      wait = Handler.send_timeout(%{send_timeout: nil, deadline: deadline})
+      assert wait in 1..60_000
+      assert Handler.send_timeout(%{send_timeout: 100, deadline: deadline}) == 100
+    end
+
+    test "a unary reply that times out gets DEADLINE_EXCEEDED, not UNKNOWN" do
+      attach_telemetry(@send_error)
+
+      run_server(
+        BigReplyServer,
+        fn port ->
+          point = Protobuf.encode(%Routeguide.Point{})
+          socket = open_call(port, "/routeguide.RouteGuide/GetFeature", point, [])
+
+          # The send timed out. The stream process is still stuck, so the client can't see
+          # the status yet.
+          Process.sleep(1500)
+          assert_receive {:telemetry, @send_error, _, %{reason: %GRPC.RPCError{status: 4}}}, 5_000
+
+          open_window(socket)
+          assert %{"grpc-status" => "4"} = read_trailers(socket)
+          :gen_tcp.close(socket)
+        end,
+        0,
+        adapter_opts: [send_timeout: 200] ++ @buffers
       )
     end
 
@@ -233,13 +329,23 @@ defmodule GRPC.Server.Adapters.Cowboy.SendBackpressureTest do
     end
   end
 
+  defp stray_ack?([_alias | :stream_body_ack]), do: true
+  defp stray_ack?({_ref, :stream_body_ack}), do: true
+  defp stray_ack?(_other), do: false
+
   defp open_stalled(port, way, extra_headers) do
+    body = Protobuf.encode(%Routeguide.Rectangle{lo: %Routeguide.Point{latitude: way}})
+    open_call(port, "/routeguide.RouteGuide/ListFeatures", body, extra_headers)
+  end
+
+  # Opens a call on a raw socket, and reads nothing.
+  defp open_call(port, path, body, extra_headers) do
     {:ok, socket} = :gen_tcp.connect(~c"localhost", port, [:binary, active: false, nodelay: true])
 
     headers = [
       {":method", "POST"},
       {":scheme", "http"},
-      {":path", "/routeguide.RouteGuide/ListFeatures"},
+      {":path", path},
       {":authority", "localhost:#{port}"},
       {"content-type", "application/grpc"},
       {"te", "trailers"}
@@ -247,7 +353,6 @@ defmodule GRPC.Server.Adapters.Cowboy.SendBackpressureTest do
     ]
 
     {block, _} = :cow_hpack.encode(headers, :cow_hpack.init())
-    body = Protobuf.encode(%Routeguide.Rectangle{lo: %Routeguide.Point{latitude: way}})
 
     :ok =
       :gen_tcp.send(socket, [
@@ -258,6 +363,39 @@ defmodule GRPC.Server.Adapters.Cowboy.SendBackpressureTest do
       ])
 
     socket
+  end
+
+  defp open_window(socket) do
+    :ok =
+      :gen_tcp.send(socket, [
+        :cow_http2.window_update(10_000_000),
+        :cow_http2.window_update(1, 10_000_000)
+      ])
+  end
+
+  # Reads frames until the stream ends, and returns the trailers.
+  defp read_trailers(socket), do: read_frames(socket, <<>>, :cow_hpack.init(), %{})
+
+  defp read_frames(socket, buffer, hpack, acc) do
+    case :cow_http2.parse(buffer) do
+      {:ok, {:headers, 1, fin, _head_fin, block}, rest} ->
+        {headers, hpack} = :cow_hpack.decode(block, hpack)
+        acc = Map.merge(acc, Map.new(headers))
+        if fin == :fin, do: acc, else: read_frames(socket, rest, hpack, acc)
+
+      {:ok, {:data, 1, :fin, _data}, _rest} ->
+        acc
+
+      {:ok, _frame, rest} ->
+        read_frames(socket, rest, hpack, acc)
+
+      {:ignore, rest} ->
+        read_frames(socket, rest, hpack, acc)
+
+      _more ->
+        {:ok, data} = :gen_tcp.recv(socket, 0, 5_000)
+        read_frames(socket, buffer <> data, hpack, acc)
+    end
   end
 
   # Reads a whole reply stream with gun, which credits the server's windows as it reads.
