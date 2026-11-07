@@ -410,8 +410,8 @@ defmodule GRPC.Client.Adapters.GunFlowControlTest do
   describe "http2_opts initial_connection_window_size" do
     # A cowlib sender holds data back only when the stream window is small, so
     # a small connection window does not stall a stream. But cowlib crashes in
-    # `client_preface/1` for a value under 65,535, so the adapter rejects it.
-    test "is validated" do
+    # `common_preface/1` for a value under 65,535, so the adapter rejects it.
+    test "accepts 65_535 and above, rejects the rest" do
       for ok <- [65_535, 65_536, 8_000_000] do
         assert :ok = Gun.validate_opts(http2_opts: %{initial_connection_window_size: ok})
       end

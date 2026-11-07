@@ -42,19 +42,18 @@ if Code.ensure_loaded?(:gun) do
     a frame reopens the window. A stream window under one frame would stall
     cowlib senders, which hold data back when the stream window is under 16,384
     bytes and the data does not fit. A WINDOW_UPDATE would restart such a
-    stream, but Gun sends none before it receives data, and a held-back stream
-    sends none. The adapter therefore also rejects
+    stream. Gun sends none before it receives data. A held-back stream sends
+    none. The adapter therefore also rejects
     `http2_opts: %{initial_stream_window_size: n}` when `n` is not an integer,
     or is under `16_384`. The option is the stream window that Gun announces, so
     the check does not depend on `:response_window`.
 
     `initial_connection_window_size` has no such floor. A cowlib sender holds
-    data back only when the stream window is under 16,384 bytes. A small
-    connection window limits what it sends, and a connection WINDOW_UPDATE
-    restarts it. The adapter rejects a value that is not an integer, or is under
-    `65_535`, for another reason: cowlib's `cow_http2_machine:client_preface/1` subtracts
-    65,535 from it and crashes with a `function_clause` error when the result is
-    negative, so the connection does not open.
+    data back only when the stream window is under 16,384 bytes. The adapter
+    rejects a value that is not an integer, or is under `65_535`, for another
+    reason: cowlib subtracts 65,535 in `cow_http2_machine:common_preface/1`, and
+    `update_window/2` raises `FunctionClauseError`, so the connection does not
+    open.
     """
 
     @behaviour GRPC.Client.Adapter
@@ -112,8 +111,9 @@ if Code.ensure_loaded?(:gun) do
 
     defp validate_stream_window(_http2_opts), do: :ok
 
-    # cowlib crashes in `cow_http2_machine:client_preface/1` for a value under 65,535, the
-    # protocol default of the connection window.
+    # cowlib subtracts 65,535, the protocol default of the connection window, in
+    # `cow_http2_machine:common_preface/1`. `update_window/2` raises
+    # `FunctionClauseError` for a smaller value.
     defp validate_connection_window(%{initial_connection_window_size: window}) do
       if is_integer(window) and window >= @min_connection_window do
         :ok

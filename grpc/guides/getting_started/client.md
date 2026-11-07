@@ -143,8 +143,8 @@ The same floor applies to the HTTP/2 stream window. Unless you set
 `http2_opts: %{initial_stream_window_size: n}`, the adapter sets it to
 `:response_window`. If you set it, `n` must be an integer of 16,384 or more, and
 `GRPC.Stub.connect/2` raises `ArgumentError` for any other value. A WINDOW_UPDATE
-would restart a stalled stream, but Gun sends none before it receives data, and
-a held-back stream sends none.
+would restart a stalled stream. Gun sends none before it receives data. A
+held-back stream sends none.
 
 `http2_opts: %{initial_connection_window_size: n}` has a different floor. A
 small connection window does not stall a stream, but `n` must be an integer of
