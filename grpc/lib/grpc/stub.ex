@@ -745,26 +745,32 @@ defmodule GRPC.Stub do
       interceptor.return_headers?(opts)
   end
 
-  # Strips the headers from the result of `next` and sends them to the calling
-  # process as a message. `next` may run in another process, so the process
-  # dictionary is not used. If the interceptor returns `{:ok, reply}` or
-  # `{:ok, replies}`, the headers go back, so an interceptor further out still
-  # sees them.
+  # Strips the headers from the result of `next` and sends them to the process
+  # that runs the interceptor. `next` may run in another process, so the process
+  # dictionary is not used. When the interceptor returns, that process takes the
+  # last message with `receive ... after 0`. This is right only if the
+  # interceptor waits for every process that calls `next`, for example with
+  # `Task.await/2`. A late call finds the wrapper closed (`mode` is not 0) and
+  # sends nothing, so no message stays in the mailbox. The check and the send
+  # are not atomic, so this is best effort: a call in that gap can leave one
+  # message. If the interceptor returns `{:ok, reply}` or `{:ok, replies}`,
+  # the headers go back, so an interceptor further out still sees them.
   defp call_without_headers(interceptor, opts, stream, req, next, server_stream?) do
     owner = self()
     ref = make_ref()
-    # Tells `drop_trailers/4` where to send the trailers. 0: to `owner`, which
-    # waits for them. 1: to the process that reads the stream. 2: nowhere.
+    # 0: the wrapper is open, and `owner` waits for the messages. 1: the
+    # wrapper is closed, and the process that reads the stream gets the
+    # trailers. 2: the wrapper is closed, and nobody gets a message.
     mode = :atomics.new(1, [])
 
     next = fn s, r ->
       case next.(s, r) do
         {:ok, replies, %{} = headers} when server_stream? ->
-          send(owner, {ref, :headers, headers})
+          send_headers(owner, ref, mode, headers)
           {:ok, drop_trailers(replies, owner, ref, mode)}
 
         {:ok, reply, %{} = headers} ->
-          send(owner, {ref, :headers, headers})
+          send_headers(owner, ref, mode, headers)
           {:ok, reply}
 
         other ->
@@ -781,8 +787,16 @@ defmodule GRPC.Stub do
     end
   end
 
+  defp send_headers(owner, ref, mode, headers) do
+    if :atomics.get(mode, 1) == 0, do: send(owner, {ref, :headers, headers})
+    :ok
+  end
+
   # The trailers item is the last item of the stream. Send it aside as the
-  # stream runs, so the plain interceptor never sees it.
+  # stream runs, so the plain interceptor never sees it. The process that reads
+  # the stream must also run the last item of `restore_headers/5`. If another
+  # process reads it, for example `Task.async_stream/3`, the trailers are lost
+  # and a message stays in that process.
   defp drop_trailers(replies, owner, ref, mode) do
     Stream.flat_map(replies, fn
       {:trailers, trailers} ->
