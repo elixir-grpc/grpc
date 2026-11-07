@@ -36,6 +36,10 @@ defmodule GRPC.Server.Adapters.Cowboy do
       Then the server closes the connection and ends the RPCs that remain (default: `:infinity`,
       which keeps Cowboy's `goaway_complete_timeout`, 3000 ms). This also applies when the
       server stops.
+    * `:max_connection_idle` - Milliseconds that a connection has no open RPC before the server
+      closes it gracefully (default: `:infinity`). The close is the same as for
+      `:max_connection_age`. The time counts from the end of the last RPC. A connection with no RPC
+      yet is not closed. It has no jitter. See the "Connection age" guide.
     * `:send_timeout` - How long `GRPC.Server.send_reply/3` waits for the client to read earlier
       replies, in milliseconds, before it raises a `:deadline_exceeded` `GRPC.RPCError`
       (default: `:infinity`). A call with a deadline waits no longer than the deadline.
