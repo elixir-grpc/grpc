@@ -409,11 +409,38 @@ defmodule GRPC.Client.Adapters.GunFlowControlTest do
 
   describe "http2_opts initial_connection_window_size" do
     # A cowlib sender holds data back only when the stream window is small, so
-    # the connection window has no floor here.
-    test "is not limited by validate_opts" do
-      for size <- [0, 1_000, 16_383, 65_535, 8_000_000] do
-        assert :ok = Gun.validate_opts(http2_opts: %{initial_connection_window_size: size})
+    # a small connection window does not stall a stream. But cowlib crashes in
+    # `common_preface/1` for a value under 65,535, so the adapter rejects it.
+    test "accepts 65_535 and above, rejects the rest" do
+      for ok <- [65_535, 65_536, 8_000_000] do
+        assert :ok = Gun.validate_opts(http2_opts: %{initial_connection_window_size: ok})
       end
+
+      for bad <- [0, 1_000, 16_383, 16_384, 65_534, -1, 65_535.0, "65535", nil] do
+        assert {:error, message} =
+                 Gun.validate_opts(http2_opts: %{initial_connection_window_size: bad})
+
+        assert message =~ ":initial_connection_window_size"
+        assert message =~ "65535"
+        assert message =~ inspect(bad)
+      end
+    end
+
+    test "a value under the floor is rejected by GRPC.Stub.connect/2", %{port: port} do
+      assert_raise ArgumentError, ~r/:initial_connection_window_size.*65535/, fn ->
+        GRPC.Stub.connect("localhost:#{port}",
+          adapter_opts: [http2_opts: %{initial_connection_window_size: 65_534}]
+        )
+      end
+    end
+
+    test "a value at the floor delivers replies", %{port: port} do
+      channel = connect(port, http2_opts: %{initial_connection_window_size: 65_535})
+
+      assert {:ok, %Routeguide.Feature{name: name}} =
+               Stub.get_feature(channel, %Routeguide.Point{latitude: 200_000}, timeout: 10_000)
+
+      assert byte_size(name) == 200_000
     end
   end
 
