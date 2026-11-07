@@ -56,14 +56,14 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       {:ok, pid} = ConnectionProcess.start_link(:http, "localhost", port)
       ref = Process.monitor(pid)
       assert :ok == ConnectionProcess.disconnect(pid)
-      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 1_000
     end
 
     test "returns :ok when the process is already dead", %{port: port} do
       {:ok, pid} = ConnectionProcess.start_link(:http, "localhost", port)
       ref = Process.monitor(pid)
       :ok = ConnectionProcess.disconnect(pid)
-      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 1_000
 
       assert :ok == ConnectionProcess.disconnect(pid)
     end
@@ -572,7 +572,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       # Close the live client first so Cowboy shutdown does not wait on drain.
       ref = Process.monitor(pid)
       :ok = ConnectionProcess.disconnect(pid)
-      assert_receive {:DOWN, ^ref, :process, ^pid, _reason}
+      assert_receive {:DOWN, ^ref, :process, ^pid, _reason}, 1_000
       :ok = GRPC.Server.stop_endpoint(ReconnectExhaustedEndpoint)
 
       exhausted_state = %{state | retry: 1, retry_attempt: 1}
@@ -606,7 +606,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   end
 
   describe "handle_info - connection_closed - with request" do
-    setup :valid_connection
+    setup :quiet_connection
     setup :valid_stream_request
     setup :valid_stream_response
 
@@ -676,7 +676,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
   end
 
   describe "handle_info - connection_closed - with dead stream response process" do
-    setup :valid_connection
+    setup :quiet_connection
     setup :valid_stream_request
     setup :valid_stream_response
 
@@ -1088,7 +1088,7 @@ defmodule GRPC.Client.Adapters.Mint.ConnectionProcessTest do
       # Close the live client first so Cowboy shutdown does not wait on drain.
       ref = Process.monitor(pid)
       :ok = ConnectionProcess.disconnect(pid)
-      assert_receive {:DOWN, ^ref, :process, ^pid, _reason}
+      assert_receive {:DOWN, ^ref, :process, ^pid, _reason}, 1_000
       :ok = GRPC.Server.stop_endpoint(ReconnectUnavailableEndpoint)
 
       failed_state = %{state | retry_attempt: 0, retry_timeout_ms: 10}
