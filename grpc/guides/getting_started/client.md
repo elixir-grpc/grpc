@@ -124,8 +124,8 @@ You can switch to **Mint** (pure Elixir HTTP/2) or other adapters as needed.
 The Gun adapter holds back the server when you read a response slower than it
 arrives. It reads ahead of you by at most `:response_window` bytes per stream
 (default 1 MiB), then stops reopening the HTTP/2 window until you take more
-messages. The queue can hold up to the window plus the HTTP/2 stream window, which
-defaults to the same size, so about 2 MiB by default.
+messages. Gun counts the window in DATA frames of up to 16 KiB, so the default is
+64 frames.
 
 ```elixir
 iex> GRPC.Stub.connect("localhost:50051",
@@ -133,9 +133,23 @@ iex> GRPC.Stub.connect("localhost:50051",
 ...> )
 ```
 
-A larger window gives faster streams on high-latency links, and costs memory per
-stream. `response_window: :infinity` turns the limit off. A message larger than the
-window still arrives in full.
+The least window is 16,384 bytes, one frame. `GRPC.Stub.connect/2` raises
+`ArgumentError` for a smaller value, because a peer built on cowlib (such as
+Cowboy) holds a message back while the stream window is smaller than 16,384
+bytes and the message does not fit. `response_window: :infinity` turns the limit
+off. A message larger than the window still arrives in full.
+
+The queue holds more than the window. After the frames are used up, the server
+can still fill what is left of the HTTP/2 stream window. That window is set to
+the response window, and Gun adds 65,535 bytes to it each time it reopens it. At
+most the queue holds the window in frames, plus the window and 65,535 bytes: about
+2.1 MiB by default.
+
+The window limits bytes, not messages. Each queued entry is one DATA frame, so a
+server that sends one small message per frame fills the same bytes with many
+more entries. With a 64 KiB window and messages of 8 bytes, the queue can hold
+about 16,000 entries. A larger window gives faster streams on high-latency links,
+and costs memory per stream.
 
 ### Using Mint Adapter
 

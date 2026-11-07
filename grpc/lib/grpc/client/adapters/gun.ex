@@ -19,13 +19,30 @@ if Code.ensure_loaded?(:gun) do
     Options in `:adapter_opts` that this adapter reads itself, besides the ones Gun takes:
 
       * `:response_window` - bytes of a response the adapter reads ahead of the
-        caller, per stream (default: `1_048_576`). Gun stops sending
-        the stream's window updates once the window is full, and the adapter
-        reopens it as the caller takes messages, so a slow consumer slows
-        the server instead of filling memory. At most the window plus the HTTP/2
-        stream window (set to the window unless `:http2_opts` gives
-        `:initial_stream_window_size`) is held in the queue. Messages larger
-        than the window still arrive in full. `:infinity` turns the limit off.
+        caller, per stream (default: `1_048_576`). The least value is `16_384`, one
+        HTTP/2 frame. Gun counts the window in DATA frames, `ceil(window / 16_384)`
+        of them. Gun stops sending the stream's window updates once that many
+        frames are unread, and the adapter reopens the window as the caller takes
+        messages, so a slow consumer slows the server instead of filling memory.
+        `:infinity` turns the limit off.
+
+    The window limits bytes more than entries. After the frame count is used up,
+    the peer can still fill what is left of the HTTP/2 stream window. Gun's
+    stream window is set to `:response_window` unless `:http2_opts` gives
+    `:initial_stream_window_size`, and cowlib adds 65,535 bytes each time Gun
+    reopens it (`cow_http2_machine:ensure_window/3`, option
+    `stream_window_margin_size`). The queue therefore holds at most
+    `ceil(window / 16_384)` frames of 16 KiB, plus `window + 65_535` bytes.
+    Each queued entry is one DATA frame. A server that sends one small message
+    per frame fills those bytes with many small entries, for example about 16,000
+    entries of 8 bytes for a 64 KiB window. A larger `max_frame_size_received` in
+    `:http2_opts` raises the byte limit in the same way.
+
+    A message larger than the window still arrives in full, because each read of
+    a frame reopens the window. A window under one frame would stall cowlib
+    senders, which hold data back when the stream window is under 16,384 bytes
+    and the data does not fit. Keep a custom `:initial_stream_window_size` at
+    16,384 or more.
     """
 
     @behaviour GRPC.Client.Adapter
@@ -37,6 +54,9 @@ if Code.ensure_loaded?(:gun) do
     @max_retries 100
     # Default of `:response_window`, in bytes.
     @default_response_window 1_048_576
+    # One frame. A smaller window stalls a cowlib peer, which holds data back
+    # while the stream window is under 16,384 bytes and the data does not fit.
+    @min_response_window 16_384
 
     @impl true
     def validate_opts(opts) when is_list(opts) do
@@ -44,12 +64,13 @@ if Code.ensure_loaded?(:gun) do
         :infinity ->
           :ok
 
-        window when is_integer(window) and window > 0 ->
+        window when is_integer(window) and window >= @min_response_window ->
           :ok
 
         other ->
           {:error,
-           ":response_window must be a positive integer or :infinity, got: #{inspect(other)}"}
+           ":response_window must be :infinity or an integer of at least " <>
+             "#{@min_response_window} bytes (one HTTP/2 frame), got: #{inspect(other)}"}
       end
     end
 
