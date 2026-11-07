@@ -61,7 +61,7 @@ defmodule GRPC.Server.Adapters.Cowboy.ConnectionAge do
           %{
             max_idle: idle,
             counters: counters,
-            test_pid: Map.get(opts, :max_connection_idle_test_pid)
+            test_pid: Map.get(opts, :__max_connection_idle_test_pid__)
           }
         end
 

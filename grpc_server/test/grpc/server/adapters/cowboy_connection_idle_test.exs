@@ -17,6 +17,10 @@ defmodule GRPC.Server.Adapters.CowboyConnectionIdleTest do
     use GRPC.Server, service: Routeguide.RouteGuide.Service
 
     # Tells the test the RPC is open, then waits for the test to release it.
+    # latitude 2: the handler raises. Latitude 3: the handler process exits abnormally.
+    def get_feature(%{latitude: 2}, _stream), do: raise("boom")
+    def get_feature(%{latitude: 3}, _stream), do: Process.exit(self(), :kill)
+
     def get_feature(point, _stream) do
       send(
         :persistent_term.get({GRPC.Server.Adapters.CowboyConnectionIdleTest, :test}),
@@ -46,7 +50,9 @@ defmodule GRPC.Server.Adapters.CowboyConnectionIdleTest do
     test "accepts :infinity and a positive integer" do
       opts = %{max_connection_idle: 1_000}
       assert ConnectionAge.configure(opts) == opts
-      assert ConnectionAge.configure(%{max_connection_idle: :infinity})
+
+      opts = %{max_connection_idle: :infinity}
+      assert ConnectionAge.configure(opts) == opts
     end
   end
 
@@ -122,7 +128,10 @@ defmodule GRPC.Server.Adapters.CowboyConnectionIdleTest do
   describe "the helper" do
     test "wakes, reports open and idle, and ends with the connection" do
       conn =
-        start_fake_connection(%{max_connection_idle: 20, max_connection_idle_test_pid: self()})
+        start_fake_connection(%{
+          max_connection_idle: 20,
+          __max_connection_idle_test_pid__: self()
+        })
 
       assert_receive {:trace, ^conn, :spawn, helper, _mfa}, @ceiling
       helper_ref = Process.monitor(helper)
@@ -198,6 +207,30 @@ defmodule GRPC.Server.Adapters.CowboyConnectionIdleTest do
 
         :ok = :gen_tcp.send(conn.socket, :cow_http2.rst_stream(1, :cancel))
         assert_receive {:DOWN, ^rpc_ref, :process, ^rpc, _}, @ceiling
+
+        assert_receive {:idle_check, :idle}, @ceiling
+        continue_close()
+        assert :closed = next_frame(conn, fn _ -> false end)
+      end)
+    end
+
+    @tag :capture_log
+    test "counts a stream whose handler raises" do
+      run_idle_server(fn port ->
+        conn = h2_connect(port)
+        conn = send_get_feature(conn, 1, 2)
+
+        assert_receive {:idle_check, :idle}, @ceiling
+        continue_close()
+        assert :closed = next_frame(conn, fn _ -> false end)
+      end)
+    end
+
+    @tag :capture_log
+    test "counts a stream whose handler process exits abnormally" do
+      run_idle_server(fn port ->
+        conn = h2_connect(port)
+        conn = send_get_feature(conn, 1, 3)
 
         assert_receive {:idle_check, :idle}, @ceiling
         continue_close()
@@ -295,7 +328,7 @@ defmodule GRPC.Server.Adapters.CowboyConnectionIdleTest do
         [
           max_connection_idle: 100,
           goaway_initial_timeout: 50,
-          max_connection_idle_test_pid: self()
+          __max_connection_idle_test_pid__: self()
         ],
         adapter_opts
       )
@@ -356,7 +389,7 @@ defmodule GRPC.Server.Adapters.CowboyConnectionIdleTest do
     %{socket: socket, buffer: <<>>, hpack: :cow_hpack.init()}
   end
 
-  defp send_get_feature(%{socket: socket, hpack: hpack} = conn, stream_id) do
+  defp send_get_feature(%{socket: socket, hpack: hpack} = conn, stream_id, latitude \\ 1) do
     headers = [
       {":method", "POST"},
       {":scheme", "http"},
@@ -367,7 +400,7 @@ defmodule GRPC.Server.Adapters.CowboyConnectionIdleTest do
     ]
 
     {block, hpack} = :cow_hpack.encode(headers, hpack)
-    body = Routeguide.Point.encode(%Routeguide.Point{latitude: 1, longitude: 1})
+    body = Routeguide.Point.encode(%Routeguide.Point{latitude: latitude, longitude: 1})
     message = <<0, byte_size(body)::32, body::binary>>
 
     :ok =
