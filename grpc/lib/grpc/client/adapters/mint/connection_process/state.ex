@@ -20,7 +20,9 @@ if Code.ensure_loaded?(Mint.HTTP) do
       generation: 1,
       max_concurrent_streams: :unknown,
       settings_known?: false,
-      pings_unacked: 0
+      pings_unacked: 0,
+      notify_drain: false,
+      draining: false
     ]
 
     def new(conn, opts) do
@@ -35,7 +37,8 @@ if Code.ensure_loaded?(Mint.HTTP) do
         retry: opts[:retry] || 0,
         telemetry_metadata: opts[:telemetry_metadata],
         keepalive: opts[:keepalive],
-        keepalive_tolerance: opts[:keepalive_tolerance]
+        keepalive_tolerance: opts[:keepalive_tolerance],
+        notify_drain: opts[:notify_drain] || false
       }
     end
 

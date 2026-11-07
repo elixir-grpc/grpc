@@ -32,7 +32,10 @@ defmodule GRPC.Client.Pool.Implementation do
     # connection instead of all slots aliasing one shared process.
     connect_channel = %GRPC.Channel{base_channel | ref: nil}
 
-    adapter_opts = Keyword.put(config.adapter_opts, :logical_connection_ref, base_channel.ref)
+    adapter_opts =
+      config.adapter_opts
+      |> Keyword.put(:logical_connection_ref, base_channel.ref)
+      |> put_notify_drain(connect_channel.adapter)
 
     case connect_channel.adapter.connect(connect_channel, adapter_opts) do
       {:ok, %GRPC.Channel{} = channel} ->
@@ -60,6 +63,13 @@ defmodule GRPC.Client.Pool.Implementation do
     end
   end
 
+  # A Mint connection process tells the pool when it starts to drain after GOAWAY.
+  # Other adapters do not take the option.
+  defp put_notify_drain(adapter_opts, GRPC.Client.Adapters.Mint),
+    do: Keyword.put(adapter_opts, :notify_drain, true)
+
+  defp put_notify_drain(adapter_opts, _adapter), do: adapter_opts
+
   # Connection processes are started under GRPC.Client.Supervisor, not linked to the
   # pool, so monitoring is how the pool learns a connection has died.
   defp monitor_connection(%GRPC.Channel{adapter_payload: %{conn_pid: conn_pid}})
@@ -67,6 +77,31 @@ defmodule GRPC.Client.Pool.Implementation do
        do: Process.monitor(conn_pid)
 
   defp monitor_connection(_channel), do: nil
+
+  @doc """
+  Marks the channel of a connection that got GOAWAY as draining and opens a
+  replacement. A draining channel gets no new calls. It leaves the pool when its
+  last call ends or its connection process stops.
+  """
+  @spec handle_draining(State.t(), pid()) :: State.t()
+  def handle_draining(state, pid) do
+    case find_channel_by_adapter_payload_connection_pid(state, pid) do
+      {state, %State.Channel{draining: false} = channel} ->
+        state = put_in(state, [:channels, channel.id, :draining], true)
+        {state, _monitor_ref} = maybe_reap_channel({state, nil}, channel)
+        {state, _monitor_refs} = maybe_replenish_pool({state, []})
+        state
+
+      {state, _already_draining_or_unknown} ->
+        state
+    end
+  end
+
+  @doc "The number of channels that are not draining."
+  @spec live_channel_count(State.t()) :: non_neg_integer()
+  def live_channel_count(%State{channels: channels}), do: count_live(channels)
+
+  defp count_live(channels), do: Enum.count(channels, fn {_id, ch} -> not ch.draining end)
 
   @spec handle_connection_process_crush(State.t(), reference()) :: {State.t(), [reference(), ...]}
   def handle_connection_process_crush(state, pid) do
@@ -97,7 +132,7 @@ defmodule GRPC.Client.Pool.Implementation do
   end
 
   defp maybe_replenish_pool({%State{channels: channels, config: config} = state, monitor_refs}) do
-    deficit = config.pool_size - map_size(channels)
+    deficit = config.pool_size - count_live(channels)
 
     {
       if(deficit > 0, do: open_connection_pool(state, deficit), else: state),
@@ -227,19 +262,35 @@ defmodule GRPC.Client.Pool.Implementation do
 
   defp maybe_reap_channel({state, monitor_ref}, %State.Channel{id: channel_id}) do
     case Map.get(state.channels, channel_id) do
-      %State.Channel{open_streams: 0} = ch
-      when map_size(state.channels) > state.config.pool_size ->
-        ch.channel.adapter.disconnect(ch.channel)
-        if ch.monitor_ref, do: Process.demonitor(ch.monitor_ref, [:flush])
+      %State.Channel{open_streams: 0, draining: true} = ch ->
+        {reap_channel(state, ch), monitor_ref}
 
-        new_channels = Map.delete(state.channels, channel_id)
-        new_leases = Map.delete(state.leases_by_channel_id, channel_id)
-
-        {%{state | channels: new_channels, leases_by_channel_id: new_leases}, monitor_ref}
+      %State.Channel{open_streams: 0} = ch ->
+        if count_live(state.channels) > state.config.pool_size do
+          {reap_channel(state, ch), monitor_ref}
+        else
+          {state, monitor_ref}
+        end
 
       _ ->
         {state, monitor_ref}
     end
+  end
+
+  # The connection process of a draining channel can stop on its own at the same time.
+  defp reap_channel(state, %State.Channel{id: channel_id} = ch) do
+    try do
+      ch.channel.adapter.disconnect(ch.channel)
+    catch
+      :exit, _reason -> :ok
+    end
+
+    if ch.monitor_ref, do: Process.demonitor(ch.monitor_ref, [:flush])
+
+    new_channels = Map.delete(state.channels, channel_id)
+    new_leases = Map.delete(state.leases_by_channel_id, channel_id)
+
+    %{state | channels: new_channels, leases_by_channel_id: new_leases}
   end
 
   @spec take_channel(State.t(), pid()) :: {State.Channel.t(), reference(), State.t()}
@@ -262,8 +313,9 @@ defmodule GRPC.Client.Pool.Implementation do
     |> lease_channel(caller_pid)
   end
 
-  defp maybe_open_channels(%{channels: channels} = state) when map_size(channels) > 0, do: state
-  defp maybe_open_channels(%{channels: %{}} = state), do: init(state)
+  defp maybe_open_channels(%{channels: channels} = state) do
+    if count_live(channels) > 0, do: state, else: init(state)
+  end
 
   defp choose_channel(
          %{
@@ -273,7 +325,7 @@ defmodule GRPC.Client.Pool.Implementation do
        ) do
     {
       Enum.find_value(wrapped_channel, fn {_id, %State.Channel{open_streams: open_streams} = ch} ->
-        if is_nil(max_streams) or open_streams < max_streams, do: ch
+        if not ch.draining and (is_nil(max_streams) or open_streams < max_streams), do: ch
       end),
       state
     }
@@ -289,29 +341,31 @@ defmodule GRPC.Client.Pool.Implementation do
     {
       Enum.find_value(wrapped_channel, fn {_id,
                                            %State.Channel{open_streams: open_streams, id: id} = ch} ->
-        if (is_nil(max_streams) or open_streams < max_streams) and id == channel_id, do: ch
+        if not ch.draining and (is_nil(max_streams) or open_streams < max_streams) and
+             id == channel_id,
+           do: ch
       end),
       state
     }
   end
 
-  defp maybe_open_new_connection({nil, %State{channels: channels, config: config} = state})
-       when not is_nil(config.max_pool_overflow) and
-              map_size(channels) >= config.pool_size + config.max_pool_overflow,
-       do: {nil, state}
+  defp maybe_open_new_connection({nil, %State{channels: channels, config: config} = state}) do
+    if not is_nil(config.max_pool_overflow) and
+         count_live(channels) >= config.pool_size + config.max_pool_overflow do
+      {nil, state}
+    else
+      case open_new_connection(config) do
+        %State.Channel{} = wrapped_channel ->
+          state =
+            state
+            |> put_in([:channels, wrapped_channel.id], wrapped_channel)
+            |> put_in([:leases_by_channel_id, wrapped_channel.id], [])
 
-  defp maybe_open_new_connection({nil, %State{config: config} = state}) do
-    case open_new_connection(config) do
-      %State.Channel{} = wrapped_channel ->
-        state =
-          state
-          |> put_in([:channels, wrapped_channel.id], wrapped_channel)
-          |> put_in([:leases_by_channel_id, wrapped_channel.id], [])
+          {wrapped_channel, state}
 
-        {wrapped_channel, state}
-
-      _ ->
-        {nil, state}
+        _ ->
+          {nil, state}
+      end
     end
   end
 

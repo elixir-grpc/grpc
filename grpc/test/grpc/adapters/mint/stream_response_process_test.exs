@@ -293,6 +293,28 @@ defmodule GRPC.Client.Adapters.Mint.StreamResponseProcessTest do
     end
   end
 
+  describe "handle_call/3 - errors after done" do
+    test "ignore an error when the response has ended", %{state: state} do
+      state = %{state | done: true, responses: :queue.in({:trailers, %{}}, :queue.new())}
+
+      response =
+        StreamResponseProcess.handle_call({:consume_response, {:error, "late"}}, self(), state)
+
+      assert {:reply, :ok, new_state, {:continue, :produce_response}} = response
+      assert :queue.to_list(new_state.responses) == [{:trailers, %{}}]
+    end
+
+    test "the caller gets the reply, not a late error" do
+      {:ok, pid} = StreamResponseProcess.start_link(build(:client_stream), true)
+      StreamResponseProcess.consume(pid, :trailers, [{"grpc-status", "0"}])
+      StreamResponseProcess.done(pid)
+      assert :ok == StreamResponseProcess.consume(pid, :error, "late")
+      StreamResponseProcess.done(pid)
+
+      assert [{:trailers, _}] = pid |> StreamResponseProcess.build_stream(true) |> Enum.to_list()
+    end
+  end
+
   describe "handle_call/3 - done" do
     test "set state to done", %{state: state} do
       response =

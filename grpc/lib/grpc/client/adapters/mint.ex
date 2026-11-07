@@ -10,6 +10,29 @@ if Code.ensure_loaded?(Mint.HTTP) do
     mix deps.clean grpc
     mix deps.compile grpc
     ```
+
+    ## Server GOAWAY
+
+    When the server sends GOAWAY with `NO_ERROR`, for example after `:max_connection_age`,
+    the calls that are open finish on the old connection.
+
+    With the connection pool (`config :grpc, pool_enabled: true`), the pool sends new calls
+    to a new connection. It removes the old connection when its last call ends.
+
+    Without the pool, a call that starts during the drain fails with `UNAVAILABLE`. The
+    client connects again when the drain ends. Gun does not have this limit.
+
+    A call that the pool gave to the old connection just before the GOAWAY fails with
+    `UNAVAILABLE` too. The server did not process it, so a retry is safe.
+
+    Mint takes no request body on a connection after GOAWAY, not even the end of the
+    stream. A client-streaming or bidirectional call can be open at GOAWAY without an
+    ended request stream. It cannot send more messages or end the stream. The adapter
+    drops the stream and the call fails with `UNAVAILABLE`. Mint 1.9 sends no RST_STREAM
+    after GOAWAY, so the server sees the stream end when the connection closes.
+
+    A send that times out on a busy connection process exits to the caller. The
+    response stays open.
     """
 
     alias GRPC.Channel
@@ -28,6 +51,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
     ]
     @default_transport_opts [timeout: :infinity, nodelay: true]
     @cleanup_timeout 1_000
+    @unavailable GRPC.Status.unavailable()
 
     @doc """
     Connects using Mint based on the provided configs. Options
@@ -61,7 +85,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
     end
 
     # Every key `connect/2` and the connection pool read from the adapter options.
-    # `:logical_connection_ref` is added by the pool, not by the caller.
+    # `:logical_connection_ref` and `:notify_drain` are added by the pool, not by the caller.
     @valid_opts [
       :retry,
       :transport_opts,
@@ -69,7 +93,8 @@ if Code.ensure_loaded?(Mint.HTTP) do
       :keepalive,
       :keepalive_tolerance,
       :config_options,
-      :logical_connection_ref
+      :logical_connection_ref,
+      :notify_drain
     ]
 
     @impl true
@@ -124,8 +149,8 @@ if Code.ensure_loaded?(Mint.HTTP) do
           opts
         ) do
       {:ok, data, _} = GRPC.Message.to_data(message, opts)
-      :ok = ConnectionProcess.stream_request_body(pid, request_ref, data)
-      if opts[:send_end_stream], do: ConnectionProcess.stream_request_body(pid, request_ref, :eof)
+      :ok = stream_body(stream, pid, request_ref, data)
+      if opts[:send_end_stream], do: stream_body(stream, pid, request_ref, :eof)
       stream
     end
 
@@ -136,7 +161,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
             payload: %{response: {:ok, %{request_ref: request_ref}}}
           } = stream
         ) do
-      ConnectionProcess.stream_request_body(pid, request_ref, :eof)
+      stream_body(stream, pid, request_ref, :eof)
       stream
     end
 
@@ -150,6 +175,31 @@ if Code.ensure_loaded?(Mint.HTTP) do
       ConnectionProcess.cancel(conn_pid, request_ref)
     end
 
+    # After GOAWAY the connection process fails the call with UNAVAILABLE and gives the
+    # error to the response process, so `receive_data/2` returns it. Do not crash here.
+    defp stream_body(stream, pid, request_ref, body) do
+      case ConnectionProcess.stream_request_body(pid, request_ref, body) do
+        {:error, %GRPC.RPCError{status: @unavailable}} -> :ok
+        result -> result
+      end
+    catch
+      # The connection process is gone, or died during the call (`:noproc`, `:normal`,
+      # `:killed`, `:shutdown` or a crash). Nothing may have told the response process,
+      # so end it here. Else `receive_data/2` waits forever.
+      # A `:timeout` means the process is alive but busy. The exit goes to the caller as
+      # before, and the response stays open, because the request may still go through.
+      :exit, {reason, {GenServer, :call, _args}} when reason != :timeout ->
+        fail_response(stream)
+    end
+
+    # The response process ignores this error if the response has ended.
+    defp fail_response(%{payload: %{stream_response_pid: pid}}) do
+      error = GRPC.RPCError.exception(@unavailable, "the connection is closed")
+      StreamResponseProcess.consume(pid, :error, error)
+      StreamResponseProcess.done(pid)
+      :ok
+    end
+
     defp validate_known_opts(opts) do
       case for({key, _value} <- opts, key not in @valid_opts, do: key) do
         [] -> :ok
@@ -160,7 +210,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
     defp unknown_opts_message(unknown) do
       message =
         "unknown option(s) for the Mint adapter: #{inspect(unknown)}. " <>
-          "Valid options are: #{inspect(@valid_opts -- [:logical_connection_ref])}."
+          "Valid options are: #{inspect(@valid_opts -- [:logical_connection_ref, :notify_drain])}."
 
       if :custom_opts in unknown do
         message <>
@@ -217,6 +267,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       # Pooled connections open with `ref: nil`, so the pool passes the logical ref separately
       {logical_ref, opts} = Keyword.pop(opts, :logical_connection_ref, channel.ref)
       {keepalive_opts, opts} = Keyword.split(opts, [:keepalive, :keepalive_tolerance])
+      {notify_drain, opts} = Keyword.pop(opts, :notify_drain, false)
       module_opts = Application.get_env(:grpc, __MODULE__, config_opts)
 
       transport_metadata = %{
@@ -230,6 +281,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
         |> connect_opts(opts)
         |> merge_opts(module_opts)
         |> Keyword.put(:retry, retry)
+        |> Keyword.put(:notify_drain, notify_drain)
         |> Keyword.put(:grpc_transport_metadata, transport_metadata)
         |> Keyword.merge(keepalive_opts)
 
