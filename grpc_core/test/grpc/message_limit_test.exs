@@ -58,8 +58,9 @@ defmodule GRPC.MessageLimitTest do
                GRPC.Message.from_data(%{compressor: GRPC.Compressor.Gzip}, body)
     end
 
-    test "leaves a short, malformed buffer to the existing error" do
-      assert {:error, %RPCError{status: 3}} = GRPC.Message.from_data(%{compressor: nil}, <<0, 0>>)
+    test "leaves a short, malformed buffer to the INTERNAL error" do
+      assert {:error, %RPCError{status: 13}} =
+               GRPC.Message.from_data(%{compressor: nil}, <<0, 0>>)
     end
   end
 

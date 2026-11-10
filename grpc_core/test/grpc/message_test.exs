@@ -38,4 +38,15 @@ defmodule GRPC.MessageTest do
     assert {:ok, base64_payload, _} = GRPC.Message.to_data(message, %{codec: GRPC.Codec.WebText})
     assert {message, ""} == GRPC.Message.from_data(Base.decode64!(base64_payload))
   end
+
+  # Regression for #650: parse_trailers/1 raised a MatchError on the line without a colon.
+  test "from_data/2 gives INTERNAL, rather than raising, for a trailers line without a colon" do
+    block = "grpc-status: 0\r\nnocolon"
+
+    assert {:error, %GRPC.RPCError{status: 13}} =
+             GRPC.Message.from_data(
+               %{compressor: nil},
+               <<0x80, byte_size(block)::32, block::binary>>
+             )
+  end
 end
