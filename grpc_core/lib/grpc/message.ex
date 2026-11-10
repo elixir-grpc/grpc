@@ -136,27 +136,50 @@ defmodule GRPC.Message do
          )}
 
       <<@trailers_flag, length::big-32, message::bytes-size(length), rest::binary>> ->
-        {:trailers, parse_trailers(message), rest}
+        case parse_trailers(message) do
+          {:ok, trailers} ->
+            {:trailers, trailers, rest}
+
+          :error ->
+            {:error, RPCError.exception(status: :internal, message: "Trailers are malformed.")}
+        end
 
       _ ->
-        {:error, RPCError.exception(status: :invalid_argument, message: "Message is malformed.")}
+        {:error, RPCError.exception(status: :internal, message: "Message is malformed.")}
     end
   end
 
   defp decode_data(%{compressor: compressor}, data) do
     case data do
       <<1, length::big-32, message::bytes-size(length), rest::binary>> ->
-        {:ok, compressor.decompress(message), rest}
+        decompress(compressor, message, rest)
 
       <<0, length::big-32, message::bytes-size(length), rest::binary>> ->
         {:ok, message, rest}
 
       <<@trailers_flag, length::big-32, message::bytes-size(length), rest::binary>> ->
-        {:trailers, parse_trailers(message), rest}
+        case parse_trailers(message) do
+          {:ok, trailers} ->
+            {:trailers, trailers, rest}
+
+          :error ->
+            {:error, RPCError.exception(status: :internal, message: "Trailers are malformed.")}
+        end
 
       _ ->
-        {:error, RPCError.exception(status: :invalid_argument, message: "Message is malformed.")}
+        {:error, RPCError.exception(status: :internal, message: "Message is malformed.")}
     end
+  end
+
+  defp decompress(compressor, message, rest) do
+    {:ok, compressor.decompress(message), rest}
+  rescue
+    error in RPCError ->
+      {:error, error}
+
+    _ ->
+      {:error,
+       RPCError.exception(status: :internal, message: "Message could not be decompressed.")}
   end
 
   # The length prefix is checked before the message is sliced out of the buffer.
@@ -184,12 +207,15 @@ defmodule GRPC.Message do
     end
   end
 
+  # Gives `:error` for a line without a colon.
   defp parse_trailers(data) do
     data
     |> String.split("\r\n")
-    |> Enum.reduce(%{}, fn line, acc ->
-      [k, v] = String.split(line, ":", parts: 2)
-      Map.put(acc, k, String.trim(v))
+    |> Enum.reduce_while({:ok, %{}}, fn line, {:ok, acc} ->
+      case String.split(line, ":", parts: 2) do
+        [key, value] -> {:cont, {:ok, Map.put(acc, key, String.trim(value))}}
+        [_no_colon] -> {:halt, :error}
+      end
     end)
   end
 

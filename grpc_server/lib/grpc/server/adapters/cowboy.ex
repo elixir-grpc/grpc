@@ -169,9 +169,15 @@ defmodule GRPC.Server.Adapters.Cowboy do
         {message, new_s}
 
       _ ->
-        read_stream(Map.put(s, :need_more, true))
+        read_stream_next(s)
     end
   end
+
+  defp read_stream_next(%{finished: true}) do
+    raise GRPC.RPCError, status: :internal, message: "The request body ends inside a message"
+  end
+
+  defp read_stream_next(s), do: read_stream(Map.put(s, :need_more, true))
 
   @impl true
   def send_reply(%{pid: pid} = payload, data, opts) do

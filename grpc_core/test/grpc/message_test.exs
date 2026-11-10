@@ -49,4 +49,10 @@ defmodule GRPC.MessageTest do
                <<0x80, byte_size(block)::32, block::binary>>
              )
   end
+
+  # Regression for #650: the compressor's :data_error escaped from_data/2.
+  test "from_data/2 gives INTERNAL, rather than raising, for a message that does not decompress" do
+    assert {:error, %GRPC.RPCError{status: 13}} =
+             GRPC.Message.from_data(%{compressor: GRPC.Compressor.Gzip}, <<1, 3::32, "abc">>)
+  end
 end

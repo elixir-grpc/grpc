@@ -309,62 +309,97 @@ defmodule GRPC.Server do
        ) do
     {:ok, data} = adapter.read_body(payload)
 
-    body =
-      if function_exported?(codec, :unpack_from_channel, 1) do
-        codec.unpack_from_channel(data)
-      else
-        data
-      end
-
-    # Checked here, as well as in GRPC.Message.from_data/2, because this package
-    # can run against a grpc_core release that predates the check.
-    with :ok <- check_message_length(body) do
-      case GRPC.Message.from_data(stream, body) do
-        {:ok, message, <<>>} ->
-          request = codec.decode(message, req_mod)
-
-          call_with_interceptors(res_stream, func_name, stream, request)
-
-        resp = {:error, _} ->
-          resp
-      end
+    with {:ok, body} <- unpack_body(codec, data),
+         {:ok, message} <- validate_message(stream, body),
+         {:ok, request} <- decode_request(codec, message, req_mod) do
+      call_with_interceptors(res_stream, func_name, stream, request)
     end
   end
 
   defp do_handle_request(
          true,
          res_stream,
-         %{
-           request_mod: req_mod,
-           codec: codec,
-           adapter: adapter,
-           payload: payload,
-           compressor: compressor
-         } = stream,
+         %{adapter: adapter, payload: payload} = stream,
          func_name
        ) do
     reading_stream =
       adapter.reading_stream(payload)
       |> Elixir.Stream.map(fn {flag, message} ->
         check_message_length!(message)
-
-        cond do
-          flag == 0 ->
-            codec.decode(message, req_mod)
-
-          flag == 1 && compressor != nil ->
-            compressor.decompress(message)
-            |> codec.decode(req_mod)
-
-          flag == 1 && compressor == nil ->
-            raise RPCError.exception(
-                    status: :invalid_argument,
-                    message: "grpc encoding is specified, but message is not compressed"
-                  )
-        end
+        decode_stream_message!(stream, flag, message)
       end)
 
     call_with_interceptors(res_stream, func_name, stream, reading_stream)
+  end
+
+  defp unpack_body(codec, data) do
+    if function_exported?(codec, :unpack_from_channel, 1) do
+      {:ok, codec.unpack_from_channel(data)}
+    else
+      {:ok, data}
+    end
+  rescue
+    error -> {:error, internal_error("Could not decode the request body: ", error)}
+  end
+
+  defp validate_message(_stream, <<>>),
+    do: {:error, RPCError.exception(:unimplemented, "A unary call takes one message, got none")}
+
+  defp validate_message(stream, body) do
+    case GRPC.Message.from_data(stream, body) do
+      {:ok, message, <<>>} ->
+        {:ok, message}
+
+      {:ok, _message, <<_flag, length::32, _::binary-size(length), _::binary>>} ->
+        {:error, RPCError.exception(:unimplemented, "A unary call takes one message, got more")}
+
+      {:ok, _message, _not_a_message} ->
+        {:error, RPCError.exception(:internal, "The request has bytes after its message")}
+
+      {:trailers, _trailers, _rest} ->
+        {:error, RPCError.exception(:internal, "A request cannot carry a trailers frame")}
+
+      {:error, _error} = error ->
+        error
+    end
+  end
+
+  defp decode_request(codec, data, req_mod) do
+    {:ok, codec.decode(data, req_mod)}
+  rescue
+    error -> {:error, internal_error("Could not decode the request message: ", error)}
+  end
+
+  defp decode_stream_message!(%{codec: codec, request_mod: req_mod} = stream, flag, message) do
+    case decode_request(codec, decompress!(stream, flag, message), req_mod) do
+      {:ok, request} -> request
+      {:error, error} -> raise error
+    end
+  end
+
+  defp decompress!(_stream, 0, message), do: message
+
+  defp decompress!(%{compressor: nil}, 1, _message),
+    do: raise_internal!("The compressed flag is set, but grpc-encoding names no compressor")
+
+  defp decompress!(%{compressor: compressor}, 1, message) do
+    compressor.decompress(message)
+  rescue
+    error in RPCError -> reraise error, __STACKTRACE__
+    error -> raise internal_error("Could not decompress the request message: ", error)
+  end
+
+  defp decompress!(_stream, flag, _message) when flag in [:trailers, 0x80],
+    do: raise_internal!("A request cannot carry a trailers frame")
+
+  defp decompress!(_stream, flag, _message),
+    do: raise_internal!("A request message cannot have flag #{flag}")
+
+  defp raise_internal!(message), do: raise(RPCError, status: :internal, message: message)
+
+  defp internal_error(prefix, error) do
+    reason = error |> Exception.message() |> String.replace(~r/\s+/, " ") |> String.trim()
+    RPCError.exception(:internal, prefix <> reason)
   end
 
   # `:max_message_length` bounds one message in either direction; see
@@ -373,15 +408,6 @@ defmodule GRPC.Server do
   def max_message_length do
     Application.get_env(:grpc, :max_message_length, Bitwise.bsl(1, 31))
   end
-
-  defp check_message_length(<<_flag::8, length::32, _::binary>>) do
-    case message_too_large(length) do
-      nil -> :ok
-      error -> {:error, error}
-    end
-  end
-
-  defp check_message_length(_body), do: :ok
 
   defp check_message_length!(message) do
     if error = message_too_large(byte_size(message)), do: raise(error)

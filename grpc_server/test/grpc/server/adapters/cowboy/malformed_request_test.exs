@@ -54,11 +54,9 @@ defmodule GRPC.Server.Adapters.Cowboy.MalformedRequestTest do
      [], frame.(<<1, 2, 3>>, 0), :internal},
     {"a unary gzip message that does not decompress", say_hello, "application/grpc", gzip,
      frame.("not gzip", 1), :internal},
-
     {"a unary call with a second message", say_hello, "application/grpc", [],
      frame.(hello, 0) <> frame.(hello, 0), :unimplemented},
     {"a unary call with no message", say_hello, "application/grpc", [], <<>>, :unimplemented},
-
     {"a client-stream field with wire type 7", record_route, "application/grpc", [],
      frame.(point, 0) <> frame.(<<0x0F>>, 0), :internal},
     {"a client-stream trailers frame", record_route, "application/grpc", [],
