@@ -24,7 +24,7 @@
 
   * A `GRPC.RPCError` raised while the Cowboy adapter sends the reply or the trailers, after the handler returned, or when no handler matches the request, now keeps its status. Before, the client got `UNKNOWN`. For example, a known path called with an HTTP method that the RPC does not accept now gets `UNIMPLEMENTED` (#496).
 
-  * A unary request body that is cut short, or a request stream message with the compressed flag and no `grpc-encoding`, now gets `INTERNAL` instead of `INVALID_ARGUMENT`. A unary call with no message gets `UNIMPLEMENTED`. These are the codes grpc/grpc's `doc/statuscodes.md` gives a library; it never generates `INVALID_ARGUMENT` (#650).
+  * A unary request body that is cut short, or a request stream message with the compressed flag and no `grpc-encoding`, now gets `INTERNAL` instead of `INVALID_ARGUMENT`. A unary call with no message gets `UNIMPLEMENTED`. These are the codes grpc/grpc's `doc/statuscodes.md` gives a library; it never generates `INVALID_ARGUMENT` (#651).
 
 ### Bug Fixes
 
@@ -35,7 +35,7 @@
   * Request data that waits for its handler is credited to the client once, when the handler reads it. It was credited on arrival and again on read, so the receive window grew without bound and a client was never held back. A handler that stops reading now holds its client to the stream window (`initial_stream_window_size`).
   * Unless set, the Cowboy adapter's connection window is 16 stream windows (`initial_connection_window_size`, `connection_window_margin_size`), so streams whose handlers stop reading can't take the whole connection window from the other streams on it.
   * Servers started with `GRPC.Server.start/3` (no endpoint) now each keep their own routes. The last server started used to replace the routes of the others, and a call could fail with UNIMPLEMENTED or 404. Servers started with an endpoint are not changed (#649).
-  * A request message that does not decode now gets `INTERNAL`, with a `grpc-message` that says what failed, and a unary call with a second message gets `UNIMPLEMENTED`. Before, the codec's exception raised in the RPC process: the client got `UNKNOWN` "Internal Server Error", and the exception reached the `exception_log_filter` as a crash, or for a request stream was also logged past it. It is now a `GRPC.RPCError`, which a filter can drop by status. This covers protobuf, JSON, Erlpack and gRPC-Web text bodies, a gzip message that does not decompress, a trailers frame or unknown flag byte in a request, and bytes after a unary message. A request stream that ends inside a message, which got no reply at all, now gets `INTERNAL` too. This needs `grpc_core` 1.0.7 (#650).
+  * A request message that does not decode now gets an error code `INTERNAL`, with a `grpc-message` that says what failed, as opposed to crashing the process.
 
 ## v1.0.6 (2026-11-06)
 
