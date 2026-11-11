@@ -39,7 +39,6 @@ defmodule GRPC.MessageTest do
     assert {message, ""} == GRPC.Message.from_data(Base.decode64!(base64_payload))
   end
 
-  # Regression for #650: parse_trailers/1 raised a MatchError on the line without a colon.
   test "from_data/2 gives INTERNAL, rather than raising, for a trailers line without a colon" do
     block = "grpc-status: 0\r\nnocolon"
 
@@ -50,7 +49,6 @@ defmodule GRPC.MessageTest do
              )
   end
 
-  # Regression for #650: the compressor's :data_error escaped from_data/2.
   test "from_data/2 gives INTERNAL, rather than raising, for a message that does not decompress" do
     assert {:error, %GRPC.RPCError{status: 13}} =
              GRPC.Message.from_data(%{compressor: GRPC.Compressor.Gzip}, <<1, 3::32, "abc">>)
