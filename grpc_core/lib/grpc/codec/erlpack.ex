@@ -12,6 +12,11 @@ defmodule GRPC.Codec.Erlpack do
       release, and a materialized fun reaching a call site enables remote code
       execution. None of these types are valid in a gRPC payload.
 
+  Compressed payloads are refused too (GHSA-gwv3-832j-g8ch). The VM inflates a
+  compressed term in full inside `:erlang.binary_to_term/2`, before any check in
+  this module can run, so a few hundred kilobytes can expand to gigabytes.
+  `encode/2` never compresses, so a peer using this codec has no need to.
+
   As a consequence, any atom referenced by an incoming payload must already
   exist in the receiving node, which is the case for loaded protobuf structs.
   """
@@ -24,6 +29,11 @@ defmodule GRPC.Codec.Erlpack do
 
   def encode(struct, _opts \\ []) do
     :erlang.term_to_binary(struct)
+  end
+
+  # <<131, 80, ...>> is the version byte followed by the COMPRESSED tag.
+  def decode(<<131, 80, _rest::binary>>, _module) do
+    raise ArgumentError, "refusing to decode compressed erlpack payload"
   end
 
   def decode(binary, _module) do

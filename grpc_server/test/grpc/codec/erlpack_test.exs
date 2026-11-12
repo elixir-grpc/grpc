@@ -172,6 +172,27 @@ defmodule GRPC.Codec.ErlpackTest do
       end
     end
 
+    test "refuses compressed terms before inflating them (GHSA-gwv3-832j-g8ch)" do
+      # 64 MiB of zeros compresses to about 64 KB. Decoding must raise instead of
+      # inflating it.
+      binary = :erlang.term_to_binary(:binary.copy(<<0>>, 64 * 1024 * 1024), [:compressed])
+      assert <<131, 80, _::binary>> = binary
+      assert byte_size(binary) < 1024 * 1024
+
+      assert_raise ArgumentError, ~r/compressed/, fn ->
+        Erlpack.decode(binary, AnyModule)
+      end
+    end
+
+    test "refuses small compressed terms too" do
+      binary = :erlang.term_to_binary({:ok, :binary.copy("payload", 100)}, [:compressed])
+      assert <<131, 80, _::binary>> = binary
+
+      assert_raise ArgumentError, ~r/compressed/, fn ->
+        Erlpack.decode(binary, AnyModule)
+      end
+    end
+
     test "still decodes payloads referencing existing atoms" do
       term = {:ok, :existing_atom, "payload"}
       binary = :erlang.term_to_binary(term)
