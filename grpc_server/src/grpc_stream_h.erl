@@ -42,8 +42,20 @@ init(StreamID, Req=#{ref := Ref}, Opts) ->
 	%% Last, so a stream that fails in init/3 is never counted. Cowboy does not call
 	%% terminate/3 for it.
 	ok = 'Elixir.GRPC.Server.Adapters.Cowboy.ConnectionAge':stream_opened(),
-	{[{spawn, Pid, Shutdown}|Commands],
+	{[{spawn, Pid, Shutdown}|Commands] ++ initial_flow(Req, Opts),
 		#state{next=Next, ref=Ref, pid=Pid, expect=Expect}}.
+
+%% Flow is otherwise requested only for data that has arrived. Cowboy tops up the
+%% connection window only to match requested flow, and a call refused while the
+%% client still had data in flight leaves that data uncredited. Once the window is
+%% empty no data can arrive, no flow is requested, and every call on the connection
+%% waits. One frame of flow up front makes any new stream with a body top up the
+%% window. It also keeps a single frame from exceeding the stream's flow, which
+%% would put the connection flow out of step with its streams'. GHSA-7x9q-vvph-rjcr.
+initial_flow(#{has_body := true}, Opts) ->
+	[{flow, maps:get(max_frame_size_received, Opts, 16384)}];
+initial_flow(_, _) ->
+	[].
 
 %% Ignore the expect header in HTTP/1.0.
 expect(#{version := 'HTTP/1.0'}) ->
