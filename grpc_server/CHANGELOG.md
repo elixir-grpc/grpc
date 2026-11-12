@@ -24,6 +24,8 @@
 
   * A `GRPC.RPCError` raised while the Cowboy adapter sends the reply or the trailers, after the handler returned, or when no handler matches the request, now keeps its status. Before, the client got `UNKNOWN`. For example, a known path called with an HTTP method that the RPC does not accept now gets `UNIMPLEMENTED` (#496).
 
+  * A unary request body that is cut short, or a request stream message with the compressed flag and no `grpc-encoding`, now gets `INTERNAL` instead of `INVALID_ARGUMENT`. A unary call with no message gets `UNIMPLEMENTED`. These are the codes grpc/grpc's `doc/statuscodes.md` gives a library; it never generates `INVALID_ARGUMENT` (#651).
+
 ### Bug Fixes
 
   * `GRPC.Server.send_reply/3` now waits until the Cowboy adapter has taken the reply, so a client that reads slowly slows the server stream. Before, replies piled up in the stream process's mailbox without limit. This also covers `GRPC.Stream.run_with/3`. The wait is bounded by Cowboy's `max_stream_buffer_size` and `max_connection_buffer_size`, by the call's deadline, and by the new `:send_timeout` adapter option (default `:infinity`). If the stream's process is gone, `send_reply/3` exits with `:shutdown`. See the "Slow clients and server streams" guide (#496).
@@ -33,6 +35,7 @@
   * Request data that waits for its handler is credited to the client once, when the handler reads it. It was credited on arrival and again on read, so the receive window grew without bound and a client was never held back. A handler that stops reading now holds its client to the stream window (`initial_stream_window_size`).
   * Unless set, the Cowboy adapter's connection window is 16 stream windows (`initial_connection_window_size`, `connection_window_margin_size`), so streams whose handlers stop reading can't take the whole connection window from the other streams on it.
   * Servers started with `GRPC.Server.start/3` (no endpoint) now each keep their own routes. The last server started used to replace the routes of the others, and a call could fail with UNIMPLEMENTED or 404. Servers started with an endpoint are not changed (#649).
+  * A request message that does not decode now gets an error code `INTERNAL`, with a `grpc-message` that says what failed, as opposed to crashing the process.
 
 ## v1.0.6 (2026-11-06)
 
