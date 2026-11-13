@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.1.0 - 2026-11-13
+
 ### Enhancements
 
   * New Cowboy adapter options `:max_connection_age` and `:max_connection_age_grace`, in milliseconds. After the age, the server sends GOAWAY, lets open calls finish, and closes the connection. After the grace, it ends calls that are still open. The age has ±10% jitter and counts from the first call on the connection. Both default to `:infinity`, which changes nothing. Clients that balance over many servers, for example behind a Kubernetes headless service, then reconnect and find new replicas. The new "Connection age" guide has the details and the parts of gRPC proposal A9 that are not done: server keepalive PINGs and the check of client PINGs. Cowboy must change for both (#355).

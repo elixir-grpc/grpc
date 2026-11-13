@@ -2,7 +2,7 @@ defmodule GRPC.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/elixir-grpc/grpc/tree/master/grpc"
-  @version "1.0.6"
+  @version "1.1.0"
 
   def project do
     [
@@ -29,8 +29,8 @@ defmodule GRPC.MixProject do
 
   defp deps do
     [
-      {:grpc_core, path: "../grpc_core"},
-      # {:grpc_core, "~> 1.0.6"},
+      # {:grpc_core, path: "../grpc_core"},
+      {:grpc_core, "~> 1.1.0"},
       {:gun, "~> 2.7.0", optional: true},
       {:mint, "~> 1.9", optional: true},
       {:castore, "~> 1.0", optional: true},

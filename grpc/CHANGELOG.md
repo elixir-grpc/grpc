@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.1.0 - 2026-11-13
+
 ### Enhancements
 
   * `config :grpc, max_message_length: bytes` now limits the size of one message the client sends or receives, and `guides/advanced/message_size_limits.md` documents it (#387). The default stays 2 GiB. A request over the limit is not sent: a unary call returns `{:error, %GRPC.RPCError{status: RESOURCE_EXHAUSTED}}`, and `GRPC.Stub.send_request/3` raises. A reply message over the limit fails with the same status, as a unary result, or on a response stream as an `{:error, _}` item, with both adapters. The client checks the length prefix itself, so this works with `grpc_core` 1.0.6, and it checks it in the first chunk that holds it: the Gun and Mint adapters then cancel the request instead of reading the rest of the message. Before, an oversize request crashed the adapter with a `MatchError`. The Mint adapter no longer crashes its response process when `GRPC.Message.get_message/2` raises, for instance on a gzip bomb: it returns the `GRPC.RPCError` instead.
@@ -24,7 +26,7 @@
   * The optional `:gun` dependency is now `~> 2.7.0` (was `~> 2.4.0`), which picks up the security fixes in gun 2.5, 2.6 and 2.7. Gun 2.6 and later require Erlang/OTP 27 or newer, so apps that use the Gun adapter must run on OTP 27+.
   * Test suites that define a Mox mock for the `GRPC.Client.Adapter` behaviour must stub the new validation callback. Mox generates optional callbacks on mocks, so `GRPC.Client.Connection` calls `validate_opts/1` on the mock and Mox raises `UnexpectedCallError` when it is not stubbed. Adapters that implement the behaviour with `@behaviour` and do not define `validate_opts/1` are unaffected.
   * The Mint adapter now returns `%GRPC.RPCError{}` instead of a bare string when a request or a queued stream body write hits a closed connection (`UNAVAILABLE`) or a cancelled request (`CANCELLED`), matching how the Gun adapter surfaces transport errors.
-  * Connection errors under the Mint adapter now uniformly surface errors with gRPC status `UNAVAILABLE` instead of `UNKNOWN`. 
+* Connection errors under the Mint adapter now uniformly surface errors with gRPC status `UNAVAILABLE` instead of `UNKNOWN`.
 
 ### Bug Fixes
 

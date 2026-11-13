@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.1.0 - 2026-11-13
+
 ### Behavior Changes
 
   * `GRPC.Message.from_data/2` answers a buffer that does not hold a whole message, such as a body cut short, with `INTERNAL` instead of `INVALID_ARGUMENT` as per [the standard](https://github.com/grpc/grpc/blob/master/doc/statuscodes.md).
