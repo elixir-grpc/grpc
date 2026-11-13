@@ -19,6 +19,10 @@ defmodule GRPC.Server.Adapters.Cowboy.MalformedRequestTest do
 
     def record_route(points, _stream),
       do: %Routeguide.RouteSummary{point_count: Enum.count(points)}
+
+    def route_chat(notes, stream) do
+      Enum.each(notes, &GRPC.Server.send_reply(stream, &1))
+    end
   end
 
   @servers [Greeter, RouteGuide]
@@ -27,9 +31,11 @@ defmodule GRPC.Server.Adapters.Cowboy.MalformedRequestTest do
   frame = fn payload, flag -> <<flag, byte_size(payload)::32, payload::binary>> end
   hello = Protobuf.encode(%Helloworld.HelloRequest{name: "hi"})
   point = Protobuf.encode(%Routeguide.Point{latitude: 1, longitude: 2})
+  note = Protobuf.encode(%Routeguide.RouteNote{message: "hi"})
 
   say_hello = "/helloworld.Greeter/SayHello"
   record_route = "/routeguide.RouteGuide/RecordRoute"
+  route_chat = "/routeguide.RouteGuide/RouteChat"
   gzip = [{"grpc-encoding", "gzip"}]
 
   # {claim, path, content-type, headers, body, status}
@@ -66,7 +72,17 @@ defmodule GRPC.Server.Adapters.Cowboy.MalformedRequestTest do
     {"a client-stream gzip message that does not decompress", record_route, "application/grpc",
      gzip, frame.("not gzip", 1), :internal},
     {"a client stream that ends inside a message", record_route, "application/grpc", [],
-     frame.(point, 0) <> <<0, 5::32, "ab">>, :internal}
+     frame.(point, 0) <> <<0, 5::32, "ab">>, :internal},
+    # GHSA-c2h9-f9cc-27xh: before the stream reader stopped on a body that had ended
+    # inside a message, these spun one scheduler and never answered.
+    {"a client stream that sends only a prefix declaring 100 bytes", record_route,
+     "application/grpc", [], <<0, 0, 0, 0, 100>>, :internal},
+    {"a client stream that ends inside the 5-byte prefix", record_route, "application/grpc", [],
+     <<0, 0, 0>>, :internal},
+    {"a bidi stream that sends only a prefix declaring 100 bytes", route_chat, "application/grpc",
+     [], <<0, 0, 0, 0, 100>>, :internal},
+    {"a bidi stream that ends inside a message", route_chat, "application/grpc", [],
+     frame.(note, 0) <> <<0, 5::32, "ab">>, :internal}
   ]
 
   setup_all do
