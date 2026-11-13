@@ -250,8 +250,10 @@ defmodule GRPC.Server.Adapters.Cowboy do
     {path, GRPC.Server.Adapters.Cowboy.Handler, {endpoint, server, path, Enum.into(opts, %{})}}
   end
 
+  # The handler reads `:http_transcode_route` to tell this route from a plain gRPC one.
   defp build_route({:http_transcode, {_method, path, match}}, endpoint, server, opts) do
-    {match, GRPC.Server.Adapters.Cowboy.Handler, {endpoint, server, path, Enum.into(opts, %{})}}
+    opts = opts |> Enum.into(%{}) |> Map.put(:http_transcode_route, true)
+    {match, GRPC.Server.Adapters.Cowboy.Handler, {endpoint, server, path, opts}}
   end
 
   defp cowboy_start_args(endpoint, servers, port, opts) do

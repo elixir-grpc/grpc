@@ -26,6 +26,8 @@
 
   * A unary request body that is cut short, or a request stream message with the compressed flag and no `grpc-encoding`, now gets `INTERNAL` instead of `INVALID_ARGUMENT`. A unary call with no message gets `UNIMPLEMENTED`. These are the codes grpc/grpc's `doc/statuscodes.md` gives a library; it never generates `INVALID_ARGUMENT` (#651).
 
+  * The Cowboy adapter now treats a route from an HttpRule as transcoded whatever the `Content-Type` says, with the JSON codec. Before, the header chose the path, and a request to a transcoded URL with `application/grpc` or `application/grpc-web` skipped the path bindings, so its body could set a field the URL fixes, such as `name` in `/v1/messages/{name}`. A CORS preflight is not changed. A call to a transcoded URL with a gRPC body now gets an error from the JSON decoder. A request-streaming call in transcoding mode now gets `UNIMPLEMENTED`, because transcoding maps one request message and a stream has no path binding to apply (GHSA-xc5v-89vq-hv5m).
+
 ### Bug Fixes
 
   * A call refused for `:max_body_size` no longer stalls the other calls on its connection. The client can still have DATA in flight for a refused call, and Cowboy dropped it without giving the window back. After enough refusals the connection window was empty, no data could arrive, and every later call waited until its deadline. Each stream with a body now asks Cowboy for one frame of flow when it opens, which makes Cowboy top up an empty window. Tests cover refusals one at a time, eight at a time, and a call that opens first and sends its body after the window would have emptied (GHSA-7x9q-vvph-rjcr).

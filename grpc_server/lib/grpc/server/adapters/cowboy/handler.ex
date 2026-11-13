@@ -35,7 +35,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     http_method = extract_http_method(req)
     exception_log_filter = extract_exception_log_filter_opt(opts)
 
-    with {:ok, access_mode, sub_type, content_type} <- find_content_type_subtype(req),
+    with {:ok, access_mode, sub_type, content_type} <- find_content_type_subtype(req, opts),
          {:ok, codec} <- find_codec(sub_type, content_type, server),
          {:ok, compressor} <- find_compressor(req, server) do
       stream_pid = self()
@@ -137,7 +137,7 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
     end
   end
 
-  defp find_content_type_subtype(req) do
+  defp find_content_type_subtype(req, opts) do
     content_type =
       case :cowboy_req.header("content-type", req) do
         :undefined ->
@@ -163,8 +163,19 @@ defmodule GRPC.Server.Adapters.Cowboy.Handler do
       end
 
     access_mode = resolve_access_mode(req, access_mode, subtype)
+    {access_mode, subtype} = pin_transcoded_route(opts, req, access_mode, subtype)
     {:ok, access_mode, subtype, content_type}
   end
+
+  # A route from an HttpRule is always transcoded, whatever the Content-Type says.
+  # Only the transcoding path applies the route's path bindings, so a request that
+  # chose another path with its header could set a field the URL is meant to fix
+  # (GHSA-xc5v-89vq-hv5m). A CORS preflight stays a preflight.
+  defp pin_transcoded_route(%{http_transcode_route: true}, req, access_mode, subtype) do
+    if preflight?(req), do: {access_mode, subtype}, else: {:http_transcoding, "json"}
+  end
+
+  defp pin_transcoded_route(_opts, _req, access_mode, subtype), do: {access_mode, subtype}
 
   defp extract_http_method(req) do
     case :cowboy_req.method(req) do

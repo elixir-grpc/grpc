@@ -316,6 +316,13 @@ defmodule GRPC.Server do
     end
   end
 
+  # Transcoding maps one request message from the path, query and body. A request
+  # stream has no such mapping, and decoding its frames alone would drop the path
+  # bindings (GHSA-xc5v-89vq-hv5m).
+  defp do_handle_request(true, _res_stream, %{access_mode: :http_transcoding}, _func_name) do
+    {:error, RPCError.exception(:unimplemented, "A request stream cannot be transcoded")}
+  end
+
   defp do_handle_request(
          true,
          res_stream,
