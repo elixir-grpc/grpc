@@ -161,6 +161,50 @@ defmodule GRPC.Server.Adapters.Cowboy.SendBackpressureTest do
     end
   end
 
+  describe "two calls on one connection" do
+    # The first call fills its stream's buffer and waits for an ack. The second fills the
+    # connection's buffer, so Cowboy raises connection_buffer_full on every stream, the waiting
+    # one too. The waiting call must still get its ack when the buffers drain.
+    test "both finish once the client reads", %{counter: counter} do
+      run_server(
+        FloodServer,
+        fn port ->
+          # With `flow: 1` gun credits the server's windows only when the test says so.
+          {:ok, conn} =
+            :gun.open(~c"localhost", port, %{
+              protocols: [:http2],
+              http2_opts: %{
+                initial_connection_window_size: @window,
+                initial_stream_window_size: @window
+              }
+            })
+
+          {:ok, :http2} = :gun.await_up(conn, 5_000)
+
+          first = stalled_flood(conn)
+          assert_receive {:producer, _producer, handler}, 5_000
+          settle_and_sample(handler, counter)
+
+          second = stalled_flood(conn)
+          assert_receive {:producer, _producer, handler}, 5_000
+          settle_and_sample(handler, counter)
+
+          for ref <- [first, second], do: :gun.update_flow(conn, ref, 1_000_000_000)
+
+          for ref <- [first, second] do
+            {bytes, status} = collect(conn, ref, <<>>, nil)
+            assert status == "0"
+            assert count_messages(bytes, 0) == @total
+          end
+
+          :gun.close(conn)
+        end,
+        0,
+        adapter_opts: Keyword.put(@buffers, :shutdown_timeout, @shutdown_timeout)
+      )
+    end
+  end
+
   describe "the wait for a client that doesn't read" do
     test "ends after :send_timeout" do
       with_stalled_client(
@@ -448,12 +492,26 @@ defmodule GRPC.Server.Adapters.Cowboy.SendBackpressureTest do
     end)
   end
 
+  # Opens a ListFeatures call that gun doesn't read until the test updates its flow.
+  defp stalled_flood(conn) do
+    body = Protobuf.encode(%Routeguide.Rectangle{lo: %Routeguide.Point{latitude: 1}})
+
+    :gun.post(
+      conn,
+      "/routeguide.RouteGuide/ListFeatures",
+      [{"content-type", "application/grpc"}, {"te", "trailers"}],
+      <<0, byte_size(body)::32, body::binary>>,
+      %{flow: 1}
+    )
+  end
+
   defp collect(conn, ref, acc, status) do
     case :gun.await(conn, ref, 10_000) do
       {:response, _, _, _} -> collect(conn, ref, acc, status)
       {:data, :fin, data} -> {acc <> data, status}
       {:data, :nofin, data} -> collect(conn, ref, acc <> data, status)
       {:trailers, trailers} -> {acc, :proplists.get_value("grpc-status", trailers)}
+      {:error, reason} -> {acc, reason}
     end
   end
 
