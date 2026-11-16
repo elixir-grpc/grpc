@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Bug Fixes
+
+  * The Mint adapter no longer leaks a `StreamResponseProcess` when the call to the connection process exits, because the process is gone, dies during the call, or takes longer than the call timeout.
+
 ## v1.1.0 - 2026-11-13
 
 ### Enhancements
