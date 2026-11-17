@@ -599,8 +599,23 @@ if Code.ensure_loaded?(:gun) do
         deadline: deadline
       }
 
-      Stream.unfold(state, fn s -> read_stream(s) end)
+      Stream.resource(
+        fn -> state end,
+        fn state ->
+          case read_stream(state) do
+            nil -> {:halt, state}
+            {item, next_state} -> {[item], next_state}
+          end
+        end,
+        &release_stream/1
+      )
     end
+
+    # A caller may stop enumerating a reply before it ends, as `Enum.take/2` does.
+    # Nothing else resets the stream then, and its response process keeps the rest
+    # of the reply queued until the connection closes.
+    defp release_stream(%{fin: false, stream: stream}), do: cancel(stream)
+    defp release_stream(_state), do: :ok
 
     defp read_stream(%{buffer: <<>>, fin: true, fin_resp: nil}), do: nil
 
