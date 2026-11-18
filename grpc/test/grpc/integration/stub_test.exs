@@ -54,10 +54,6 @@ defmodule GRPC.Integration.StubTest do
   end
 
   test "a named channel's handle works while the pool is enabled" do
-    previous_pool = Application.get_env(:grpc, :pool_enabled)
-    Application.put_env(:grpc, :pool_enabled, true)
-    on_exit(fn -> Application.put_env(:grpc, :pool_enabled, previous_pool) end)
-
     channel_name = {:pooled_named_connection, make_ref()}
     on_exit(fn -> GRPC.Client.Connection.disconnect(channel_name) end)
 
