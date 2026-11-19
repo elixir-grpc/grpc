@@ -265,7 +265,7 @@ defmodule GRPC.Server.BodyLimitFlowWindowTest do
     Enum.any?(frames, fn
       {:rst_stream, ^stream_id, _} -> true
       {:headers, ^stream_id, :fin, _, _} -> true
-      {:data, ^stream_id, :fin, _} -> true
+      {:data, ^stream_id, :fin, _, _} -> true
       _ -> false
     end)
   end
