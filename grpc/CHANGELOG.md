@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Behavior Changes
+
+  * The optional `:gun` dependency is now `~> 2.8.0` (was `~> 2.7.0`), with cowlib 2.22.0. Gun 2.7 and earlier crash on a DATA frame that cowlib 2.22 reports for a stream that was already reset, and gun 2.8 handles it, so an app on cowlib 2.22 or later needs gun 2.8. Gun 2.8 requires cowlib 2.22.0 or newer. The lock files now use cowboy 2.21.0, the first cowboy that handles the same cowlib 2.22 return value.
+
+### Bug Fixes
+
+  * The Mint adapter no longer leaks a `StreamResponseProcess` when the call to the connection process exits, because the process is gone, dies during the call, or takes longer than the call timeout.
+
 ## v1.1.0 - 2026-11-13
 
 ### Enhancements

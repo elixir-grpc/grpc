@@ -7,6 +7,7 @@ defmodule GRPC.Client.Adapters.GunMailboxTest do
   # async: false, because it toggles global Application env.
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog, only: [capture_log: 1]
   import GRPC.Integration.TestCase, only: [reconnect_server: 2]
 
   alias GRPC.Client.Adapters.Gun.ConnectionProcess
@@ -140,6 +141,43 @@ defmodule GRPC.Client.Adapters.GunMailboxTest do
     assert {:monitored_by, own_monitors} = Process.info(self(), :monitored_by)
     refute gun_pid in own_monitors
     assert ConnectionProcess.disconnect(conn_pid) == :ok
+  end
+
+  test "a stream that finished on its own is not cancelled again" do
+    previous_level = Logger.level()
+    Logger.configure(level: :debug)
+    on_exit(fn -> Logger.configure(level: previous_level) end)
+
+    Application.put_env(:grpc, :pool_enabled, false)
+    {:ok, _, port} = GRPC.Server.start(FeatureServer, 0)
+    on_exit(fn -> GRPC.Server.stop(FeatureServer) end)
+
+    {:ok, channel} = GRPC.Stub.connect("localhost:#{port}")
+    %{adapter_payload: %{conn_pid: conn_pid}} = channel
+
+    point = %Routeguide.Point{latitude: 409_146_138, longitude: -746_188_906}
+    rectangle = %Routeguide.Rectangle{lo: point, hi: %{point | latitude: 1}}
+
+    log =
+      capture_log(fn ->
+        assert {:ok, %Routeguide.Feature{}} =
+                 Routeguide.RouteGuide.Stub.get_feature(channel, point)
+
+        assert {:ok, features} =
+                 Routeguide.RouteGuide.Stub.list_features(channel, rectangle)
+
+        assert [{:ok, _}, {:ok, _}] = Enum.to_list(features)
+
+        # The connection process cancels a stream from its :DOWN handler, so
+        # wait for it to have handled both exits before the log is read.
+        assert_eventually("the finished streams are dropped", fn ->
+          map_size(:sys.get_state(conn_pid).response_processes) == 0
+        end)
+
+        Process.sleep(100)
+      end)
+
+    refute log =~ "received gun_error"
   end
 
   defp assert_calls_work(channel) do

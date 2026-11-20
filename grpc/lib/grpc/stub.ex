@@ -564,25 +564,35 @@ defmodule GRPC.Stub do
 
   defp acquire_channel(%Channel{pool: nil} = channel, opts) do
     case resolve_channel(channel, opts) do
-      {:ok, ch} -> {:ok, ch, nil}
-      {:error, error} -> {:error, error}
+      # The virtual handle of a named connection carries no pool ref of its
+      # own; the channel it resolves to does, so check out from that pool.
+      {:ok, %Channel{pool: pool_ref}} when is_reference(pool_ref) ->
+        checkout_pool(channel, pool_ref)
+
+      {:ok, ch} ->
+        {:ok, ch, nil}
+
+      {:error, error} ->
+        {:error, error}
     end
   end
 
   defp acquire_channel(%Channel{pool: pool_ref} = channel, opts) do
     # Always go through pick_channel so the LB can rotate between address pools
-    actual_pool_ref =
-      case Connection.pick_channel(channel, opts) do
-        {:ok, %Channel{pool: picked_pool_ref}} when is_reference(picked_pool_ref) ->
-          picked_pool_ref
+    checkout_pool(channel, picked_pool_ref(channel, opts) || pool_ref)
+  end
 
-        _ ->
-          pool_ref
-      end
+  defp picked_pool_ref(channel, opts) do
+    case Connection.pick_channel(channel, opts) do
+      {:ok, %Channel{pool: pool_ref}} when is_reference(pool_ref) -> pool_ref
+      _ -> nil
+    end
+  end
 
-    case GRPC.Client.Pool.checkout(actual_pool_ref) do
+  defp checkout_pool(channel, pool_ref) do
+    case GRPC.Client.Pool.checkout(pool_ref) do
       {wrapped, actual_channel, monitor_ref} ->
-        {:ok, actual_channel, {wrapped, actual_pool_ref, monitor_ref}}
+        {:ok, actual_channel, {wrapped, pool_ref, monitor_ref}}
 
       {:error, :no_connection} ->
         unavailable_error(channel.ref)
@@ -636,6 +646,11 @@ defmodule GRPC.Stub do
       {:ok, %Channel{adapter_payload: payload} = ch} when is_map(payload) ->
         # An adapter that exposes no transport pid cannot be liveness-checked;
         # treat it as usable, matching channel_alive?/1 on the connection side.
+        {:ok, ch}
+
+      # A pooled address resolves to a channel carrying the pool ref in place
+      # of an adapter payload; its connection is checked out separately.
+      {:ok, %Channel{pool: pool_ref} = ch} when is_reference(pool_ref) ->
         {:ok, ch}
 
       _ ->

@@ -455,7 +455,7 @@ defmodule GRPC.Server.Adapters.Cowboy.SendBackpressureTest do
         acc = Map.merge(acc, Map.new(headers))
         if fin == :fin, do: acc, else: read_frames(socket, rest, hpack, acc)
 
-      {:ok, {:data, 1, :fin, _data}, _rest} ->
+      {:ok, {:data, 1, :fin, _data, _flow}, _rest} ->
         acc
 
       {:ok, _frame, rest} ->

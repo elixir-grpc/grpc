@@ -278,12 +278,7 @@ if Code.ensure_loaded?(:gun) do
     end
 
     def handle_info({:cancel_expired_stream, stream_ref}, %{gun_pid: gun_pid} = state) do
-      case :gun.stream_info(gun_pid, stream_ref) do
-        {:ok, :undefined} -> :ok
-        {:ok, _info} -> :gun.cancel(gun_pid, stream_ref)
-        {:error, :not_connected} -> :ok
-      end
-
+      cancel_stream(gun_pid, stream_ref)
       {:noreply, state}
     end
 
@@ -344,7 +339,7 @@ if Code.ensure_loaded?(:gun) do
     def handle_info({:DOWN, monitor_ref, :process, _pid, _reason}, %{gun_pid: gun_pid} = state) do
       case find_stream_by_monitor(state, monitor_ref) do
         {stream_ref, entry} ->
-          :ok = :gun.cancel(gun_pid, stream_ref)
+          cancel_stream(gun_pid, stream_ref)
 
           response_pid =
             case entry do
@@ -382,6 +377,16 @@ if Code.ensure_loaded?(:gun) do
     def handle_info(msg, state) do
       Logger.warning("#{inspect(__MODULE__)} received unexpected message: #{inspect(msg)}")
       {:noreply, state}
+    end
+
+    # A stream that has already finished is gone from Gun, which answers a cancel
+    # with a gun_error about the missing stream. Only reset the ones still open.
+    defp cancel_stream(gun_pid, stream_ref) do
+      case :gun.stream_info(gun_pid, stream_ref) do
+        {:ok, :undefined} -> :ok
+        {:ok, _info} -> :gun.cancel(gun_pid, stream_ref)
+        {:error, :not_connected} -> :ok
+      end
     end
 
     @impl GenServer
