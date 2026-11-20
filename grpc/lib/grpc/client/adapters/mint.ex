@@ -464,9 +464,15 @@ if Code.ensure_loaded?(Mint.HTTP) do
         StreamResponseProcess.start_link(stream, return_headers_for_request?(stream, opts))
 
       response =
-        ConnectionProcess.request(pid, "POST", path, headers, body,
-          stream_response_pid: stream_response_pid
-        )
+        try do
+          ConnectionProcess.request(pid, "POST", path, headers, body,
+            stream_response_pid: stream_response_pid
+          )
+        catch
+          :exit, reason ->
+            quietly(fn -> GenServer.stop(stream_response_pid, :normal, @cleanup_timeout) end)
+            :erlang.raise(:exit, reason, __STACKTRACE__)
+        end
 
       stream
       |> GRPC.Client.Stream.put_payload(:response, response)
