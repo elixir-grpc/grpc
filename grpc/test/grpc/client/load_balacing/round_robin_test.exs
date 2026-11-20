@@ -66,13 +66,32 @@ defmodule GRPC.Client.LoadBalancing.RoundRobinTest do
       assert {:error, :no_addresses} = RoundRobin.pick(state)
     end
 
-    test "resets cursor so the first pick after update starts at the first channel" do
-      {:ok, state} = RoundRobin.init(channels: channels([{"a", 1}, {"b", 2}]))
-      {:ok, _, _} = RoundRobin.pick(state)
-      {:ok, _, _} = RoundRobin.pick(state)
+    # Connection calls update/2 on every re-resolution, usually with the same list.
+    # A low-traffic client (one pick per resolve) must still rotate, not be pinned
+    # to the first channel.
+    test "keeps the cursor across an update with an unchanged list" do
+      chs = channels([{"a", 1}, {"b", 2}, {"c", 3}])
+      {:ok, state} = RoundRobin.init(channels: chs)
 
-      {:ok, state} = RoundRobin.update(state, channels([{"new-first", 1}, {"new-second", 2}]))
-      assert {:ok, %Channel{host: "new-first"}, _} = RoundRobin.pick(state)
+      hosts =
+        for _ <- 1..6 do
+          {:ok, %Channel{host: host}, _} = RoundRobin.pick(state)
+          {:ok, _} = RoundRobin.update(state, chs)
+          host
+        end
+
+      assert hosts == ~w(a b c a b c)
+    end
+
+    test "keeps picks valid when an update shrinks the list" do
+      {:ok, state} = RoundRobin.init(channels: channels([{"a", 1}, {"b", 2}, {"c", 3}]))
+      for _ <- 1..2, do: {:ok, _, _} = RoundRobin.pick(state)
+
+      {:ok, state} = RoundRobin.update(state, channels([{"x", 9}]))
+
+      for _ <- 1..3 do
+        assert {:ok, %Channel{host: "x"}, _} = RoundRobin.pick(state)
+      end
     end
   end
 

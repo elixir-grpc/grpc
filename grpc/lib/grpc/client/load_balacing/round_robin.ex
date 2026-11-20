@@ -36,10 +36,15 @@ defmodule GRPC.Client.LoadBalancing.RoundRobin do
     ArgumentError -> {:error, :no_addresses}
   end
 
+  # The cursor is deliberately NOT reset. `GRPC.Client.Connection` calls update/2 on
+  # every DNS re-resolution, whether or not the address set changed. Resetting the
+  # cursor there made the first pick after every resolve go to the first channel, so
+  # a client making fewer than one call per channel per resolve interval sent nearly
+  # all of its traffic to one backend. pick/1 takes the index modulo the current
+  # size, so a cursor carried over a grown or shrunk list stays valid.
   @impl true
-  def update(%{tid: tid, atomics: aref} = state, new_channels) do
+  def update(%{tid: tid} = state, new_channels) do
     :ets.insert(tid, {@channels_key, List.to_tuple(new_channels)})
-    :atomics.put(aref, 1, 0)
     {:ok, state}
   end
 
