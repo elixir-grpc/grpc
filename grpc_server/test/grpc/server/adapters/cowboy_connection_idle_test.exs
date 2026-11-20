@@ -261,7 +261,9 @@ defmodule GRPC.Server.Adapters.CowboyConnectionIdleTest do
         assert Process.alive?(rpc2)
         send(rpc2, :release)
 
-        {conn, {:data, 3, _, body}} = next_frame(conn, &match?({:data, 3, _, _}, &1))
+        # cowlib 2.22 adds the flow size as a fifth element of a DATA frame.
+        {conn, data_frame} = next_frame(conn, &match?({:data, 3, _, _, _}, &1))
+        body = elem(data_frame, 3)
         assert {:ok, %Routeguide.Feature{name: "done"}} = decode_reply(body)
 
         {conn, {:headers, 3, :fin, _, _}} =
