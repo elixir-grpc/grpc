@@ -53,6 +53,23 @@ defmodule GRPC.Integration.StubTest do
     end)
   end
 
+  test "a named channel's handle works while the pool is enabled" do
+    channel_name = {:pooled_named_connection, make_ref()}
+    on_exit(fn -> GRPC.Client.Connection.disconnect(channel_name) end)
+
+    run_server(HelloServer, fn port ->
+      {:ok, _channel} = GRPC.Client.Connection.connect("localhost:#{port}", name: channel_name)
+      assert :ok = GRPC.Client.Connection.await_ready(channel_name)
+
+      # get_channel/1 returns the virtual handle, which carries no pool ref.
+      {:ok, %GRPC.Channel{pool: nil} = channel} = GRPC.Client.Connection.get_channel(channel_name)
+
+      req = %Helloworld.HelloRequest{name: "pooled"}
+      assert {:ok, reply} = Helloworld.Greeter.Stub.say_hello(channel, req)
+      assert reply.message == "Hello, pooled"
+    end)
+  end
+
   test "use a channel name to send a message" do
     on_exit(fn -> GRPC.Client.Connection.disconnect(:my_channel) end)
 
