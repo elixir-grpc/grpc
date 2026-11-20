@@ -8,7 +8,7 @@ defmodule GRPC.Server.MixProject do
     [
       app: :grpc_server,
       version: @version,
-      elixir: "~> 1.15",
+      elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
