@@ -6,6 +6,8 @@
 
   * A server stream no longer hangs when two calls on one connection fill Cowboy's send buffers. If a stream waited for its stream buffer to drain and the connection buffer then filled, the second alarm made the stream forget it was waiting. When the buffers drained it got no ack, and the call never ended, however fast the client read (#652).
 
+  * `GRPC.Server.Supervisor` crashed on unix sockets (`adapter_opts: [ip: {:local, path}]`). This is now fixed (#665).
+
 ## v1.1.0 - 2026-11-13
 
 ### Enhancements
