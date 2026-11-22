@@ -405,19 +405,13 @@ defmodule GRPC.Server.Adapters.Cowboy do
   defp contains?(_, _), do: false
 
   defp running_info(scheme, endpoint, servers, ref) do
-    {addr, port} = :ranch.get_addr(ref)
-
-    addr_str =
-      case addr do
-        :undefined ->
-          raise "undefined address for ranch server"
-
-        addr ->
-          "#{:inet.ntoa(addr)}:#{port}"
-      end
-
-    "Running #{servers_name(endpoint, servers)} with Cowboy using #{scheme}://#{addr_str}"
+    "Running #{servers_name(endpoint, servers)} with Cowboy using " <>
+      listen_address(scheme, :ranch.get_addr(ref))
   end
+
+  defp listen_address(scheme, {:local, path}), do: "#{scheme} on unix:#{path}"
+  defp listen_address(_scheme, {:undefined, _}), do: raise("undefined address for ranch server")
+  defp listen_address(scheme, {ip, port}), do: "#{scheme}://#{:inet.ntoa(ip)}:#{port}"
 
   # Without an endpoint, `Module.concat(nil, Dispatch)` is one key for all listeners.
   # Each listener needs its own routes, so the key uses the listener name.
