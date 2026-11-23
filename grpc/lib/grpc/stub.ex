@@ -1017,7 +1017,18 @@ defmodule GRPC.Stub do
   def recv(%{__interface__: interface} = stream, opts) do
     opts =
       if is_list(opts) do
-        parse_recv_opts(Keyword.put_new(opts, :timeout, @default_timeout))
+        default_timeout =
+          if Map.get(stream, :grpc_type) in [
+               :client_stream,
+               :server_stream,
+               :bidirectional_stream
+             ] do
+            :infinity
+          else
+            @default_timeout
+          end
+
+        parse_recv_opts(Keyword.put_new(opts, :timeout, default_timeout))
       else
         opts
       end
