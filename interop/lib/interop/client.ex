@@ -176,20 +176,32 @@ defmodule Interop.Client do
       }
     end
 
-    GRPC.Stub.send_request(stream, req.(31415, 27182))
+    requests = [{31415, 27182}, {9, 8}, {2653, 1828}, {58979, 45904}]
+    [{first_response_size, first_payload_size} | _] = requests
+    GRPC.Stub.send_request(stream, req.(first_response_size, first_payload_size))
     {:ok, res_enum} = GRPC.Stub.recv(stream)
-    reply = String.duplicate(<<0>>, 31415)
 
-    {:ok, %{payload: %{body: ^reply}}} = Enum.at(res_enum, 0)
+    response_count =
+      res_enum
+      |> Enum.with_index()
+      |> Enum.reduce(0, fn {{:ok, %{payload: %{body: body}}}, index}, count ->
+        {response_size, _payload_size} = Enum.fetch!(requests, index)
+        expected = String.duplicate(<<0>>, response_size)
+        ^expected = body
 
-    Enum.each([{9, 8}, {2653, 1828}, {58979, 45904}], fn {res, payload} ->
-      GRPC.Stub.send_request(stream, req.(res, payload))
-      reply = String.duplicate(<<0>>, res)
+        case Enum.fetch(requests, index + 1) do
+          {:ok, {next_response_size, next_payload_size}} ->
+            GRPC.Stub.send_request(stream, req.(next_response_size, next_payload_size))
 
-      {:ok, %{payload: %{body: ^reply}}} = Enum.at(res_enum, 0)
-    end)
+          :error ->
+            :ok = GRPC.Stub.end_stream(stream)
+        end
 
-    GRPC.Stub.end_stream(stream)
+        count + 1
+      end)
+
+    expected_count = length(requests)
+    ^expected_count = response_count
   end
 
   def empty_stream!(ch) do
