@@ -51,6 +51,21 @@ defmodule GRPC.Client.Adapters.MintTest do
                Mint.connect(channel, config_options: [transport_opts: [ip: "256.0.0.0"]])
     end
 
+    test "fails if the server closes before sending its SETTINGS frame" do
+      {:ok, listen_socket} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+      {:ok, port} = :inet.port(listen_socket)
+      on_exit(fn -> :gen_tcp.close(listen_socket) end)
+
+      spawn_link(fn ->
+        {:ok, socket} = :gen_tcp.accept(listen_socket)
+        {:ok, _preface} = :gen_tcp.recv(socket, 0, 1_000)
+        :gen_tcp.close(socket)
+      end)
+
+      channel = build(:channel, adapter: Mint, port: port, host: "localhost")
+      assert {:error, %TransportError{reason: :closed}} = Mint.connect(channel, [])
+    end
+
     test "defaults client settings when none is passed", %{port: port} do
       channel = build(:channel, adapter: Mint, port: port, host: "localhost")
 

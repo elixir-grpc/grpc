@@ -33,6 +33,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
     @reconnect_stop_event [:grpc, :client, :mint, :reconnect, :stop]
     @reconnect_error_event [:grpc, :client, :mint, :reconnect, :error]
     @reconnect_exhausted_event [:grpc, :client, :mint, :reconnect, :exhausted]
+    @mint_default_connect_timeout 30_000
 
     @doc """
     Starts and link connection process
@@ -97,7 +98,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       Telemetry.execute(:started, %{generation: 0, active_streams: 0}, metadata)
       {keepalive_opts, opts} = Keyword.split(opts, [:keepalive, :keepalive_tolerance])
 
-      case Mint.HTTP.connect(scheme, host, port, opts) do
+      case connect(scheme, host, port, opts) do
         {:ok, conn} ->
           state_opts = [
             parent: opts[:parent],
@@ -111,7 +112,12 @@ if Code.ensure_loaded?(Mint.HTTP) do
           ]
 
           Telemetry.execute(:connected, %{generation: 1}, Map.put(metadata, :reconnect, false))
-          {:ok, conn |> State.new(state_opts ++ keepalive_opts) |> schedule_keepalive()}
+
+          {:ok,
+           conn
+           |> State.new(state_opts ++ keepalive_opts)
+           |> observe_settings()
+           |> schedule_keepalive()}
 
         {:error, reason} ->
           Logger.error(
@@ -688,7 +694,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
       start = System.monotonic_time()
 
-      case Mint.HTTP.connect(state.scheme, state.host, state.port, state.connect_opts) do
+      case connect(state.scheme, state.host, state.port, state.connect_opts) do
         {:ok, conn} ->
           Logger.info("Reconnected successfully to #{state.scheme}://#{state.host}:#{state.port}")
 
@@ -716,7 +722,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
               pings_unacked: 0
           }
 
-          {:noreply, new_state}
+          {:noreply, observe_settings(new_state)}
 
         {:error, reason} ->
           Logger.warning(
@@ -808,6 +814,45 @@ if Code.ensure_loaded?(Mint.HTTP) do
     defp normalize_max_streams(:infinity), do: :infinity
     defp normalize_max_streams(value) when is_integer(value) and value > 0, do: value
     defp normalize_max_streams(_value), do: :unknown
+
+    defp connect(scheme, host, port, opts) do
+      timeout = get_in(opts, [:transport_opts, :timeout]) || @mint_default_connect_timeout
+      deadline = connect_deadline(timeout)
+
+      with {:ok, conn} <-
+             Mint.HTTP.connect(
+               scheme,
+               host,
+               port,
+               Keyword.merge(opts, mode: :passive, protocols: [:http2])
+             ),
+           {:ok, conn} <- await_server_preface(conn, deadline) do
+        Mint.HTTP.set_mode(conn, :active)
+      end
+    end
+
+    defp await_server_preface(%Mint.HTTP2{state: :handshaking} = conn, deadline) do
+      case Mint.HTTP.recv(conn, 0, remaining_time(deadline)) do
+        {:ok, conn, []} ->
+          await_server_preface(conn, deadline)
+
+        {:error, _conn, reason, _responses} ->
+          {:ok, _conn} = Mint.HTTP.close(conn)
+          {:error, reason}
+      end
+    end
+
+    defp await_server_preface(conn, _deadline) do
+      if Mint.HTTP.open?(conn),
+        do: {:ok, conn},
+        else: {:error, %Mint.TransportError{reason: :closed}}
+    end
+
+    defp connect_deadline(:infinity), do: :infinity
+    defp connect_deadline(timeout), do: System.monotonic_time(:millisecond) + timeout
+
+    defp remaining_time(:infinity), do: :infinity
+    defp remaining_time(deadline), do: max(deadline - System.monotonic_time(:millisecond), 0)
 
     defp connect_failed(metadata, reason) do
       maybe_connect_error(metadata, reason)
