@@ -253,15 +253,12 @@ defmodule Interop.Client do
   end
 
   defp process_full_duplex_response({:ok, res_enum, %{headers: new_headers}}) do
-    {:ok, data} = Enum.at(res_enum, 0)
-    {:trailers, new_trailers} = Enum.at(res_enum, 0)
+    [{:ok, data}, {:trailers, new_trailers}] = Enum.to_list(res_enum)
     {new_headers, data, new_trailers}
   end
 
   defp process_full_duplex_response({:ok, res_enum}) do
-    {:headers, headers} = Enum.at(res_enum, 0)
-    {:ok, data} = Enum.at(res_enum, 0)
-    {:trailers, trailers} = Enum.at(res_enum, 0)
+    [{:headers, headers}, {:ok, data}, {:trailers, trailers}] = Enum.to_list(res_enum)
     {headers, data, trailers}
   end
 
