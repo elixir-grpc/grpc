@@ -42,9 +42,6 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
     @behaviour GRPC.Client.Adapter
 
-    @default_connect_opts [
-      protocols: [:http2]
-    ]
     @default_client_settings [
       initial_window_size: 8_000_000,
       max_frame_size: 8_000_000
@@ -55,8 +52,8 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
     @doc """
     Connects using Mint based on the provided configs. Options
-      * `:transport_opts`: Defaults to `[timeout: :infinity, nodelay: true]`, given the nature of H2 connections (with support to
-        long-lived streams) `timeout: :infinity` is set to avoid timeouts while waiting for server streams to complete.
+      * `:transport_opts`: Defaults to `[timeout: :infinity, nodelay: true]`. `timeout` bounds the whole connect, including
+        the wait for the server's first SETTINGS frame, but not streams.
         `nodelay: true` sets `TCP_NODELAY`, so small writes go out at once instead of waiting on Nagle's algorithm and
         delayed ACKs, which adds tens of milliseconds to sequential calls. Pass `nodelay: false` to turn it off. The other
         options may vary based on the transport used for this connection (tcp or ssl). Check [Mint.HTTP.connect/4](https://hexdocs.pm/mint/Mint.HTTP.html#connect/4)
@@ -254,11 +251,6 @@ if Code.ensure_loaded?(Mint.HTTP) do
       ]
     end
 
-    defp merge_opts(opts, module_opts) do
-      opts = Keyword.merge(opts, module_opts)
-      Keyword.merge(@default_connect_opts, opts)
-    end
-
     defp mint_scheme(%Channel{scheme: "https"} = _channel), do: :https
     defp mint_scheme(_channel), do: :http
 
@@ -279,7 +271,7 @@ if Code.ensure_loaded?(Mint.HTTP) do
       opts =
         channel
         |> connect_opts(opts)
-        |> merge_opts(module_opts)
+        |> Keyword.merge(module_opts)
         |> Keyword.put(:retry, retry)
         |> Keyword.put(:notify_drain, notify_drain)
         |> Keyword.put(:grpc_transport_metadata, transport_metadata)

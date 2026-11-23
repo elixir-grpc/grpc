@@ -201,6 +201,25 @@ defmodule GRPC.Client.Adapters.MTLSTest do
     end
   end
 
+  describe "mint adapter, client side of a rejected certificate" do
+    setup do
+      Process.flag(:trap_exit, true)
+      :ok
+    end
+
+    test "a missing certificate fails the connect", %{port: port, certs: certs} do
+      assert {:error,
+              %Elixir.Mint.TransportError{reason: {:tls_alert, {:certificate_required, _}}}} =
+               GRPC.Client.Adapters.Mint.ConnectionProcess.start_link(:https, "localhost", port,
+                 transport_opts: [
+                   timeout: 5_000,
+                   cacertfile: certs.server_ca,
+                   verify: :verify_peer
+                 ]
+               )
+    end
+  end
+
   # Builds a CA and a leaf for the server, and another pair for the client, and
   # writes them as PEM files like the ones a real deployment has.
   defp write_certs(dir) do

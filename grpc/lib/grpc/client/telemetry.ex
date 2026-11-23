@@ -16,6 +16,9 @@ defmodule GRPC.Client.Telemetry do
   | `:settings` | none | common metadata plus `max_concurrent_streams` |
   | `:streams` | `active` | common metadata |
 
+  With the Mint adapter, `:connected` is emitted once the server's first HTTP/2
+  SETTINGS frame has arrived.
+
   Generations start at one on the first successful establishment and increment
   after recovery. Stream occupancy is an authoritative snapshot after each
   stream-table mutation.
