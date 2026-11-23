@@ -46,13 +46,13 @@ if Code.ensure_loaded?(Mint.HTTP) do
       initial_window_size: 8_000_000,
       max_frame_size: 8_000_000
     ]
-    @default_transport_opts [timeout: :infinity, nodelay: true]
+    @default_transport_opts [timeout: 20_000, nodelay: true]
     @cleanup_timeout 1_000
     @unavailable GRPC.Status.unavailable()
 
     @doc """
     Connects using Mint based on the provided configs. Options
-      * `:transport_opts`: Defaults to `[timeout: :infinity, nodelay: true]`. `timeout` bounds the whole connect, including
+      * `:transport_opts`: Defaults to `[timeout: 20_000, nodelay: true]`. `timeout` bounds the whole connect, including
         the wait for the server's first SETTINGS frame, but not streams.
         `nodelay: true` sets `TCP_NODELAY`, so small writes go out at once instead of waiting on Nagle's algorithm and
         delayed ACKs, which adds tens of milliseconds to sequential calls. Pass `nodelay: false` to turn it off. The other
