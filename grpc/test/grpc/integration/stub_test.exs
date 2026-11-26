@@ -151,4 +151,22 @@ defmodule GRPC.Integration.StubTest do
               }} == channel |> Helloworld.Greeter.Stub.say_hello(req, timeout: 50)
     end)
   end
+
+  test "uses an infinite default receive timeout for streaming RPCs" do
+    test_pid = self()
+
+    stream = %GRPC.Client.Stream{
+      grpc_type: :bidirectional_stream,
+      __interface__: %{
+        receive_data: fn _stream, opts ->
+          send(test_pid, {:recv_opts, opts})
+          {:ok, []}
+        end
+      }
+    }
+
+    assert {:ok, []} = GRPC.Stub.recv(stream)
+    assert_received {:recv_opts, opts}
+    assert opts[:timeout] == :infinity
+  end
 end
